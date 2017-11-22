@@ -358,9 +358,6 @@ struct Option MuttVars[] = {
   ** .pp
   ** When this variable is \fIset\fP, NeoMutt will include Delivered-To headers when
   ** bouncing messages.  Postfix users may wish to \fIunset\fP this variable.
-  ** .pp
-  ** \fBNote:\fP On Debian systems, this option is unset by default in
-  ** /etc/Muttrc.
   */
   { "braille_friendly", DT_BOOL, R_NONE, OPT_BRAILLE_FRIENDLY, 0 },
   /*
@@ -797,7 +794,7 @@ struct Option MuttVars[] = {
   ** .pp
   ** This variable specifies which editor is used by NeoMutt.
   ** It defaults to the value of the \fC$$$VISUAL\fP, or \fC$$$EDITOR\fP, environment
-  ** variable, or to the string ``/usr/bin/editor'' if neither of those are set.
+  ** variable, or to the string ``vi'' if neither of those are set.
   ** .pp
   ** The \fC$$editor\fP string may contain a \fI%s\fP escape, which will be replaced by the name
   ** of the file to be edited.  If the \fI%s\fP escape does not appear in \fC$$editor\fP, a
@@ -1278,9 +1275,6 @@ struct Option MuttVars[] = {
   ** which case a detected one is not used.
   ** .pp
   ** Also see $$use_domain and $$hidden_host.
-  ** .pp
-  ** \fBNote:\fP On Debian systems, the default for this variable is obtained
-  ** from /etc/mailname when Mutt starts.
   */
 #ifdef HAVE_LIBIDN
   { "idn_decode",       DT_BOOL, R_MENU, OPT_IDN_DECODE, 1 },
@@ -1949,9 +1943,6 @@ struct Option MuttVars[] = {
   ** system.  It is used with various sets of parameters to gather the
   ** list of known remailers, and to finally send a message through the
   ** mixmaster chain.
-  ** .pp
-  ** \fBNote:\fP On Debian systems, this option is set by default to
-  ** ``mixmaster-filter'' in /etc/Muttrc.
   */
 #endif
   { "move",             DT_QUAD, R_NONE, OPT_MOVE, MUTT_NO },
@@ -3657,10 +3648,6 @@ struct Option MuttVars[] = {
   ** This is a format string, see the $$smime_decrypt_command command for
   ** possible \fCprintf(3)\fP-like sequences.
   ** (S/MIME only)
-  ** .pp
-  ** \fBNote:\fP On Debian systems, this defaults to the first existing file in
-  ** the following list: ~/.smime/ca-certificates.crt ~/.smime/ca-bundle.crt
-  ** /etc/ssl/certs/ca-certificates.crt.
   */
 #ifdef USE_SMTP
   { "smtp_authenticators", DT_STRING, R_NONE, UL &SmtpAuthenticators, UL 0 },
@@ -3827,9 +3814,6 @@ struct Option MuttVars[] = {
   ** .ts
   ** set ssl_ca_certificates_file=/etc/ssl/certs/ca-certificates.crt
   ** .te
-  ** .pp
-  ** \fBNote:\fP On Debian systems, this option is set by default to
-  ** ``threads'' in /etc/Muttrc.
   */
 #endif /* USE_SSL_GNUTLS */
   { "ssl_client_cert", DT_PATH, R_NONE, UL &SslClientCert, 0 },
@@ -4377,9 +4361,6 @@ struct Option MuttVars[] = {
   ** is set to deliver directly via SMTP (see $$smtp_url), this
   ** option does nothing: NeoMutt will never write out the ``Bcc:'' header
   ** in this case.
-  ** .pp
-  ** \fBNote:\fP On Debian systems, exim4 and postfix strip BCC headers by
-  ** default. The above warning applies to exim3 users, see /etc/Muttrc.
   */
   { "write_inc",        DT_NUMBER,  R_NONE, UL &WriteInc, 10 },
   /*
