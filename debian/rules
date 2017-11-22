@@ -29,7 +29,6 @@ override_dh_auto_configure:
 		--enable-pop			\
 		--enable-sidebar		\
 		--enable-nntp			\
-		--enable-dotlock \
 		$(notmuch)			\
 		--disable-fmemopen		\
 						\
@@ -58,9 +57,3 @@ override_dh_install:
 	  cat debian/extra/rc/neomuttrc.foot ) > debian/tmp/neomuttrc
 	
 	dh_install
-
-override_dh_installchangelogs:
-	dh_installchangelogs ChangeLog
-
-override_dh_fixperms:
-	dh_fixperms --exclude usr/bin/neomutt_dotlock

@@ -1,6 +1,5 @@
 debian/tmp/usr/bin/neomutt
 debian/tmp/usr/bin/smime_keys
-debian/tmp/usr/bin/neomutt_dotlock
 debian/tmp/usr/share/locale/*
 
 debian/extra/lib/mailspell		usr/lib/neomutt

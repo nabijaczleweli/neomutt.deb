@@ -1,2 +1,1 @@
-neomutt: setgid-binary usr/bin/neomutt_dotlock 2755 root/mail
 neomutt: arch-dep-package-has-big-usr-share
