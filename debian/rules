@@ -50,8 +50,7 @@ override_dh_auto_install:
 	
 override_dh_install:
 	cd debian/tmp/usr/share/doc/neomutt && \
-	rm -rf samples/iconv samples/ca-bundle.crt && \
-	cp $(CURDIR)/UPDATING NEWS
+	rm -rf samples/iconv samples/ca-bundle.crt
 	
 	chmod +x debian/extra/lib/*
 	
