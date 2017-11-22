@@ -5,7 +5,7 @@ Maintainer: Mutt maintainers <pkg-mutt-maintainers@lists.alioth.debian.org>
 Uploaders:
  Antonio Radici <antonio@debian.org>,
  Faidon Liambotis <paravoid@debian.org>
-Build-Depends: debhelper (>= 9), dh-lua,
+Build-Depends: debhelper (>= 9), dh-autoreconf, dh-lua,
  docbook-xml,
  docbook-xsl,
  gawk,
