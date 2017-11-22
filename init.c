@@ -505,6 +505,31 @@ int mutt_option_set(const struct Option *val, struct Buffer *err)
 }
 #endif
 
+static int getmailname(char *s, size_t l)
+{
+    FILE *f;
+    char tmp[512];
+    char *p = tmp;
+
+    if ((f = fopen ("/etc/mailname", "r")) == NULL)
+       return (-1);
+
+    if (fgets (tmp, 510, f) != NULL) {
+      while (*p && !ISSPACE(*p) && l > 0) {
+	*s++ = *p++;
+	l--;
+      }
+      if (*(s-1) == '.')
+	s--;
+      *s = 0;
+
+      fclose (f);
+      return 0;
+    }
+    fclose (f);
+    return (-1);
+}
+
 int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, int flags)
 {
   if (!dest || !tok)
@@ -4140,6 +4165,12 @@ void mutt_init(int skip_sys_rc, struct ListHead *commands)
   }
 
   /* some systems report the FQDN instead of just the hostname */
+  /* If /etc/mailname is available, use that as domain name, otherwise the
+   * configured domain, DNS or uname (in order) */
+  if (getmailname(buffer, sizeof(buffer)) != -1)
+  {
+    Fqdn = safe_strdup(buffer);
+  }
   if ((p = strchr(utsname.nodename, '.')))
     ShortHostname = mutt_substrdup(utsname.nodename, p);
   else
@@ -4147,14 +4178,32 @@ void mutt_init(int skip_sys_rc, struct ListHead *commands)
 
 /* now get FQDN.  Use configured domain first, DNS next, then uname */
 #ifdef DOMAIN
-  /* we have a compile-time domain name, use that for Hostname */
-  Hostname = safe_malloc(mutt_strlen(DOMAIN) + mutt_strlen(ShortHostname) + 2);
-  sprintf(Hostname, "%s.%s", NONULL(ShortHostname), DOMAIN);
-#else
-  if (!(getdnsdomainname(buffer, sizeof(buffer))))
+  if (!Fqdn)
   {
-    Hostname = safe_malloc(mutt_strlen(buffer) + mutt_strlen(ShortHostname) + 2);
-    sprintf(Hostname, "%s.%s", NONULL(ShortHostname), buffer);
+      Fqdn = safe_malloc(mutt_strlen(DOMAIN) + mutt_strlen(Hostname) + 2);
+      sprintf(Fqdn, "%s.%s", NONULL(Hostname), DOMAIN);
+  }
+#else
+  if (!Fqdn)
+  {
+    if (!getdnsdomainname(buffer, sizeof(buffer)))
+    {
+      Fqdn = safe_malloc(mutt_strlen(buffer) + mutt_strlen(Hostname) + 2);
+      sprintf(Fqdn, "%s.%s", NONULL(Hostname), buffer);
+    }
+    else
+    {
+      /*
+       * DNS failed, use the nodename.  Whether or not the nodename had a '.' in
+       * it, we can use the nodename as the FQDN.  On hosts where DNS is not
+       * being used, e.g. small network that relies on hosts files, a short host
+       * name is all that is required for SMTP to work correctly.  It could be
+       * wrong, but we've done the best we can, at this point the onus is on the
+       * user to provide the correct hostname if the nodename won't work in their
+       * network.
+       */
+      Fqdn = safe_strdup(utsname.nodename);
+    }
   }
   else
     /*
@@ -4227,7 +4276,7 @@ void mutt_init(int skip_sys_rc, struct ListHead *commands)
   {
     p = getenv("EDITOR");
     if (!p)
-      p = "vi";
+      p = "/usr/bin/editor";
   }
   Editor = safe_strdup(p);
   Visual = safe_strdup(p);

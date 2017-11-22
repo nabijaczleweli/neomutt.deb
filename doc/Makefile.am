@@ -79,16 +79,14 @@ uninstall-local:
 
 check:
 manual.txt: manual.html
-	-LC_ALL=C w3m -dump -O UTF8 manual.html > $@ || \
-	LC_ALL=C lynx -dump -nolist -with_backspaces -display_charset=us-ascii manual.html > $@ || \
-	LC_ALL=C elinks -dump -no-numbering -no-references manual.html | sed -e 's,\\001, ,g' > $@
+	LC_ALL=C w3m -dump -O UTF-8 manual.html > $@
 
 neomuttrc: $(top_srcdir)/init.h makedoc$(EXEEXT) $(srcdir)/neomuttrc.head
 	sed -e 's,[@]docdir[@],$(docdir),' $(srcdir)/neomuttrc.head > neomuttrc
 	$(CPP) $(AM_CPPFLAGS) $(DEFS) $(CPPFLAGS) -D_MAKEDOC -C $(top_srcdir)/init.h | ./makedoc$(EXEEXT) -c >> neomuttrc
 
 manual.html: manual.xml $(srcdir)/html.xsl $(srcdir)/neomutt.xsl $(srcdir)/neomutt.css
-	-xsltproc --nonet -o $@ $(srcdir)/html.xsl manual.xml
+	xsltproc --nonet -o $@ $(srcdir)/html.xsl manual.xml
 
 $(CHUNKED_DOCFILES): index.html
 

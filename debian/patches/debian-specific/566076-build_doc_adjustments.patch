@@ -1,0 +1,30 @@
+From: Antonio Radici <antonio@debian.org>
+Date: Thu, 27 Feb 2014 16:25:39 +0100
+Subject: 566076-build_doc_adjustments
+
+Use w3m to build the txt manual.
+---
+ doc/Makefile.am | 8 +++-----
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+
+--- a/doc/Makefile.am
++++ b/doc/Makefile.am
+@@ -79,16 +79,14 @@
+ 
+ check:
+ manual.txt: manual.html
+-	-LC_ALL=C w3m -dump -O UTF8 manual.html > $@ || \
+-	LC_ALL=C lynx -dump -nolist -with_backspaces -display_charset=us-ascii manual.html > $@ || \
+-	LC_ALL=C elinks -dump -no-numbering -no-references manual.html | sed -e 's,\\001, ,g' > $@
++	LC_ALL=C w3m -dump -O UTF-8 manual.html > $@
+ 
+ neomuttrc: $(top_srcdir)/init.h makedoc$(EXEEXT) $(srcdir)/neomuttrc.head
+ 	sed -e 's,[@]docdir[@],$(docdir),' $(srcdir)/neomuttrc.head > neomuttrc
+ 	$(CPP) $(AM_CPPFLAGS) $(DEFS) $(CPPFLAGS) -D_MAKEDOC -C $(top_srcdir)/init.h | ./makedoc$(EXEEXT) -c >> neomuttrc
+ 
+ manual.html: manual.xml $(srcdir)/html.xsl $(srcdir)/neomutt.xsl $(srcdir)/neomutt.css
+-	-xsltproc --nonet -o $@ $(srcdir)/html.xsl manual.xml
++	xsltproc --nonet -o $@ $(srcdir)/html.xsl manual.xml
+ 
+ $(CHUNKED_DOCFILES): index.html
+ 
