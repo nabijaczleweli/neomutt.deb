@@ -1,0 +1,5 @@
+#!/bin/sh
+
+echo "Including output of \`neomutt -v'..."
+
+LC_ALL=C neomutt -v >&3

@@ -1,0 +1,19 @@
+debian/tmp/usr/bin/neomutt
+debian/tmp/usr/bin/smime_keys
+debian/tmp/usr/bin/neomutt_dotlock
+debian/tmp/usr/share/locale/*
+
+debian/extra/lib/mailspell		usr/lib/neomutt
+debian/tmp/usr/bin/pgpring		usr/lib/neomutt
+debian/tmp/usr/bin/pgpewrap		usr/lib/neomutt
+debian/extra/lib/source-neomuttrc.d	usr/lib/neomutt
+debian/extra/lib/debian-ldap-query	usr/lib/neomutt
+debian/extra/lib/mailto-neomutt     usr/lib/neomutt
+
+debian/tmp/Neomuttrc		etc
+contrib/gpg.rc				etc/Neomuttrc.d
+contrib/smime.rc			etc/Neomuttrc.d
+debian/extra/rc/*.rc			etc/Neomuttrc.d
+debian/extra/neomutt.xpm			usr/share/pixmaps
+debian/extra/neomutt.desktop		usr/share/applications
+debian/tmp/usr/share/doc/neomutt/*.html	usr/share/doc/mutt/html
