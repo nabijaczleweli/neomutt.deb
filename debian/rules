@@ -42,7 +42,8 @@ override_dh_auto_configure:
 		--without-gdbm 			\
 		--without-bdb			\
 		--without-qdbm \
-	    --with-tokyocabinet
+	    --without-tokyocabinet \
+		--with-lmdb
 
 override_dh_auto_install:
 	dh_auto_install --destdir=debian/tmp
