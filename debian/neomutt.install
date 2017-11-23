@@ -16,4 +16,4 @@ contrib/smime.rc			etc/neomuttrc.d
 debian/extra/rc/*.rc			etc/neomuttrc.d
 debian/extra/neomutt.xpm			usr/share/pixmaps
 debian/extra/neomutt.desktop		usr/share/applications
-debian/tmp/usr/share/doc/neomutt/*.html	usr/share/doc/mutt/html
+debian/tmp/usr/share/doc/neomutt/*.html	usr/share/doc/neomutt/html
