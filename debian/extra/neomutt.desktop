@@ -2,9 +2,9 @@
 Categories=Office;Network;Email;
 Comment=Simple text-based Mail User Agent
 Comment[de]=Einfaches, Text-basiertes Mailprogramm
-Exec=mutt %u
-Icon=mutt
-Name=mutt
+Exec=neomutt %u
+Icon=neomutt
+Name=neomutt
 Name[de]=Mutt
 MimeType=x-scheme-handler/mailto;
 NoDisplay=false
