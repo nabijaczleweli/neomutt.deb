@@ -51,6 +51,10 @@ Copyright: 1996-2002 Brandon Long <blong@fiction.net>
            2014-2016 Kevin J. McCarthy <kevin@8t8.us>
 License: GPL-2+
 
+Files: contrib/logo/neomutt.svg
+Copyright: 2017 Malcolm Locke <malc@wholemeal.co.nz>
+License: CC-BY-SA-4.0
+
 Files: debian/*
 Copyright: 1999-2004 Marco d'Itri <md@linux.it>
            2005-2009 Adeodato Simó <dato@net.com.org.es>
