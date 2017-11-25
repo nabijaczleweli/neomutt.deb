@@ -6,43 +6,39 @@ export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
 no_notmuch_architectures := alpha hppa hurd-i386 powerpcspe ppc64 sh4 sparc64
 ifneq ($(DEB_HOST_ARCH),$(filter $(DEB_HOST_ARCH), $(no_notmuch_architectures)))
-	notmuch = --enable-notmuch
+	notmuch = --notmuch
 else
 	notmuch = --disable-notmuch
 endif
 
 %:
-	dh $@ --with autoreconf --builddirectory=debian/build
+	dh $@ --builddirectory=debian/build
 
 override_dh_auto_configure:
-	dh_auto_configure -- \
+	./configure.autosetup \
 		--with-mailpath=/var/mail	\
 						\
-		--enable-compressed		\
-		--enable-debug			\
+		--compressed		\
+		--logging			\
 		--enable-fcntl			\
 		--enable-hcache			\
-		--enable-gpgme			\
-		--enable-lua            \
+		--gpgme			\
+		--lua            \
 		--enable-imap			\
 		--enable-smtp			\
 		--enable-pop			\
 		--enable-sidebar		\
 		--enable-nntp			\
 		$(notmuch)			\
-		--disable-fmemopen		\
 						\
-		--with-curses			\
-		--with-gnutls			\
-		--with-gss			\
-		--with-idn			\
-		--with-mixmaster		\
-		--with-sasl			\
+		--with-ui			\
+		--gnutls			\
+		--gss			\
+		--idn			\
+		--mixmaster		\
+		--sasl			\
 						\
-		--without-gdbm 			\
-		--without-bdb			\
-		--without-qdbm \
-	    --with-tokyocabinet
+	    --tokyocabinet
 
 override_dh_auto_install:
 	dh_auto_install --destdir=debian/tmp
