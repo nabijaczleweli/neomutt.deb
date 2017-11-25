@@ -1,4 +1,4 @@
-neomutt (20171027-2) UNRELEASED; urgency=medium
+neomutt (20171027-2) unstable; urgency=medium
 
   * debian/rules: switch to configure.autosetup and remove the dependency from
     dh-autoreconf; autosetup is becoming the official configure script for
