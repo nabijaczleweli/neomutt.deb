@@ -13,7 +13,7 @@ else
 endif
 
 %:
-	dh $@ --builddirectory=debian/build
+	dh $@
 
 override_dh_auto_configure:
 	ln -s configure.autosetup configure
