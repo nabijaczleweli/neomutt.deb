@@ -17,7 +17,6 @@ endif
 
 override_dh_autoreconf:
 
-
 override_dh_auto_configure:
 	./configure.autosetup  \
 		--with-mailpath=/var/mail	\
