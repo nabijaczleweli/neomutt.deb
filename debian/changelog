@@ -3,6 +3,8 @@ neomutt (20171027-2) UNRELEASED; urgency=medium
   * debian/rules: switch to configure.autosetup and remove the dependency from
     dh-autoreconf; autosetup is becoming the official configure script for
     neomutt.
+  * debian/neomutt.clean: get rid of the temporary configure link created by
+    debian/rules
 
  -- Antonio Radici <antonio@debian.org>  Sat, 25 Nov 2017 19:38:29 +0000
 
