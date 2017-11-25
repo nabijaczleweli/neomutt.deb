@@ -1,9 +1,9 @@
 debian/tmp/usr/bin/neomutt
 debian/tmp/usr/share/locale/*
 
-debian/tmp/lib/*/neomutt/pgpewrap  usr/lib/neomutt/pgpewrap_neomutt
-debian/tmp/lib/*/neomutt/pgpring   usr/lib/neomutt/pgpring_neomutt
-debian/tmp/lib/*/neomutt/smime_keys  usr/lib/neomutt/smime_keys_neomutt
+debian/tmp/usr/lib/neomutt/pgpewrap  usr/lib/neomutt/pgpewrap_neomutt
+debian/tmp/usr/lib/neomutt/pgpring   usr/lib/neomutt/pgpring_neomutt
+debian/tmp/usr/lib/neomutt/smime_keys  usr/lib/neomutt/smime_keys_neomutt
 
 debian/extra/lib/mailspell		    usr/lib/neomutt
 debian/extra/lib/source-neomuttrc.d	usr/lib/neomutt
