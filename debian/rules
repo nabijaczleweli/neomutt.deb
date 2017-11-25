@@ -3,6 +3,7 @@
 include /usr/share/dpkg/buildflags.mk
 
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DH_QUIET=1
 
 no_notmuch_architectures := alpha hppa hurd-i386 powerpcspe ppc64 sh4 sparc64
 ifneq ($(DEB_HOST_ARCH),$(filter $(DEB_HOST_ARCH), $(no_notmuch_architectures)))
@@ -15,20 +16,14 @@ endif
 	dh $@ --builddirectory=debian/build
 
 override_dh_auto_configure:
-	./configure.autosetup \
+	ln -s configure.autosetup configure
+	dh_auto_configure --  \
 		--with-mailpath=/var/mail	\
 						\
-		--compressed		\
 		--logging			\
 		--enable-fcntl			\
-		--enable-hcache			\
 		--gpgme			\
 		--lua            \
-		--enable-imap			\
-		--enable-smtp			\
-		--enable-pop			\
-		--enable-sidebar		\
-		--enable-nntp			\
 		$(notmuch)			\
 						\
 		--with-ui			\
