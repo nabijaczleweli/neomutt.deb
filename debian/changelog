@@ -6,6 +6,7 @@ neomutt (20171027-2) UNRELEASED; urgency=medium
   * debian/neomutt.clean: get rid of the temporary configure link created by
     debian/rules
   * debian/compat: switched to 10
+  * debian/copyright: fixed the duplicate license problem
 
  -- Antonio Radici <antonio@debian.org>  Sat, 25 Nov 2017 19:38:29 +0000
 
