@@ -1,5 +1,5 @@
 The original neomutt source was repackaged to remove the autosetup/jimsh0.c
-file, which is a generated bootstrap of jimctl; this was reported in
+file, which is a generated bootstrap of jimtcl; this was reported in
 https://bugs.debian.org/882717.
 
-A build dependency on jimctl was put in place to replace the file.
+A build dependency on jimtcl was put in place to replace the file.
