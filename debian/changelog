@@ -1,6 +1,7 @@
 neomutt (20171027+dfsg.1-1) UNRELEASED; urgency=medium
 
   * Removed generated autosetup/jimsh0.c to comply with DFSG (Closes: 882717).
+    + The file was replaced with a B-D on jimsh.
 
  -- Antonio Radici <antonio@debian.org>  Sun, 26 Nov 2017 06:24:32 +0000
 
