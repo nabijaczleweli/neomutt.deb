@@ -1,3 +1,12 @@
+neomutt (20171027+dfsg.1-2) UNRELEASED; urgency=medium
+
+  * debian/patches:
+    + neomutt-devel/0001-autosetup-fix-out-of-tree-build.patch:
+      imported an upstream patch to fix an issue with doc/ not building out of
+      tree.
+
+ -- Antonio Radici <antonio@debian.org>  Sun, 26 Nov 2017 07:20:16 +0000
+
 neomutt (20171027+dfsg.1-1) unstable; urgency=medium
 
   * Removed generated autosetup/jimsh0.c to comply with DFSG (Closes: 882717).
