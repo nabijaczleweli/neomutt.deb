@@ -12,7 +12,7 @@ to vi.
 
 --- a/init.c
 +++ b/init.c
-@@ -4276,7 +4276,7 @@
+@@ -4227,7 +4227,7 @@
    {
      p = getenv("EDITOR");
      if (!p)
