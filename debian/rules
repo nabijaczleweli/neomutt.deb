@@ -13,12 +13,13 @@ else
 endif
 
 %:
-	dh $@
+	dh $@ --with-builddir=debian/build
 
 override_dh_autoreconf:
 
 override_dh_auto_configure:
-	./configure.autosetup  \
+	ln -s configure.autosetup configure
+	dh_auto_configure -- 
 		--with-mailpath=/var/mail	\
 						\
 		--logging			\
