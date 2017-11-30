@@ -3,7 +3,6 @@
 include /usr/share/dpkg/buildflags.mk
 
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
-export DH_VERBOSE=1
 
 no_notmuch_architectures := alpha hppa hurd-i386 powerpcspe ppc64 sh4 sparc64
 ifneq ($(DEB_HOST_ARCH),$(filter $(DEB_HOST_ARCH), $(no_notmuch_architectures)))
