@@ -1,6 +1,7 @@
 debian/tmp/usr/bin/neomutt
 debian/tmp/usr/share/locale/*
 
+debian/tmp/usr/lib/neomutt/*        usr/lib/neomutt
 debian/extra/lib/mailspell		    usr/lib/neomutt
 debian/extra/lib/source-neomuttrc.d	usr/lib/neomutt
 debian/extra/lib/debian-ldap-query	usr/lib/neomutt
