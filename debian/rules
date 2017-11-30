@@ -19,23 +19,20 @@ override_dh_autoreconf:
 
 override_dh_auto_configure:
 	ln -sf configure.autosetup configure
-	dh_auto_configure -- 
+	dh_auto_configure --  \
 	    --libexecdir=/usr/lib \
-		--with-mailpath=/var/mail	\
-						\
-		--logging			\
-		--enable-fcntl			\
-		--gpgme			\
-		--lua            \
-		$(notmuch)			\
-						\
-		--with-ui			\
-		--gnutls			\
-		--gss			\
-		--idn			\
-		--mixmaster		\
-		--sasl			\
-						\
+		--with-mailpath=/var/mail \
+		--logging \
+		--enable-fcntl \
+		--gpgme	\
+		--lua \
+		$(notmuch) \
+		--with-ui \
+		--gnutls \
+		--gss \
+		--idn \
+		--mixmaster \
+		--sasl \
 	    --tokyocabinet
 
 override_dh_auto_install:
