@@ -1,4 +1,4 @@
-neomutt (20171027+dfsg.1-4) UNRELEASED; urgency=medium
+neomutt (20171027+dfsg.1-4) unstable; urgency=medium
 
   * debian/patches:
     + neomutt-devel/0006-autosetup-fix-check-for-missing-sendmail.patch: fix
