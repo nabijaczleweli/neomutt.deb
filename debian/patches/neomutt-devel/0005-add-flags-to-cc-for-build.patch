@@ -1,0 +1,14 @@
+Properly include the dpkg-buildflags output into CC_FOR_BUILD, so that makedoc
+can be build with the proper harderning flags.
+
+--- a/Makefile.autosetup
++++ b/Makefile.autosetup
+@@ -7,7 +7,7 @@
+ PWD=		@PWD@
+ AR=		@AR@
+ CC=		@CC@
+-CC_FOR_BUILD=	@CC_FOR_BUILD@ @CFLAGS_FOR_BUILD@
++CC_FOR_BUILD=	@CC_FOR_BUILD@ @CFLAGS@ @CPPFLAGS@ @CFLAGS_FOR_BUILD@
+ CPP=		@CPP@
+ CFLAGS=		@CPPFLAGS@ @CFLAGS@ -I. -I@top_srcdir@ -Wall $(EXTRA_CFLAGS)
+ LDFLAGS=	@LDFLAGS@ $(EXTRA_LDFLAGS)
