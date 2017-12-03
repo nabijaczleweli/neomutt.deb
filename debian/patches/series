@@ -9,3 +9,4 @@ neomutt-devel/0002-Define-prefix-in-Makefile.autosetup.patch
 neomutt-devel/0003-Install-stuff-to-PACKAGE-in-libexecdir-not-libdir.patch
 neomutt-devel/0004-Update-autosetup-to-latest-master.patch
 neomutt-devel/0005-add-flags-to-cc-for-build.patch
+neomutt-devel/0006-autosetup-fix-check-for-missing-sendmail.patch

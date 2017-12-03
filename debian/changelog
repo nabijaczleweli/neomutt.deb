@@ -1,3 +1,11 @@
+neomutt (20171027+dfsg.1-4) UNRELEASED; urgency=medium
+
+  * debian/patches:
+    + neomutt-devel/0006-autosetup-fix-check-for-missing-sendmail.patch: fix
+      autosetup build in relation to sendmail path (Closes: 883007).
+
+ -- Antonio Radici <antonio@debian.org>  Sun, 03 Dec 2017 10:19:31 +0000
+
 neomutt (20171027+dfsg.1-3) unstable; urgency=medium
 
   * debian/patches:
