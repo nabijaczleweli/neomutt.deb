@@ -6,10 +6,11 @@ cleanly to mutt 1.9.1 so I decided to rewrite to use the mutt libraries.
 
 --- a/init.c
 +++ b/init.c
-@@ -505,6 +505,30 @@
+@@ -505,6 +505,32 @@
  }
  #endif
  
++#ifndef DOMAIN
 +/* getmailname returns the content of /etc/mailname if present, so that the caller can use that instead of calling
 + * gethostbyname() on the hostname; the function returns NULL in case of failure or a dynamically allocated buffer in
 + * case of success. The buffer needs to be freed after use.
@@ -33,11 +34,12 @@ cleanly to mutt 1.9.1 so I decided to rewrite to use the mutt libraries.
 +  }
 +  return s;
 +}
++#endif
 +
  int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, int flags)
  {
    if (!dest || !tok)
-@@ -4168,6 +4192,12 @@
+@@ -4168,6 +4194,12 @@
       */
      Hostname = safe_strdup(utsname.nodename);
  #endif
