@@ -1,3 +1,9 @@
+neomutt (20171208+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream version.
+
+ -- Antonio Radici <antonio@debian.org>  Sat, 09 Dec 2017 08:34:25 +0000
+
 neomutt (20171027+dfsg.1-4) unstable; urgency=medium
 
   * debian/patches:
