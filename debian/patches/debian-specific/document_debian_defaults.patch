@@ -10,7 +10,7 @@ from the default only on Debian systems.
 
 --- a/init.h
 +++ b/init.h
-@@ -358,6 +358,9 @@
+@@ -360,6 +360,9 @@
    ** .pp
    ** When this variable is \fIset\fP, NeoMutt will include Delivered-To headers when
    ** bouncing messages.  Postfix users may wish to \fIunset\fP this variable.
@@ -20,7 +20,7 @@ from the default only on Debian systems.
    */
    { "braille_friendly", DT_BOOL, R_NONE, OPT_BRAILLE_FRIENDLY, 0 },
    /*
-@@ -1275,6 +1278,9 @@
+@@ -1292,6 +1295,9 @@
    ** which case a detected one is not used.
    ** .pp
    ** Also see $$use_domain and $$hidden_host.
@@ -30,7 +30,7 @@ from the default only on Debian systems.
    */
  #ifdef HAVE_LIBIDN
    { "idn_decode",       DT_BOOL, R_MENU, OPT_IDN_DECODE, 1 },
-@@ -1943,6 +1949,9 @@
+@@ -1960,6 +1966,9 @@
    ** system.  It is used with various sets of parameters to gather the
    ** list of known remailers, and to finally send a message through the
    ** mixmaster chain.
@@ -40,7 +40,7 @@ from the default only on Debian systems.
    */
  #endif
    { "move",             DT_QUAD, R_NONE, OPT_MOVE, MUTT_NO },
-@@ -3648,6 +3657,10 @@
+@@ -3665,6 +3674,10 @@
    ** This is a format string, see the $$smime_decrypt_command command for
    ** possible \fCprintf(3)\fP-like sequences.
    ** (S/MIME only)
@@ -51,7 +51,7 @@ from the default only on Debian systems.
    */
  #ifdef USE_SMTP
    { "smtp_authenticators", DT_STRING, R_NONE, UL &SmtpAuthenticators, UL 0 },
-@@ -3814,6 +3827,9 @@
+@@ -3831,6 +3844,9 @@
    ** .ts
    ** set ssl_ca_certificates_file=/etc/ssl/certs/ca-certificates.crt
    ** .te
@@ -61,7 +61,7 @@ from the default only on Debian systems.
    */
  #endif /* USE_SSL_GNUTLS */
    { "ssl_client_cert", DT_PATH, R_NONE, UL &SslClientCert, 0 },
-@@ -4361,6 +4377,9 @@
+@@ -4380,6 +4396,9 @@
    ** is set to deliver directly via SMTP (see $$smtp_url), this
    ** option does nothing: NeoMutt will never write out the ``Bcc:'' header
    ** in this case.

@@ -9,7 +9,7 @@ Use w3m to build the txt manual.
 
 --- a/doc/Makefile.am
 +++ b/doc/Makefile.am
-@@ -79,16 +79,14 @@
+@@ -77,16 +77,14 @@
  
  check:
  manual.txt: manual.html

@@ -4,9 +4,4 @@ debian-specific/use_usr_bin_editor.patch
 debian-specific/document_debian_defaults.patch
 debian-specific/882690-use_fqdn_from_etc_mailname.patch
 misc/smime.rc.patch
-neomutt-devel/0001-autosetup-fix-out-of-tree-build.patch
-neomutt-devel/0002-Define-prefix-in-Makefile.autosetup.patch
-neomutt-devel/0003-Install-stuff-to-PACKAGE-in-libexecdir-not-libdir.patch
-neomutt-devel/0004-Update-autosetup-to-latest-master.patch
 neomutt-devel/0005-add-flags-to-cc-for-build.patch
-neomutt-devel/0006-autosetup-fix-check-for-missing-sendmail.patch

@@ -12,18 +12,18 @@ to vi.
 
 --- a/init.c
 +++ b/init.c
-@@ -4227,7 +4227,7 @@
+@@ -4203,7 +4203,7 @@
    {
      p = getenv("EDITOR");
      if (!p)
 -      p = "vi";
 +      p = "/usr/bin/editor";
    }
-   Editor = safe_strdup(p);
-   Visual = safe_strdup(p);
+   Editor = mutt_str_strdup(p);
+   Visual = mutt_str_strdup(p);
 --- a/init.h
 +++ b/init.h
-@@ -794,7 +794,7 @@
+@@ -812,7 +812,7 @@
    ** .pp
    ** This variable specifies which editor is used by NeoMutt.
    ** It defaults to the value of the \fC$$$VISUAL\fP, or \fC$$$EDITOR\fP, environment

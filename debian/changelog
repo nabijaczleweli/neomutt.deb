@@ -1,6 +1,8 @@
 neomutt (20171208+dfsg.1-1) unstable; urgency=medium
 
   * New upstream version.
+  * debian/patches: all refreshed, removed some autosetup related patches that
+    are now upstream.
 
  -- Antonio Radici <antonio@debian.org>  Sat, 09 Dec 2017 08:34:25 +0000
 
