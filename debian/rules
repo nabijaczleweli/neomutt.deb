@@ -21,7 +21,6 @@ override_dh_auto_configure:
 	dh_auto_configure --  \
 	    --libexecdir=/usr/lib \
 		--with-mailpath=/var/mail \
-		--logging \
 		--enable-fcntl \
 		--gpgme	\
 		--lua \
