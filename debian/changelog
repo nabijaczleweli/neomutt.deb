@@ -1,3 +1,13 @@
+neomutt (20171215+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release, fixes a couple of bugs.
+  * debian/patches:
+    + removed the previous neomutt-devel patch
+    + removed debian-specific/566076-build_doc_adjustments.patch as we are now
+      using autosetup.
+
+ -- Antonio Radici <antonio@debian.org>  Fri, 15 Dec 2017 22:21:32 +0000
+
 neomutt (20171208+dfsg.1-2) unstable; urgency=medium
 
   * debian/patches:

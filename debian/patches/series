@@ -1,7 +1,5 @@
 debian-specific/neomuttrc.patch
-debian-specific/566076-build_doc_adjustments.patch
 debian-specific/use_usr_bin_editor.patch
 debian-specific/document_debian_defaults.patch
 misc/smime.rc.patch
 neomutt-devel/0005-add-flags-to-cc-for-build.patch
-neomutt-devel/884324-fix-write-fcc-segfault.patch

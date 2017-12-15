@@ -40,7 +40,7 @@ from the default only on Debian systems.
    */
  #endif
    { "move",             DT_QUAD, R_NONE, OPT_MOVE, MUTT_NO },
-@@ -3665,6 +3674,10 @@
+@@ -3678,6 +3687,10 @@
    ** This is a format string, see the $$smime_decrypt_command command for
    ** possible \fCprintf(3)\fP-like sequences.
    ** (S/MIME only)
@@ -51,7 +51,7 @@ from the default only on Debian systems.
    */
  #ifdef USE_SMTP
    { "smtp_authenticators", DT_STRING, R_NONE, UL &SmtpAuthenticators, UL 0 },
-@@ -3831,6 +3844,9 @@
+@@ -3844,6 +3857,9 @@
    ** .ts
    ** set ssl_ca_certificates_file=/etc/ssl/certs/ca-certificates.crt
    ** .te
@@ -61,7 +61,7 @@ from the default only on Debian systems.
    */
  #endif /* USE_SSL_GNUTLS */
    { "ssl_client_cert", DT_PATH, R_NONE, UL &SslClientCert, 0 },
-@@ -4380,6 +4396,9 @@
+@@ -4393,6 +4409,9 @@
    ** is set to deliver directly via SMTP (see $$smtp_url), this
    ** option does nothing: NeoMutt will never write out the ``Bcc:'' header
    ** in this case.
