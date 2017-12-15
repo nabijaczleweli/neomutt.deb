@@ -1,4 +1,4 @@
-neomutt (20171208+dfsg.1-2) UNRELEASED; urgency=medium
+neomutt (20171208+dfsg.1-2) unstable; urgency=medium
 
   * debian/patches:
     + neomutt-devel/884324-fix-write-fcc-segfault.patch (Closes: 884324).
