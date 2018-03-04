@@ -1,3 +1,9 @@
+neomutt (20180223+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Antonio Radici <antonio@debian.org>  Sun, 04 Mar 2018 14:59:49 +0000
+
 neomutt (20171215+dfsg.1-1) unstable; urgency=medium
 
   * New upstream release, fixes a couple of bugs.
