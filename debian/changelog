@@ -4,6 +4,7 @@ neomutt (20180223+dfsg.1-1) unstable; urgency=medium
   * debian/control:
     + Alioth deprecation: changed mailing list to neomutt@packages.debian.org
     + Changed VCS-* fields as we moved to salsa.debian.org
+    + Add missing libxml2-utils to build-dep for xmlcatalog dependency.
   * debian/patches: all refreshed
 
  -- Antonio Radici <antonio@debian.org>  Sun, 04 Mar 2018 14:59:49 +0000
