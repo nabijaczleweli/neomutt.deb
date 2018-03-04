@@ -5,6 +5,7 @@ neomutt (20180223+dfsg.1-1) unstable; urgency=medium
     + Alioth deprecation: changed mailing list to neomutt@packages.debian.org
     + Changed VCS-* fields as we moved to salsa.debian.org
     + Add missing libxml2-utils to build-dep for xmlcatalog dependency.
+    + Standards-Version upgraded to 4.1.3, no changes required.
   * debian/patches:
     + All patches refreshed
     + Added neomutt-devel/0006-default-setlocale-to-C.patch to deal with a
