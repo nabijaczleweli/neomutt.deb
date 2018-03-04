@@ -23,7 +23,7 @@
 
 #include "config.h"
 #include <stddef.h>
-#include <limits.h>
+#include <stdbool.h>
 #include <string.h>
 #include <wchar.h>
 #include <wctype.h>
@@ -33,10 +33,8 @@
 #include "globals.h"
 #include "history.h"
 #include "keymap.h"
-#include "mbyte.h"
 #include "mutt_curses.h"
 #include "opcodes.h"
-#include "options.h"
 #include "protos.h"
 
 /**
@@ -120,14 +118,12 @@ int mutt_enter_string(char *buf, size_t buflen, int col, int flags)
   struct EnterState *es = mutt_new_enter_state();
   do
   {
-#if defined(USE_SLANG_CURSES) || defined(HAVE_RESIZETERM)
     if (SigWinch)
     {
       SigWinch = 0;
       mutt_resize_screen();
       clearok(stdscr, TRUE);
     }
-#endif
     rc = mutt_enter_string_full(buf, buflen, col, flags, 0, NULL, NULL, es);
   } while (rc == 1);
   mutt_free_enter_state(&es);
@@ -247,24 +243,33 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col, int flags, int mul
       {
         case OP_EDITOR_HISTORY_UP:
           state->curpos = state->lastchar;
-          if (mutt_history_at_scratch(hclass))
+          if (mutt_hist_at_scratch(hclass))
           {
             mutt_mb_wcstombs(buf, buflen, state->wbuf, state->curpos);
-            mutt_history_save_scratch(hclass, buf);
+            mutt_hist_save_scratch(hclass, buf);
           }
-          replace_part(state, 0, mutt_history_prev(hclass));
+          replace_part(state, 0, mutt_hist_prev(hclass));
           redraw = MUTT_REDRAW_INIT;
           break;
 
         case OP_EDITOR_HISTORY_DOWN:
           state->curpos = state->lastchar;
-          if (mutt_history_at_scratch(hclass))
+          if (mutt_hist_at_scratch(hclass))
           {
             mutt_mb_wcstombs(buf, buflen, state->wbuf, state->curpos);
-            mutt_history_save_scratch(hclass, buf);
+            mutt_hist_save_scratch(hclass, buf);
           }
-          replace_part(state, 0, mutt_history_next(hclass));
+          replace_part(state, 0, mutt_hist_next(hclass));
           redraw = MUTT_REDRAW_INIT;
+          break;
+
+        case OP_EDITOR_HISTORY_SEARCH:
+          state->curpos = state->lastchar;
+          mutt_mb_wcstombs(buf, buflen, state->wbuf, state->curpos);
+          mutt_history_complete(buf, buflen, hclass);
+          replace_part(state, 0, buf);
+          rc = 1;
+          goto bye;
           break;
 
         case OP_EDITOR_BACKSPACE:
@@ -320,7 +325,9 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col, int flags, int mul
             state->curpos++;
             while (state->curpos < state->lastchar &&
                    COMB_CHAR(state->wbuf[state->curpos]))
+            {
               state->curpos++;
+            }
           }
           break;
 
@@ -345,7 +352,9 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col, int flags, int mul
               state->curpos++;
             while (state->curpos < state->lastchar &&
                    !iswspace(state->wbuf[state->curpos]))
+            {
               state->curpos++;
+            }
           }
           break;
 
@@ -460,7 +469,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col, int flags, int mul
           {
             goto self_insert;
           }
-        /* fallthrough */
+          /* fallthrough */
 
         case OP_EDITOR_COMPLETE:
         case OP_EDITOR_COMPLETE_QUERY:
@@ -547,7 +556,8 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col, int flags, int mul
           }
           else if (flags & MUTT_ALIAS && ch == OP_EDITOR_COMPLETE_QUERY)
           {
-            if ((i = state->curpos))
+            i = state->curpos;
+            if (i != 0)
             {
               for (; i && state->wbuf[i - 1] != ','; i--)
                 ;
@@ -589,7 +599,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col, int flags, int mul
               {
                 mutt_pretty_mailbox(buf, buflen);
                 if (!pass)
-                  mutt_history_add(hclass, buf, true);
+                  mutt_hist_add(hclass, buf, true);
                 rc = 0;
                 goto bye;
               }
@@ -622,7 +632,6 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col, int flags, int mul
           else if (flags & MUTT_NM_TAG)
           {
             mutt_mb_wcstombs(buf, buflen, state->wbuf, state->curpos);
-            i = strlen(buf);
             if (!mutt_nm_tag_complete(buf, buflen, state->tabs))
               BEEP();
 
@@ -708,7 +717,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col, int flags, int mul
         /* Convert from wide characters */
         mutt_mb_wcstombs(buf, buflen, state->wbuf, state->lastchar);
         if (!pass)
-          mutt_history_add(hclass, buf, true);
+          mutt_hist_add(hclass, buf, true);
 
         if (multiple)
         {
@@ -744,7 +753,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col, int flags, int mul
 
 bye:
 
-  mutt_reset_history_state(hclass);
+  mutt_hist_reset_state(hclass);
   FREE(&tempbuf);
   return rc;
 }

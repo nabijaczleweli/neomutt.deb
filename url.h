@@ -22,7 +22,7 @@
 #define _MUTT_URL_H
 
 #include <stddef.h>
-#include "mutt/queue.h"
+#include "mutt/mutt.h"
 
 struct Envelope;
 
@@ -47,8 +47,8 @@ enum UrlScheme
   U_UNKNOWN
 };
 
-#define U_DECODE_PASSWD (1)
-#define U_PATH (1 << 1)
+#define U_DECODE_PASSWD (1 << 0)
+#define U_PATH          (1 << 1)
 
 /**
  * struct UrlQueryString - Parsed Query String

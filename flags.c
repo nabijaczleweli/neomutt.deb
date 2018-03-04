@@ -59,7 +59,7 @@ void mutt_set_flag_update(struct Context *ctx, struct Header *h, int flag, int b
 
       if (bf)
       {
-        if (!h->deleted && !ctx->readonly && (!h->flagged || !option(OPT_FLAG_SAFE)))
+        if (!h->deleted && !ctx->readonly && (!h->flagged || !FlagSafe))
         {
           h->deleted = true;
           update = true;
@@ -326,7 +326,9 @@ void mutt_set_flag_update(struct Context *ctx, struct Header *h, int flag, int b
    */
   if (h->searched && (changed != h->changed || deleted != ctx->deleted ||
                       tagged != ctx->tagged || flagged != ctx->flagged))
+  {
     h->searched = false;
+  }
 }
 
 /**
@@ -393,8 +395,8 @@ int mutt_change_flag(struct Header *h, int bf)
   int i, flag;
   struct Event event;
 
-  mutt_window_mvprintw(MuttMessageWindow, 0, 0, "%s? (D/N/O/r/*/!): ",
-                       bf ? _("Set flag") : _("Clear flag"));
+  mutt_window_mvprintw(MuttMessageWindow, 0, 0,
+                       "%s? (D/N/O/r/*/!): ", bf ? _("Set flag") : _("Clear flag"));
   mutt_window_clrtoeol(MuttMessageWindow);
 
   event = mutt_getch();

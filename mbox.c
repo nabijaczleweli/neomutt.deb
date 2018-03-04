@@ -46,7 +46,6 @@
 #include "mutt_curses.h"
 #include "mx.h"
 #include "options.h"
-#include "parameter.h"
 #include "protos.h"
 #include "sort.h"
 #include "thread.h"
@@ -181,7 +180,7 @@ static int mmdf_parse_mailbox(struct Context *ctx)
       {
         tmploc = loc + hdr->content->length;
 
-        if (0 < tmploc && tmploc < ctx->size)
+        if ((tmploc > 0) && (tmploc < ctx->size))
         {
           if (fseeko(ctx->fp, tmploc, SEEK_SET) != 0 ||
               fgets(buf, sizeof(buf) - 1, ctx->fp) == NULL ||
@@ -327,9 +326,15 @@ static int mbox_parse_mailbox(struct Context *ctx)
         LOFF_T tmploc;
 
         loc = ftello(ctx->fp);
-        tmploc = loc + curhdr->content->length + 1;
 
-        if (0 < tmploc && tmploc < ctx->size)
+        /* The test below avoids a potential integer overflow if the
+         * content-length is huge (thus necessarily invalid).
+         */
+        tmploc = (curhdr->content->length < ctx->size) ?
+                     (loc + curhdr->content->length + 1) :
+                     -1;
+
+        if ((tmploc > 0) && (tmploc < ctx->size))
         {
           /*
            * check to see if the content-length looks valid.  we expect to
@@ -339,8 +344,7 @@ static int mbox_parse_mailbox(struct Context *ctx)
               fgets(buf, sizeof(buf), ctx->fp) == NULL ||
               (mutt_str_strncmp("From ", buf, 5) != 0))
           {
-            mutt_debug(1,
-                       "bad content-length in message %d (cl=" OFF_T_FMT ")\n",
+            mutt_debug(1, "bad content-length in message %d (cl=" OFF_T_FMT ")\n",
                        curhdr->index, curhdr->content->length);
             mutt_debug(1, "\tLINE: %s", buf);
             /* nope, return the previous position */
@@ -557,7 +561,7 @@ static int strict_cmp_bodies(const struct Body *b1, const struct Body *b2)
   if (b1->type != b2->type || b1->encoding != b2->encoding ||
       (mutt_str_strcmp(b1->subtype, b2->subtype) != 0) ||
       (mutt_str_strcmp(b1->description, b2->description) != 0) ||
-      !mutt_param_cmp_strict(b1->parameter, b2->parameter) || b1->length != b2->length)
+      !mutt_param_cmp_strict(&b1->parameter, &b2->parameter) || b1->length != b2->length)
     return 0;
   return 1;
 }
@@ -621,10 +625,10 @@ static int reopen_mailbox(struct Context *ctx, int *index_hint)
 
   /* simulate a close */
   if (ctx->id_hash)
-    mutt_hash_destroy(&ctx->id_hash, NULL);
+    mutt_hash_destroy(&ctx->id_hash);
   if (ctx->subj_hash)
-    mutt_hash_destroy(&ctx->subj_hash, NULL);
-  mutt_hash_destroy(&ctx->label_hash, NULL);
+    mutt_hash_destroy(&ctx->subj_hash);
+  mutt_hash_destroy(&ctx->label_hash);
   mutt_clear_threads(ctx);
   FREE(&ctx->v2r);
   if (ctx->readonly)
@@ -921,8 +925,7 @@ void mbox_reset_atime(struct Context *ctx, struct stat *st)
    * When $mbox_check_recent is set, existing new mail is ignored, so do not
    * reset the atime to mtime-1 to signal new mail.
    */
-  if (!option(OPT_MAIL_CHECK_RECENT) && utimebuf.actime >= utimebuf.modtime &&
-      mbox_has_new(ctx))
+  if (!MailCheckRecent && utimebuf.actime >= utimebuf.modtime && mbox_has_new(ctx))
   {
     utimebuf.actime = utimebuf.modtime - 1;
   }
@@ -992,8 +995,10 @@ static int mbox_sync_mailbox(struct Context *ctx, int *index_hint)
     goto bail;
   }
   else if (i < 0)
+  {
     /* fatal error */
     return -1;
+  }
 
   /* Create a temporary file to write the new version of the mailbox in. */
   mutt_mktemp(tempfile, sizeof(tempfile));
@@ -1259,7 +1264,7 @@ static int mbox_sync_mailbox(struct Context *ctx, int *index_hint)
   unlink(tempfile); /* remove partial copy of the mailbox */
   mutt_sig_unblock();
 
-  if (option(OPT_CHECK_MBOX_SIZE))
+  if (CheckMboxSize)
   {
     tmp = mutt_find_mailbox(ctx->path);
     if (tmp && tmp->new == false)
