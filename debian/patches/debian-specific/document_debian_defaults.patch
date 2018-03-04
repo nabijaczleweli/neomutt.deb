@@ -8,9 +8,11 @@ from the default only on Debian systems.
  init.h | 22 ++++++++++++++++++++++
  1 file changed, 22 insertions(+)
 
---- a/init.h
-+++ b/init.h
-@@ -360,6 +360,9 @@
+Index: neomutt/init.h
+===================================================================
+--- neomutt.orig/init.h
++++ neomutt/init.h
+@@ -359,6 +359,9 @@ struct Option MuttVars[] = {
    ** .pp
    ** When this variable is \fIset\fP, NeoMutt will include Delivered-To headers when
    ** bouncing messages.  Postfix users may wish to \fIunset\fP this variable.
@@ -18,9 +20,9 @@ from the default only on Debian systems.
 +  ** \fBNote:\fP On Debian systems, this option is unset by default in
 +  ** /etc/Muttrc.
    */
-   { "braille_friendly", DT_BOOL, R_NONE, OPT_BRAILLE_FRIENDLY, 0 },
+   { "braille_friendly", DT_BOOL, R_NONE, UL &BrailleFriendly, 0 },
    /*
-@@ -1292,6 +1295,9 @@
+@@ -1267,6 +1270,9 @@ struct Option MuttVars[] = {
    ** which case a detected one is not used.
    ** .pp
    ** Also see $$use_domain and $$hidden_host.
@@ -29,8 +31,8 @@ from the default only on Debian systems.
 +  ** from /etc/mailname when Mutt starts.
    */
  #ifdef HAVE_LIBIDN
-   { "idn_decode",       DT_BOOL, R_MENU, OPT_IDN_DECODE, 1 },
-@@ -1960,6 +1966,9 @@
+   { "idn_decode",       DT_BOOL, R_MENU, UL &IdnDecode, 1 },
+@@ -1919,6 +1925,9 @@ struct Option MuttVars[] = {
    ** system.  It is used with various sets of parameters to gather the
    ** list of known remailers, and to finally send a message through the
    ** mixmaster chain.
@@ -39,8 +41,8 @@ from the default only on Debian systems.
 +  ** ``mixmaster-filter'' in /etc/Muttrc.
    */
  #endif
-   { "move",             DT_QUAD, R_NONE, OPT_MOVE, MUTT_NO },
-@@ -3678,6 +3687,10 @@
+   { "move",             DT_QUAD, R_NONE, UL &Move, MUTT_NO },
+@@ -3644,6 +3653,10 @@ struct Option MuttVars[] = {
    ** This is a format string, see the $$smime_decrypt_command command for
    ** possible \fCprintf(3)\fP-like sequences.
    ** (S/MIME only)
@@ -51,7 +53,7 @@ from the default only on Debian systems.
    */
  #ifdef USE_SMTP
    { "smtp_authenticators", DT_STRING, R_NONE, UL &SmtpAuthenticators, UL 0 },
-@@ -3844,6 +3857,9 @@
+@@ -3810,6 +3823,9 @@ struct Option MuttVars[] = {
    ** .ts
    ** set ssl_ca_certificates_file=/etc/ssl/certs/ca-certificates.crt
    ** .te
@@ -61,7 +63,7 @@ from the default only on Debian systems.
    */
  #endif /* USE_SSL_GNUTLS */
    { "ssl_client_cert", DT_PATH, R_NONE, UL &SslClientCert, 0 },
-@@ -4393,6 +4409,9 @@
+@@ -4351,6 +4367,9 @@ struct Option MuttVars[] = {
    ** is set to deliver directly via SMTP (see $$smtp_url), this
    ** option does nothing: NeoMutt will never write out the ``Bcc:'' header
    ** in this case.

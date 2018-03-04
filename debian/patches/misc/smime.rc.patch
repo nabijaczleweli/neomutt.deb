@@ -10,9 +10,11 @@ Signed-off-by: Matteo F. Vescovi <mfv@debian.org>
  contrib/smime.rc | 19 ++++++++++---------
  1 file changed, 10 insertions(+), 9 deletions(-)
 
---- a/contrib/smime.rc
-+++ b/contrib/smime.rc
-@@ -4,33 +4,34 @@
+Index: neomutt/contrib/smime.rc
+===================================================================
+--- neomutt.orig/contrib/smime.rc
++++ neomutt/contrib/smime.rc
+@@ -4,20 +4,20 @@
  
  # If you compiled neomutt with support for both PGP and S/MIME, PGP
  # will be the default method unless the following option is set
@@ -38,26 +40,23 @@ Signed-off-by: Matteo F. Vescovi <mfv@debian.org>
 +#set crypt_replysignencrypted = yes
 +#set crypt_verify_sig = yes
  
- # Section A: Key Management.
  
- # The (default) keyfile for signing/decrypting.  Uncomment the following
- # line and replace the keyid with your own.
--set smime_default_key="12345678.0"
-+#set smime_default_key="12345678.0"
- 
- # Uncomment to make neomutt ask what key to use when trying to decrypt a message.
- # It will use the default key above (if that was set) else.
+ # Section A: Key Management
+@@ -47,9 +47,11 @@ set crypt_verify_sig = yes
  # unset smime_decrypt_use_default_key
  
  # Path to a file or directory with trusted certificates
 -set smime_ca_location="~/.smime/ca-bundle.crt"
-+#set smime_ca_location="~/.smime/ca-bundle.crt"
-+set smime_ca_location=`for f in $HOME/.smime/ca-certificates.crt $HOME/.smime/ca-bundle.crt /etc/ssl/certs/ca-certificates.crt ; do if [ -e $f ] ; then echo $f ; exit ; fi ; done`
++# set smime_ca_location="~/.smime/ca-bundle.crt"
  
  # Path to where all known certificates go. (must exist!)
++set smime_ca_location=`for f in $HOME/.smime/ca-certificates.crt $HOME/.smime/ca-bundle.crt /etc/ssl/certs/ca-certificates.crt ; do if [ -e $f ] ; then echo $f ; exit ; fi ; done`
++
  set smime_certificates="~/.smime/certificates"
-@@ -77,7 +78,7 @@
- #Section C: Incoming messages
+ 
+ # Path to where all private keys go. (must exist!)
+@@ -94,7 +96,7 @@ set smime_sign_command="openssl smime -s
+ # Section C: Incoming messages
  
  # Decrypt a message.  Output is a MIME entity.
 -set smime_decrypt_command="openssl smime -decrypt -passin stdin -inform DER -in %f -inkey %k -recip %c"
