@@ -34,14 +34,12 @@
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 #include "mutt/mutt.h"
 #include "mutt.h"
 #include "rfc1524.h"
 #include "body.h"
 #include "globals.h"
 #include "options.h"
-#include "parameter.h"
 #include "protos.h"
 
 /**
@@ -69,7 +67,7 @@ int rfc1524_expand_command(struct Body *a, char *filename, char *type, char *com
 
   mutt_str_strfcpy(type2, type, sizeof(type2));
 
-  if (option(OPT_MAILCAP_SANITIZE))
+  if (MailcapSanitize)
     mutt_file_sanitize_filename(type2, 0);
 
   while (x < clen - 1 && command[x] && y < sizeof(buf) - 1)
@@ -94,9 +92,9 @@ int rfc1524_expand_command(struct Body *a, char *filename, char *type, char *com
           param[z++] = command[x++];
         param[z] = '\0';
 
-        pvalue2 = mutt_param_get(param, a->parameter);
+        pvalue2 = mutt_param_get(&a->parameter, param);
         mutt_str_strfcpy(pvalue, NONULL(pvalue2), sizeof(pvalue));
-        if (option(OPT_MAILCAP_SANITIZE))
+        if (MailcapSanitize)
           mutt_file_sanitize_filename(pvalue, 0);
 
         y += mutt_file_quote_filename(buf + y, sizeof(buf) - y, pvalue);
@@ -260,19 +258,25 @@ static int rfc1524_mailcap_parse(struct Body *a, char *filename, char *type,
           /* this compare most occur before compose to match correctly */
           if (get_field_text(field + 12, entry ? &entry->composetypecommand : NULL,
                              type, filename, line))
+          {
             composecommand = true;
+          }
         }
         else if (mutt_str_strncasecmp(field, "compose", 7) == 0)
         {
           if (get_field_text(field + 7, entry ? &entry->composecommand : NULL,
                              type, filename, line))
+          {
             composecommand = true;
+          }
         }
         else if (mutt_str_strncasecmp(field, "print", 5) == 0)
         {
           if (get_field_text(field + 5, entry ? &entry->printcommand : NULL,
                              type, filename, line))
+          {
             printcommand = true;
+          }
         }
         else if (mutt_str_strncasecmp(field, "edit", 4) == 0)
         {
@@ -301,7 +305,10 @@ static int rfc1524_mailcap_parse(struct Body *a, char *filename, char *type,
           {
             len = mutt_str_strlen(test_command) + STRING;
             mutt_mem_realloc(&test_command, len);
-            rfc1524_expand_command(a, a->filename, type, test_command, len);
+            if (rfc1524_expand_command(a, a->filename, type, test_command, len) == 1)
+            {
+              mutt_debug(1, "Command is expecting to be piped\n");
+            }
             if (mutt_system(test_command) != 0)
             {
               /* a non-zero exit code means test failed */
@@ -550,7 +557,7 @@ int rfc1524_expand_filename(char *nametemplate, char *oldfile, char *newfile, si
       if (lmatch)
         *left = 0;
       else
-        mutt_str_strnfcpy(left, nametemplate, sizeof(left), i);
+        mutt_str_strnfcpy(left, nametemplate, i, sizeof(left));
 
       if (rmatch)
         *right = 0;

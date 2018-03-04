@@ -44,6 +44,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
 #include "mutt/mutt.h"
@@ -111,11 +112,11 @@ struct NmCtxData
 {
   notmuch_database_t *db;
 
-  struct Url db_url;           /**< Parsed view url of the Notmuch database */
-  char *db_url_holder;         /**< The storage string used by db_url, we keep it
+  struct Url db_url;   /**< Parsed view url of the Notmuch database */
+  char *db_url_holder; /**< The storage string used by db_url, we keep it
                                 *   to be able to free db_url */
-  char *db_query;              /**< Previous query */
-  int db_limit;                /**< Maximum number of results to return */
+  char *db_query;      /**< Previous query */
+  int db_limit;        /**< Maximum number of results to return */
   enum NmQueryType query_type; /**< Messages or Threads */
 
   struct Progress progress; /**< A progress bar */
@@ -237,9 +238,9 @@ static char *header_get_id(struct Header *h)
   return (h && h->data) ? ((struct NmHdrData *) h->data)->virtual_id : NULL;
 }
 
-static char *header_get_fullpath(struct Header *h, char *buf, size_t bufsz)
+static char *header_get_fullpath(struct Header *h, char *buf, size_t buflen)
 {
-  snprintf(buf, bufsz, "%s/%s", nm_header_get_folder(h), h->path);
+  snprintf(buf, buflen, "%s/%s", nm_header_get_folder(h), h->path);
   return buf;
 }
 
@@ -308,7 +309,7 @@ static void query_window_reset(void)
  * windowed_query_from_query - transforms a vfolder search query into a windowed one
  * @param[in]  query vfolder search string
  * @param[out] buf   allocated string buffer to receive the modified search query
- * @param[in]  bufsz allocated maximum size of the buf string buffer
+ * @param[in]  buflen allocated maximum size of the buf string buffer
  * @retval true  Transformed search query is available as a string in buf
  * @retval false Search query shall not be transformed
  *
@@ -342,7 +343,7 @@ static void query_window_reset(void)
  * If there's no search registered in `nm_query_window_current_search` or this is
  * a new search, it will reset the window and do the search.
  */
-static bool windowed_query_from_query(const char *query, char *buf, size_t bufsz)
+static bool windowed_query_from_query(const char *query, char *buf, size_t buflen)
 {
   mutt_debug(2, "nm: %s\n", query);
 
@@ -369,10 +370,10 @@ static bool windowed_query_from_query(const char *query, char *buf, size_t bufsz
   }
 
   if (end == 0)
-    snprintf(buf, bufsz, "date:%d%s..now and %s", beg, NmQueryWindowTimebase,
+    snprintf(buf, buflen, "date:%d%s..now and %s", beg, NmQueryWindowTimebase,
              NmQueryWindowCurrentSearch);
   else
-    snprintf(buf, bufsz, "date:%d%s..%d%s and %s", beg, NmQueryWindowTimebase,
+    snprintf(buf, buflen, "date:%d%s..%d%s and %s", beg, NmQueryWindowTimebase,
              end, NmQueryWindowTimebase, NmQueryWindowCurrentSearch);
 
   mutt_debug(2, "nm: %s -> %s\n", query, buf);
@@ -490,9 +491,8 @@ static notmuch_database_t *do_database_open(const char *filename, bool writable,
     st = notmuch_database_open(filename, writable ? NOTMUCH_DATABASE_MODE_READ_WRITE : NOTMUCH_DATABASE_MODE_READ_ONLY,
                                &db);
 #else
-    db = notmuch_database_open(filename,
-                               writable ? NOTMUCH_DATABASE_MODE_READ_WRITE :
-                                          NOTMUCH_DATABASE_MODE_READ_ONLY);
+    db = notmuch_database_open(filename, writable ? NOTMUCH_DATABASE_MODE_READ_WRITE :
+                                                    NOTMUCH_DATABASE_MODE_READ_ONLY);
 #endif
     if (db || !NmOpenTimeout || ((ct / 2) > NmOpenTimeout))
       break;
@@ -1578,13 +1578,12 @@ done:
     mutt_message(_("No more messages in the thread."));
 
   data->oldmsgcount = 0;
-  mutt_debug(1,
-             "nm: reading entire-thread messages... done [rc=%d, count=%d]\n",
+  mutt_debug(1, "nm: reading entire-thread messages... done [rc=%d, count=%d]\n",
              rc, ctx->msgcount);
   return rc;
 }
 
-char *nm_uri_from_query(struct Context *ctx, char *buf, size_t bufsz)
+char *nm_uri_from_query(struct Context *ctx, char *buf, size_t buflen)
 {
   mutt_debug(2, "(%s)\n", buf);
   struct NmCtxData *data = get_ctxdata(ctx);
@@ -1623,8 +1622,8 @@ char *nm_uri_from_query(struct Context *ctx, char *buf, size_t bufsz)
 
   url_pct_encode(&uri[added], sizeof(uri) - added, buf);
 
-  strncpy(buf, uri, bufsz);
-  buf[bufsz - 1] = '\0';
+  strncpy(buf, uri, buflen);
+  buf[buflen - 1] = '\0';
 
   mutt_debug(1, "nm: uri from query '%s'\n", buf);
   return buf;
@@ -1950,17 +1949,17 @@ char *nm_get_description(struct Context *ctx)
   return NULL;
 }
 
-int nm_description_to_path(const char *desc, char *buf, size_t bufsz)
+int nm_description_to_path(const char *desc, char *buf, size_t buflen)
 {
-  if (!desc || !buf || !bufsz)
+  if (!desc || !buf || (buflen == 0))
     return -EINVAL;
 
   for (struct Buffy *b = Incoming; b; b = b->next)
   {
     if ((b->magic == MUTT_NOTMUCH) && b->desc && (strcmp(desc, b->desc) == 0))
     {
-      strncpy(buf, b->path, bufsz);
-      buf[bufsz - 1] = '\0';
+      strncpy(buf, b->path, buflen);
+      buf[buflen - 1] = '\0';
       return 0;
     }
   }
@@ -2373,9 +2372,8 @@ static int nm_open_message(struct Context *ctx, struct Message *msg, int msgno)
   if (!ctx || !msg)
     return 1;
   struct Header *cur = ctx->hdrs[msgno];
-  char *folder = ctx->path;
   char path[_POSIX_PATH_MAX];
-  folder = nm_header_get_folder(cur);
+  char *folder = nm_header_get_folder(cur);
 
   snprintf(path, sizeof(path), "%s/%s", folder, cur->path);
 

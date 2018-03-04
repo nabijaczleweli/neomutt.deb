@@ -51,12 +51,12 @@ struct Progress;
 #define IMAP_LOG_PASS 5
 
 /* IMAP command responses. Used in ImapCommand.state too */
-#define IMAP_CMD_OK       (0)  /**< `<tag> OK ...` */
-#define IMAP_CMD_BAD      (-1) /**< `<tag> BAD ...` */
-#define IMAP_CMD_NO       (-2) /**< `<tag> NO ...` */
-#define IMAP_CMD_CONTINUE (1)  /**< `* ...` */
-#define IMAP_CMD_RESPOND  (2)  /**< `+` */
-#define IMAP_CMD_NEW      (3)  /**< ImapCommand.state additions */
+#define IMAP_CMD_OK       0  /**< `<tag> OK ...` */
+#define IMAP_CMD_BAD      -1 /**< `<tag> BAD ...` */
+#define IMAP_CMD_NO       -2 /**< `<tag> NO ...` */
+#define IMAP_CMD_CONTINUE 1  /**< `* ...` */
+#define IMAP_CMD_RESPOND  2  /**< `+` */
+#define IMAP_CMD_NEW      3  /**< ImapCommand.state additions */
 
 /* number of entries in the hash table */
 #define IMAP_CACHE_LEN 10
@@ -279,7 +279,7 @@ int imap_exec_msgset(struct ImapData *idata, const char *pre, const char *post,
 int imap_open_connection(struct ImapData *idata);
 void imap_close_connection(struct ImapData *idata);
 struct ImapData *imap_conn_find(const struct Account *account, int flags);
-int imap_read_literal(FILE *fp, struct ImapData *idata, long bytes, struct Progress *pbar);
+int imap_read_literal(FILE *fp, struct ImapData *idata, unsigned long bytes, struct Progress *pbar);
 void imap_expunge_mailbox(struct ImapData *idata);
 void imap_logout(struct ImapData **idata);
 int imap_sync_message_for_copy(struct ImapData *idata, struct Header *hdr, struct Buffer *cmd, int *err_continue);
@@ -324,7 +324,7 @@ struct ImapData *imap_new_idata(void);
 void imap_free_idata(struct ImapData **idata);
 char *imap_fix_path(struct ImapData *idata, const char *mailbox, char *path, size_t plen);
 void imap_cachepath(struct ImapData *idata, const char *mailbox, char *dest, size_t dlen);
-int imap_get_literal_count(const char *buf, long *bytes);
+int imap_get_literal_count(const char *buf, unsigned int *bytes);
 char *imap_get_qualifier(char *buf);
 int imap_mxcmp(const char *mx1, const char *mx2);
 char *imap_next_word(char *s);

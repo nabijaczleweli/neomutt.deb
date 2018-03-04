@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include "mutt/mutt.h"
 #include "mutt.h"
 #include "keymap.h"
@@ -494,6 +495,7 @@ int km_dokey(int menu)
       if (ImapKeepalive >= i)
         imap_keepalive();
       else
+      {
         while (ImapKeepalive && ImapKeepalive < i)
         {
           timeout(ImapKeepalive * 1000);
@@ -508,6 +510,7 @@ int km_dokey(int menu)
           i -= ImapKeepalive;
           imap_keepalive();
         }
+      }
     }
 #endif
 
@@ -543,7 +546,8 @@ int km_dokey(int menu)
       {
         /* check generic menu */
         bindings = OpGeneric;
-        if ((func = get_func(bindings, tmp.op)))
+        func = get_func(bindings, tmp.op);
+        if (func)
           return tmp.op;
       }
 
@@ -585,7 +589,7 @@ int km_dokey(int menu)
       if (map->op != OP_MACRO)
         return map->op;
 
-      if (option(OPT_IGNORE_MACRO_EVENTS))
+      if (OPT_IGNORE_MACRO_EVENTS)
       {
         mutt_error(_("Macros are currently disabled."));
         return -1;
@@ -619,7 +623,8 @@ static const char *km_keyname(int c)
   static char buf[10];
   const char *p = NULL;
 
-  if ((p = mutt_map_get_name(c, KeyNames)))
+  p = mutt_map_get_name(c, KeyNames);
+  if (p)
     return p;
 
   if (c < 256 && c > -128 && iscntrl((unsigned char) c))
@@ -1035,9 +1040,8 @@ static int try_bind(char *key, int menu, char *func,
   }
   if (err)
   {
-    snprintf(err->data, err->dsize,
-             _("Function '%s' not available for menu '%s'"), func,
-             mutt_map_get_name(menu, Menus));
+    snprintf(err->data, err->dsize, _("Function '%s' not available for menu '%s'"),
+             func, mutt_map_get_name(menu, Menus));
   }
   return -1; /* Couldn't find an existing function with this name */
 }
@@ -1252,8 +1256,7 @@ void mutt_what_key(void)
 {
   int ch;
 
-  mutt_window_mvprintw(MuttMessageWindow, 0, 0,
-                       _("Enter keys (^G to abort): "));
+  mutt_window_mvprintw(MuttMessageWindow, 0, 0, _("Enter keys (^G to abort): "));
   do
   {
     ch = getch();

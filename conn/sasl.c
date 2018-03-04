@@ -115,8 +115,9 @@ static int getnameinfo_err(int ret)
       err = SASL_FAIL; /* no real equivalent */
       break;
     case EAI_SYSTEM:
-      mutt_debug(1, "A system error occurred.  The error code can be found in "
-                    "errno(%d,%s)).\n",
+      mutt_debug(1,
+                 "A system error occurred.  The error code can be found in "
+                 "errno(%d,%s)).\n",
                  errno, strerror(errno));
       err = SASL_FAIL; /* no real equivalent */
       break;
@@ -661,7 +662,7 @@ int mutt_sasl_interact(sasl_interact_t *interaction)
 
     snprintf(prompt, sizeof(prompt), "%s: ", interaction->prompt);
     resp[0] = '\0';
-    if (option(OPT_NO_CURSES) || mutt_get_field(prompt, resp, sizeof(resp), 0))
+    if (OPT_NO_CURSES || mutt_get_field(prompt, resp, sizeof(resp), 0))
       return SASL_FAIL;
 
     interaction->len = mutt_str_strlen(resp) + 1;

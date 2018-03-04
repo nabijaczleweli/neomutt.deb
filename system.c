@@ -21,9 +21,9 @@
  */
 
 #include "config.h"
-#include <limits.h>
 #include <signal.h>
 #include <stdlib.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include "mutt/mutt.h"
 #include "mutt.h"
@@ -31,8 +31,6 @@
 #ifdef USE_IMAP
 #include "imap/imap.h"
 #endif
-#include <sys/types.h>
-#include <sys/wait.h>
 
 /**
  * mutt_system - Run an external command

@@ -27,11 +27,11 @@
  *
  * | Function                   | Description
  * | :------------------------- | :---------------------------------------------------------
- * | mutt_sig_exit_handler()    | Notify the user and shutdown gracefully
- * | mutt_sig_empty_handler()   | Dummy signal handler
  * | mutt_sig_allow_interrupt() | Allow/disallow Ctrl-C (SIGINT)
  * | mutt_sig_block()           | Block signals during critical operations
  * | mutt_sig_block_system()    | Block signals before calling exec()
+ * | mutt_sig_empty_handler()   | Dummy signal handler
+ * | mutt_sig_exit_handler()    | Notify the user and shutdown gracefully
  * | mutt_sig_init()            | Initialise the signal handling
  * | mutt_sig_unblock()         | Restore previously blocked signals
  * | mutt_sig_unblock_system()  | Restore previously blocked signals
@@ -44,7 +44,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "debug.h"
 #include "message.h"
 #include "signal2.h"
 
@@ -133,9 +132,7 @@ void mutt_sig_init(sig_handler_t sig_fn, sig_handler_t exit_fn)
   sigaction(SIGCONT, &act, NULL);
   sigaction(SIGTSTP, &act, NULL);
   sigaction(SIGINT, &act, NULL);
-#if defined(USE_SLANG_CURSES) || defined(HAVE_RESIZETERM)
   sigaction(SIGWINCH, &act, NULL);
-#endif
 
   /* POSIX doesn't allow us to ignore SIGCHLD,
    * so we just install a dummy handler for it */
@@ -163,9 +160,7 @@ void mutt_sig_block(void)
   sigaddset(&Sigset, SIGHUP);
   sigaddset(&Sigset, SIGTSTP);
   sigaddset(&Sigset, SIGINT);
-#if defined(USE_SLANG_CURSES) || defined(HAVE_RESIZETERM)
   sigaddset(&Sigset, SIGWINCH);
-#endif
   sigprocmask(SIG_BLOCK, &Sigset, 0);
   SignalsBlocked = true;
 }

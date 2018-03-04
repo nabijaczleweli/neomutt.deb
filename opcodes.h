@@ -43,6 +43,7 @@
   _fmt(OP_BUFFY_LIST,                     N_("list mailboxes with new mail")) \
   _fmt(OP_CATCHUP,                        N_("mark all articles in newsgroup as read")) \
   _fmt(OP_CHANGE_DIRECTORY,               N_("change directories")) \
+  _fmt(OP_GOTO_PARENT,                    N_("go to parent directory")) \
   _fmt(OP_CHECK_NEW,                      N_("check mailboxes for new mail")) \
   _fmt(OP_COMPOSE_ATTACH_FILE,            N_("attach file(s) to this message")) \
   _fmt(OP_COMPOSE_ATTACH_MESSAGE,         N_("attach message(s) to this message")) \
@@ -108,6 +109,7 @@
   _fmt(OP_EDITOR_FORWARD_WORD,            N_("move the cursor to the end of the word")) \
   _fmt(OP_EDITOR_HISTORY_DOWN,            N_("scroll down through the history list")) \
   _fmt(OP_EDITOR_HISTORY_UP,              N_("scroll up through the history list")) \
+  _fmt(OP_EDITOR_HISTORY_SEARCH,          N_("search through the history list")) \
   _fmt(OP_EDITOR_KILL_EOL,                N_("delete chars from cursor to end of line")) \
   _fmt(OP_EDITOR_KILL_EOW,                N_("delete chars from the cursor to the end of the word")) \
   _fmt(OP_EDITOR_KILL_LINE,               N_("delete all chars on the line")) \

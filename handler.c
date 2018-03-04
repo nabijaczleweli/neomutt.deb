@@ -24,9 +24,6 @@
 #include <stddef.h>
 #include <ctype.h>
 #include <iconv.h>
-#ifdef ENABLE_NLS
-#include <libintl.h>
-#endif
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -44,13 +41,10 @@
 #include "filter.h"
 #include "globals.h"
 #include "keymap.h"
-#include "mime.h"
-#include "mutt_charset.h"
 #include "mutt_curses.h"
 #include "ncrypt/ncrypt.h"
 #include "opcodes.h"
 #include "options.h"
-#include "parameter.h"
 #include "protos.h"
 #include "rfc1524.h"
 #include "rfc3676.h"
@@ -61,25 +55,12 @@
 
 typedef int (*handler_t)(struct Body *b, struct State *s);
 
-// clang-format off
-const int IndexHex[128] = {
-    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
-    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
-    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
-     0, 1, 2, 3,  4, 5, 6, 7,  8, 9,-1,-1, -1,-1,-1,-1,
-    -1,10,11,12, 13,14,15,-1, -1,-1,-1,-1, -1,-1,-1,-1,
-    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
-    -1,10,11,12, 13,14,15,-1, -1,-1,-1,-1, -1,-1,-1,-1,
-    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1
-};
-// clang-format on
-
 static void print_part_line(struct State *s, struct Body *b, int n)
 {
   char length[5];
-  mutt_pretty_size(length, sizeof(length), b->length);
+  mutt_str_pretty_size(length, sizeof(length), b->length);
   state_mark_attach(s);
-  char *charset = mutt_param_get("charset", b->parameter);
+  char *charset = mutt_param_get(&b->parameter, "charset");
   if (n != 0)
     state_printf(s, _("[-- Alternative Type #%d: "), n);
   else
@@ -120,7 +101,7 @@ static void convert_to_state(iconv_t cd, char *bufi, size_t *l, struct State *s)
   while (true)
   {
     ob = bufo, obl = sizeof(bufo);
-    mutt_cs_iconv(cd, &ib, &ibl, &ob, &obl, 0, "?");
+    mutt_ch_iconv(cd, &ib, &ibl, &ob, &obl, 0, "?");
     if (ob == bufo)
       break;
     state_prefix_put(bufo, ob - bufo, s);
@@ -264,8 +245,6 @@ static void decode_quoted(struct State *s, long len, int istext, iconv_t cd)
 
   while (len > 0)
   {
-    last = 0;
-
     /*
      * It's ok to use a fixed size buffer for input, even if the line turns
      * out to be longer than this.  Just process the line in chunks.  This
@@ -419,9 +398,9 @@ static void decode_uuencoded(struct State *s, long len, int istext, iconv_t cd)
   state_reset_prefix(s);
 }
 
-/* ----------------------------------------------------------------------------
- * A (not so) minimal implementation of RFC1563.
- */
+  /* ----------------------------------------------------------------------------
+   * A (not so) minimal implementation of RFC1563.
+   */
 
 #define INDENT_SIZE 4
 
@@ -930,16 +909,18 @@ static int text_enriched_handler(struct Body *a, struct State *s)
  */
 static int is_mmnoask(const char *buf)
 {
-  char tmp[LONG_STRING], *p = NULL, *q = NULL;
+  char *p = NULL;
+  const char *val = NULL;
+  char tmp[LONG_STRING], *q = NULL;
   int lng;
 
-  p = getenv("MM_NOASK");
-  if (p && *p)
+  val = mutt_str_getenv("MM_NOASK");
+  if (val)
   {
-    if (mutt_str_strcmp(p, "1") == 0)
+    if (mutt_str_strcmp(val, "1") == 0)
       return 1;
 
-    mutt_str_strfcpy(tmp, p, sizeof(tmp));
+    mutt_str_strfcpy(tmp, val, sizeof(tmp));
     p = tmp;
 
     while ((p = strtok(p, ",")) != NULL)
@@ -985,7 +966,7 @@ static int is_autoview(struct Body *b)
 
   snprintf(type, sizeof(type), "%s/%s", TYPE(b), b->subtype);
 
-  if (option(OPT_IMPLICIT_AUTOVIEW))
+  if (ImplicitAutoview)
   {
     /* $implicit_autoview is essentially the same as "auto_view *" */
     is_av = 1;
@@ -1041,7 +1022,7 @@ static int alternative_handler(struct Body *a, struct State *s)
     b = mutt_new_body();
     b->length = (long) st.st_size;
     b->parts = mutt_parse_multipart(
-        s->fpin, mutt_param_get("boundary", a->parameter), (long) st.st_size,
+        s->fpin, mutt_param_get(&a->parameter, "boundary"), (long) st.st_size,
         (mutt_str_strcasecmp("digest", a->subtype) == 0));
   }
   else
@@ -1154,7 +1135,7 @@ static int alternative_handler(struct Body *a, struct State *s)
 
   if (choice)
   {
-    if (s->flags & MUTT_DISPLAY && !option(OPT_WEED))
+    if (s->flags & MUTT_DISPLAY && !Weed)
     {
       fseeko(s->fpin, choice->hdr_offset, SEEK_SET);
       mutt_file_copy_bytes(s->fpin, s->fpout, choice->offset - choice->hdr_offset);
@@ -1230,7 +1211,7 @@ static int message_handler(struct Body *a, struct State *s)
   {
     mutt_copy_hdr(s->fpin, s->fpout, off_start, b->parts->offset,
                   (((s->flags & MUTT_WEED) ||
-                    ((s->flags & (MUTT_DISPLAY | MUTT_PRINTING)) && option(OPT_WEED))) ?
+                    ((s->flags & (MUTT_DISPLAY | MUTT_PRINTING)) && Weed)) ?
                        (CH_WEED | CH_REORDER) :
                        0) |
                       (s->prefix ? CH_PREFIX : 0) | CH_DECODE | CH_FROM |
@@ -1303,7 +1284,7 @@ static int multipart_handler(struct Body *a, struct State *s)
     b = mutt_new_body();
     b->length = (long) st.st_size;
     b->parts = mutt_parse_multipart(
-        s->fpin, mutt_param_get("boundary", a->parameter), (long) st.st_size,
+        s->fpin, mutt_param_get(&a->parameter, "boundary"), (long) st.st_size,
         (mutt_str_strcasecmp("digest", a->subtype) == 0));
   }
   else
@@ -1322,7 +1303,7 @@ static int multipart_handler(struct Body *a, struct State *s)
       }
       state_puts(" --]\n", s);
       print_part_line(s, p, 0);
-      if (!option(OPT_WEED))
+      if (!Weed)
       {
         fseeko(s->fpin, p->hdr_offset, SEEK_SET);
         mutt_file_copy_bytes(s->fpin, s->fpout, p->offset - p->hdr_offset);
@@ -1341,8 +1322,7 @@ static int multipart_handler(struct Body *a, struct State *s)
                  NONULL(p->subtype));
     }
 
-    if ((s->flags & MUTT_REPLYING) && (option(OPT_INCLUDE_ONLYFIRST)) &&
-        (s->flags & MUTT_FIRSTDONE))
+    if ((s->flags & MUTT_REPLYING) && IncludeOnlyfirst && (s->flags & MUTT_FIRSTDONE))
     {
       break;
     }
@@ -1495,7 +1475,7 @@ static int external_body_handler(struct Body *b, struct State *s)
   const char *expiration = NULL;
   time_t expire;
 
-  access_type = mutt_param_get("access-type", b->parameter);
+  access_type = mutt_param_get(&b->parameter, "access-type");
   if (!access_type)
   {
     if (s->flags & MUTT_DISPLAY)
@@ -1510,7 +1490,7 @@ static int external_body_handler(struct Body *b, struct State *s)
       return -1;
   }
 
-  expiration = mutt_param_get("expiration", b->parameter);
+  expiration = mutt_param_get(&b->parameter, "expiration");
   if (expiration)
     expire = mutt_date_parse_date(expiration, NULL);
   else
@@ -1525,10 +1505,10 @@ static int external_body_handler(struct Body *b, struct State *s)
 
       state_mark_attach(s);
       state_printf(s, _("[-- This %s/%s attachment "), TYPE(b->parts), b->parts->subtype);
-      length = mutt_param_get("length", b->parameter);
+      length = mutt_param_get(&b->parameter, "length");
       if (length)
       {
-        mutt_pretty_size(pretty_size, sizeof(pretty_size), strtol(length, NULL, 10));
+        mutt_str_pretty_size(pretty_size, sizeof(pretty_size), strtol(length, NULL, 10));
         state_printf(s, _("(size %s bytes) "), pretty_size);
       }
       state_puts(_("has been deleted --]\n"), s);
@@ -1545,7 +1525,7 @@ static int external_body_handler(struct Body *b, struct State *s)
       }
 
       mutt_copy_hdr(s->fpin, s->fpout, ftello(s->fpin), b->parts->offset,
-                    (option(OPT_WEED) ? (CH_WEED | CH_REORDER) : 0) | CH_DECODE, NULL);
+                    (Weed ? (CH_WEED | CH_REORDER) : 0) | CH_DECODE, NULL);
     }
   }
   else if (expiration && expire < time(NULL))
@@ -1560,8 +1540,7 @@ static int external_body_handler(struct Body *b, struct State *s)
                         s);
 
       mutt_copy_hdr(s->fpin, s->fpout, ftello(s->fpin), b->parts->offset,
-                    (option(OPT_WEED) ? (CH_WEED | CH_REORDER) : 0) | CH_DECODE | CH_DISPLAY,
-                    NULL);
+                    (Weed ? (CH_WEED | CH_REORDER) : 0) | CH_DECODE | CH_DISPLAY, NULL);
     }
   }
   else
@@ -1572,11 +1551,9 @@ static int external_body_handler(struct Body *b, struct State *s)
       state_printf(s, _("[-- This %s/%s attachment is not included, --]\n"),
                    TYPE(b->parts), b->parts->subtype);
       state_mark_attach(s);
-      state_printf(
-          s, _("[-- and the indicated access-type %s is unsupported --]\n"), access_type);
+      state_printf(s, _("[-- and the indicated access-type %s is unsupported --]\n"), access_type);
       mutt_copy_hdr(s->fpin, s->fpout, ftello(s->fpin), b->parts->offset,
-                    (option(OPT_WEED) ? (CH_WEED | CH_REORDER) : 0) | CH_DECODE | CH_DISPLAY,
-                    NULL);
+                    (Weed ? (CH_WEED | CH_REORDER) : 0) | CH_DECODE | CH_DISPLAY, NULL);
     }
   }
 
@@ -1590,14 +1567,14 @@ void mutt_decode_attachment(struct Body *b, struct State *s)
 
   if (istext && s->flags & MUTT_CHARCONV)
   {
-    char *charset = mutt_param_get("charset", b->parameter);
+    char *charset = mutt_param_get(&b->parameter, "charset");
     if (!charset && AssumedCharset && *AssumedCharset)
-      charset = mutt_cs_get_default_charset();
+      charset = mutt_ch_get_default_charset();
     if (charset && Charset)
-      cd = mutt_iconv_open(Charset, charset, MUTT_ICONV_HOOK_FROM);
+      cd = mutt_ch_iconv_open(Charset, charset, MUTT_ICONV_HOOK_FROM);
   }
   else if (istext && b->charset)
-    cd = mutt_iconv_open(Charset, b->charset, MUTT_ICONV_HOOK_FROM);
+    cd = mutt_ch_iconv_open(Charset, b->charset, MUTT_ICONV_HOOK_FROM);
 
   fseeko(s->fpin, b->offset, SEEK_SET);
   switch (b->encoding)
@@ -1642,7 +1619,7 @@ static int text_plain_handler(struct Body *b, struct State *s)
 
   while ((buf = mutt_file_read_line(buf, &sz, s->fpin, NULL, 0)))
   {
-    if ((mutt_str_strcmp(buf, "-- ") != 0) && option(OPT_TEXT_FLOWED))
+    if ((mutt_str_strcmp(buf, "-- ") != 0) && TextFlowed)
     {
       l = mutt_str_strlen(buf);
       while (l > 0 && buf[l - 1] == ' ')
@@ -1850,8 +1827,9 @@ int mutt_body_handler(struct Body *b, struct State *s)
        */
       if ((WithCrypto & APPLICATION_PGP) && mutt_is_application_pgp(b))
         handler = crypt_pgp_application_pgp_handler;
-      else if (option(OPT_REFLOW_TEXT) &&
-               (mutt_str_strcasecmp("flowed", mutt_param_get("format", b->parameter)) == 0))
+      else if (ReflowText &&
+               (mutt_str_strcasecmp("flowed",
+                                    mutt_param_get(&b->parameter, "format")) == 0))
       {
         handler = rfc3676_handler;
       }
@@ -1885,7 +1863,7 @@ int mutt_body_handler(struct Body *b, struct State *s)
     }
     else if (WithCrypto && (mutt_str_strcasecmp("signed", b->subtype) == 0))
     {
-      p = mutt_param_get("protocol", b->parameter);
+      p = mutt_param_get(&b->parameter, "protocol");
 
       if (!p)
         mutt_error(_("Error: multipart/signed has no protocol."));
@@ -1906,15 +1884,13 @@ int mutt_body_handler(struct Body *b, struct State *s)
 
     if (b->encoding != ENC7BIT && b->encoding != ENC8BIT && b->encoding != ENCBINARY)
     {
-      mutt_debug(1,
-                 "Bad encoding type %d for multipart entity, assuming 7 bit\n", b->encoding);
+      mutt_debug(1, "Bad encoding type %d for multipart entity, assuming 7 bit\n", b->encoding);
       b->encoding = ENC7BIT;
     }
   }
   else if (WithCrypto && b->type == TYPEAPPLICATION)
   {
-    if (option(OPT_DONT_HANDLE_PGP_KEYS) &&
-        (mutt_str_strcasecmp("pgp-keys", b->subtype) == 0))
+    if (OPT_DONT_HANDLE_PGP_KEYS && (mutt_str_strcasecmp("pgp-keys", b->subtype) == 0))
     {
       /* pass raw part through for key extraction */
       plaintext = true;
@@ -1927,30 +1903,30 @@ int mutt_body_handler(struct Body *b, struct State *s)
 
   /* only respect disposition == attachment if we're not
      displaying from the attachment menu (i.e. pager) */
-  if ((!option(OPT_HONOR_DISPOSITION) ||
-       (b->disposition != DISPATTACH || option(OPT_VIEW_ATTACH))) &&
+  if ((!HonorDisposition || (b->disposition != DISPATTACH || OPT_VIEW_ATTACH)) &&
       (plaintext || handler))
   {
     rc = run_decode_and_handler(b, s, handler, plaintext);
   }
   /* print hint to use attachment menu for disposition == attachment
      if we're not already being called from there */
-  else if ((s->flags & MUTT_DISPLAY) ||
-           (b->disposition == DISPATTACH && !option(OPT_VIEW_ATTACH) &&
-            option(OPT_HONOR_DISPOSITION) && (plaintext || handler)))
+  else if ((s->flags & MUTT_DISPLAY) || (b->disposition == DISPATTACH && !OPT_VIEW_ATTACH &&
+                                         HonorDisposition && (plaintext || handler)))
   {
     state_mark_attach(s);
-    if (option(OPT_HONOR_DISPOSITION) && b->disposition == DISPATTACH)
+    if (HonorDisposition && b->disposition == DISPATTACH)
       fputs(_("[-- This is an attachment "), s->fpout);
     else
       state_printf(s, _("[-- %s/%s is unsupported "), TYPE(b), b->subtype);
-    if (!option(OPT_VIEW_ATTACH))
+    if (!OPT_VIEW_ATTACH)
     {
       char keystroke[SHORT_STRING];
 
       if (km_expand_key(keystroke, sizeof(keystroke),
                         km_find_func(MENU_PAGER, OP_VIEW_ATTACHMENTS)))
+      {
         fprintf(s->fpout, _("(use '%s' to view this part)"), keystroke);
+      }
       else
         fputs(_("(need 'view-attachments' bound to key!)"), s->fpout);
     }
