@@ -1,7 +1,7 @@
 Source: neomutt
 Section: mail
 Priority: optional
-Maintainer: Mutt maintainers <pkg-mutt-maintainers@lists.alioth.debian.org>
+Maintainer: Mutt maintainers <neomutt@packages.debian.org>
 Uploaders:
  Antonio Radici <antonio@debian.org>,
  Faidon Liambotis <paravoid@debian.org>
@@ -25,8 +25,8 @@ Build-Depends: debhelper (>= 10), dh-lua,
  xsltproc,
  zlib1g-dev
 Standards-Version: 4.1.2
-Vcs-Git: https://anonscm.debian.org/git/pkg-mutt/neomutt.git
-Vcs-Browser: https://anonscm.debian.org/cgit/pkg-mutt/neomutt.git
+Vcs-Git: https://salsa.debian.org/mutt-team/neomutt.git
+Vcs-Browser: https://salsa.debian.org/mutt-team/neomutt
 Homepage: http://www.neomutt.org/
 
 Package: neomutt
