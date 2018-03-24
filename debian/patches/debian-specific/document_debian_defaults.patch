@@ -8,11 +8,9 @@ from the default only on Debian systems.
  init.h | 22 ++++++++++++++++++++++
  1 file changed, 22 insertions(+)
 
-Index: neomutt/init.h
-===================================================================
---- neomutt.orig/init.h
-+++ neomutt/init.h
-@@ -359,6 +359,9 @@ struct Option MuttVars[] = {
+--- a/init.h
++++ b/init.h
+@@ -364,6 +364,9 @@
    ** .pp
    ** When this variable is \fIset\fP, NeoMutt will include Delivered-To headers when
    ** bouncing messages.  Postfix users may wish to \fIunset\fP this variable.
@@ -22,7 +20,7 @@ Index: neomutt/init.h
    */
    { "braille_friendly", DT_BOOL, R_NONE, UL &BrailleFriendly, 0 },
    /*
-@@ -1267,6 +1270,9 @@ struct Option MuttVars[] = {
+@@ -1302,6 +1305,9 @@
    ** which case a detected one is not used.
    ** .pp
    ** Also see $$use_domain and $$hidden_host.
@@ -32,7 +30,7 @@ Index: neomutt/init.h
    */
  #ifdef HAVE_LIBIDN
    { "idn_decode",       DT_BOOL, R_MENU, UL &IdnDecode, 1 },
-@@ -1919,6 +1925,9 @@ struct Option MuttVars[] = {
+@@ -1946,6 +1952,9 @@
    ** system.  It is used with various sets of parameters to gather the
    ** list of known remailers, and to finally send a message through the
    ** mixmaster chain.
@@ -42,7 +40,7 @@ Index: neomutt/init.h
    */
  #endif
    { "move",             DT_QUAD, R_NONE, UL &Move, MUTT_NO },
-@@ -3644,6 +3653,10 @@ struct Option MuttVars[] = {
+@@ -3676,6 +3685,10 @@
    ** This is a format string, see the $$smime_decrypt_command command for
    ** possible \fCprintf(3)\fP-like sequences.
    ** (S/MIME only)
@@ -53,7 +51,7 @@ Index: neomutt/init.h
    */
  #ifdef USE_SMTP
    { "smtp_authenticators", DT_STRING, R_NONE, UL &SmtpAuthenticators, UL 0 },
-@@ -3810,6 +3823,9 @@ struct Option MuttVars[] = {
+@@ -3842,6 +3855,9 @@
    ** .ts
    ** set ssl_ca_certificates_file=/etc/ssl/certs/ca-certificates.crt
    ** .te
@@ -62,8 +60,8 @@ Index: neomutt/init.h
 +  ** ``threads'' in /etc/Muttrc.
    */
  #endif /* USE_SSL_GNUTLS */
-   { "ssl_client_cert", DT_PATH, R_NONE, UL &SslClientCert, 0 },
-@@ -4351,6 +4367,9 @@ struct Option MuttVars[] = {
+   { "ssl_ciphers", DT_STRING, R_NONE, UL &SslCiphers, UL 0 },
+@@ -4364,6 +4380,9 @@
    ** is set to deliver directly via SMTP (see $$smtp_url), this
    ** option does nothing: NeoMutt will never write out the ``Bcc:'' header
    ** in this case.

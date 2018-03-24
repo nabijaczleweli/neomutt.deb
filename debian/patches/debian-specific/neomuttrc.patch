@@ -44,7 +44,7 @@ Some changes to the official documentation for neomutt.rc.
 -macro generic,pager <F1> "<shell-escape> less @docdir@/manual.txt<Enter>" "show NeoMutt documentation"
 +macro generic,pager <F1> "<shell-escape> zcat @docdir@/manual.txt.gz | sensible-pager<enter>" "show NeoMutt documentation"
  
- # show the incoming mailboxes list (just like "mutt -y") and back when pressing "y"
+ # show the incoming mailboxes list (just like "neomutt -y") and back when pressing "y"
  macro index,pager y "<change-folder>?" "show incoming mailboxes list"
 @@ -35,7 +63,7 @@
  # append-hook '\.gz$' "gzip --stdout              '%t' >> '%f'"
