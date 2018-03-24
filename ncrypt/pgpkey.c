@@ -35,7 +35,6 @@
 #include "mutt/mutt.h"
 #include "mutt.h"
 #include "pgpkey.h"
-#include "address.h"
 #include "body.h"
 #include "crypt.h"
 #include "filter.h"
@@ -514,7 +513,6 @@ static struct PgpKeyInfo *pgp_select_key(struct PgpKeyInfo *keys,
   if (!i && unusable)
   {
     mutt_error(_("All matching keys are expired, revoked, or disabled."));
-    mutt_sleep(1);
     return NULL;
   }
 
@@ -725,7 +723,6 @@ struct PgpKeyInfo *pgp_ask_for_key(char *tag, char *whatfor, short abilities, en
       return key;
 
     mutt_error(_("No matching keys found for \"%s\""), resp);
-    mutt_sleep(0);
   }
   /* not reached */
 }
