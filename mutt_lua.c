@@ -32,7 +32,6 @@
 #include "mutt/mutt.h"
 #include "mutt.h"
 #include "mutt_lua.h"
-#include "address.h"
 #include "globals.h"
 #include "mailbox.h"
 #include "mbtable.h"
@@ -419,7 +418,7 @@ int mutt_lua_source_file(struct Buffer *tmp, struct Buffer *s,
   }
   if (MoreArgs(s))
   {
-    mutt_str_strfcpy(err->data, _("source: too many arguments"), err->dsize);
+    mutt_buffer_printf(err, _("%s: too many arguments"), "source");
     return -1;
   }
   mutt_str_strfcpy(path, tmp->data, sizeof(path));

@@ -25,45 +25,15 @@
  * @page address Representation of an email address
  *
  * Representation of an email address
- *
- * | Data             | Description
- * | :--------------- | :--------------------------------------------------
- * | #AddressError    | An out-of-band error code
- * | #AddressErrors   | Messages for the error codes in #AddressError
- * | #AddressSpecials | Characters with special meaning for email addresses
- *
- * | Function                     | Description
- * | :--------------------------- | :---------------------------------------------------------
- * | mutt_addr_append()           | Append one list of addresses onto another
- * | mutt_addr_cat()              | Copy a string and escape the specified characters
- * | mutt_addr_cmp()              | Compare two e-mail addresses
- * | mutt_addr_cmp_strict()       | Strictly compare two Address lists
- * | mutt_addr_copy()             | Copy the real address
- * | mutt_addr_copy_list()        | Copy a list of addresses
- * | mutt_addr_for_display()      | Convert an Address for display purposes
- * | mutt_addr_free()             | Free a list of Addresses
- * | mutt_addr_has_recips()       | Count the number of Addresses with valid recipients
- * | mutt_addr_is_intl()          | Does the Address have IDN components
- * | mutt_addr_is_local()         | Does the Address have NO IDN components
- * | mutt_addr_mbox_to_udomain()  | Split a mailbox name into user and domain
- * | mutt_addr_new()              | Create a new Address
- * | mutt_addr_parse_list()       | Parse a list of email addresses
- * | mutt_addr_parse_list2()      | Parse a list of email addresses
- * | mutt_addr_qualify()          | Expand local names in an Address list using a hostname
- * | mutt_addr_remove_from_list() | Remove an Address from a list
- * | mutt_addr_search()           | Search for an e-mail address in a list
- * | mutt_addr_set_intl()         | Mark an Address as having IDN components
- * | mutt_addr_set_local()        | Mark an Address as having NO IDN components
- * | mutt_addr_valid_msgid()      | Is this a valid Message ID?
- * | mutt_addr_write()            | Write an Address to a buffer
- * | mutt_addr_write_single()     | Write a single Address to a buffer
  */
 
 #include "config.h"
 #include <stdio.h>
 #include <string.h>
-#include "mutt/mutt.h"
 #include "address.h"
+#include "idna2.h"
+#include "memory.h"
+#include "string2.h"
 
 /**
  * AddressSpecials - Characters with special meaning for email addresses
@@ -1230,4 +1200,69 @@ size_t mutt_addr_write(char *buf, size_t buflen, struct Address *addr, bool disp
 done:
   *pbuf = 0;
   return pbuf - buf;
+}
+
+/**
+ * mutt_addrlist_to_intl - Convert an Address list to Punycode
+ * @param[in]  a   Address list to modify
+ * @param[out] err Pointer for failed addresses
+ * @retval 0  Success, all addresses converted
+ * @retval -1 Error, err will be set to the failed address
+ */
+int mutt_addrlist_to_intl(struct Address *a, char **err)
+{
+  char *user = NULL, *domain = NULL;
+  char *intl_mailbox = NULL;
+  int rc = 0;
+
+  if (err)
+    *err = NULL;
+
+  for (; a; a = a->next)
+  {
+    if (!a->mailbox || mutt_addr_is_intl(a))
+      continue;
+
+    if (mutt_addr_mbox_to_udomain(a->mailbox, &user, &domain) == -1)
+      continue;
+
+    intl_mailbox = mutt_idna_local_to_intl(user, domain);
+    if (!intl_mailbox)
+    {
+      rc = -1;
+      if (err && !*err)
+        *err = mutt_str_strdup(a->mailbox);
+      continue;
+    }
+
+    mutt_addr_set_intl(a, intl_mailbox);
+  }
+
+  return rc;
+}
+
+/**
+ * mutt_addrlist_to_local - Convert an Address list from Punycode
+ * @param a Address list to modify
+ * @retval 0 Always
+ */
+int mutt_addrlist_to_local(struct Address *a)
+{
+  char *user = NULL, *domain = NULL;
+  char *local_mailbox = NULL;
+
+  for (; a; a = a->next)
+  {
+    if (!a->mailbox || mutt_addr_is_local(a))
+      continue;
+
+    if (mutt_addr_mbox_to_udomain(a->mailbox, &user, &domain) == -1)
+      continue;
+
+    local_mailbox = mutt_idna_intl_to_local(user, domain, 0);
+    if (local_mailbox)
+      mutt_addr_set_local(a, local_mailbox);
+  }
+
+  return 0;
 }

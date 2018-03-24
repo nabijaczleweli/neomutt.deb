@@ -26,7 +26,6 @@
 #include <string.h>
 #include "mutt/mutt.h"
 #include "sort.h"
-#include "address.h"
 #include "body.h"
 #include "context.h"
 #include "envelope.h"
@@ -363,7 +362,6 @@ void mutt_sort_headers(struct Context *ctx, int init)
            (AuxSort = mutt_get_sort_func(SortAux)) == NULL)
   {
     mutt_error(_("Could not find sorting function! [report this bug]"));
-    mutt_sleep(1);
     return;
   }
   else
