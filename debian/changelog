@@ -1,3 +1,14 @@
+neomutt (20180323+dfsg.1-1) UNRELEASED; urgency=medium
+
+  * New upstream release
+  * debian/patches:
+    + dropped all patches in neomutt-devel/, they are upstream
+  * debian/rules:
+    + set EXTRA_CFLAGS_FOR_BUILD and EXTRA_LDFLAGS_FOR_BUILD to build doc/
+      properly.
+
+ -- Antonio Radici <antonio@debian.org>  Sat, 24 Mar 2018 08:45:38 +0000
+
 neomutt (20180223+dfsg.1-1) unstable; urgency=medium
 
   * New upstream release.
