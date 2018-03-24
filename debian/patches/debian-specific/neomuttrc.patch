@@ -41,15 +41,15 @@ Some changes to the official documentation for neomutt.rc.
  "call urlview to extract URLs out of a message"
  
  # Show documentation when pressing F1
--macro generic,pager <F1> "<shell-escape> less @docdir@/manual.txt<Enter>" "show Mutt documentation"
-+macro generic,pager <F1> "<shell-escape> zcat @docdir@/manual.txt.gz | sensible-pager<enter>" "show Mutt documentation"
+-macro generic,pager <F1> "<shell-escape> less @docdir@/manual.txt<Enter>" "show NeoMutt documentation"
++macro generic,pager <F1> "<shell-escape> zcat @docdir@/manual.txt.gz | sensible-pager<enter>" "show NeoMutt documentation"
  
  # show the incoming mailboxes list (just like "mutt -y") and back when pressing "y"
  macro index,pager y "<change-folder>?" "show incoming mailboxes list"
 @@ -35,7 +63,7 @@
  # append-hook '\.gz$' "gzip --stdout              '%t' >> '%f'"
  
- # If Mutt is unable to determine your site's domain name correctly, you can
+ # If NeoMutt is unable to determine your site's domain name correctly, you can
 -# set the default here.
 +# set the default here. (better: fix /etc/mailname)
  #
