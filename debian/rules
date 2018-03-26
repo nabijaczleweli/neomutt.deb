@@ -23,7 +23,8 @@ override_dh_autoreconf:
 
 override_dh_auto_configure:
 	dh_auto_configure --  \
-	    --libexecdir=/usr/lib \
+		--mandir=/usr/share/man \
+		--libexecdir=/usr/lib \
 		--with-mailpath=/var/mail \
 		--enable-fcntl \
 		--gpgme	\
@@ -35,7 +36,7 @@ override_dh_auto_configure:
 		--idn \
 		--mixmaster \
 		--sasl \
-	    --tokyocabinet
+		--tokyocabinet
 
 override_dh_auto_install:
 	dh_auto_install --destdir=debian/tmp
