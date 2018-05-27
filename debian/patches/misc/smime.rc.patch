@@ -10,10 +10,8 @@ Signed-off-by: Matteo F. Vescovi <mfv@debian.org>
  contrib/smime.rc | 19 ++++++++++---------
  1 file changed, 10 insertions(+), 9 deletions(-)
 
-Index: neomutt/contrib/smime.rc
-===================================================================
---- neomutt.orig/contrib/smime.rc
-+++ neomutt/contrib/smime.rc
+--- a/contrib/smime.rc
++++ b/contrib/smime.rc
 @@ -4,20 +4,20 @@
  
  # If you compiled neomutt with support for both PGP and S/MIME, PGP
@@ -42,7 +40,7 @@ Index: neomutt/contrib/smime.rc
  
  
  # Section A: Key Management
-@@ -47,9 +47,11 @@ set crypt_verify_sig = yes
+@@ -47,9 +47,11 @@
  # unset smime_decrypt_use_default_key
  
  # Path to a file or directory with trusted certificates
@@ -55,7 +53,7 @@ Index: neomutt/contrib/smime.rc
  set smime_certificates="~/.smime/certificates"
  
  # Path to where all private keys go. (must exist!)
-@@ -94,7 +96,7 @@ set smime_sign_command="openssl smime -s
+@@ -94,7 +96,7 @@
  # Section C: Incoming messages
  
  # Decrypt a message.  Output is a MIME entity.
