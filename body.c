@@ -20,6 +20,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @page body Representation of the body of an email
+ *
+ * Representation of the body of an email
+ */
+
 #include "config.h"
 #include <limits.h>
 #include <string.h>
@@ -29,7 +35,11 @@
 #include "header.h"
 #include "protos.h"
 
-struct Body *mutt_new_body(void)
+/**
+ * mutt_body_new - Create a new Body
+ * @retval ptr Newly allocated Body
+ */
+struct Body *mutt_body_new(void)
 {
   struct Body *p = mutt_mem_calloc(1, sizeof(struct Body));
 
@@ -40,9 +50,14 @@ struct Body *mutt_new_body(void)
 }
 
 /**
- * mutt_copy_body - create a send-mode duplicate from a receive-mode body
+ * mutt_body_copy - Create a send-mode duplicate from a receive-mode body
+ * @param[in]  fp  FILE pointer to attachments
+ * @param[out] tgt New Body will be saved here
+ * @param[in]  src Source Body to copy
+ * @retval  0 Success
+ * @retval -1 Failure
  */
-int mutt_copy_body(FILE *fp, struct Body **tgt, struct Body *src)
+int mutt_body_copy(FILE *fp, struct Body **tgt, struct Body *src)
 {
   if (!tgt || !src)
     return -1;
@@ -67,7 +82,7 @@ int mutt_copy_body(FILE *fp, struct Body **tgt, struct Body *src)
   if (mutt_save_attachment(fp, src, tmp, 0, NULL) == -1)
     return -1;
 
-  *tgt = mutt_new_body();
+  *tgt = mutt_body_new();
   b = *tgt;
 
   memcpy(b, src, sizeof(struct Body));
@@ -115,7 +130,11 @@ int mutt_copy_body(FILE *fp, struct Body **tgt, struct Body *src)
   return 0;
 }
 
-void mutt_free_body(struct Body **p)
+/**
+ * mutt_body_free - Free a Body
+ * @param p Body to free
+ */
+void mutt_body_free(struct Body **p)
 {
   struct Body *a = *p, *b = NULL;
 
@@ -145,11 +164,11 @@ void mutt_free_body(struct Body **p)
     {
       /* Don't free twice (b->hdr->content = b->parts) */
       b->hdr->content = NULL;
-      mutt_free_header(&b->hdr);
+      mutt_header_free(&b->hdr);
     }
 
     if (b->parts)
-      mutt_free_body(&b->parts);
+      mutt_body_free(&b->parts);
 
     FREE(&b);
   }

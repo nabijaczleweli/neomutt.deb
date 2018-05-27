@@ -52,6 +52,7 @@
 #include "mutt_socket.h"
 #include "mx.h"
 #include "options.h"
+#include "progress.h"
 #include "protos.h"
 #include "tags.h"
 #ifdef USE_HCACHE
@@ -77,10 +78,9 @@ static struct ImapHeaderData *new_header_data(void)
  */
 static void update_context(struct ImapData *idata, int oldmsgcount)
 {
-  struct Context *ctx = NULL;
   struct Header *h = NULL;
 
-  ctx = idata->ctx;
+  struct Context *ctx = idata->ctx;
   if (!idata->uid_hash)
     idata->uid_hash = mutt_hash_int_create(MAX(6 * ctx->msgcount / 5, 30), 0);
 
@@ -114,8 +114,8 @@ static struct BodyCache *msg_cache_open(struct ImapData *idata)
  * msg_cache_get - Get the message cache entry for an email
  * @param idata Server data
  * @param h     Email header
- * @retval FILE* Success, handle of cache entry
- * @retval NULL  Failure
+ * @retval ptr  Success, handle of cache entry
+ * @retval NULL Failure
  */
 static FILE *msg_cache_get(struct ImapData *idata, struct Header *h)
 {
@@ -133,8 +133,8 @@ static FILE *msg_cache_get(struct ImapData *idata, struct Header *h)
  * msg_cache_put - Put an email into the message cache
  * @param idata Server data
  * @param h     Email header
- * @retval FILE* Success, handle of cache entry
- * @retval NULL  Failure
+ * @retval ptr  Success, handle of cache entry
+ * @retval NULL Failure
  */
 static FILE *msg_cache_put(struct ImapData *idata, struct Header *h)
 {
@@ -385,12 +385,11 @@ static int msg_parse_fetch(struct ImapHeader *h, char *s)
  */
 static int msg_fetch_header(struct Context *ctx, struct ImapHeader *h, char *buf, FILE *fp)
 {
-  struct ImapData *idata = NULL;
   unsigned int bytes;
   int rc = -1; /* default now is that string isn't FETCH response */
   int parse_rc;
 
-  idata = ctx->data;
+  struct ImapData *idata = ctx->data;
 
   if (buf[0] != '*')
     return rc;
@@ -580,18 +579,18 @@ static void set_changed_flag(struct Context *ctx, struct Header *h,
    * cmd_parse_fetch().  We don't want to count a local modification
    * to the header flag as a "change".
    */
-  if ((old_hd_flag != new_hd_flag) || (!local_changes))
-  {
-    if (new_hd_flag != h_flag)
-    {
-      if (server_changes)
-        *server_changes = 1;
+  if ((old_hd_flag == new_hd_flag) && local_changes)
+    return;
 
-      /* Local changes have priority */
-      if (!local_changes)
-        mutt_set_flag(ctx, h, flag_name, new_hd_flag);
-    }
-  }
+  if (new_hd_flag == h_flag)
+    return;
+
+  if (server_changes)
+    *server_changes = 1;
+
+  /* Local changes have priority */
+  if (!local_changes)
+    mutt_set_flag(ctx, h, flag_name, new_hd_flag);
 }
 
 /**
@@ -608,7 +607,6 @@ static void set_changed_flag(struct Context *ctx, struct Header *h,
  */
 int imap_read_headers(struct ImapData *idata, unsigned int msn_begin, unsigned int msn_end)
 {
-  struct Context *ctx = NULL;
   char *hdrreq = NULL;
   FILE *fp = NULL;
   char tempfile[_POSIX_PATH_MAX];
@@ -633,7 +631,7 @@ int imap_read_headers(struct ImapData *idata, unsigned int msn_begin, unsigned i
   unsigned int uidnext = 0;
 #endif /* USE_HCACHE */
 
-  ctx = idata->ctx;
+  struct Context *ctx = idata->ctx;
 
   if (mutt_bit_isset(idata->capabilities, IMAP4REV1))
   {
@@ -792,10 +790,7 @@ int imap_read_headers(struct ImapData *idata, unsigned int msn_begin, unsigned i
 
   while (msn_begin <= msn_end && fetch_msn_end < msn_end)
   {
-    char *cmd = NULL;
-    struct Buffer *b = NULL;
-
-    b = mutt_buffer_new();
+    struct Buffer *b = mutt_buffer_new();
     if (evalhc)
     {
       /* In case there are holes in the header cache. */
@@ -806,6 +801,7 @@ int imap_read_headers(struct ImapData *idata, unsigned int msn_begin, unsigned i
       mutt_buffer_printf(b, "%u:%u", msn_begin, msn_end);
 
     fetch_msn_end = msn_end;
+    char *cmd = NULL;
     safe_asprintf(&cmd, "FETCH %s (UID FLAGS INTERNALDATE RFC822.SIZE %s)", b->data, hdrreq);
     imap_cmd_start(idata, cmd);
     FREE(&cmd);
@@ -859,7 +855,7 @@ int imap_read_headers(struct ImapData *idata, unsigned int msn_begin, unsigned i
           continue;
         }
 
-        ctx->hdrs[idx] = mutt_new_header();
+        ctx->hdrs[idx] = mutt_header_new();
 
         idata->max_msn = MAX(idata->max_msn, h.data->msn);
         idata->msn_index[h.data->msn - 1] = ctx->hdrs[idx];
@@ -883,10 +879,10 @@ int imap_read_headers(struct ImapData *idata, unsigned int msn_begin, unsigned i
           maxuid = h.data->uid;
 
         rewind(fp);
-        /* NOTE: if Date: header is missing, mutt_read_rfc822_header depends
+        /* NOTE: if Date: header is missing, mutt_rfc822_read_header depends
          *   on h.received being set */
-        ctx->hdrs[idx]->env = mutt_read_rfc822_header(fp, ctx->hdrs[idx], 0, 0);
-        /* content built as a side-effect of mutt_read_rfc822_header */
+        ctx->hdrs[idx]->env = mutt_rfc822_read_header(fp, ctx->hdrs[idx], 0, 0);
+        /* content built as a side-effect of mutt_rfc822_read_header */
         ctx->hdrs[idx]->content->length = h.content_length;
         ctx->size += h.content_length;
 
@@ -984,8 +980,6 @@ error_out_0:
  */
 int imap_fetch_message(struct Context *ctx, struct Message *msg, int msgno)
 {
-  struct ImapData *idata = NULL;
-  struct Header *h = NULL;
   struct Envelope *newenv = NULL;
   char buf[LONG_STRING];
   char path[_POSIX_PATH_MAX];
@@ -995,6 +989,7 @@ int imap_fetch_message(struct Context *ctx, struct Message *msg, int msgno)
   unsigned int uid;
   int cacheno;
   struct ImapCache *cache = NULL;
+  bool retried = false;
   bool read;
   int rc;
 
@@ -1003,8 +998,8 @@ int imap_fetch_message(struct Context *ctx, struct Message *msg, int msgno)
   bool fetched = false;
   int output_progress;
 
-  idata = ctx->data;
-  h = ctx->hdrs[msgno];
+  struct ImapData *idata = ctx->data;
+  struct Header *h = ctx->hdrs[msgno];
 
   msg->fp = msg_cache_get(idata, h);
   if (msg->fp)
@@ -1156,10 +1151,10 @@ parsemsg:
   /* It may be that the Status header indicates a message is read, but the
    * IMAP server doesn't know the message has been \Seen. So we capture
    * the server's notion of 'read' and if it differs from the message info
-   * picked up in mutt_read_rfc822_header, we mark the message (and context
+   * picked up in mutt_rfc822_read_header, we mark the message (and context
    * changed). Another possibility: ignore Status on IMAP? */
   read = h->read;
-  newenv = mutt_read_rfc822_header(msg->fp, h, 0, 0);
+  newenv = mutt_rfc822_read_header(msg->fp, h, 0, 0);
   mutt_env_merge(h->env, &newenv);
 
   /* see above. We want the new status in h->read, so we unset it manually
@@ -1183,6 +1178,14 @@ parsemsg:
   mutt_clear_error();
   rewind(msg->fp);
   HEADER_DATA(h)->parsed = true;
+
+  /* retry message parse if cached message is empty */
+  if (!retried && ((h->lines == 0) || (h->content->length == 0)))
+  {
+    imap_cache_del(idata, h);
+    retried = true;
+    goto parsemsg;
+  }
 
   return 0;
 
@@ -1237,7 +1240,6 @@ int imap_commit_message(struct Context *ctx, struct Message *msg)
  */
 int imap_append_message(struct Context *ctx, struct Message *msg)
 {
-  struct ImapData *idata = NULL;
   FILE *fp = NULL;
   char buf[LONG_STRING];
   char mbox[LONG_STRING];
@@ -1251,7 +1253,7 @@ int imap_append_message(struct Context *ctx, struct Message *msg)
   struct ImapMbox mx;
   int rc;
 
-  idata = ctx->data;
+  struct ImapData *idata = ctx->data;
 
   if (imap_parse_path(ctx->path, &mx))
     return -1;
@@ -1309,11 +1311,9 @@ int imap_append_message(struct Context *ctx, struct Message *msg)
 
   if (rc != IMAP_CMD_RESPOND)
   {
-    char *pc = NULL;
-
     mutt_debug(1, "#1 command failed: %s\n", idata->buf);
 
-    pc = idata->buf + SEQLEN;
+    char *pc = idata->buf + SEQLEN;
     SKIPWS(pc);
     pc = imap_next_word(pc);
     mutt_error("%s", pc);
@@ -1339,7 +1339,7 @@ int imap_append_message(struct Context *ctx, struct Message *msg)
   if (len)
     flush_buffer(buf, &len, idata->conn);
 
-  mutt_socket_write(idata->conn, "\r\n");
+  mutt_socket_send(idata->conn, "\r\n");
   mutt_file_fclose(&fp);
 
   do
@@ -1348,10 +1348,8 @@ int imap_append_message(struct Context *ctx, struct Message *msg)
 
   if (!imap_code(idata->buf))
   {
-    char *pc = NULL;
-
     mutt_debug(1, "#2 command failed: %s\n", idata->buf);
-    pc = idata->buf + SEQLEN;
+    char *pc = idata->buf + SEQLEN;
     SKIPWS(pc);
     pc = imap_next_word(pc);
     mutt_error("%s", pc);
@@ -1378,7 +1376,6 @@ fail:
  */
 int imap_copy_messages(struct Context *ctx, struct Header *h, char *dest, int delete)
 {
-  struct ImapData *idata = NULL;
   struct Buffer cmd, sync_cmd;
   char mbox[LONG_STRING];
   char mmbox[LONG_STRING];
@@ -1388,7 +1385,7 @@ int imap_copy_messages(struct Context *ctx, struct Header *h, char *dest, int de
   int err_continue = MUTT_NO;
   int triedcreate = 0;
 
-  idata = ctx->data;
+  struct ImapData *idata = ctx->data;
 
   if (imap_parse_path(dest, &mx))
   {
@@ -1397,7 +1394,7 @@ int imap_copy_messages(struct Context *ctx, struct Header *h, char *dest, int de
   }
 
   /* check that the save-to folder is in the same account */
-  if (!mutt_account_match(&(idata->conn->account), &(mx.account)))
+  if (mutt_account_match(&(idata->conn->account), &(mx.account)) == 0)
   {
     mutt_debug(3, "%s not same server as %s\n", dest, ctx->path);
     return 1;
@@ -1461,7 +1458,8 @@ int imap_copy_messages(struct Context *ctx, struct Header *h, char *dest, int de
         goto out;
       }
       else
-        mutt_message(_("Copying %d messages to %s..."), rc, mbox);
+        mutt_message(ngettext("Copying %d message to %s...", "Copying %d messages to %s...", rc),
+                     rc, mbox);
     }
     else
     {
@@ -1591,13 +1589,13 @@ int imap_cache_clean(struct ImapData *idata)
  */
 void imap_free_header_data(struct ImapHeaderData **data)
 {
-  if (*data)
-  {
-    /* this should be safe even if the list wasn't used */
-    FREE(&((*data)->flags_system));
-    FREE(&((*data)->flags_remote));
-    FREE(data);
-  }
+  if (!data || !*data)
+    return;
+
+  /* this should be safe even if the list wasn't used */
+  FREE(&((*data)->flags_system));
+  FREE(&((*data)->flags_remote));
+  FREE(data);
 }
 
 /**
@@ -1623,14 +1621,13 @@ char *imap_set_flags(struct ImapData *idata, struct Header *h, char *s, int *ser
   struct Context *ctx = idata->ctx;
   struct ImapHeader newh;
   struct ImapHeaderData old_hd;
-  struct ImapHeaderData *hd = NULL;
   bool readonly;
   int local_changes;
 
   local_changes = h->changed;
 
   memset(&newh, 0, sizeof(newh));
-  hd = h->data;
+  struct ImapHeaderData *hd = h->data;
   newh.data = hd;
 
   memcpy(&old_hd, hd, sizeof(old_hd));

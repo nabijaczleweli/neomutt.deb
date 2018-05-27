@@ -39,6 +39,7 @@
 #include "mutt_socket.h"
 #include "options.h"
 #include "pop.h"
+#include "progress.h"
 #include "protos.h"
 #include "url.h"
 
@@ -54,15 +55,13 @@
 int pop_parse_path(const char *path, struct Account *acct)
 {
   struct Url url;
-  char *c = NULL;
-  struct servent *service = NULL;
 
   /* Defaults */
   acct->flags = 0;
   acct->type = MUTT_ACCT_TYPE_POP;
   acct->port = 0;
 
-  c = mutt_str_strdup(path);
+  char *c = mutt_str_strdup(path);
   url_parse(&url, c);
 
   if ((url.scheme != U_POP && url.scheme != U_POPS) || !url.host ||
@@ -77,7 +76,7 @@ int pop_parse_path(const char *path, struct Account *acct)
   if (url.scheme == U_POPS)
     acct->flags |= MUTT_ACCT_SSL;
 
-  service = getservbyname(url.scheme == U_POP ? "pop3" : "pop3s", "tcp");
+  struct servent *service = getservbyname(url.scheme == U_POP ? "pop3" : "pop3s", "tcp");
   if (!acct->port)
   {
     if (service)
@@ -99,14 +98,12 @@ int pop_parse_path(const char *path, struct Account *acct)
  */
 static void pop_error(struct PopData *pop_data, char *msg)
 {
-  char *t = NULL, *c = NULL, *c2 = NULL;
-
-  t = strchr(pop_data->err_msg, '\0');
-  c = msg;
+  char *t = strchr(pop_data->err_msg, '\0');
+  char *c = msg;
 
   if (mutt_str_strncmp(msg, "-ERR ", 5) == 0)
   {
-    c2 = mutt_str_skip_email_wsp(msg + 5);
+    char *c2 = mutt_str_skip_email_wsp(msg + 5);
 
     if (*c2)
       c = c2;
@@ -470,7 +467,7 @@ int pop_query_d(struct PopData *pop_data, char *buf, size_t buflen, char *msg)
     mutt_debug(MUTT_SOCK_LOG_CMD, "> %s", msg);
   }
 
-  mutt_socket_write_d(pop_data->conn, buf, -1, dbg);
+  mutt_socket_send_d(pop_data->conn, buf, dbg);
 
   c = strpbrk(buf, " \r\n");
   if (c)
@@ -560,8 +557,8 @@ int pop_fetch_data(struct PopData *pop_data, char *query, struct Progress *progr
  * check_uidl - find message with this UIDL and set refno
  * @param line String containing UIDL
  * @param data POP data
- * @retval 0 on success
- * @retval -1 on error
+ * @retval  0 Success
+ * @retval -1 Error
  */
 static int check_uidl(char *line, void *data)
 {
@@ -592,8 +589,8 @@ static int check_uidl(char *line, void *data)
 /**
  * pop_reconnect - reconnect and verify indexes if connection was lost
  * @param ctx Context
- * @retval 0 on success
- * @retval -1 on error
+ * @retval  0 Success
+ * @retval -1 Error
  */
 int pop_reconnect(struct Context *ctx)
 {

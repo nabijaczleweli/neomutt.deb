@@ -51,6 +51,7 @@
 #include "header.h"
 #include "mailbox.h"
 #include "mutt_curses.h"
+#include "mutt_window.h"
 #include "mx.h"
 #include "ncrypt/ncrypt.h"
 #include "options.h"
@@ -207,18 +208,15 @@ char *mutt_expand_path_regex(char *s, size_t slen, int regex)
 
       case '@':
       {
-        struct Header *h = NULL;
-        struct Address *alias = NULL;
-
-        alias = mutt_lookup_alias(s + 1);
+        struct Address *alias = mutt_alias_lookup(s + 1);
         if (alias)
         {
-          h = mutt_new_header();
+          struct Header *h = mutt_header_new();
           h->env = mutt_env_new();
           h->env->from = h->env->to = alias;
           mutt_default_save(p, sizeof(p), h);
           h->env->from = h->env->to = NULL;
-          mutt_free_header(&h);
+          mutt_header_free(&h);
           /* Avoid infinite recursion if the resulting folder starts with '@' */
           if (*p != '@')
             recurse = true;
@@ -251,7 +249,7 @@ char *mutt_expand_path_regex(char *s, size_t slen, int regex)
         }
         else
         {
-          mutt_str_strfcpy(p, NONULL(SpoolFile), sizeof(p));
+          mutt_str_strfcpy(p, NONULL(Spoolfile), sizeof(p));
           tail = s + 1;
         }
       }
@@ -624,9 +622,9 @@ void mutt_expand_fmt(char *dest, size_t destlen, const char *fmt, const char *sr
 
 /**
  * mutt_check_overwrite - Ask the user if overwriting is necessary
- * @retval  0 on success
- * @retval -1 on abort
- * @retval  1 on error
+ * @retval  0 Success
+ * @retval -1 Abort
+ * @retval  1 Error
  */
 int mutt_check_overwrite(const char *attname, const char *path, char *fname,
                          size_t flen, int *append, char **directory)
@@ -646,7 +644,10 @@ int mutt_check_overwrite(const char *attname, const char *path, char *fname,
       switch (mutt_multi_choice
               /* L10N:
                  Means "The path you specified as the destination file is a directory."
-                 See the msgid "Save to file: " (alias.c, recvattach.c) */
+                 See the msgid "Save to file: " (alias.c, recvattach.c)
+
+                 These three letters correspond to the choices in the string.
+               */
               (_("File is a directory, save under it? [(y)es, (n)o, (a)ll]"), _("yna")))
       {
         case 3: /* all */
@@ -680,8 +681,10 @@ int mutt_check_overwrite(const char *attname, const char *path, char *fname,
 
   if (*append == 0 && access(fname, F_OK) == 0)
   {
-    switch (mutt_multi_choice(
-        _("File exists, (o)verwrite, (a)ppend, or (c)ancel?"), _("oac")))
+    switch (
+        mutt_multi_choice(_("File exists, (o)verwrite, (a)ppend, or (c)ancel?"),
+                          // L10N: Options for: File exists, (o)verwrite, (a)ppend, or (c)ancel?
+                          _("oac")))
     {
       case -1: /* abort */
         return -1;
@@ -706,9 +709,7 @@ void mutt_save_path(char *d, size_t dsize, struct Address *a)
     mutt_str_strfcpy(d, a->mailbox, dsize);
     if (!SaveAddress)
     {
-      char *p = NULL;
-
-      p = strpbrk(d, "%@");
+      char *p = strpbrk(d, "%@");
       if (p)
         *p = 0;
     }
@@ -743,7 +744,6 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
   char prefix[SHORT_STRING], tmp[LONG_STRING], *cp = NULL, *wptr = buf, ch;
   char if_str[SHORT_STRING], else_str[SHORT_STRING];
   size_t wlen, count, len, wid;
-  pid_t pid;
   FILE *filter = NULL;
   char *recycler = NULL;
 
@@ -774,7 +774,6 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
     /* n-off is the number of backslashes. */
     if (off > 0 && ((n - off) % 2) == 0)
     {
-      struct Buffer *srcbuf = NULL, *word = NULL, *command = NULL;
       char srccopy[LONG_STRING];
       int i = 0;
 
@@ -784,10 +783,10 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
       srccopy[n - 1] = '\0';
 
       /* prepare BUFFERs */
-      srcbuf = mutt_buffer_from(srccopy);
+      struct Buffer *srcbuf = mutt_buffer_from(srccopy);
       srcbuf->dptr = srcbuf->data;
-      word = mutt_buffer_new();
-      command = mutt_buffer_new();
+      struct Buffer *word = mutt_buffer_new();
+      struct Buffer *command = mutt_buffer_new();
 
       /* Iterate expansions across successive arguments */
       do
@@ -820,8 +819,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
 
       col -= wlen; /* reset to passed in value */
       wptr = buf;  /* reset write ptr */
-      wlen = ((flags & MUTT_FORMAT_ARROWCURSOR) && ArrowCursor) ? 3 : 0;
-      pid = mutt_create_filter(command->data, NULL, &filter, NULL);
+      pid_t pid = mutt_create_filter(command->data, NULL, &filter, NULL);
       if (pid != -1)
       {
         int rc;
@@ -1192,17 +1190,17 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
         break;
       switch (*src)
       {
+        case 'f':
+          *wptr = '\f';
+          break;
         case 'n':
           *wptr = '\n';
-          break;
-        case 't':
-          *wptr = '\t';
           break;
         case 'r':
           *wptr = '\r';
           break;
-        case 'f':
-          *wptr = '\f';
+        case 't':
+          *wptr = '\t';
           break;
         case 'v':
           *wptr = '\v';
@@ -1362,12 +1360,15 @@ int mutt_save_confirm(const char *s, struct stat *st)
       if (ret == 0)
       {
         /* create dir recursively */
-        if (mutt_file_mkdir(mutt_file_dirname(s), S_IRWXU) == -1)
+        char *tmp_path = mutt_file_dirname(s);
+        if (mutt_file_mkdir(tmp_path, S_IRWXU) == -1)
         {
           /* report failure & abort */
           mutt_perror(s);
+          FREE(&tmp_path);
           return 1;
         }
+        FREE(&tmp_path);
       }
     }
     else
@@ -1426,8 +1427,7 @@ void mutt_encode_path(char *dest, size_t dlen, const char *src)
 int mutt_set_xdg_path(enum XdgType type, char *buf, size_t bufsize)
 {
   const char *xdg_env = mutt_str_getenv(xdg_env_vars[type]);
-  char *xdg = (xdg_env && *xdg_env) ? mutt_str_strdup(xdg_env) :
-                                      mutt_str_strdup(xdg_defaults[type]);
+  char *xdg = xdg_env ? mutt_str_strdup(xdg_env) : mutt_str_strdup(xdg_defaults[type]);
   char *x = xdg; /* strsep() changes xdg, so free x instead later */
   char *token = NULL;
   int rc = 0;
@@ -1494,7 +1494,7 @@ void mutt_get_parent_path(char *output, char *path, size_t olen)
 /**
  * mutt_realpath - resolve path, unraveling symlinks
  * @param buf Buffer containing path
- * @retval len String length of resolved path
+ * @retval num String length of resolved path
  * @retval 0   Error, buf is not overwritten
  *
  * Resolve and overwrite the path in buf.

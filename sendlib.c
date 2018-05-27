@@ -49,6 +49,7 @@
 #include "header.h"
 #include "mailbox.h"
 #include "mutt_curses.h"
+#include "mutt_window.h"
 #include "mx.h"
 #include "ncrypt/ncrypt.h"
 #include "options.h"
@@ -354,6 +355,9 @@ int mutt_write_mime_header(struct Body *a, FILE *f)
 
   fputc('\n', f);
 
+  if (a->language)
+    fprintf(f, "Content-Language: %s\n", a->language);
+
   if (a->description)
     fprintf(f, "Content-Description: %s\n", a->description);
 
@@ -365,7 +369,7 @@ int mutt_write_mime_header(struct Body *a, FILE *f)
     {
       fprintf(f, "Content-Disposition: %s", dispstr[a->disposition]);
 
-      if (a->use_disp)
+      if (a->use_disp && (a->disposition != DISPINLINE))
       {
         char *fn = a->d_filename;
         if (!fn)
@@ -967,11 +971,11 @@ struct Content *mutt_get_content_info(const char *fname, struct Body *b)
  * mutt_lookup_mime_type - Find the MIME type for an attachment
  * @param att  Email with attachment
  * @param path Path to attachment
- * @retval n MIME type, e.g. #TYPEIMAGE
+ * @retval num MIME type, e.g. #TYPEIMAGE
  *
  * Given a file at `path`, see if there is a registered MIME type.
  * Returns the major MIME type, and copies the subtype to ``d''.  First look
- * for ~/.mime.types, then look in a system mime.types if we can find one.
+ * in a system mime.types if we can find one, then look for ~/.mime.types.
  * The longest match is used so that we can match `ps.gz' when `gz' also
  * exists.
  */
@@ -1192,7 +1196,7 @@ void mutt_message_to_7bit(struct Body *a, FILE *fp)
     goto cleanup;
 
   fseeko(fpin, a->offset, SEEK_SET);
-  a->parts = mutt_parse_message_rfc822(fpin, a);
+  a->parts = mutt_rfc822_parse_message(fpin, a);
 
   transform_to_7bit(a->parts, fpin);
 
@@ -1227,7 +1231,7 @@ cleanup:
     return;
   }
   a->length = sb.st_size;
-  mutt_free_body(&a->parts);
+  mutt_body_free(&a->parts);
   a->hdr->content = NULL;
 }
 
@@ -1362,7 +1366,7 @@ struct Body *mutt_make_message_attach(struct Context *ctx, struct Header *hdr, i
   if (!fp)
     return NULL;
 
-  body = mutt_new_body();
+  body = mutt_body_new();
   body->type = TYPEMESSAGE;
   body->subtype = mutt_str_strdup("rfc822");
   body->filename = mutt_str_strdup(buffer);
@@ -1395,14 +1399,14 @@ struct Body *mutt_make_message_attach(struct Context *ctx, struct Header *hdr, i
       pgp &= ~PGPENCRYPT;
     }
     else if (((WithCrypto & APPLICATION_PGP) != 0) &&
-             (mutt_is_application_pgp(hdr->content) & PGPENCRYPT))
+             ((mutt_is_application_pgp(hdr->content) & PGPENCRYPT) == PGPENCRYPT))
     {
       chflags |= CH_MIME | CH_TXTPLAIN;
       cmflags = MUTT_CM_DECODE | MUTT_CM_CHARCONV;
       pgp &= ~PGPENCRYPT;
     }
     else if (((WithCrypto & APPLICATION_SMIME) != 0) &&
-             mutt_is_application_smime(hdr->content) & SMIMEENCRYPT)
+             ((mutt_is_application_smime(hdr->content) & SMIMEENCRYPT) == SMIMEENCRYPT))
     {
       chflags |= CH_MIME | CH_TXTPLAIN;
       cmflags = MUTT_CM_DECODE | MUTT_CM_CHARCONV;
@@ -1415,10 +1419,10 @@ struct Body *mutt_make_message_attach(struct Context *ctx, struct Header *hdr, i
   fflush(fp);
   rewind(fp);
 
-  body->hdr = mutt_new_header();
+  body->hdr = mutt_header_new();
   body->hdr->offset = 0;
   /* we don't need the user headers here */
-  body->hdr->env = mutt_read_rfc822_header(fp, body->hdr, 0, 0);
+  body->hdr->env = mutt_rfc822_read_header(fp, body->hdr, 0, 0);
   if (WithCrypto)
     body->hdr->security = pgp;
   mutt_update_encoding(body);
@@ -1462,10 +1466,7 @@ static void run_mime_type_query(struct Body *att)
 
 struct Body *mutt_make_file_attach(const char *path)
 {
-  struct Body *att = NULL;
-  struct Content *info = NULL;
-
-  att = mutt_new_body();
+  struct Body *att = mutt_body_new();
   att->filename = mutt_str_strdup(path);
 
   if (MimeTypeQueryCommand && *MimeTypeQueryCommand && MimeTypeQueryFirst)
@@ -1482,10 +1483,10 @@ struct Body *mutt_make_file_attach(const char *path)
     run_mime_type_query(att);
   }
 
-  info = mutt_get_content_info(path, att);
+  struct Content *info = mutt_get_content_info(path, att);
   if (!info)
   {
-    mutt_free_body(&att);
+    mutt_body_free(&att);
     return NULL;
   }
 
@@ -1552,9 +1553,7 @@ static bool check_boundary(const char *boundary, struct Body *b)
 
 struct Body *mutt_make_multipart(struct Body *b)
 {
-  struct Body *new = NULL;
-
-  new = mutt_new_body();
+  struct Body *new = mutt_body_new();
   new->type = TYPEMULTIPART;
   new->subtype = mutt_str_strdup("mixed");
   new->encoding = get_toplevel_encoding(b);
@@ -1583,7 +1582,7 @@ struct Body *mutt_remove_multipart(struct Body *b)
     t = b;
     b = b->parts;
     t->parts = NULL;
-    mutt_free_body(&t);
+    mutt_body_free(&t);
   }
   return b;
 }
@@ -1639,9 +1638,12 @@ void mutt_write_address_list(struct Address *addr, FILE *fp, int linelen, bool d
 
 /**
  * mutt_write_references - Add the message references to a list
+ * @param r    String List of references
+ * @param f    File to write to
+ * @param trim Trim the list to at most this many items
  *
- * need to write the list in reverse because they are stored in reverse order
- * when parsed to speed up threading
+ * Write the list in reverse because they are stored in reverse order when
+ * parsed to speed up threading.
  */
 void mutt_write_references(const struct ListHead *r, FILE *f, size_t trim)
 {
@@ -2007,7 +2009,7 @@ out:
  *               anonymous remailer chains.
  */
 
-int mutt_write_rfc822_header(FILE *fp, struct Envelope *env,
+int mutt_rfc822_write_header(FILE *fp, struct Envelope *env,
                              struct Body *attach, int mode, int privacy)
 {
   char buffer[LONG_STRING];
@@ -2041,9 +2043,9 @@ int mutt_write_rfc822_header(FILE *fp, struct Envelope *env,
   }
   else if (mode > 0)
 #ifdef USE_NNTP
-    if (!OPT_NEWS_SEND)
+    if (!OptNewsSend)
 #endif
-      fputs("To: \n", fp);
+      fputs("To:\n", fp);
 
   if (env->cc)
   {
@@ -2052,9 +2054,9 @@ int mutt_write_rfc822_header(FILE *fp, struct Envelope *env,
   }
   else if (mode > 0)
 #ifdef USE_NNTP
-    if (!OPT_NEWS_SEND)
+    if (!OptNewsSend)
 #endif
-      fputs("Cc: \n", fp);
+      fputs("Cc:\n", fp);
 
   if (env->bcc)
   {
@@ -2066,31 +2068,31 @@ int mutt_write_rfc822_header(FILE *fp, struct Envelope *env,
   }
   else if (mode > 0)
 #ifdef USE_NNTP
-    if (!OPT_NEWS_SEND)
+    if (!OptNewsSend)
 #endif
-      fputs("Bcc: \n", fp);
+      fputs("Bcc:\n", fp);
 
 #ifdef USE_NNTP
   if (env->newsgroups)
     fprintf(fp, "Newsgroups: %s\n", env->newsgroups);
-  else if (mode == 1 && OPT_NEWS_SEND)
-    fputs("Newsgroups: \n", fp);
+  else if (mode == 1 && OptNewsSend)
+    fputs("Newsgroups:\n", fp);
 
   if (env->followup_to)
     fprintf(fp, "Followup-To: %s\n", env->followup_to);
-  else if (mode == 1 && OPT_NEWS_SEND)
-    fputs("Followup-To: \n", fp);
+  else if (mode == 1 && OptNewsSend)
+    fputs("Followup-To:\n", fp);
 
   if (env->x_comment_to)
     fprintf(fp, "X-Comment-To: %s\n", env->x_comment_to);
-  else if (mode == 1 && OPT_NEWS_SEND && XCommentTo)
-    fputs("X-Comment-To: \n", fp);
+  else if (mode == 1 && OptNewsSend && XCommentTo)
+    fputs("X-Comment-To:\n", fp);
 #endif
 
   if (env->subject)
     mutt_write_one_header(fp, "Subject", env->subject, NULL, 0, 0);
   else if (mode == 1)
-    fputs("Subject: \n", fp);
+    fputs("Subject:\n", fp);
 
   /* save message id if the user has set it */
   if (env->message_id && !privacy)
@@ -2102,11 +2104,11 @@ int mutt_write_rfc822_header(FILE *fp, struct Envelope *env,
     mutt_write_address_list(env->reply_to, fp, 10, 0);
   }
   else if (mode > 0)
-    fputs("Reply-To: \n", fp);
+    fputs("Reply-To:\n", fp);
 
   if (env->mail_followup_to)
 #ifdef USE_NNTP
-    if (!OPT_NEWS_SEND)
+    if (!OptNewsSend)
 #endif
     {
       fputs("Mail-Followup-To: ", fp);
@@ -2177,6 +2179,12 @@ int mutt_write_rfc822_header(FILE *fp, struct Envelope *env,
   return (ferror(fp) == 0 ? 0 : -1);
 }
 
+/**
+ * encode_headers - RFC2047-encode a list of headers
+ * @param h String List of headers
+ *
+ * The strings are encoded in-place.
+ */
 static void encode_headers(struct ListHead *h)
 {
   char *tmp = NULL;
@@ -2208,25 +2216,23 @@ static void encode_headers(struct ListHead *h)
 
 const char *mutt_fqdn(short may_hide_host)
 {
-  char *p = NULL;
+  if (!Hostname || (Hostname[0] == '@'))
+    return NULL;
 
-  if (Hostname && Hostname[0] != '@')
+  char *p = Hostname;
+
+  if (may_hide_host && HiddenHost)
   {
-    p = Hostname;
+    p = strchr(Hostname, '.');
+    if (p)
+      p++;
 
-    if (may_hide_host && HiddenHost)
-    {
-      p = strchr(Hostname, '.');
-      if (p)
-        p++;
+    /* sanity check: don't hide the host if
+      * the fqdn is something like detebe.org.
+      */
 
-      /* sanity check: don't hide the host if
-       * the fqdn is something like detebe.org.
-       */
-
-      if (!p || !strchr(p, '.'))
-        p = Hostname;
-    }
+    if (!p || !strchr(p, '.'))
+      p = Hostname;
   }
 
   return p;
@@ -2236,15 +2242,13 @@ static char *gen_msgid(void)
 {
   char buf[SHORT_STRING];
   time_t now;
-  struct tm *tm = NULL;
-  const char *fqdn = NULL;
   unsigned char rndid[MUTT_RANDTAG_LEN + 1];
 
   mutt_rand_base32(rndid, sizeof(rndid) - 1);
   rndid[MUTT_RANDTAG_LEN] = 0;
   now = time(NULL);
-  tm = gmtime(&now);
-  fqdn = mutt_fqdn(0);
+  struct tm *tm = gmtime(&now);
+  const char *fqdn = mutt_fqdn(0);
   if (!fqdn)
     fqdn = NONULL(ShortHostname);
 
@@ -2267,12 +2271,13 @@ static void alarm_handler(int sig)
  *                      to the temporary file containing the stdout of the
  *                      child process. If it is NULL, stderr and stdout
  *                      are not redirected.
+ * @retval  0 Success
+ * @retval >0 Failure, return code from sendmail
  */
 static int send_msg(const char *path, char **args, const char *msg, char **tempfile)
 {
   sigset_t set;
-  int fd, st;
-  pid_t pid, ppid;
+  int st;
 
   mutt_sig_block_system();
 
@@ -2289,13 +2294,13 @@ static int send_msg(const char *path, char **args, const char *msg, char **tempf
     *tempfile = mutt_str_strdup(tmp);
   }
 
-  pid = fork();
+  pid_t pid = fork();
   if (pid == 0)
   {
     struct sigaction act, oldalrm;
 
     /* save parent's ID before setsid() */
-    ppid = getppid();
+    pid_t ppid = getppid();
 
     /* we want the delivery to continue even after the main process dies,
      * so we put ourselves into another session right away
@@ -2305,10 +2310,10 @@ static int send_msg(const char *path, char **args, const char *msg, char **tempf
     /* next we close all open files */
     close(0);
 #ifdef OPEN_MAX
-    for (fd = tempfile ? 1 : 3; fd < OPEN_MAX; fd++)
+    for (int fd = tempfile ? 1 : 3; fd < OPEN_MAX; fd++)
       close(fd);
 #elif defined(_POSIX_OPEN_MAX)
-    for (fd = tempfile ? 1 : 3; fd < _POSIX_OPEN_MAX; fd++)
+    for (int fd = tempfile ? 1 : 3; fd < _POSIX_OPEN_MAX; fd++)
       close(fd);
 #else
     if (tempfile)
@@ -2348,7 +2353,7 @@ static int send_msg(const char *path, char **args, const char *msg, char **tempf
       }
 
       /* execvpe is a glibc extension */
-      /* execvpe (path, args, mutt_envlist ()); */
+      /* execvpe (path, args, mutt_envlist_getlist()); */
       execvp(path, args);
       _exit(S_ERR);
     }
@@ -2460,6 +2465,8 @@ static char **add_option(char **args, size_t *argslen, size_t *argsmax, char *s)
  * @param bcc      Recipients
  * @param msg      File containing message
  * @param eightbit Message contains 8bit chars
+ * @retval  0 Success
+ * @retval -1 Failure
  */
 int mutt_invoke_sendmail(struct Address *from, struct Address *to, struct Address *cc,
                          struct Address *bcc, const char *msg, int eightbit)
@@ -2471,7 +2478,7 @@ int mutt_invoke_sendmail(struct Address *from, struct Address *to, struct Addres
   int i;
 
 #ifdef USE_NNTP
-  if (OPT_NEWS_SEND)
+  if (OptNewsSend)
   {
     char cmd[LONG_STRING];
 
@@ -2525,7 +2532,7 @@ int mutt_invoke_sendmail(struct Address *from, struct Address *to, struct Addres
   }
 
 #ifdef USE_NNTP
-  if (!OPT_NEWS_SEND)
+  if (!OptNewsSend)
   {
 #endif
     size_t extra_argslen = 0;
@@ -2591,17 +2598,15 @@ int mutt_invoke_sendmail(struct Address *from, struct Address *to, struct Addres
    * and is set up to prompt using ncurses pinentry.  If we
    * mutt_endwin() it leaves other users staring at a blank screen.
    * So instead, just force a hard redraw on the next refresh. */
-  if (!OPT_NO_CURSES)
+  if (!OptNoCurses)
     mutt_need_hard_redraw();
 
-  i = send_msg(path, args, msg, OPT_NO_CURSES ? NULL : &childout);
+  i = send_msg(path, args, msg, OptNoCurses ? NULL : &childout);
   if (i != (EX_OK & 0xff))
   {
     if (i != S_BKG)
     {
-      const char *e = NULL;
-
-      e = mutt_str_sysexit(i);
+      const char *e = mutt_str_sysexit(i);
       mutt_error(_("Error sending message, child exited %d (%s)."), i, NONULL(e));
       if (childout)
       {
@@ -2672,7 +2677,7 @@ void mutt_prepare_envelope(struct Envelope *env, int final)
 
   if (env->subject)
 #ifdef USE_NNTP
-    if (!OPT_NEWS_SEND || MimeSubject)
+    if (!OptNewsSend || MimeSubject)
 #endif
     {
       mutt_rfc2047_encode(&env->subject, NULL, sizeof("Subject:"), SendCharset);
@@ -2768,14 +2773,13 @@ static int bounce_message(FILE *fp, struct Header *h, struct Address *to,
 
 int mutt_bounce_message(FILE *fp, struct Header *h, struct Address *to)
 {
-  struct Address *from = NULL, *resent_to = NULL;
   const char *fqdn = mutt_fqdn(1);
   char resent_from[STRING];
   int ret;
   char *err = NULL;
 
   resent_from[0] = '\0';
-  from = mutt_default_from();
+  struct Address *from = mutt_default_from();
 
   /*
    * mutt_default_from() does not use $realname if the real name is not set
@@ -2785,7 +2789,7 @@ int mutt_bounce_message(FILE *fp, struct Header *h, struct Address *to)
    * upon message criteria.
    */
   if (!from->personal)
-    from->personal = mutt_str_strdup(RealName);
+    from->personal = mutt_str_strdup(Realname);
 
   if (fqdn)
     mutt_addr_qualify(from, fqdn);
@@ -2800,7 +2804,7 @@ int mutt_bounce_message(FILE *fp, struct Header *h, struct Address *to)
   mutt_addr_write(resent_from, sizeof(resent_from), from, false);
 
 #ifdef USE_NNTP
-  OPT_NEWS_SEND = false;
+  OptNewsSend = false;
 #endif
 
   /*
@@ -2808,7 +2812,7 @@ int mutt_bounce_message(FILE *fp, struct Header *h, struct Address *to)
    * function is called, since the user receives confirmation of the address
    * list being bounced to.
    */
-  resent_to = mutt_addr_copy_list(to, false);
+  struct Address *resent_to = mutt_addr_copy_list(to, false);
   rfc2047_encode_addrlist(resent_to, "Resent-To");
 
   ret = bounce_message(fp, h, resent_to, resent_from, from);
@@ -2888,18 +2892,16 @@ int mutt_write_multiple_fcc(const char *path, struct Header *hdr, const char *ms
 {
   char fcc_tok[_POSIX_PATH_MAX];
   char fcc_expanded[_POSIX_PATH_MAX];
-  char *tok = NULL;
-  int status;
 
   mutt_str_strfcpy(fcc_tok, path, sizeof(fcc_tok));
 
-  tok = strtok(fcc_tok, ",");
+  char *tok = strtok(fcc_tok, ",");
   if (!tok)
     return -1;
 
   mutt_debug(1, "Fcc: initial mailbox = '%s'\n", tok);
   /* mutt_expand_path already called above for the first token */
-  status = mutt_write_fcc(tok, hdr, msgid, post, fcc, finalpath);
+  int status = mutt_write_fcc(tok, hdr, msgid, post, fcc, finalpath);
   if (status != 0)
     return status;
 
@@ -2976,10 +2978,10 @@ int mutt_write_fcc(const char *path, struct Header *hdr, const char *msgid,
     goto done;
   }
 
-  /* post == 1 => postpone message. Set mode = -1 in mutt_write_rfc822_header()
-   * post == 0 => Normal mode. Set mode = 0 in mutt_write_rfc822_header()
+  /* post == 1 => postpone message. Set mode = -1 in mutt_rfc822_write_header()
+   * post == 0 => Normal mode. Set mode = 0 in mutt_rfc822_write_header()
    * */
-  mutt_write_rfc822_header(msg->fp, hdr->env, hdr->content, post ? -post : 0, 0);
+  mutt_rfc822_write_header(msg->fp, hdr->env, hdr->content, post ? -post : 0, 0);
 
   /* (postponement) if this was a reply of some sort, <msgid> contains the
    * Message-ID: of message replied to.  Save it using a special X-Mutt-
@@ -2999,7 +3001,7 @@ int mutt_write_fcc(const char *path, struct Header *hdr, const char *msgid,
   if (f.magic == MUTT_MMDF || f.magic == MUTT_MBOX)
     fprintf(msg->fp, "Status: RO\n");
 
-  /* mutt_write_rfc822_header() only writes out a Date: header with
+  /* mutt_rfc822_write_header() only writes out a Date: header with
    * mode == 0, i.e. _not_ postponement; so write out one ourself */
   if (post)
     fprintf(msg->fp, "%s", mutt_date_make_date(buf, sizeof(buf)));

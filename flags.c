@@ -20,6 +20,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @page flags Manipulate the flags in an email header
+ *
+ * Manipulate the flags in an email header
+ */
+
 #include "config.h"
 #include <stddef.h>
 #include <stdbool.h>
@@ -30,12 +36,21 @@
 #include "header.h"
 #include "mutt_curses.h"
 #include "mutt_menu.h"
+#include "mutt_window.h"
 #include "mx.h"
 #include "options.h"
 #include "protos.h"
 #include "sort.h"
 #include "thread.h"
 
+/**
+ * mutt_set_flag_update - Set a flag on an email
+ * @param ctx     Mailbox Context
+ * @param h       Email Header
+ * @param flag    Flag to set, e.g. #MUTT_DELETE
+ * @param bf      true: set the flag; false: clear the flag
+ * @param upd_ctx true: update the Context
+ */
 void mutt_set_flag_update(struct Context *ctx, struct Header *h, int flag, int bf, int upd_ctx)
 {
   if (!ctx || !h)
@@ -316,7 +331,7 @@ void mutt_set_flag_update(struct Context *ctx, struct Header *h, int flag, int b
   {
     mutt_set_header_color(ctx, h);
 #ifdef USE_SIDEBAR
-    mutt_set_current_menu_redraw(REDRAW_SIDEBAR);
+    mutt_menu_set_current_redraw(REDRAW_SIDEBAR);
 #endif
   }
 
@@ -332,7 +347,9 @@ void mutt_set_flag_update(struct Context *ctx, struct Header *h, int flag, int b
 }
 
 /**
- * mutt_thread_set_flag - Set a flag on an entire thread
+ * mutt_tag_set_flag - Set flag on tagged messages
+ * @param flag Flag to set, e.g. #MUTT_DELETE
+ * @param bf   true: set the flag; false: clear the flag
  */
 void mutt_tag_set_flag(int flag, int bf)
 {
@@ -341,6 +358,15 @@ void mutt_tag_set_flag(int flag, int bf)
       mutt_set_flag(Context, Context->hdrs[i], flag, bf);
 }
 
+/**
+ * mutt_thread_set_flag - Set a flag on an entire thread
+ * @param hdr       Email Header
+ * @param flag      Flag to set, e.g. #MUTT_DELETE
+ * @param bf        true: set the flag; false: clear the flag
+ * @param subthread If true apply to all of the thread
+ * @retval  0 Success
+ * @retval -1 Failure
+ */
 int mutt_thread_set_flag(struct Header *hdr, int flag, int bf, int subthread)
 {
   struct MuttThread *start = NULL, *cur = hdr->thread;
@@ -390,6 +416,13 @@ done:
   return 0;
 }
 
+/**
+ * mutt_change_flag - Change the flag on a Message
+ * @param h  Email Header
+ * @param bf true: set the flag; false: clear the flag
+ * @retval  0 Success
+ * @retval -1 Failure
+ */
 int mutt_change_flag(struct Header *h, int bf)
 {
   int i, flag;

@@ -50,6 +50,7 @@
 #include "mutt_account.h"
 #include "mutt_curses.h"
 #include "mutt_menu.h"
+#include "mutt_window.h"
 #include "mx.h"
 #include "opcodes.h"
 #include "options.h"
@@ -211,14 +212,14 @@ static int browser_compare(const void *a, const void *b)
 
   switch (SortBrowser & SORT_MASK)
   {
-    case SORT_DATE:
-      return browser_compare_date(a, b);
-    case SORT_SIZE:
-      return browser_compare_size(a, b);
-    case SORT_DESC:
-      return browser_compare_desc(a, b);
     case SORT_COUNT:
       return browser_compare_count(a, b);
+    case SORT_DATE:
+      return browser_compare_date(a, b);
+    case SORT_DESC:
+      return browser_compare_desc(a, b);
+    case SORT_SIZE:
+      return browser_compare_size(a, b);
     case SORT_UNREAD:
       return browser_compare_count_new(a, b);
     case SORT_SUBJECT:
@@ -243,7 +244,7 @@ static void browser_sort(struct BrowserState *state)
 #ifdef USE_NNTP
     case SORT_SIZE:
     case SORT_DATE:
-      if (OPT_NEWS)
+      if (OptNews)
         return;
 #endif
     default:
@@ -606,6 +607,25 @@ static const char *group_index_format_str(char *buf, size_t buflen, size_t col, 
         snprintf(buf, buflen, fmt, folder->ff->new ? 'N' : 'u');
       break;
 
+    case 'n':
+      if (Context && Context->data == folder->ff->nd)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
+        snprintf(buf, buflen, fmt, Context->new);
+      }
+      else if (MarkOld && folder->ff->nd->last_cached >= folder->ff->nd->first_message &&
+               folder->ff->nd->last_cached <= folder->ff->nd->last_message)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
+        snprintf(buf, buflen, fmt, folder->ff->nd->last_message - folder->ff->nd->last_cached);
+      }
+      else
+      {
+        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
+        snprintf(buf, buflen, fmt, folder->ff->nd->unread);
+      }
+      break;
+
     case 's':
       if (flags & MUTT_FORMAT_OPTIONAL)
       {
@@ -620,25 +640,6 @@ static const char *group_index_format_str(char *buf, size_t buflen, size_t col, 
       {
         snprintf(fmt, sizeof(fmt), "%%%sd", prec);
         snprintf(buf, buflen, fmt, Context->unread);
-      }
-      else
-      {
-        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
-        snprintf(buf, buflen, fmt, folder->ff->nd->unread);
-      }
-      break;
-
-    case 'n':
-      if (Context && Context->data == folder->ff->nd)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
-        snprintf(buf, buflen, fmt, Context->new);
-      }
-      else if (MarkOld && folder->ff->nd->last_cached >= folder->ff->nd->first_message &&
-               folder->ff->nd->last_cached <= folder->ff->nd->last_message)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
-        snprintf(buf, buflen, fmt, folder->ff->nd->last_message - folder->ff->nd->last_cached);
       }
       else
       {
@@ -691,7 +692,7 @@ static void add_folder(struct Menu *m, struct BrowserState *state, const char *n
   (state->entry)[state->entrylen].imap = false;
 #endif
 #ifdef USE_NNTP
-  if (OPT_NEWS)
+  if (OptNews)
     (state->entry)[state->entrylen].nd = (struct NntpData *) data;
 #endif
   (state->entrylen)++;
@@ -716,7 +717,7 @@ static int examine_directory(struct Menu *menu, struct BrowserState *state,
                              char *d, const char *prefix)
 {
 #ifdef USE_NNTP
-  if (OPT_NEWS)
+  if (OptNews)
   {
     struct NntpServer *nserv = CurrentNewsSrv;
 
@@ -851,7 +852,7 @@ static int examine_mailboxes(struct Menu *menu, struct BrowserState *state)
   struct stat s;
 
 #ifdef USE_NNTP
-  if (OPT_NEWS)
+  if (OptNews)
   {
     struct NntpServer *nserv = CurrentNewsSrv;
 
@@ -888,7 +889,8 @@ static int examine_mailboxes(struct Menu *menu, struct BrowserState *state)
 
       char buffer[LONG_STRING];
       mutt_str_strfcpy(buffer, tmp->path, sizeof(buffer));
-      mutt_pretty_mailbox(buffer, sizeof(buffer));
+      if (BrowserAbbreviateMailboxes)
+        mutt_pretty_mailbox(buffer, sizeof(buffer));
 
 #ifdef USE_IMAP
       if (mx_is_imap(tmp->path))
@@ -942,7 +944,7 @@ static int examine_mailboxes(struct Menu *menu, struct BrowserState *state)
 static int select_file_search(struct Menu *menu, regex_t *re, int n)
 {
 #ifdef USE_NNTP
-  if (OPT_NEWS)
+  if (OptNews)
     return (regexec(re, ((struct FolderFile *) menu->data)[n].desc, 0, NULL, 0));
 #endif
   return (regexec(re, ((struct FolderFile *) menu->data)[n].name, 0, NULL, 0));
@@ -970,7 +972,7 @@ static void folder_entry(char *buf, size_t buflen, struct Menu *menu, int num)
   folder.num = num;
 
 #ifdef USE_NNTP
-  if (OPT_NEWS)
+  if (OptNews)
     mutt_expando_format(buf, buflen, 0, MuttIndexWindow->cols,
                         NONULL(GroupIndexFormat), group_index_format_str,
                         (unsigned long) &folder, MUTT_FORMAT_ARROWCURSOR);
@@ -1029,8 +1031,6 @@ static void browser_highlight_default(struct BrowserState *state, struct Menu *m
 static void init_menu(struct BrowserState *state, struct Menu *menu,
                       char *title, size_t titlelen, bool buffy)
 {
-  char path[_POSIX_PATH_MAX];
-
   menu->max = state->entrylen;
 
   if (menu->current >= menu->max)
@@ -1043,7 +1043,7 @@ static void init_menu(struct BrowserState *state, struct Menu *menu,
   menu->tagged = 0;
 
 #ifdef USE_NNTP
-  if (OPT_NEWS)
+  if (OptNews)
   {
     if (buffy)
       snprintf(title, titlelen, _("Subscribed newsgroups"));
@@ -1061,6 +1061,7 @@ static void init_menu(struct BrowserState *state, struct Menu *menu,
     }
     else
     {
+      char path[_POSIX_PATH_MAX];
       menu->is_mailbox_list = 0;
       mutt_str_strfcpy(path, LastDir, sizeof(path));
       mutt_pretty_mailbox(path, sizeof(path));
@@ -1170,7 +1171,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
   memset(&state, 0, sizeof(struct BrowserState));
 
 #ifdef USE_NNTP
-  if (OPT_NEWS)
+  if (OptNews)
   {
     if (*f)
       mutt_str_strfcpy(prefix, f, sizeof(prefix));
@@ -1201,7 +1202,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
     {
       init_state(&state, NULL);
       state.imap_browse = true;
-      if (!imap_browse(f, &state))
+      if (imap_browse(f, &state) == 0)
       {
         mutt_str_strfcpy(LastDir, state.folder, sizeof(LastDir));
         browser_sort(&state);
@@ -1298,15 +1299,15 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
            */
           switch (mx_get_magic(CurrentFolder))
           {
-            case MUTT_MBOX:
-            case MUTT_MMDF:
-            case MUTT_MH:
-            case MUTT_MAILDIR:
             case MUTT_IMAP:
+            case MUTT_MAILDIR:
+            case MUTT_MBOX:
+            case MUTT_MH:
+            case MUTT_MMDF:
               if (Folder)
                 mutt_str_strfcpy(LastDir, NONULL(Folder), sizeof(LastDir));
-              else if (SpoolFile)
-                mutt_browser_select_dir(SpoolFile);
+              else if (Spoolfile)
+                mutt_browser_select_dir(Spoolfile);
               break;
             default:
               mutt_browser_select_dir(CurrentFolder);
@@ -1367,7 +1368,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
     if (examine_directory(NULL, &state, LastDir, prefix) == -1)
       goto bail;
   }
-  menu = mutt_new_menu(MENU_FOLDER);
+  menu = mutt_menu_new(MENU_FOLDER);
   menu->make_entry = folder_entry;
   menu->search = select_file_search;
   menu->title = title;
@@ -1387,10 +1388,10 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
 
   menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_FOLDER,
 #ifdef USE_NNTP
-                                 OPT_NEWS ? FolderNewsHelp :
+                                 OptNews ? FolderNewsHelp :
 #endif
-                                            FolderHelp);
-  mutt_push_current_menu(menu);
+                                           FolderHelp);
+  mutt_menu_push_current(menu);
 
   init_menu(&state, menu, title, sizeof(title), buffy);
 
@@ -1400,7 +1401,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
     {
       case OP_GENERIC_SELECT_ENTRY:
 
-        if (!state.entrylen)
+        if (state.entrylen == 0)
         {
           mutt_error(_("No files match the file mask"));
           break;
@@ -1534,7 +1535,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
           }
         }
 
-        if (buffy || OPT_NEWS) /* USE_NNTP */
+        if (buffy || OptNews) /* USE_NNTP */
         {
           mutt_str_strfcpy(f, state.entry[menu->current].name, flen);
           mutt_expand_path(f, flen);
@@ -1609,7 +1610,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
           break;
         }
 
-        if (!imap_mailbox_create(LastDir))
+        if (imap_mailbox_create(LastDir) == 0)
         {
           /* TODO: find a way to detect if the new folder would appear in
            *   this window, and insert it without starting over. */
@@ -1669,7 +1670,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
           snprintf(msg, sizeof(msg), _("Really delete mailbox \"%s\"?"), mx.mbox);
           if (mutt_yesorno(msg, MUTT_NO) == MUTT_YES)
           {
-            if (!imap_delete_mailbox(Context, &mx))
+            if (imap_delete_mailbox(Context, &mx) == 0)
             {
               /* free the mailbox from the browser */
               FREE(&((state.entry)[nentry].name));
@@ -1697,7 +1698,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
       case OP_CHANGE_DIRECTORY:
 
 #ifdef USE_NNTP
-        if (OPT_NEWS)
+        if (OptNews)
           break;
 #endif
 
@@ -1849,7 +1850,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
               goto bail;
             }
             kill_prefix = 0;
-            if (!state.entrylen)
+            if (state.entrylen == 0)
             {
               mutt_error(_("No files match the file mask"));
               break;
@@ -1988,7 +1989,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
         break;
 
       case OP_BROWSER_VIEW_FILE:
-        if (!state.entrylen)
+        if (state.entrylen == 0)
         {
           mutt_error(_("No files match the file mask"));
           break;
@@ -2012,16 +2013,15 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
         }
         else
         {
-          struct Body *b = NULL;
           char buf2[_POSIX_PATH_MAX];
 
           mutt_file_concat_path(buf2, LastDir, state.entry[menu->current].name,
                                 sizeof(buf2));
-          b = mutt_make_file_attach(buf2);
+          struct Body *b = mutt_make_file_attach(buf2);
           if (b)
           {
             mutt_view_attachment(NULL, b, MUTT_REGULAR, NULL, NULL);
-            mutt_free_body(&b);
+            mutt_body_free(&b);
             menu->redraw = REDRAW_FULL;
           }
           else
@@ -2032,7 +2032,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
 #ifdef USE_NNTP
       case OP_CATCHUP:
       case OP_UNCATCHUP:
-        if (OPT_NEWS)
+        if (OptNews)
         {
           struct FolderFile *ff = &state.entry[menu->current];
           int rc;
@@ -2061,7 +2061,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
         break;
 
       case OP_LOAD_ACTIVE:
-        if (OPT_NEWS)
+        if (OptNews)
         {
           struct NntpServer *nserv = CurrentNewsSrv;
 
@@ -2082,7 +2082,10 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
           if (buffy)
             examine_mailboxes(menu, &state);
           else
-            examine_directory(menu, &state, NULL, NULL);
+          {
+            if (examine_directory(menu, &state, NULL, NULL) == -1)
+              break;
+          }
           init_menu(&state, menu, title, sizeof(title), buffy);
         }
         break;
@@ -2095,7 +2098,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
 #ifdef USE_NNTP
       case OP_SUBSCRIBE_PATTERN:
       case OP_UNSUBSCRIBE_PATTERN:
-        if (OPT_NEWS)
+        if (OptNews)
         {
           struct NntpServer *nserv = CurrentNewsSrv;
           regex_t rx;
@@ -2129,7 +2132,7 @@ void mutt_select_file(char *f, size_t flen, int flags, char ***files, int *numfi
             menu->redraw = REDRAW_FULL;
             j = 0;
           }
-          else if (!state.entrylen)
+          else if (state.entrylen == 0)
           {
             mutt_error(_("No newsgroups match the mask"));
             break;
@@ -2202,7 +2205,7 @@ bail:
 
   if (menu)
   {
-    mutt_pop_current_menu(menu);
+    mutt_menu_pop_current(menu);
     mutt_menu_destroy(&menu);
   }
 

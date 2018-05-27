@@ -20,6 +20,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @page crypt_pgppacket Parse PGP data packets
+ *
+ * Parse PGP data packets
+ */
+
 #include "config.h"
 #include <stdbool.h>
 #include <stdio.h>
@@ -35,12 +41,9 @@ static int read_material(size_t material, size_t *used, FILE *fp)
 {
   if (*used + material >= plen)
   {
-    unsigned char *p = NULL;
-    size_t nplen;
+    size_t nplen = *used + material + CHUNKSIZE;
 
-    nplen = *used + material + CHUNKSIZE;
-
-    p = realloc(pbuf, nplen);
+    unsigned char *p = realloc(pbuf, nplen);
     if (!p)
     {
       perror("realloc");
@@ -72,7 +75,7 @@ unsigned char *pgp_read_packet(FILE *fp, size_t *len)
   if (startpos < 0)
     return NULL;
 
-  if (!plen)
+  if (plen == 0)
   {
     plen = CHUNKSIZE;
     pbuf = mutt_mem_malloc(plen);

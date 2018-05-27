@@ -45,6 +45,7 @@
 #include "mailbox.h"
 #include "mutt_curses.h"
 #include "mutt_menu.h"
+#include "mutt_window.h"
 #include "mx.h"
 #include "ncrypt/ncrypt.h"
 #include "opcodes.h"
@@ -318,6 +319,10 @@ static void redraw_crypt_lines(struct Header *msg)
 
 #ifdef MIXMASTER
 
+/**
+ * redraw_mix_line - Redraw the Mixmaster chain
+ * @param chain List of chain links
+ */
 static void redraw_mix_line(struct ListHead *chain)
 {
   char *t = NULL;
@@ -362,6 +367,8 @@ static int check_attachments(struct AttachCtx *actx)
 
   for (int i = 0; i < actx->idxlen; i++)
   {
+    if (actx->idx[i]->content->type == TYPEMULTIPART)
+      continue;
     mutt_str_strfcpy(pretty, actx->idx[i]->content->filename, sizeof(pretty));
     if (stat(actx->idx[i]->content->filename, &st) != 0)
     {
@@ -403,7 +410,7 @@ static void draw_envelope(struct Header *msg, char *fcc)
 {
   draw_envelope_addr(HDR_FROM, msg->env->from);
 #ifdef USE_NNTP
-  if (!OPT_NEWS_SEND)
+  if (!OptNewsSend)
   {
 #endif
     draw_envelope_addr(HDR_TO, msg->env->to);
@@ -507,7 +514,7 @@ static int delete_attachment(struct AttachCtx *actx, int x)
 
   idx[rindex]->content->next = NULL;
   idx[rindex]->content->parts = NULL;
-  mutt_free_body(&(idx[rindex]->content));
+  mutt_body_free(&(idx[rindex]->content));
   FREE(&idx[rindex]->tree);
   FREE(&idx[rindex]);
   for (; rindex < actx->idxlen - 1; rindex++)
@@ -635,9 +642,42 @@ static void compose_menu_redraw(struct Menu *menu)
 }
 
 /**
+ * compose_attach_swap - Swap two adjacent entries in the attachment list
+ * @param msg   Body of email
+ * @param idx   Array of Attachments
+ * @param first Index of first attachment to swap
+ */
+static void compose_attach_swap(struct Body *msg, struct AttachPtr **idx, short first)
+{
+  /* Reorder Body pointers.
+   * Must traverse msg from top since Body has no previous ptr.
+   */
+  for (struct Body *part = msg; part; part = part->next)
+  {
+    if (part->next == idx[first]->content)
+    {
+      idx[first]->content->next = idx[first + 1]->content->next;
+      idx[first + 1]->content->next = idx[first]->content;
+      part->next = idx[first + 1]->content;
+      break;
+    }
+  }
+
+  /* Reorder index */
+  struct AttachPtr *saved = idx[first];
+  idx[first] = idx[first + 1];
+  idx[first + 1] = saved;
+
+  /* Swap ptr->num */
+  int i = idx[first]->num;
+  idx[first]->num = idx[first + 1]->num;
+  idx[first + 1]->num = i;
+}
+
+/**
  * cum_attachs_size - Cumulative Attachments Size
  * @param menu Menu listing attachments
- * @retval n Number of bytes in attachments
+ * @retval num Bytes in attachments
  *
  * Returns the total number of bytes used by the attachments in the attachment
  * list _after_ content-transfer-encodings have been applied.
@@ -760,20 +800,21 @@ static void compose_status_line(char *buf, size_t buflen, size_t col, int cols,
 
 /**
  * mutt_compose_menu - Allow the user to edit the message envelope
+ * @param msg    Message to fill
+ * @param fcc    Buffer to save FCC
+ * @param fcclen Length of FCC buffer
+ * @param cur    Current message
+ * @param flags  Flags, e.g. #MUTT_COMPOSE_NOFREEHEADER
  * @retval  1 Message should be postponed
  * @retval  0 Normal exit
  * @retval -1 Abort message
  */
-int mutt_compose_menu(struct Header *msg, /* structure for new message */
-                      char *fcc, /* where to save a copy of the message */
-                      size_t fcclen, struct Header *cur, /* current message */
-                      int flags)
+int mutt_compose_menu(struct Header *msg, char *fcc, size_t fcclen,
+                      struct Header *cur, int flags)
 {
   char helpstr[LONG_STRING];
   char buf[LONG_STRING];
   char fname[_POSIX_PATH_MAX];
-  struct Menu *menu = NULL;
-  struct AttachCtx *actx = NULL;
   struct AttachPtr *new = NULL;
   int i, close = 0;
   int r = -1; /* return value */
@@ -787,7 +828,7 @@ int mutt_compose_menu(struct Header *msg, /* structure for new message */
 #ifdef USE_NNTP
   int news = 0; /* is it a news article ? */
 
-  if (OPT_NEWS_SEND)
+  if (OptNewsSend)
     news++;
 #endif
 
@@ -796,7 +837,7 @@ int mutt_compose_menu(struct Header *msg, /* structure for new message */
   rd.msg = msg;
   rd.fcc = fcc;
 
-  menu = mutt_new_menu(MENU_COMPOSE);
+  struct Menu *menu = mutt_menu_new(MENU_COMPOSE);
   menu->offset = HDR_ATTACH;
   menu->make_entry = snd_entry;
   menu->tag = mutt_tag_attach;
@@ -808,16 +849,16 @@ int mutt_compose_menu(struct Header *msg, /* structure for new message */
     menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_COMPOSE, ComposeHelp);
   menu->custom_menu_redraw = compose_menu_redraw;
   menu->redraw_data = &rd;
-  mutt_push_current_menu(menu);
+  mutt_menu_push_current(menu);
 
-  actx = mutt_mem_calloc(sizeof(struct AttachCtx), 1);
+  struct AttachCtx *actx = mutt_mem_calloc(sizeof(struct AttachCtx), 1);
   actx->hdr = msg;
   mutt_update_compose_menu(actx, menu, 1);
 
   while (loop)
   {
 #ifdef USE_NNTP
-    OPT_NEWS = false; /* for any case */
+    OptNews = false; /* for any case */
 #endif
     const int op = mutt_menu_loop(menu);
     switch (op)
@@ -1017,24 +1058,233 @@ int mutt_compose_menu(struct Header *msg, /* structure for new message */
         mutt_message_hook(NULL, msg, MUTT_SEND2HOOK);
         break;
 
+      case OP_COMPOSE_MOVE_UP:
+        if (menu->current == 0)
+        {
+          mutt_error(_("Attachment is already at top."));
+          break;
+        }
+        if (menu->current == 1)
+        {
+          mutt_error(_("The fundamental part cannot be moved."));
+          break;
+        }
+        compose_attach_swap(msg->content, actx->idx, menu->current - 1);
+        menu->redraw = 1;
+        menu->current--;
+        break;
+
+      case OP_COMPOSE_MOVE_DOWN:
+        if (menu->current == actx->idxlen - 1)
+        {
+          mutt_error(_("Attachment is already at bottom."));
+          break;
+        }
+        if (menu->current == 0)
+        {
+          mutt_error(_("The fundamental part cannot be moved."));
+          break;
+        }
+        compose_attach_swap(msg->content, actx->idx, menu->current);
+        menu->redraw = 1;
+        menu->current++;
+        break;
+
+      case OP_COMPOSE_GROUP_ALTS:
+      {
+        if (menu->tagged < 2)
+        {
+          mutt_error(
+              _("Grouping alternatives requires at least 2 tagged messages."));
+          break;
+        }
+
+        struct Body *group = mutt_body_new();
+        group->type = TYPEMULTIPART;
+        group->subtype = mutt_str_strdup("alternative");
+        group->disposition = DISPINLINE;
+
+        struct Body *alts = NULL;
+        /* group tagged message into a multipart/alternative */
+        struct Body *bptr = msg->content;
+        for (i = 0; bptr;)
+        {
+          if (bptr->tagged)
+          {
+            bptr->tagged = false;
+            bptr->disposition = DISPINLINE;
+
+            /* for first match, set group desc according to match */
+#define ALTS_TAG "Alternatives for \"%s\""
+            if (!group->description)
+            {
+              char *p = bptr->description ? bptr->description : bptr->filename;
+              if (p)
+              {
+                group->description =
+                    mutt_mem_calloc(1, strlen(p) + strlen(ALTS_TAG) + 1);
+                sprintf(group->description, ALTS_TAG, p);
+              }
+            }
+
+            /* append bptr to the alts list,
+             * and remove from the msg->content list */
+            if (alts == NULL)
+            {
+              group->parts = alts = bptr;
+              bptr = bptr->next;
+              alts->next = NULL;
+            }
+            else
+            {
+              alts->next = bptr;
+              bptr = bptr->next;
+              alts = alts->next;
+              alts->next = NULL;
+            }
+
+            for (int j = i; j < actx->idxlen - 1; j++)
+            {
+              actx->idx[j] = actx->idx[j + 1];
+              actx->idx[j + 1] = NULL; /* for debug reason */
+            }
+            actx->idxlen--;
+          }
+          else
+          {
+            bptr = bptr->next;
+            i++;
+          }
+        }
+
+        group->next = NULL;
+        mutt_generate_boundary(&group->parameter);
+
+        /* if no group desc yet, make one up */
+        if (!group->description)
+          group->description = mutt_str_strdup("unknown alternative group");
+
+        struct AttachPtr *gptr = mutt_mem_calloc(1, sizeof(struct AttachPtr));
+        gptr->content = group;
+        update_idx(menu, actx, gptr);
+      }
+        menu->redraw = REDRAW_INDEX;
+        break;
+
+      case OP_COMPOSE_GROUP_LINGUAL:
+      {
+        if (menu->tagged < 2)
+        {
+          mutt_error(
+              _("Grouping multilingual requires at least 2 tagged messages."));
+          break;
+        }
+
+        /* traverse to see whether all the parts have Content-Language: set */
+        struct Body *b = msg->content;
+        int tagged_with_lang_num = 0;
+        for (i = 0; b; b = b->next)
+          if (b->tagged && b->language && *b->language)
+            tagged_with_lang_num++;
+
+        if (menu->tagged != tagged_with_lang_num)
+        {
+          if (mutt_yesorno(
+                  _("Not all parts have Content-Language: set, continue?"), MUTT_YES) != MUTT_YES)
+          {
+            mutt_message(_("Not sending this message."));
+            break;
+          }
+        }
+
+        struct Body *group = mutt_body_new();
+        group->type = TYPEMULTIPART;
+        group->subtype = mutt_str_strdup("multilingual");
+        group->disposition = DISPINLINE;
+
+        struct Body *alts = NULL;
+        /* group tagged message into a multipart/multilingual */
+        struct Body *bptr = msg->content;
+        for (i = 0; bptr;)
+        {
+          if (bptr->tagged)
+          {
+            bptr->tagged = false;
+            bptr->disposition = DISPINLINE;
+
+            /* for first match, set group desc according to match */
+#define LINGUAL_TAG "Multilingual part for \"%s\""
+            if (!group->description)
+            {
+              char *p = bptr->description ? bptr->description : bptr->filename;
+              if (p)
+              {
+                group->description =
+                    mutt_mem_calloc(1, strlen(p) + strlen(LINGUAL_TAG) + 1);
+                sprintf(group->description, LINGUAL_TAG, p);
+              }
+            }
+
+            /* append bptr to the alts list,
+             * and remove from the msg->content list */
+            if (alts == NULL)
+            {
+              group->parts = alts = bptr;
+              bptr = bptr->next;
+              alts->next = NULL;
+            }
+            else
+            {
+              alts->next = bptr;
+              bptr = bptr->next;
+              alts = alts->next;
+              alts->next = NULL;
+            }
+
+            for (int j = i; j < actx->idxlen - 1; j++)
+            {
+              actx->idx[j] = actx->idx[j + 1];
+              actx->idx[j + 1] = NULL; /* for debug reason */
+            }
+            actx->idxlen--;
+          }
+          else
+          {
+            bptr = bptr->next;
+            i++;
+          }
+        }
+
+        group->next = NULL;
+        mutt_generate_boundary(&group->parameter);
+
+        /* if no group desc yet, make one up */
+        if (!group->description)
+          group->description = mutt_str_strdup("unknown multilingual group");
+
+        struct AttachPtr *gptr = mutt_mem_calloc(1, sizeof(struct AttachPtr));
+        gptr->content = group;
+        update_idx(menu, actx, gptr);
+      }
+        menu->redraw = REDRAW_INDEX;
+        break;
+
       case OP_COMPOSE_ATTACH_FILE:
       {
-        char *prompt = NULL, **files = NULL;
-        int error, numfiles;
-
+        char *prompt = _("Attach file");
+        int numfiles = 0;
+        char **files = NULL;
         fname[0] = 0;
-        prompt = _("Attach file");
-        numfiles = 0;
-        files = NULL;
 
         if (mutt_enter_fname_full(prompt, fname, sizeof(fname), 0, 1, &files,
                                   &numfiles, MUTT_SEL_MULTI) == -1 ||
             *fname == '\0')
           break;
 
-        error = 0;
+        int error = 0;
         if (numfiles > 1)
-          mutt_message(_("Attaching selected files..."));
+          mutt_message(ngettext("Attaching selected file...",
+                                "Attaching selected files...", numfiles));
         for (i = 0; i < numfiles; i++)
         {
           char *att = files[i];
@@ -1066,13 +1316,11 @@ int mutt_compose_menu(struct Header *msg, /* structure for new message */
       case OP_COMPOSE_ATTACH_NEWS_MESSAGE:
 #endif
       {
-        char *prompt = NULL;
-
+        char *prompt = _("Open mailbox to attach message from");
         fname[0] = 0;
-        prompt = _("Open mailbox to attach message from");
 
 #ifdef USE_NNTP
-        OPT_NEWS = false;
+        OptNews = false;
         if (op == OP_COMPOSE_ATTACH_NEWS_MESSAGE)
         {
           CurrentNewsSrv = nntp_select_server(NewsServer, false);
@@ -1080,7 +1328,7 @@ int mutt_compose_menu(struct Header *msg, /* structure for new message */
             break;
 
           prompt = _("Open newsgroup to attach message from");
-          OPT_NEWS = true;
+          OptNews = true;
         }
 #endif
 
@@ -1097,7 +1345,7 @@ int mutt_compose_menu(struct Header *msg, /* structure for new message */
           break;
 
 #ifdef USE_NNTP
-        if (OPT_NEWS)
+        if (OptNews)
           nntp_expand_path(fname, sizeof(fname), &CurrentNewsSrv->conn->account);
         else
 #endif
@@ -1109,7 +1357,7 @@ int mutt_compose_menu(struct Header *msg, /* structure for new message */
           if (!mx_is_pop(fname))
 #endif
 #ifdef USE_NNTP
-            if (!mx_is_nntp(fname) && !OPT_NEWS)
+            if (!mx_is_nntp(fname) && !OptNews)
 #endif
               /* check to make sure the file exists and is readable */
               if (access(fname, R_OK) == -1)
@@ -1140,10 +1388,10 @@ int mutt_compose_menu(struct Header *msg, /* structure for new message */
         old_sort_aux = SortAux;
 
         Context = ctx;
-        OPT_ATTACH_MSG = true;
+        OptAttachMsg = true;
         mutt_message(_("Tag the messages you want to attach!"));
         close = mutt_index_menu();
-        OPT_ATTACH_MSG = false;
+        OptAttachMsg = false;
 
         if (!Context)
         {
@@ -1270,6 +1518,22 @@ int mutt_compose_menu(struct Header *msg, /* structure for new message */
 
           menu->redraw = REDRAW_CURRENT;
         }
+        mutt_message_hook(NULL, msg, MUTT_SEND2HOOK);
+        break;
+
+      case OP_COMPOSE_EDIT_LANGUAGE:
+        CHECK_COUNT;
+        buf[0] = 0; /* clear buffer first */
+        if (CURATTACH->content->language)
+          mutt_str_strfcpy(buf, CURATTACH->content->language, sizeof(buf));
+        if (mutt_get_field("Content-Language: ", buf, sizeof(buf), 0) == 0)
+        {
+          CURATTACH->content->language = mutt_str_strdup(buf);
+          menu->redraw = REDRAW_CURRENT | REDRAW_STATUS;
+          mutt_clear_error();
+        }
+        else
+          mutt_warning(_("Empty Content-Language"));
         mutt_message_hook(NULL, msg, MUTT_SEND2HOOK);
         break;
 
@@ -1532,7 +1796,7 @@ int mutt_compose_menu(struct Header *msg, /* structure for new message */
               /* avoid freeing other attachments */
               actx->idx[i]->content->next = NULL;
               actx->idx[i]->content->parts = NULL;
-              mutt_free_body(&actx->idx[i]->content);
+              mutt_body_free(&actx->idx[i]->content);
             }
           }
           r = -1;
@@ -1667,7 +1931,7 @@ int mutt_compose_menu(struct Header *msg, /* structure for new message */
     }
   }
 
-  mutt_pop_current_menu(menu);
+  mutt_menu_pop_current(menu);
   mutt_menu_destroy(&menu);
 
   if (actx->idxlen)

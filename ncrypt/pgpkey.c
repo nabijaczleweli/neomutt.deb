@@ -21,6 +21,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @page crypt_pgpkey PGP key management routines
+ *
+ * PGP key management routines
+ */
+
 #include "config.h"
 #include <ctype.h>
 #include <limits.h>
@@ -44,6 +50,7 @@
 #include "keymap.h"
 #include "mutt_curses.h"
 #include "mutt_menu.h"
+#include "mutt_window.h"
 #include "ncrypt.h"
 #include "opcodes.h"
 #include "options.h"
@@ -142,16 +149,13 @@ static const char *pgp_entry_fmt(char *buf, size_t buflen, size_t col, int cols,
                                  unsigned long data, enum FormatFlag flags)
 {
   char fmt[SHORT_STRING];
-  struct PgpEntry *entry = NULL;
-  struct PgpUid *uid = NULL;
-  struct PgpKeyInfo *key = NULL, *pkey = NULL;
   int kflags = 0;
   int optional = (flags & MUTT_FORMAT_OPTIONAL);
 
-  entry = (struct PgpEntry *) data;
-  uid = entry->uid;
-  key = uid->parent;
-  pkey = pgp_principal_key(key);
+  struct PgpEntry *entry = (struct PgpEntry *) data;
+  struct PgpUid *uid = entry->uid;
+  struct PgpKeyInfo *key = uid->parent;
+  struct PgpKeyInfo *pkey = pgp_principal_key(key);
 
   if (isupper((unsigned char) op))
     key = pkey;
@@ -160,18 +164,82 @@ static const char *pgp_entry_fmt(char *buf, size_t buflen, size_t col, int cols,
 
   switch (tolower(op))
   {
+    case 'a':
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
+        snprintf(buf, buflen, fmt, key->algorithm);
+      }
+      break;
+    case 'c':
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
+        snprintf(buf, buflen, fmt, pgp_key_abilities(kflags));
+      }
+      else if (!(kflags & (KEYFLAG_ABILITIES)))
+        optional = 0;
+      break;
+    case 'f':
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%sc", prec);
+        snprintf(buf, buflen, fmt, pgp_flags(kflags));
+      }
+      else if (!(kflags & (KEYFLAG_RESTRICTIONS)))
+        optional = 0;
+      break;
+    case 'k':
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
+        snprintf(buf, buflen, fmt, pgp_this_keyid(key));
+      }
+      break;
+    case 'l':
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
+        snprintf(buf, buflen, fmt, key->keylen);
+      }
+      break;
+    case 'n':
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
+        snprintf(buf, buflen, fmt, entry->num);
+      }
+      break;
+    case 't':
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%sc", prec);
+        snprintf(buf, buflen, fmt, trust_flags[uid->trust & 0x03]);
+      }
+      else if (!(uid->trust & 0x03))
+      {
+        /* undefined trust */
+        optional = 0;
+      }
+      break;
+    case 'u':
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
+        snprintf(buf, buflen, fmt, NONULL(uid->addr));
+      }
+      break;
     case '[':
 
     {
-      const char *cp = NULL;
-      char buf2[SHORT_STRING], *p = NULL;
+      char buf2[SHORT_STRING];
       int do_locales;
       struct tm *tm = NULL;
       size_t len;
 
-      p = buf;
+      char *p = buf;
 
-      cp = src;
+      const char *cp = src;
       if (*cp == '!')
       {
         do_locales = 0;
@@ -218,71 +286,6 @@ static const char *pgp_entry_fmt(char *buf, size_t buflen, size_t col, int cols,
         src = cp + 1;
     }
     break;
-    case 'n':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
-        snprintf(buf, buflen, fmt, entry->num);
-      }
-      break;
-    case 'k':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-        snprintf(buf, buflen, fmt, pgp_this_keyid(key));
-      }
-      break;
-    case 'u':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-        snprintf(buf, buflen, fmt, NONULL(uid->addr));
-      }
-      break;
-    case 'a':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-        snprintf(buf, buflen, fmt, key->algorithm);
-      }
-      break;
-    case 'l':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
-        snprintf(buf, buflen, fmt, key->keylen);
-      }
-      break;
-    case 'f':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%sc", prec);
-        snprintf(buf, buflen, fmt, pgp_flags(kflags));
-      }
-      else if (!(kflags & (KEYFLAG_RESTRICTIONS)))
-        optional = 0;
-      break;
-    case 'c':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-        snprintf(buf, buflen, fmt, pgp_key_abilities(kflags));
-      }
-      else if (!(kflags & (KEYFLAG_ABILITIES)))
-        optional = 0;
-      break;
-    case 't':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%sc", prec);
-        snprintf(buf, buflen, fmt, trust_flags[uid->trust & 0x03]);
-      }
-      else if (!(uid->trust & 0x03))
-      {
-        /* undefined trust */
-        optional = 0;
-      }
-      break;
     default:
       *buf = '\0';
   }
@@ -518,14 +521,14 @@ static struct PgpKeyInfo *pgp_select_key(struct PgpKeyInfo *keys,
 
   switch (PgpSortKeys & SORT_MASK)
   {
+    case SORT_ADDRESS:
+      f = pgp_compare_address;
+      break;
     case SORT_DATE:
       f = pgp_compare_date;
       break;
     case SORT_KEYID:
       f = pgp_compare_keyid;
-      break;
-    case SORT_ADDRESS:
-      f = pgp_compare_address;
       break;
     case SORT_TRUST:
     default:
@@ -544,12 +547,12 @@ static struct PgpKeyInfo *pgp_select_key(struct PgpKeyInfo *keys,
   mutt_make_help(buf, sizeof(buf), _("Help"), MENU_PGP, OP_HELP);
   strcat(helpstr, buf);
 
-  menu = mutt_new_menu(MENU_PGP);
+  menu = mutt_menu_new(MENU_PGP);
   menu->max = i;
   menu->make_entry = pgp_entry;
   menu->help = helpstr;
   menu->data = KeyTable;
-  mutt_push_current_menu(menu);
+  mutt_menu_push_current(menu);
 
   if (p)
     snprintf(buf, sizeof(buf), _("PGP keys matching <%s>."), p->mailbox);
@@ -618,7 +621,7 @@ static struct PgpKeyInfo *pgp_select_key(struct PgpKeyInfo *keys,
 
         /* XXX make error reporting more verbose */
 
-        if (OPT_PGP_CHECK_TRUST)
+        if (OptPgpCheckTrust)
         {
           if (!pgp_key_is_valid(KeyTable[menu->current]->parent))
           {
@@ -627,29 +630,32 @@ static struct PgpKeyInfo *pgp_select_key(struct PgpKeyInfo *keys,
           }
         }
 
-        if (OPT_PGP_CHECK_TRUST && (!pgp_id_is_valid(KeyTable[menu->current]) ||
-                                    !pgp_id_is_strong(KeyTable[menu->current])))
+        if (OptPgpCheckTrust && (!pgp_id_is_valid(KeyTable[menu->current]) ||
+                                 !pgp_id_is_strong(KeyTable[menu->current])))
         {
           char *str = "";
           char buf2[LONG_STRING];
 
           if (KeyTable[menu->current]->flags & KEYFLAG_CANTUSE)
-            str = N_("ID is expired/disabled/revoked.");
+            str = _("ID is expired/disabled/revoked. Do you really want to use "
+                    "the key?");
           else
             switch (KeyTable[menu->current]->trust & 0x03)
             {
               case 0:
-                str = N_("ID has undefined validity.");
+                str = _("ID has undefined validity. Do you really want to use "
+                        "the key?");
                 break;
               case 1:
-                str = N_("ID is not valid.");
+                str = _("ID is not valid. Do you really want to use the key?");
                 break;
               case 2:
-                str = N_("ID is only marginally valid.");
+                str = _("ID is only marginally valid. Do you really want to "
+                        "use the key?");
                 break;
             }
 
-          snprintf(buf2, sizeof(buf2), _("%s Do you really want to use the key?"), _(str));
+          snprintf(buf2, sizeof(buf2), "%s", str);
 
           if (mutt_yesorno(buf2, MUTT_NO) != MUTT_YES)
           {
@@ -670,7 +676,7 @@ static struct PgpKeyInfo *pgp_select_key(struct PgpKeyInfo *keys,
     }
   }
 
-  mutt_pop_current_menu(menu);
+  mutt_menu_pop_current(menu);
   mutt_menu_destroy(&menu);
   FREE(&KeyTable);
 
@@ -739,10 +745,10 @@ struct Body *pgp_make_key_attachment(char *tempf)
   FILE *devnull = NULL;
   struct stat sb;
   pid_t thepid;
-  struct PgpKeyInfo *key = NULL;
-  OPT_PGP_CHECK_TRUST = false;
+  OptPgpCheckTrust = false;
 
-  key = pgp_ask_for_key(_("Please enter the key ID: "), NULL, 0, PGP_PUBRING);
+  struct PgpKeyInfo *key =
+      pgp_ask_for_key(_("Please enter the key ID: "), NULL, 0, PGP_PUBRING);
 
   if (!key)
     return NULL;
@@ -790,7 +796,7 @@ struct Body *pgp_make_key_attachment(char *tempf)
   mutt_file_fclose(&tempfp);
   mutt_file_fclose(&devnull);
 
-  att = mutt_new_body();
+  att = mutt_body_new();
   att->filename = mutt_str_strdup(tempf);
   att->unlink = true;
   att->use_disp = false;
@@ -806,16 +812,22 @@ struct Body *pgp_make_key_attachment(char *tempf)
   return att;
 }
 
-static void pgp_add_string_to_hints(struct ListHead *hints, const char *str)
+/**
+ * pgp_add_string_to_hints - Split a string and add the parts to a List
+ * @param[in]  str   String to parse
+ * @param[out] hints List of string parts
+ *
+ * The string str is split by whitespace and punctuation and the parts added to
+ * hints.
+ */
+static void pgp_add_string_to_hints(const char *str, struct ListHead *hints)
 {
-  char *scratch = NULL;
-  char *t = NULL;
-
-  scratch = mutt_str_strdup(str);
+  char *scratch = mutt_str_strdup(str);
   if (!scratch)
     return;
 
-  for (t = strtok(scratch, " ,.:\"()<>\n"); t; t = strtok(NULL, " ,.:\"()<>\n"))
+  for (char *t = strtok(scratch, " ,.:\"()<>\n"); t;
+       t = strtok(NULL, " ,.:\"()<>\n"))
   {
     if (strlen(t) > 3)
       mutt_list_insert_tail(hints, mutt_str_strdup(t));
@@ -836,6 +848,9 @@ static struct PgpKeyInfo **pgp_get_lastp(struct PgpKeyInfo *p)
 struct PgpKeyInfo *pgp_getkeybyaddr(struct Address *a, short abilities,
                                     enum PgpRing keyring, int oppenc_mode)
 {
+  if (!a)
+    return NULL;
+
   struct Address *r = NULL, *p = NULL;
   struct ListHead hints = STAILQ_HEAD_INITIALIZER(hints);
 
@@ -848,13 +863,13 @@ struct PgpKeyInfo *pgp_getkeybyaddr(struct Address *a, short abilities,
   struct PgpKeyInfo **last = &matches;
   struct PgpUid *q = NULL;
 
-  if (a && a->mailbox)
-    pgp_add_string_to_hints(&hints, a->mailbox);
-  if (a && a->personal)
-    pgp_add_string_to_hints(&hints, a->personal);
+  if (a->mailbox)
+    pgp_add_string_to_hints(a->mailbox, &hints);
+  if (a->personal)
+    pgp_add_string_to_hints(a->personal, &hints);
 
   if (!oppenc_mode)
-    mutt_message(_("Looking for keys matching \"%s\"..."), a ? a->mailbox : "");
+    mutt_message(_("Looking for keys matching \"%s\"..."), a->mailbox);
   keys = pgp_get_candidates(keyring, &hints);
 
   mutt_list_free(&hints);
@@ -980,7 +995,7 @@ struct PgpKeyInfo *pgp_getkeybystr(char *p, short abilities, enum PgpRing keyrin
   mutt_message(_("Looking for keys matching \"%s\"..."), p);
 
   pfcopy = crypt_get_fingerprint_or_id(p, &phint, &pl, &ps);
-  pgp_add_string_to_hints(&hints, phint);
+  pgp_add_string_to_hints(phint, &hints);
   keys = pgp_get_candidates(keyring, &hints);
   mutt_list_free(&hints);
 

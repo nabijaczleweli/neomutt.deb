@@ -43,9 +43,7 @@
  */
 struct Buffer *mutt_buffer_new(void)
 {
-  struct Buffer *b = NULL;
-
-  b = mutt_mem_malloc(sizeof(struct Buffer));
+  struct Buffer *b = mutt_mem_malloc(sizeof(struct Buffer));
 
   mutt_buffer_init(b);
 
@@ -170,7 +168,7 @@ int mutt_buffer_printf(struct Buffer *buf, const char *fmt, ...)
   doff = buf->dptr - buf->data;
   blen = buf->dsize - doff;
   /* solaris 9 vsnprintf barfs when blen is 0 */
-  if (!blen)
+  if (blen == 0)
   {
     blen = 128;
     buf->dsize += blen;
@@ -230,7 +228,7 @@ size_t mutt_buffer_addch(struct Buffer *buf, char c)
 /**
  * mutt_buffer_is_empty - Is the Buffer empty?
  * @param buf Buffer to inspect
- * @retval bool True, if Buffer is empty
+ * @retval true Buffer is empty
  */
 bool mutt_buffer_is_empty(const struct Buffer *buf)
 {

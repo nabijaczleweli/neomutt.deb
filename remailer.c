@@ -38,6 +38,7 @@
 #include "keymap.h"
 #include "mutt_curses.h"
 #include "mutt_menu.h"
+#include "mutt_window.h"
 #include "opcodes.h"
 #include "options.h"
 #include "protos.h"
@@ -476,13 +477,16 @@ static const struct Mapping RemailerHelp[] = {
   { N_("OK"), OP_MIX_USE },        { NULL, 0 },
 };
 
+/**
+ * mix_make_chain - Create a Mixmaster chain
+ * @param chainhead List if chain links
+ *
+ * Ask the user to select Mixmaster hosts to create a chain.
+ */
 void mix_make_chain(struct ListHead *chainhead)
 {
-  struct MixChain *chain = NULL;
   int c_cur = 0, c_old = 0;
   bool c_redraw = true;
-
-  struct Remailer **type2_list = NULL;
   size_t ttll = 0;
 
   struct Coord *coords = NULL;
@@ -493,14 +497,14 @@ void mix_make_chain(struct ListHead *chainhead)
 
   char *t = NULL;
 
-  type2_list = mix_type2_list(&ttll);
+  struct Remailer **type2_list = mix_type2_list(&ttll);
   if (!type2_list)
   {
     mutt_error(_("Can't get mixmaster's type2.list!"));
     return;
   }
 
-  chain = mutt_mem_calloc(1, sizeof(struct MixChain));
+  struct MixChain *chain = mutt_mem_calloc(1, sizeof(struct MixChain));
 
   struct ListNode *p;
   STAILQ_FOREACH(p, chainhead, entries)
@@ -518,7 +522,7 @@ void mix_make_chain(struct ListHead *chainhead)
 
   mix_screen_coordinates(type2_list, &coords, chain, 0);
 
-  menu = mutt_new_menu(MENU_MIX);
+  menu = mutt_menu_new(MENU_MIX);
   menu->max = ttll;
   menu->make_entry = mix_entry;
   menu->tag = NULL;
@@ -526,7 +530,7 @@ void mix_make_chain(struct ListHead *chainhead)
   menu->data = type2_list;
   menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_MIX, RemailerHelp);
   menu->pagelen = MIX_VOFFSET - 1;
-  mutt_push_current_menu(menu);
+  mutt_menu_push_current(menu);
 
   while (loop)
   {
@@ -614,7 +618,10 @@ void mix_make_chain(struct ListHead *chainhead)
           c_redraw = true;
         }
         else
+        {
+          /* L10N The '%d' here hard-coded to 19 */
           mutt_error(_("Mixmaster chains are limited to %d elements."), MAXMIXES);
+        }
 
         break;
       }
@@ -663,7 +670,7 @@ void mix_make_chain(struct ListHead *chainhead)
     }
   }
 
-  mutt_pop_current_menu(menu);
+  mutt_menu_pop_current(menu);
   mutt_menu_destroy(&menu);
 
   /* construct the remailer list */
@@ -735,6 +742,13 @@ int mix_check_message(struct Header *msg)
   return 0;
 }
 
+/**
+ * mix_send_message - Send an email via Mixmaster
+ * @param chain    String list of hosts
+ * @param tempfile Temporary file containing email
+ * @retval -1  Error
+ * @retval >=0 Success (Mixmaster's return code)
+ */
 int mix_send_message(struct ListHead *chain, const char *tempfile)
 {
   char cmd[HUGE_STRING];
@@ -759,7 +773,7 @@ int mix_send_message(struct ListHead *chain, const char *tempfile)
   if (i != 0)
   {
     fprintf(stderr, _("Error sending message, child exited %d.\n"), i);
-    if (!OPT_NO_CURSES)
+    if (!OptNoCurses)
     {
       mutt_any_key_to_continue(NULL);
       mutt_error(_("Error sending message."));

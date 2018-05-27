@@ -20,6 +20,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @page resize GUI handle the resizing of the screen
+ *
+ * GUI handle the resizing of the screen
+ */
+
 #include "config.h"
 #include <fcntl.h>
 #include <stdlib.h>
@@ -27,6 +33,7 @@
 #include <unistd.h>
 #include "mutt/mutt.h"
 #include "mutt_curses.h"
+#include "mutt_window.h"
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
 #else
@@ -80,5 +87,5 @@ void mutt_resize_screen(void)
 #else
   resizeterm(SLtt_Screen_Rows, SLtt_Screen_Cols);
 #endif
-  mutt_reflow_windows();
+  mutt_window_reflow();
 }

@@ -80,6 +80,7 @@
 #include "keymap.h"
 #include "mutt_curses.h"
 #include "mutt_menu.h"
+#include "mutt_window.h"
 #include "opcodes.h"
 #include "options.h"
 #include "protos.h"
@@ -166,14 +167,11 @@ static void init_history(struct History *h)
  */
 static int dup_hash_dec(struct Hash *dup_hash, char *str)
 {
-  struct HashElem *elem = NULL;
-  uintptr_t count;
-
-  elem = mutt_hash_find_elem(dup_hash, str);
+  struct HashElem *elem = mutt_hash_find_elem(dup_hash, str);
   if (!elem)
     return -1;
 
-  count = (uintptr_t) elem->data;
+  uintptr_t count = (uintptr_t) elem->data;
   if (count <= 1)
   {
     mutt_hash_delete(dup_hash, str, NULL);
@@ -195,10 +193,9 @@ static int dup_hash_dec(struct Hash *dup_hash, char *str)
  */
 static int dup_hash_inc(struct Hash *dup_hash, char *str)
 {
-  struct HashElem *elem = NULL;
   uintptr_t count;
 
-  elem = mutt_hash_find_elem(dup_hash, str);
+  struct HashElem *elem = mutt_hash_find_elem(dup_hash, str);
   if (!elem)
   {
     count = 1;
@@ -218,7 +215,7 @@ static int dup_hash_inc(struct Hash *dup_hash, char *str)
 static void shrink_histfile(void)
 {
   char tmpfname[_POSIX_PATH_MAX];
-  FILE *f = NULL, *tmp = NULL;
+  FILE *tmp = NULL;
   int n[HC_LAST] = { 0 };
   int line, hclass, read;
   char *linebuf = NULL, *p = NULL;
@@ -226,7 +223,7 @@ static void shrink_histfile(void)
   bool regen_file = false;
   struct Hash *dup_hashes[HC_LAST] = { 0 };
 
-  f = fopen(HistoryFile, "r");
+  FILE *f = fopen(HistoryFile, "r");
   if (!f)
     return;
 
@@ -387,7 +384,7 @@ static void remove_history_dups(enum HistoryClass hclass, const char *str)
   source = dest = 0;
   while (source < h->last)
   {
-    if (!mutt_str_strcmp(h->hist[source], str))
+    if (mutt_str_strcmp(h->hist[source], str) == 0)
       FREE(&h->hist[source++]);
     else
       h->hist[dest++] = h->hist[source++];
@@ -406,7 +403,7 @@ static void remove_history_dups(enum HistoryClass hclass, const char *str)
   source = dest = History;
   while (source > old_last)
   {
-    if (!mutt_str_strcmp(h->hist[source], str))
+    if (mutt_str_strcmp(h->hist[source], str) == 0)
       FREE(&h->hist[source--]);
     else
       h->hist[dest--] = h->hist[source--];
@@ -415,6 +412,151 @@ static void remove_history_dups(enum HistoryClass hclass, const char *str)
   /* Fill in moved entries with NULL */
   while (dest > old_last)
     h->hist[dest--] = NULL;
+}
+
+/**
+ * history_format_str - Format a string for the history list
+ * @param[out] buf      Buffer in which to save string
+ * @param[in]  buflen   Buffer length
+ * @param[in]  col      Starting column
+ * @param[in]  cols     Number of screen columns
+ * @param[in]  op       printf-like operator, e.g. 't'
+ * @param[in]  src      printf-like format string
+ * @param[in]  prec     Field precision, e.g. "-3.4"
+ * @param[in]  if_str   If condition is met, display this string
+ * @param[in]  else_str Otherwise, display this string
+ * @param[in]  data     Pointer to the mailbox Context
+ * @param[in]  flags    Format flags
+ * @retval src (unchanged)
+ *
+ * history_format_str() is a callback function for mutt_expando_format().
+ *
+ * | Expando | Description
+ * |:--------|:--------------
+ * | \%s     | History match
+ */
+static const char *history_format_str(char *buf, size_t buflen, size_t col, int cols,
+                                      char op, const char *src, const char *prec,
+                                      const char *if_str, const char *else_str,
+                                      unsigned long data, enum FormatFlag flags)
+{
+  char *match = (char *) data;
+
+  switch (op)
+  {
+    case 's':
+      mutt_format_s(buf, buflen, prec, match);
+      break;
+  }
+
+  return src;
+}
+
+/**
+ * history_entry - Format a menu item for the history list
+ * @param[out] buf    Buffer in which to save string
+ * @param[in]  buflen Buffer length
+ * @param[in]  menu   Menu containing aliases
+ * @param[in]  num    Index into the menu
+ */
+static void history_entry(char *buf, size_t buflen, struct Menu *menu, int num)
+{
+  char *entry = ((char **) menu->data)[num];
+
+  mutt_expando_format(buf, buflen, 0, MuttIndexWindow->cols, "%buf", history_format_str,
+                      (unsigned long) entry, MUTT_FORMAT_ARROWCURSOR);
+}
+
+/**
+ * history_menu - Select an item from a history list
+ * @param buf         Buffer in which to save string
+ * @param buflen      Buffer length
+ * @param matches     Items to choose from
+ * @param match_count Number of items
+ */
+static void history_menu(char *buf, size_t buflen, char **matches, int match_count)
+{
+  struct Menu *menu;
+  int done = 0;
+  char helpstr[LONG_STRING];
+  char title[STRING];
+
+  snprintf(title, sizeof(title), _("History '%s'"), buf);
+
+  menu = mutt_menu_new(MENU_GENERIC);
+  menu->make_entry = history_entry;
+  menu->title = title;
+  menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_GENERIC, HistoryHelp);
+  mutt_menu_push_current(menu);
+
+  menu->max = match_count;
+  menu->data = matches;
+
+  while (!done)
+  {
+    switch (mutt_menu_loop(menu))
+    {
+      case OP_GENERIC_SELECT_ENTRY:
+        mutt_str_strfcpy(buf, matches[menu->current], buflen);
+        /* fall through */
+
+      case OP_EXIT:
+        done = 1;
+        break;
+    }
+  }
+
+  mutt_menu_pop_current(menu);
+  mutt_menu_destroy(&menu);
+}
+
+/**
+ * search_history - Find matches in a history list
+ * @param[in]  search_buf String to find
+ * @param[in]  hclass     History list
+ * @param[out] matches    All the matching lines
+ * @retval num Matches found
+ */
+static int search_history(char *search_buf, enum HistoryClass hclass, char **matches)
+{
+  struct History *h = get_history(hclass);
+  int match_count = 0, cur;
+
+  if ((History == 0) || !h)
+    return 0;
+
+  cur = h->last;
+  do
+  {
+    cur--;
+    if (cur < 0)
+      cur = History;
+    if (cur == h->last)
+      break;
+    if (mutt_str_stristr(h->hist[cur], search_buf))
+      matches[match_count++] = h->hist[cur];
+  } while (match_count < History);
+
+  return match_count;
+}
+
+/**
+ * mutt_hist_free - Free all the history lists
+ */
+void mutt_hist_free(void)
+{
+  for (enum HistoryClass hclass = HC_FIRST; hclass < HC_LAST; hclass++)
+  {
+    struct History *h = &Histories[hclass];
+    if (!h->hist)
+      continue;
+
+    for (int i = 0; i < History; i++)
+    {
+      FREE(&h->hist[i]);
+    }
+    FREE(&h->hist);
+  }
 }
 
 /**
@@ -551,12 +693,11 @@ void mutt_hist_reset_state(enum HistoryClass hclass)
  */
 void mutt_hist_read_file(void)
 {
-  FILE *f = NULL;
   int line = 0, hclass, read;
   char *linebuf = NULL, *p = NULL;
   size_t buflen;
 
-  f = fopen(HistoryFile, "r");
+  FILE *f = fopen(HistoryFile, "r");
   if (!f)
     return;
 
@@ -627,97 +768,16 @@ void mutt_hist_save_scratch(enum HistoryClass hclass, const char *str)
   mutt_str_replace(&h->hist[h->last], str);
 }
 
-static const char *history_format_str(char *dest, size_t destlen, size_t col, int cols,
-                                      char op, const char *src, const char *fmt,
-                                      const char *ifstring, const char *elsestring,
-                                      unsigned long data, enum FormatFlag flags)
-{
-  char *match = (char *) data;
-
-  switch (op)
-  {
-    case 's':
-      mutt_format_s(dest, destlen, fmt, match);
-      break;
-  }
-
-  return (src);
-}
-
-static void history_entry(char *s, size_t slen, struct Menu *m, int num)
-{
-  char *entry = ((char **) m->data)[num];
-
-  mutt_expando_format(s, slen, 0, MuttIndexWindow->cols, "%s", history_format_str,
-                      (unsigned long) entry, MUTT_FORMAT_ARROWCURSOR);
-}
-
-static void history_menu(char *buf, size_t buflen, char **matches, int match_count)
-{
-  struct Menu *menu;
-  int done = 0;
-  char helpstr[LONG_STRING];
-  char title[STRING];
-
-  snprintf(title, sizeof(title), _("History '%s'"), buf);
-
-  menu = mutt_new_menu(MENU_GENERIC);
-  menu->make_entry = history_entry;
-  menu->title = title;
-  menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_GENERIC, HistoryHelp);
-  mutt_push_current_menu(menu);
-
-  menu->max = match_count;
-  menu->data = matches;
-
-  while (!done)
-  {
-    switch (mutt_menu_loop(menu))
-    {
-      case OP_GENERIC_SELECT_ENTRY:
-        mutt_str_strfcpy(buf, matches[menu->current], buflen);
-        /* fall through */
-
-      case OP_EXIT:
-        done = 1;
-        break;
-    }
-  }
-
-  mutt_pop_current_menu(menu);
-  mutt_menu_destroy(&menu);
-}
-
-static int search_history(char *search_buf, enum HistoryClass hclass, char **matches)
-{
-  struct History *h = get_history(hclass);
-  int match_count = 0, cur;
-
-  if ((History == 0) || !h)
-    return 0;
-
-  cur = h->last;
-  do
-  {
-    cur--;
-    if (cur < 0)
-      cur = History;
-    if (cur == h->last)
-      break;
-    if (mutt_str_stristr(h->hist[cur], search_buf))
-      matches[match_count++] = h->hist[cur];
-  } while (match_count < History);
-
-  return match_count;
-}
-
+/**
+ * mutt_history_complete - Complete a string from a history list
+ * @param buf    Buffer in which to save string
+ * @param buflen Buffer length
+ * @param hclass History list to use
+ */
 void mutt_history_complete(char *buf, size_t buflen, enum HistoryClass hclass)
 {
-  char **matches;
-  int match_count;
-
-  matches = mutt_mem_calloc(History, sizeof(char *));
-  match_count = search_history(buf, hclass, matches);
+  char **matches = mutt_mem_calloc(History, sizeof(char *));
+  int match_count = search_history(buf, hclass, matches);
   if (match_count)
   {
     if (match_count == 1)

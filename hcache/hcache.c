@@ -87,8 +87,14 @@ union Validate {
 HCACHE_BACKEND_LIST
 #undef HCACHE_BACKEND
 
-/* Keep this list sorted as it is in configure.ac to avoid user surprise if no
- * header_cache_backend is specified. */
+#define hcache_get_ops() hcache_get_backend_ops(HeaderCacheBackend)
+
+/**
+ * hcache_ops - Backend implementations
+ *
+ * Keep this list sorted as it is in configure.ac to avoid user surprise if no
+ * header_cache_backend is specified.
+ */
 const struct HcacheOps *hcache_ops[] = {
 #ifdef HAVE_TC
   &hcache_tokyocabinet_ops,
@@ -111,6 +117,11 @@ const struct HcacheOps *hcache_ops[] = {
   NULL,
 };
 
+/**
+ * hcache_get_backend_ops - Get the API functions for an hcache backend
+ * @param backend Name of the backend
+ * @retval ptr Set of function pointers
+ */
 static const struct HcacheOps *hcache_get_backend_ops(const char *backend)
 {
   const struct HcacheOps **ops = hcache_ops;
@@ -127,8 +138,14 @@ static const struct HcacheOps *hcache_get_backend_ops(const char *backend)
   return *ops;
 }
 
-#define hcache_get_ops() hcache_get_backend_ops(HeaderCacheBackend)
-
+/**
+ * lazy_malloc - Allocate some memory
+ * @param siz Minimum size to allocate
+ * @retval ptr Allocated memory
+ *
+ * This block is likely to be lazy_realloc()'d repeatedly.
+ * It starts off with a minimum size of 4KiB.
+ */
 static void *lazy_malloc(size_t siz)
 {
   if (siz < 4096)
@@ -137,6 +154,13 @@ static void *lazy_malloc(size_t siz)
   return mutt_mem_malloc(siz);
 }
 
+/**
+ * lazy_realloc - Reallocate some memory
+ * @param ptr Pointer to resize
+ * @param siz Minimum size
+ *
+ * The minimum size is 4KiB to avoid repeated resizing.
+ */
 static void lazy_realloc(void *ptr, size_t siz)
 {
   void **p = (void **) ptr;
@@ -147,6 +171,13 @@ static void lazy_realloc(void *ptr, size_t siz)
   mutt_mem_realloc(ptr, siz);
 }
 
+/**
+ * dump_int - Pack an integer into a binary blob
+ * @param i   Integer to save
+ * @param d   Binary blob to add to
+ * @param off Offset into the blob
+ * @retval ptr End of the newly packed binary
+ */
 static unsigned char *dump_int(unsigned int i, unsigned char *d, int *off)
 {
   lazy_realloc(&d, *off + sizeof(int));
@@ -156,12 +187,27 @@ static unsigned char *dump_int(unsigned int i, unsigned char *d, int *off)
   return d;
 }
 
+/**
+ * restore_int - Unpack an integer from a binary blob
+ * @param i   Integer to write to
+ * @param d   Binary blob to read from
+ * @param off Offset into the blob
+ */
 static void restore_int(unsigned int *i, const unsigned char *d, int *off)
 {
   memcpy(i, d + *off, sizeof(int));
   (*off) += sizeof(int);
 }
 
+/**
+ * dump_char_size - Pack a fixed-length string into a binary blob
+ * @param c       String to pack
+ * @param d       Binary blob to add to
+ * @param off     Offset into the blob
+ * @param size    Size of the string
+ * @param convert If true, the strings will be converted to utf-8
+ * @retval ptr End of the newly packed binary
+ */
 static unsigned char *dump_char_size(char *c, unsigned char *d, int *off,
                                      ssize_t size, bool convert)
 {
@@ -179,8 +225,7 @@ static unsigned char *dump_char_size(char *c, unsigned char *d, int *off,
     p = mutt_str_substr_dup(c, c + size);
     if (mutt_ch_convert_string(&p, Charset, "utf-8", 0) == 0)
     {
-      c = p;
-      size = mutt_str_strlen(c) + 1;
+      size = mutt_str_strlen(p) + 1;
     }
   }
 
@@ -195,11 +240,26 @@ static unsigned char *dump_char_size(char *c, unsigned char *d, int *off,
   return d;
 }
 
+/**
+ * dump_char - Pack a variable-length string into a binary blob
+ * @param c       String to pack
+ * @param d       Binary blob to add to
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted to utf-8
+ * @retval ptr End of the newly packed binary
+ */
 static unsigned char *dump_char(char *c, unsigned char *d, int *off, bool convert)
 {
   return dump_char_size(c, d, off, mutt_str_strlen(c) + 1, convert);
 }
 
+/**
+ * restore_char - Unpack a variable-length string from a binary blob
+ * @param c       Store the unpacked string here
+ * @param d       Binary blob to read from
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted to utf-8
+ */
 static void restore_char(char **c, const unsigned char *d, int *off, bool convert)
 {
   unsigned int size;
@@ -218,7 +278,8 @@ static void restore_char(char **c, const unsigned char *d, int *off, bool conver
     char *tmp = mutt_str_strdup(*c);
     if (mutt_ch_convert_string(&tmp, "utf-8", Charset, 0) == 0)
     {
-      mutt_str_replace(c, tmp);
+      FREE(c);
+      *c = tmp;
     }
     else
     {
@@ -228,6 +289,14 @@ static void restore_char(char **c, const unsigned char *d, int *off, bool conver
   *off += size;
 }
 
+/**
+ * dump_address - Pack an Address into a binary blob
+ * @param a       Address to pack
+ * @param d       Binary blob to add to
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted to utf-8
+ * @retval ptr End of the newly packed binary
+ */
 static unsigned char *dump_address(struct Address *a, unsigned char *d, int *off, bool convert)
 {
   unsigned int counter = 0;
@@ -249,6 +318,13 @@ static unsigned char *dump_address(struct Address *a, unsigned char *d, int *off
   return d;
 }
 
+/**
+ * restore_address - Unpack an Address from a binary blob
+ * @param a       Store the unpacked Address here
+ * @param d       Binary blob to read from
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted from utf-8
+ */
 static void restore_address(struct Address **a, const unsigned char *d, int *off, bool convert)
 {
   unsigned int counter;
@@ -268,6 +344,14 @@ static void restore_address(struct Address **a, const unsigned char *d, int *off
   *a = NULL;
 }
 
+/**
+ * dump_stailq - Pack a STAILQ into a binary blob
+ * @param l       List to read from
+ * @param d       Binary blob to add to
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted to utf-8
+ * @retval ptr End of the newly packed binary
+ */
 static unsigned char *dump_stailq(struct ListHead *l, unsigned char *d, int *off, bool convert)
 {
   unsigned int counter = 0;
@@ -287,6 +371,13 @@ static unsigned char *dump_stailq(struct ListHead *l, unsigned char *d, int *off
   return d;
 }
 
+/**
+ * restore_stailq - Unpack a STAILQ from a binary blob
+ * @param l       List to add to
+ * @param d       Binary blob to read from
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted from utf-8
+ */
 static void restore_stailq(struct ListHead *l, const unsigned char *d, int *off, bool convert)
 {
   unsigned int counter;
@@ -302,6 +393,14 @@ static void restore_stailq(struct ListHead *l, const unsigned char *d, int *off,
   }
 }
 
+/**
+ * dump_buffer - Pack a Buffer into a binary blob
+ * @param b       Buffer to pack
+ * @param d       Binary blob to add to
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted to utf-8
+ * @retval ptr End of the newly packed binary
+ */
 static unsigned char *dump_buffer(struct Buffer *b, unsigned char *d, int *off, bool convert)
 {
   if (!b)
@@ -320,6 +419,13 @@ static unsigned char *dump_buffer(struct Buffer *b, unsigned char *d, int *off, 
   return d;
 }
 
+/**
+ * restore_buffer - Unpack a Buffer from a binary blob
+ * @param b       Store the unpacked Buffer here
+ * @param d       Binary blob to read from
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted from utf-8
+ */
 static void restore_buffer(struct Buffer **b, const unsigned char *d, int *off, bool convert)
 {
   unsigned int used;
@@ -341,6 +447,14 @@ static void restore_buffer(struct Buffer **b, const unsigned char *d, int *off, 
   (*b)->destroy = used;
 }
 
+/**
+ * dump_parameter - Pack a Parameter into a binary blob
+ * @param p       Parameter to pack
+ * @param d       Binary blob to add to
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted to utf-8
+ * @retval ptr End of the newly packed binary
+ */
 static unsigned char *dump_parameter(struct ParameterList *p, unsigned char *d,
                                      int *off, bool convert)
 {
@@ -362,6 +476,13 @@ static unsigned char *dump_parameter(struct ParameterList *p, unsigned char *d,
   return d;
 }
 
+/**
+ * restore_parameter - Unpack a Parameter from a binary blob
+ * @param p       Store the unpacked Parameter here
+ * @param d       Binary blob to read from
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted from utf-8
+ */
 static void restore_parameter(struct ParameterList *p, const unsigned char *d,
                               int *off, bool convert)
 {
@@ -380,6 +501,14 @@ static void restore_parameter(struct ParameterList *p, const unsigned char *d,
   }
 }
 
+/**
+ * dump_body - Pack an Body into a binary blob
+ * @param c       Body to pack
+ * @param d       Binary blob to add to
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted to utf-8
+ * @retval ptr End of the newly packed binary
+ */
 static unsigned char *dump_body(struct Body *c, unsigned char *d, int *off, bool convert)
 {
   struct Body nb;
@@ -411,6 +540,13 @@ static unsigned char *dump_body(struct Body *c, unsigned char *d, int *off, bool
   return d;
 }
 
+/**
+ * restore_body - Unpack a Body from a binary blob
+ * @param c       Store the unpacked Body here
+ * @param d       Binary blob to read from
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted from utf-8
+ */
 static void restore_body(struct Body *c, const unsigned char *d, int *off, bool convert)
 {
   memcpy(c, d + *off, sizeof(struct Body));
@@ -428,6 +564,14 @@ static void restore_body(struct Body *c, const unsigned char *d, int *off, bool 
   restore_char(&c->d_filename, d, off, convert);
 }
 
+/**
+ * dump_envelope - Pack an Envelope into a binary blob
+ * @param e       Envelope to pack
+ * @param d       Binary blob to add to
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted to utf-8
+ * @retval ptr End of the newly packed binary
+ */
 static unsigned char *dump_envelope(struct Envelope *e, unsigned char *d, int *off, bool convert)
 {
   d = dump_address(e->return_path, d, off, convert);
@@ -467,6 +611,13 @@ static unsigned char *dump_envelope(struct Envelope *e, unsigned char *d, int *o
   return d;
 }
 
+/**
+ * restore_envelope - Unpack an Envelope from a binary blob
+ * @param e       Store the unpacked Envelope here
+ * @param d       Binary blob to read from
+ * @param off     Offset into the blob
+ * @param convert If true, the strings will be converted from utf-8
+ */
 static void restore_envelope(struct Envelope *e, const unsigned char *d, int *off, bool convert)
 {
   int real_subj_off;
@@ -507,6 +658,12 @@ static void restore_envelope(struct Envelope *e, const unsigned char *d, int *of
 #endif
 }
 
+/**
+ * crc_matches - Is the CRC number correct?
+ * @param d   Binary blob to read CRC from
+ * @param crc CRC to compare
+ * @retval num 1 if true, 0 if not
+ */
 static int crc_matches(const char *d, unsigned int crc)
 {
   int off = sizeof(union Validate);
@@ -557,7 +714,7 @@ static bool create_hcache_dir(const char *path)
  * Generate the pathname for the hcache database, it will be of the form:
  *     BASE/FOLDER/NAME-SUFFIX
  *
- * * BASE:  Base directory (@a path)
+ * * BASE:   Base directory (@a path)
  * * FOLDER: Mailbox name (@a folder)
  * * NAME:   Create by @a namer, or md5sum of @a folder
  * * SUFFIX: Character set (if ICONV isn't being used)
@@ -620,6 +777,11 @@ static const char *hcache_per_folder(const char *path, const char *folder, hcach
 
 /**
  * hcache_dump - Serialise a Header object
+ * @param h           Header cache handle
+ * @param header      Header to serialise
+ * @param off         Size of the binary blob
+ * @param uidvalidity IMAP server identifier
+ * @retval ptr Binary blob representing the Header
  *
  * This function transforms a header into a char so that it is useable by
  * db_store.
@@ -627,12 +789,11 @@ static const char *hcache_per_folder(const char *path, const char *folder, hcach
 static void *hcache_dump(header_cache_t *h, struct Header *header, int *off,
                          unsigned int uidvalidity)
 {
-  unsigned char *d = NULL;
   struct Header nh;
   bool convert = !CharsetIsUtf8;
 
   *off = 0;
-  d = lazy_malloc(sizeof(union Validate));
+  unsigned char *d = lazy_malloc(sizeof(union Validate));
 
   if (uidvalidity == 0)
   {
@@ -683,10 +844,15 @@ static void *hcache_dump(header_cache_t *h, struct Header *header, int *off,
   return d;
 }
 
+/**
+ * mutt_hcache_restore - Deserialise a Header object
+ * @param d Binary blob
+ * @retval ptr Reconstructed Header
+ */
 struct Header *mutt_hcache_restore(const unsigned char *d)
 {
   int off = 0;
-  struct Header *h = mutt_new_header();
+  struct Header *h = mutt_header_new();
   bool convert = !CharsetIsUtf8;
 
   /* skip validate */
@@ -701,7 +867,7 @@ struct Header *mutt_hcache_restore(const unsigned char *d)
   h->env = mutt_env_new();
   restore_envelope(h->env, d, &off, convert);
 
-  h->content = mutt_new_body();
+  h->content = mutt_body_new();
   restore_body(h->content, d, &off, convert);
 
   restore_char(&h->maildir_flags, d, &off, convert);
@@ -709,19 +875,25 @@ struct Header *mutt_hcache_restore(const unsigned char *d)
   return h;
 }
 
+/**
+ * get_foldername - Where should the cache be stored?
+ * @param folder Path to be canonicalised
+ * @retval ptr New string with canonical path
+ */
 static char *get_foldername(const char *folder)
 {
-  char *p = NULL;
-
   /* if the folder is local, canonify the path to avoid
    * to ensure equivalent paths share the hcache */
-  p = mutt_mem_malloc(PATH_MAX + 1);
+  char *p = mutt_mem_malloc(PATH_MAX + 1);
   if (!realpath(folder, p))
     mutt_str_replace(&p, folder);
 
   return p;
 }
 
+/**
+ * mutt_hcache_open - Multiplexor for #hcache_open_t
+ */
 header_cache_t *mutt_hcache_open(const char *path, const char *folder, hcache_namer_t namer)
 {
   const struct HcacheOps *ops = hcache_get_ops();
@@ -797,6 +969,9 @@ header_cache_t *mutt_hcache_open(const char *path, const char *folder, hcache_na
   }
 }
 
+/**
+ * mutt_hcache_close - Multiplexor for #hcache_close_t
+ */
 void mutt_hcache_close(header_cache_t *h)
 {
   const struct HcacheOps *ops = hcache_get_ops();
@@ -808,11 +983,12 @@ void mutt_hcache_close(header_cache_t *h)
   FREE(&h);
 }
 
+/**
+ * mutt_hcache_fetch - Multiplexor for #hcache_fetch_t
+ */
 void *mutt_hcache_fetch(header_cache_t *h, const char *key, size_t keylen)
 {
-  void *data = NULL;
-
-  data = mutt_hcache_fetch_raw(h, key, keylen);
+  void *data = mutt_hcache_fetch_raw(h, key, keylen);
   if (!data)
   {
     return NULL;
@@ -827,6 +1003,12 @@ void *mutt_hcache_fetch(header_cache_t *h, const char *key, size_t keylen)
   return data;
 }
 
+/**
+ * mutt_hcache_fetch_raw - Find the data for a key in a database backend
+ * @param h      Header cache handle
+ * @param key    A message identification string
+ * @param keylen The length of the string pointed to by key
+ */
 void *mutt_hcache_fetch_raw(header_cache_t *h, const char *key, size_t keylen)
 {
   char path[_POSIX_PATH_MAX];
@@ -840,6 +1022,9 @@ void *mutt_hcache_fetch_raw(header_cache_t *h, const char *key, size_t keylen)
   return ops->fetch(h->ctx, path, keylen);
 }
 
+/**
+ * mutt_hcache_free - Multiplexor for #hcache_free_t
+ */
 void mutt_hcache_free(header_cache_t *h, void **data)
 {
   const struct HcacheOps *ops = hcache_get_ops();
@@ -850,6 +1035,9 @@ void mutt_hcache_free(header_cache_t *h, void **data)
   ops->free(h->ctx, data);
 }
 
+/**
+ * mutt_hcache_store - Multiplexor for #hcache_store_t
+ */
 int mutt_hcache_store(header_cache_t *h, const char *key, size_t keylen,
                       struct Header *header, unsigned int uidvalidity)
 {
@@ -868,6 +1056,16 @@ int mutt_hcache_store(header_cache_t *h, const char *key, size_t keylen,
   return ret;
 }
 
+/**
+ * mutt_hcache_store_raw - Store some data in a database backend
+ * @param h      Header cache handle
+ * @param key    A message identification string
+ * @param keylen The length of the string pointed to by key
+ * @param data   Binary blob
+ * @param dlen   Length of binary blob
+ * @retval 0   Success
+ * @retval num Generic or backend-specific error code otherwise
+ */
 int mutt_hcache_store_raw(header_cache_t *h, const char *key, size_t keylen,
                           void *data, size_t dlen)
 {
@@ -882,6 +1080,9 @@ int mutt_hcache_store_raw(header_cache_t *h, const char *key, size_t keylen,
   return ops->store(h->ctx, path, keylen, data, dlen);
 }
 
+/**
+ * mutt_hcache_delete - Multiplexor for #hcache_delete_t
+ */
 int mutt_hcache_delete(header_cache_t *h, const char *key, size_t keylen)
 {
   char path[_POSIX_PATH_MAX];
@@ -895,6 +1096,12 @@ int mutt_hcache_delete(header_cache_t *h, const char *key, size_t keylen)
   return ops->delete (h->ctx, path, keylen);
 }
 
+/**
+ * mutt_hcache_backend_list - Get a list of backend names
+ * @retval ptr Comma-space-separated list of names
+ *
+ * The caller should free the string.
+ */
 const char *mutt_hcache_backend_list(void)
 {
   char tmp[STRING] = { 0 };
@@ -913,6 +1120,11 @@ const char *mutt_hcache_backend_list(void)
   return mutt_str_strdup(tmp);
 }
 
+/**
+ * mutt_hcache_is_valid_backend - Is this a valid hcache backend name?
+ * @param s Name to check
+ * @retval num 1 if valid, 0 if not
+ */
 int mutt_hcache_is_valid_backend(const char *s)
 {
   return hcache_get_backend_ops(s) != NULL;

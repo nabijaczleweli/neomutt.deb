@@ -36,6 +36,7 @@ struct Body
 {
   char *xtype;                  /**< content-type if x-unknown */
   char *subtype;                /**< content-type subtype */
+  char *language;               /**< content-language (RFC8255) */
   struct ParameterList parameter;  /**< parameters of the content-type */
   char *description;            /**< content-description */
   char *form_name;              /**< Content-Disposition form-data name param */
@@ -79,8 +80,7 @@ struct Body
   bool noconv : 1;              /**< don't do character set conversion */
   bool force_charset : 1;
                                 /**< send mode: don't adjust the character
-   * set when in send-mode.
-   */
+                                 * set when in send-mode.  */
   bool is_signed_data : 1;      /**< A lot of MUAs don't indicate S/MIME
                                  * signed-data correctly, e.g. they use foo.p7m
                                  * even for the name of signed data.  This flag
@@ -100,8 +100,8 @@ struct Body
 
 };
 
-struct Body *mutt_new_body(void);
-int mutt_copy_body(FILE *fp, struct Body **tgt, struct Body *src);
-void mutt_free_body(struct Body **p);
+int          mutt_body_copy(FILE *fp, struct Body **tgt, struct Body *src);
+void         mutt_body_free(struct Body **p);
+struct Body *mutt_body_new(void);
 
 #endif /* _MUTT_BODY_H */

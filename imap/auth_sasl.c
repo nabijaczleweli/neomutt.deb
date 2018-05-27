@@ -57,7 +57,7 @@ enum ImapAuthRes imap_auth_sasl(struct ImapData *idata, const char *method)
   size_t bufsize = 0;
   const char *mech = NULL;
   const char *pc = NULL;
-  unsigned int len, olen;
+  unsigned int len = 0, olen = 0;
   bool client_start;
 
   if (mutt_sasl_client_new(idata->conn, &saslconn) < 0)
@@ -210,13 +210,13 @@ enum ImapAuthRes imap_auth_sasl(struct ImapData *idata, const char *method)
     if (irc == IMAP_CMD_RESPOND)
     {
       mutt_str_strfcpy(buf + olen, "\r\n", bufsize - olen);
-      mutt_socket_write(idata->conn, buf);
+      mutt_socket_send(idata->conn, buf);
     }
 
     /* If SASL has errored out, send an abort string to the server */
     if (rc < 0)
     {
-      mutt_socket_write(idata->conn, "*\r\n");
+      mutt_socket_send(idata->conn, "*\r\n");
       mutt_debug(1, "sasl_client_step error %d\n", rc);
     }
 
