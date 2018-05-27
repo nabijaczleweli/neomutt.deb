@@ -26,7 +26,6 @@ override_dh_auto_configure:
 		--mandir=/usr/share/man \
 		--libexecdir=/usr/lib \
 		--with-mailpath=/var/mail \
-		--enable-fcntl \
 		--gpgme	\
 		--lua \
 		$(notmuch) \
