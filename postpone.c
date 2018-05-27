@@ -21,6 +21,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @page postpone Save/restore and GUI list postponed emails
+ *
+ * Save/restore and GUI list postponed emails
+ */
+
 #include "config.h"
 #include <limits.h>
 #include <stdbool.h>
@@ -69,7 +75,7 @@ static short UpdateNumPostponed = 0;
  * @param force
  * * 0 Use a cached value if costly to get a fresh count (IMAP)
  * * 1 Force check
- * @retval n Number of postponed messages
+ * @retval num Postponed messages
  */
 int mutt_num_postponed(int force)
 {
@@ -142,7 +148,7 @@ int mutt_num_postponed(int force)
   if (LastModify < st.st_mtime)
   {
 #ifdef USE_NNTP
-    int optnews = OPT_NEWS;
+    int optnews = OptNews;
 #endif
     LastModify = st.st_mtime;
 
@@ -150,7 +156,7 @@ int mutt_num_postponed(int force)
       return (PostCount = 0);
 #ifdef USE_NNTP
     if (optnews)
-      OPT_NEWS = false;
+      OptNews = false;
 #endif
     if (mx_open_mailbox(Postponed, MUTT_NOSORT | MUTT_QUIET, &ctx) == NULL)
       PostCount = 0;
@@ -159,13 +165,16 @@ int mutt_num_postponed(int force)
     mx_fastclose_mailbox(&ctx);
 #ifdef USE_NNTP
     if (optnews)
-      OPT_NEWS = true;
+      OptNews = true;
 #endif
   }
 
   return PostCount;
 }
 
+/**
+ * mutt_update_num_postponed - Force the update of the number of postponed messages
+ */
 void mutt_update_num_postponed(void)
 {
   UpdateNumPostponed = 1;
@@ -186,19 +195,23 @@ static void post_entry(char *buf, size_t buflen, struct Menu *menu, int num)
                          MUTT_FORMAT_ARROWCURSOR);
 }
 
+/**
+ * select_msg - Create a Menu to select a postponed message
+ * @retval ptr Email Header
+ */
 static struct Header *select_msg(void)
 {
   int r = -1;
   bool done = false;
   char helpstr[LONG_STRING];
 
-  struct Menu *menu = mutt_new_menu(MENU_POST);
+  struct Menu *menu = mutt_menu_new(MENU_POST);
   menu->make_entry = post_entry;
   menu->max = PostContext->msgcount;
   menu->title = _("Postponed Messages");
   menu->data = PostContext;
   menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_POST, PostponeHelp);
-  mutt_push_current_menu(menu);
+  mutt_menu_push_current(menu);
 
   /* The postponed mailbox is setup to have sorting disabled, but the global
    * Sort variable may indicate something different.   Sorting has to be
@@ -245,7 +258,7 @@ static struct Header *select_msg(void)
   }
 
   Sort = orig_sort;
-  mutt_pop_current_menu(menu);
+  mutt_menu_pop_current(menu);
   mutt_menu_destroy(&menu);
   return (r > -1 ? PostContext->hdrs[r] : NULL);
 }
@@ -254,8 +267,7 @@ static struct Header *select_msg(void)
  * mutt_get_postponed - Recall a postponed message
  * @param ctx     Context info, used when recalling a message to which we reply
  * @param hdr     envelope/attachment info for recalled message
- * @param cur     if message was a reply, `cur' is set to the message
- *                which `hdr' is in reply to
+ * @param cur     if message was a reply, `cur' is set to the message which `hdr' is in reply to
  * @param fcc     fcc for the recalled message
  * @param fcclen  max length of fcc
  * @retval -1         Error/no messages
@@ -348,10 +360,10 @@ int mutt_get_postponed(struct Context *ctx, struct Header *hdr,
       mutt_pretty_mailbox(fcc, fcclen);
 
       /* note that x-mutt-fcc was present.  we do this because we want to add a
-      * default fcc if the header was missing, but preserve the request of the
-      * user to not make a copy if the header field is present, but empty.
-      * see http://dev.mutt.org/trac/ticket/3653
-      */
+       * default fcc if the header was missing, but preserve the request of the
+       * user to not make a copy if the header field is present, but empty.
+       * see http://dev.mutt.org/trac/ticket/3653
+       */
       code |= SENDPOSTPONEDFCC;
     }
     else if (((WithCrypto & APPLICATION_PGP) != 0) &&
@@ -403,6 +415,13 @@ int mutt_get_postponed(struct Context *ctx, struct Header *hdr,
   return code;
 }
 
+/**
+ * mutt_parse_crypt_hdr - Parse a crypto header string
+ * @param p                Header string to parse
+ * @param set_empty_signas Allow an empty "Sign as"
+ * @param crypt_app App, e.g. #APPLICATION_PGP
+ * @retval num Flags, e.g. #ENCRYPT
+ */
 int mutt_parse_crypt_hdr(const char *p, int set_empty_signas, int crypt_app)
 {
   char smime_cryptalg[LONG_STRING] = "\0";
@@ -417,9 +436,54 @@ int mutt_parse_crypt_hdr(const char *p, int set_empty_signas, int crypt_app)
   {
     switch (*p)
     {
+      case 'c':
+      case 'C':
+        q = smime_cryptalg;
+
+        if (*(p + 1) == '<')
+        {
+          for (p += 2; *p && *p != '>' && q < smime_cryptalg + sizeof(smime_cryptalg) - 1;
+               *q++ = *p++)
+            ;
+
+          if (*p != '>')
+          {
+            mutt_error(_("Illegal S/MIME header"));
+            return 0;
+          }
+        }
+
+        *q = '\0';
+        break;
+
       case 'e':
       case 'E':
         flags |= ENCRYPT;
+        break;
+
+      case 'i':
+      case 'I':
+        flags |= INLINE;
+        break;
+
+      /* This used to be the micalg parameter.
+       *
+       * It's no longer needed, so we just skip the parameter in order
+       * to be able to recall old messages.
+       */
+      case 'm':
+      case 'M':
+        if (*(p + 1) == '<')
+        {
+          for (p += 2; *p && *p != '>'; p++)
+            ;
+          if (*p != '>')
+          {
+            mutt_error(_("Illegal crypto header"));
+            return 0;
+          }
+        }
+
         break;
 
       case 'o':
@@ -445,51 +509,6 @@ int mutt_parse_crypt_hdr(const char *p, int set_empty_signas, int crypt_app)
         }
 
         *q = '\0';
-        break;
-
-      /* This used to be the micalg parameter.
-       *
-       * It's no longer needed, so we just skip the parameter in order
-       * to be able to recall old messages.
-       */
-      case 'm':
-      case 'M':
-        if (*(p + 1) == '<')
-        {
-          for (p += 2; *p && *p != '>'; p++)
-            ;
-          if (*p != '>')
-          {
-            mutt_error(_("Illegal crypto header"));
-            return 0;
-          }
-        }
-
-        break;
-
-      case 'c':
-      case 'C':
-        q = smime_cryptalg;
-
-        if (*(p + 1) == '<')
-        {
-          for (p += 2; *p && *p != '>' && q < smime_cryptalg + sizeof(smime_cryptalg) - 1;
-               *q++ = *p++)
-            ;
-
-          if (*p != '>')
-          {
-            mutt_error(_("Illegal S/MIME header"));
-            return 0;
-          }
-        }
-
-        *q = '\0';
-        break;
-
-      case 'i':
-      case 'I':
-        flags |= INLINE;
         break;
 
       default:
@@ -528,8 +547,8 @@ int mutt_parse_crypt_hdr(const char *p, int set_empty_signas, int crypt_app)
  * @param resend  Set if resending (as opposed to recalling a postponed msg).
  *                Resent messages enable header weeding, and also
  *                discard any existing Message-ID and Mail-Followup-To.
- * @retval 0 on success
- * @retval -1 on error
+ * @retval  0 Success
+ * @retval -1 Error
  */
 int mutt_prepare_template(FILE *fp, struct Context *ctx, struct Header *newhdr,
                           struct Header *hdr, short resend)
@@ -557,7 +576,7 @@ int mutt_prepare_template(FILE *fp, struct Context *ctx, struct Header *newhdr,
   fseeko(fp, hdr->offset, SEEK_SET);
   newhdr->offset = hdr->offset;
   /* enable header weeding for resent messages */
-  newhdr->env = mutt_read_rfc822_header(fp, newhdr, 1, resend);
+  newhdr->env = mutt_rfc822_read_header(fp, newhdr, 1, resend);
   newhdr->content->length = hdr->content->length;
   mutt_parse_part(fp, newhdr->content);
 
@@ -586,7 +605,7 @@ int mutt_prepare_template(FILE *fp, struct Context *ctx, struct Header *newhdr,
       goto bail;
     }
 
-    mutt_free_body(&newhdr->content);
+    mutt_body_free(&newhdr->content);
     newhdr->content = b;
 
     mutt_clear_error();
@@ -609,7 +628,7 @@ int mutt_prepare_template(FILE *fp, struct Context *ctx, struct Header *newhdr,
       newhdr->security |= APPLICATION_SMIME;
 
     /* destroy the signature */
-    mutt_free_body(&newhdr->content->parts->next);
+    mutt_body_free(&newhdr->content->parts->next);
     newhdr->content = mutt_remove_multipart(newhdr->content);
   }
 
@@ -724,7 +743,7 @@ int mutt_prepare_template(FILE *fp, struct Context *ctx, struct Header *newhdr,
 
     mutt_stamp_attachment(b);
 
-    mutt_free_body(&b->parts);
+    mutt_body_free(&b->parts);
     if (b->hdr)
       b->hdr->content = NULL; /* avoid dangling pointer */
   }
@@ -760,7 +779,7 @@ bail:
   if (rc == -1)
   {
     mutt_env_free(&newhdr->env);
-    mutt_free_body(&newhdr->content);
+    mutt_body_free(&newhdr->content);
   }
 
   return rc;

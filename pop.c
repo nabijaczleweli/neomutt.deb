@@ -21,6 +21,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @page pop POP network mailbox
+ *
+ * POP network mailbox
+ */
+
 #include "config.h"
 #include <errno.h>
 #include <limits.h>
@@ -45,6 +51,7 @@
 #include "mx.h"
 #include "ncrypt/ncrypt.h"
 #include "options.h"
+#include "progress.h"
 #include "protos.h"
 #include "url.h"
 #ifdef USE_HCACHE
@@ -58,6 +65,10 @@
 
 /**
  * fetch_message - write line to file
+ * @param line String to write
+ * @param file FILE pointer to write to
+ * @retval  0 Success
+ * @retval -1 Failure
  */
 static int fetch_message(char *line, void *file)
 {
@@ -81,17 +92,14 @@ static int fetch_message(char *line, void *file)
  */
 static int pop_read_header(struct PopData *pop_data, struct Header *h)
 {
-  FILE *f = NULL;
   int rc, index;
   size_t length;
   char buf[LONG_STRING];
-  char tempfile[_POSIX_PATH_MAX];
 
-  mutt_mktemp(tempfile, sizeof(tempfile));
-  f = mutt_file_fopen(tempfile, "w+");
+  FILE *f = mutt_file_mkstemp();
   if (!f)
   {
-    mutt_perror(tempfile);
+    mutt_perror("mutt_file_mkstemp failed!");
     return -3;
   }
 
@@ -129,7 +137,7 @@ static int pop_read_header(struct PopData *pop_data, struct Header *h)
     case 0:
     {
       rewind(f);
-      h->env = mutt_read_rfc822_header(f, h, 0, 0);
+      h->env = mutt_rfc822_read_header(f, h, 0, 0);
       h->content->length = length - h->content->offset + 1;
       rewind(f);
       while (!feof(f))
@@ -152,12 +160,15 @@ static int pop_read_header(struct PopData *pop_data, struct Header *h)
   }
 
   mutt_file_fclose(&f);
-  unlink(tempfile);
   return rc;
 }
 
 /**
  * fetch_uidl - parse UIDL
+ * @param line String to parse
+ * @param data Mailbox Context
+ * @retval  0 Success
+ * @retval -1 Failure
  */
 static int fetch_uidl(char *line, void *data)
 {
@@ -186,7 +197,7 @@ static int fetch_uidl(char *line, void *data)
       mx_alloc_memory(ctx);
 
     ctx->msgcount++;
-    ctx->hdrs[i] = mutt_new_header();
+    ctx->hdrs[i] = mutt_header_new();
     ctx->hdrs[i]->data = mutt_str_strdup(line);
   }
   else if (ctx->hdrs[i]->index != index - 1)
@@ -198,15 +209,20 @@ static int fetch_uidl(char *line, void *data)
   return 0;
 }
 
+/**
+ * msg_cache_check - Check the Body Cache for an ID
+ * @param id     Cache ID
+ * @param bcache Body cache
+ * @param data   Mailbox Context
+ * @retval  0 Success
+ * @retval -1 Failure
+ */
 static int msg_cache_check(const char *id, struct BodyCache *bcache, void *data)
 {
-  struct Context *ctx = NULL;
-  struct PopData *pop_data = NULL;
-
-  ctx = (struct Context *) data;
+  struct Context *ctx = (struct Context *) data;
   if (!ctx)
     return -1;
-  pop_data = (struct PopData *) ctx->data;
+  struct PopData *pop_data = (struct PopData *) ctx->data;
   if (!pop_data)
     return -1;
 
@@ -230,11 +246,24 @@ static int msg_cache_check(const char *id, struct BodyCache *bcache, void *data)
 }
 
 #ifdef USE_HCACHE
+/**
+ * pop_hcache_namer - Create a header cache filename for a POP mailbox
+ * @param path    Path of mailbox
+ * @param dest    Buffer for filename
+ * @param destlen Length of buffer
+ * @retval num Characters written to buffer
+ */
 static int pop_hcache_namer(const char *path, char *dest, size_t destlen)
 {
   return snprintf(dest, destlen, "%s." HC_FEXT, path);
 }
 
+/**
+ * pop_hcache_open - Open the header cache
+ * @param pop_data POP server data
+ * @param path     Path to the mailbox
+ * @retval ptr Header cache
+ */
 static header_cache_t *pop_hcache_open(struct PopData *pop_data, const char *path)
 {
   struct Url url;
@@ -314,7 +343,10 @@ static int pop_fetch_headers(struct Context *ctx)
     }
     if (deleted > 0)
     {
-      mutt_error(_("%d messages have been lost. Try reopening the mailbox."), deleted);
+      mutt_error(
+          ngettext("%d message has been lost. Try reopening the mailbox.",
+                   "%d messages have been lost. Try reopening the mailbox.", deleted),
+          deleted);
     }
 
     bool hcached = false;
@@ -340,7 +372,7 @@ static int pop_fetch_headers(struct Context *ctx)
          */
         struct Header *h = mutt_hcache_restore((unsigned char *) data);
         mutt_hcache_free(hc, &data);
-        mutt_free_header(&ctx->hdrs[i]);
+        mutt_header_free(&ctx->hdrs[i]);
         ctx->hdrs[i] = h;
         ctx->hdrs[i]->refno = refno;
         ctx->hdrs[i]->index = index;
@@ -403,7 +435,7 @@ static int pop_fetch_headers(struct Context *ctx)
   if (ret < 0)
   {
     for (int i = ctx->msgcount; i < new_count; i++)
-      mutt_free_header(&ctx->hdrs[i]);
+      mutt_header_free(&ctx->hdrs[i]);
     return ret;
   }
 
@@ -420,6 +452,9 @@ static int pop_fetch_headers(struct Context *ctx)
 
 /**
  * pop_open_mailbox - open POP mailbox, fetch only headers
+ * @param ctx Mailbox Context
+ * @retval  0 Success
+ * @retval -1 Failure
  */
 static int pop_open_mailbox(struct Context *ctx)
 {
@@ -491,6 +526,7 @@ static int pop_open_mailbox(struct Context *ctx)
 
 /**
  * pop_clear_cache - delete all cached messages
+ * @param pop_data POP server data
  */
 static void pop_clear_cache(struct PopData *pop_data)
 {
@@ -511,6 +547,8 @@ static void pop_clear_cache(struct PopData *pop_data)
 
 /**
  * pop_close_mailbox - close POP mailbox
+ * @param ctx Mailbox Context
+ * @retval 0 Always
  */
 static int pop_close_mailbox(struct Context *ctx)
 {
@@ -539,6 +577,11 @@ static int pop_close_mailbox(struct Context *ctx)
 
 /**
  * pop_fetch_message - fetch message from POP server
+ * @param ctx   Mailbox Context
+ * @param msg   Message
+ * @param msgno Message number
+ * @retval  0 Success
+ * @retval -1 Failure
  */
 static int pop_fetch_message(struct Context *ctx, struct Message *msg, int msgno)
 {
@@ -658,7 +701,7 @@ static int pop_fetch_message(struct Context *ctx, struct Message *msg, int msgno
     mutt_hash_delete(ctx->subj_hash, h->env->real_subj, h);
   mutt_label_hash_remove(ctx, h);
   mutt_env_free(&h->env);
-  h->env = mutt_read_rfc822_header(msg->fp, h, 0, 0);
+  h->env = mutt_rfc822_read_header(msg->fp, h, 0, 0);
   if (ctx->subj_hash && h->env->real_subj)
     mutt_hash_insert(ctx->subj_hash, h->env->real_subj, h);
   mutt_label_hash_add(ctx, h);
@@ -684,6 +727,13 @@ static int pop_fetch_message(struct Context *ctx, struct Message *msg, int msgno
   return 0;
 }
 
+/**
+ * pop_close_message - Close POP Message
+ * @param ctx Mailbox Context
+ * @param msg Message
+ * @retval 0   Success
+ * @retval EOF Error, see errno
+ */
 static int pop_close_message(struct Context *ctx, struct Message *msg)
 {
   return mutt_file_fclose(&msg->fp);
@@ -691,6 +741,10 @@ static int pop_close_message(struct Context *ctx, struct Message *msg)
 
 /**
  * pop_sync_mailbox - update POP mailbox, delete messages from server
+ * @param ctx        Mailbox Context
+ * @param index_hint Current Message
+ * @retval  0 Success
+ * @retval -1 Failure
  */
 static int pop_sync_mailbox(struct Context *ctx, int *index_hint)
 {
@@ -771,6 +825,10 @@ static int pop_sync_mailbox(struct Context *ctx, int *index_hint)
 
 /**
  * pop_check_mailbox - Check for new messages and fetch headers
+ * @param ctx        Mailbox Context
+ * @param index_hint Current Message
+ * @retval  0 Success
+ * @retval -1 Failure
  */
 static int pop_check_mailbox(struct Context *ctx, int *index_hint)
 {
@@ -888,7 +946,7 @@ void pop_fetch_mail(void)
     goto finish;
   }
 
-  if (mx_open_mailbox(NONULL(SpoolFile), MUTT_APPEND, &ctx) == NULL)
+  if (mx_open_mailbox(NONULL(Spoolfile), MUTT_APPEND, &ctx) == NULL)
     goto finish;
 
   delanswer = query_quadoption(PopDelete, _("Delete messages from server?"));
@@ -940,7 +998,11 @@ void pop_fetch_mail(void)
       break;
     }
 
-    mutt_message(_("%s [%d of %d messages read]"), msgbuf, i - last, msgs - last);
+    /* L10N: The plural is picked by the second numerical argument, i.e.
+     * the %d right before 'messages', i.e. the total number of messages. */
+    mutt_message(ngettext("%s [%d of %d message read]",
+                          "%s [%d of %d messages read]", msgs - last),
+                 msgbuf, i - last, msgs - last);
   }
 
   mx_close_mailbox(&ctx, NULL);
@@ -968,6 +1030,9 @@ fail:
   FREE(&pop_data);
 }
 
+/**
+ * mx_comp_ops - Mailbox callback functions
+ */
 struct MxOps mx_pop_ops = {
   .open = pop_open_mailbox,
   .open_append = NULL,

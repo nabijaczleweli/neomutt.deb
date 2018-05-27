@@ -59,7 +59,8 @@ char *LogFileVersion = NULL; /**< Program version */
 /**
  * LogQueue - In-memory list of log lines
  */
-struct LogList LogQueue = STAILQ_HEAD_INITIALIZER(LogQueue);
+static struct LogList LogQueue = STAILQ_HEAD_INITIALIZER(LogQueue);
+
 int LogQueueCount = 0; /**< Number of entries currently in the log queue */
 int LogQueueMax = 0;   /**< Maximum number of entries in the log queue */
 
@@ -128,6 +129,7 @@ int log_file_open(bool verbose)
   LogFileFP = mutt_file_fopen(LogFileName, "a+");
   if (!LogFileFP)
     return -1;
+  setvbuf(LogFileFP, NULL, _IOLBF, 0);
 
   fprintf(LogFileFP, "[%s] NeoMutt%s debugging at level %d\n", timestamp(0),
           NONULL(LogFileVersion), LogFileLevel);
@@ -208,7 +210,8 @@ void log_file_set_version(const char *version)
 }
 
 /**
- * log_file_running - XXX
+ * log_file_running - Is the log file running?
+ * @retval true If the log file is running
  */
 bool log_file_running(void)
 {
@@ -253,7 +256,7 @@ int log_disp_file(time_t stamp, const char *file, int line,
   va_list ap;
   va_start(ap, level);
   const char *fmt = va_arg(ap, const char *);
-  ret = vfprintf(LogFileFP, fmt, ap);
+  ret += vfprintf(LogFileFP, fmt, ap);
   va_end(ap);
 
   if (level == LL_PERROR)
@@ -272,7 +275,7 @@ int log_disp_file(time_t stamp, const char *file, int line,
 /**
  * log_queue_add - Add a LogLine to the queue
  * @param ll LogLine to add
- * @retval num Number of entries in the queue
+ * @retval num Entries in the queue
  *
  * If #LogQueueMax is non-zero, the queue will be limited to this many items.
  */
@@ -345,7 +348,7 @@ void log_queue_flush(log_dispatcher_t disp)
 /**
  * log_queue_save - Save the contents of the queue to a temporary file
  * @param fp Open file handle
- * @retval num Number of lines written to the file
+ * @retval num Lines written to the file
  *
  * The queue is written to a temporary file.  The format is:
  * * `[HH:MM:SS]<LEVEL> FORMATTED-MESSAGE`

@@ -144,14 +144,15 @@ static int lua_mutt_set(lua_State *l)
     case DT_PATH:
     case DT_SORT:
     case DT_STRING:
-      opt.var = (long) mutt_str_strdup(lua_tostring(l, -1));
+      opt.var = mutt_str_strdup(lua_tostring(l, -1));
       rc = mutt_option_set(&opt, &err);
       FREE(&opt.var);
       break;
     case DT_QUAD:
-      opt.var = (long) lua_tointeger(l, -1);
-      if ((opt.var != MUTT_YES) && (opt.var != MUTT_NO) &&
-          (opt.var != MUTT_ASKYES) && (opt.var != MUTT_ASKNO))
+    {
+      long num = lua_tointeger(l, -1);
+      opt.var = (void *) num;
+      if ((num != MUTT_YES) && (num != MUTT_NO) && (num != MUTT_ASKYES) && (num != MUTT_ASKNO))
       {
         luaL_error(l,
                    "Invalid opt for quad option %s (one of "
@@ -161,8 +162,11 @@ static int lua_mutt_set(lua_State *l)
         rc = -1;
       }
       else
+      {
         rc = mutt_option_set(&opt, &err);
+      }
       break;
+    }
     case DT_MAGIC:
       if (mx_set_magic(lua_tostring(l, -1)))
       {
@@ -175,7 +179,7 @@ static int lua_mutt_set(lua_State *l)
       lua_Integer i = lua_tointeger(l, -1);
       if ((i > SHRT_MIN) && (i < SHRT_MAX))
       {
-        opt.var = lua_tointeger(l, -1);
+        opt.var = (void *) lua_tointeger(l, -1);
         rc = mutt_option_set(&opt, &err);
       }
       else
@@ -186,8 +190,7 @@ static int lua_mutt_set(lua_State *l)
       break;
     }
     case DT_BOOL:
-      opt.var = (long) lua_toboolean(l, -1);
-      rc = mutt_option_set(&opt, &err);
+      *(bool *) opt.var = lua_toboolean(l, -1);
       break;
     default:
       luaL_error(l, "Unsupported NeoMutt parameter type %d for %s", opt.type, param);
@@ -235,7 +238,7 @@ static int lua_mutt_get(lua_State *l)
         }
         return 1;
       case DT_QUAD:
-        lua_pushinteger(l, opt.var);
+        lua_pushinteger(l, *(unsigned char *) opt.var);
         return 1;
       case DT_REGEX:
       case DT_MAGIC:
@@ -254,7 +257,7 @@ static int lua_mutt_get(lua_State *l)
         lua_pushinteger(l, (signed short) *((unsigned long *) opt.var));
         return 1;
       case DT_BOOL:
-        lua_pushboolean(l, opt.var);
+        lua_pushboolean(l, *((bool *) opt.var));
         return 1;
       default:
         luaL_error(l, "NeoMutt parameter type %d unknown for %s", opt.type, param);
@@ -360,23 +363,25 @@ static void luaopen_mutt(lua_State *l)
 
 static bool lua_init(lua_State **l)
 {
+  if (!l)
+    return false;
+  if (*l)
+    return true;
+
+  mutt_debug(2, " * lua_init()\n");
+  *l = luaL_newstate();
+
   if (!*l)
   {
-    mutt_debug(2, " * lua_init()\n");
-    *l = luaL_newstate();
-
-    if (!*l)
-    {
-      mutt_error("Error: Couldn't load the lua interpreter.");
-      return false;
-    }
-
-    lua_atpanic(*l, handle_panic);
-
-    /* load various Lua libraries */
-    luaL_openlibs(*l);
-    luaopen_mutt(*l);
+    mutt_error("Error: Couldn't load the lua interpreter.");
+    return false;
   }
+
+  lua_atpanic(*l, handle_panic);
+
+  /* load various Lua libraries */
+  luaL_openlibs(*l);
+  luaopen_mutt(*l);
 
   return true;
 }
@@ -393,7 +398,7 @@ int mutt_lua_parse(struct Buffer *tmp, struct Buffer *s, unsigned long data, str
   if (luaL_dostring(Lua, s->dptr))
   {
     mutt_debug(2, " * %s -> failure\n", s->dptr);
-    snprintf(err->data, err->dsize, _("%s: %s"), s->dptr, lua_tostring(Lua, -1));
+    snprintf(err->data, err->dsize, "%s: %s", s->dptr, lua_tostring(Lua, -1));
     /* pop error message from the stack */
     lua_pop(Lua, 1);
     return -1;

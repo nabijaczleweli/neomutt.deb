@@ -21,6 +21,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @page enter GUI ask the user to enter a string
+ *
+ * GUI ask the user to enter a string
+ */
+
 #include "config.h"
 #include <stddef.h>
 #include <stdbool.h>
@@ -34,6 +40,7 @@
 #include "history.h"
 #include "keymap.h"
 #include "mutt_curses.h"
+#include "mutt_window.h"
 #include "opcodes.h"
 #include "protos.h"
 
@@ -49,6 +56,12 @@ enum RedrawFlags
 /* combining mark / non-spacing character */
 #define COMB_CHAR(wc) (IsWPrint(wc) && !wcwidth(wc))
 
+/**
+ * my_addwch - Display one wide character on screen
+ * @param wc Character to display
+ * @retval OK  Success
+ * @retval ERR Failure
+ */
 static int my_addwch(wchar_t wc)
 {
   int n = wcwidth(wc);
@@ -63,8 +76,9 @@ static int my_addwch(wchar_t wc)
 
 /**
  * replace_part - Search and replace on a buffer
- *
- * Replace part of the wchar_t buffer, from FROM to CURPOS, by BUF.
+ * @param state Current state of the input buffer
+ * @param from  Starting point for the replacement
+ * @param buf   Replacement string
  */
 static void replace_part(struct EnterState *state, size_t from, char *buf)
 {
@@ -99,7 +113,7 @@ static void replace_part(struct EnterState *state, size_t from, char *buf)
 }
 
 /**
- * mutt_enter_string_simple - Ask the user for a string
+ * mutt_enter_string - Ask the user for a string
  * @param buf    Buffer to store the string
  * @param buflen Buffer length
  * @param col    Initial cursor position
@@ -115,7 +129,7 @@ static void replace_part(struct EnterState *state, size_t from, char *buf)
 int mutt_enter_string(char *buf, size_t buflen, int col, int flags)
 {
   int rc;
-  struct EnterState *es = mutt_new_enter_state();
+  struct EnterState *es = mutt_enter_state_new();
   do
   {
     if (SigWinch)
@@ -126,7 +140,7 @@ int mutt_enter_string(char *buf, size_t buflen, int col, int flags)
     }
     rc = mutt_enter_string_full(buf, buflen, col, flags, 0, NULL, NULL, es);
   } while (rc == 1);
-  mutt_free_enter_state(&es);
+  mutt_enter_state_free(&es);
   return rc;
 }
 
@@ -489,7 +503,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col, int flags, int mul
               rc = 1;
               goto bye;
             }
-            if (!mutt_complete(buf, buflen))
+            if (mutt_complete(buf, buflen) == 0)
             {
               templen = state->lastchar - i;
               mutt_mem_realloc(&tempbuf, templen * sizeof(wchar_t));
@@ -609,7 +623,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col, int flags, int mul
               goto bye;
             }
 
-            if (!mutt_complete(buf, buflen))
+            if (mutt_complete(buf, buflen) == 0)
             {
               templen = state->lastchar;
               mutt_mem_realloc(&tempbuf, templen * sizeof(wchar_t));
@@ -758,7 +772,11 @@ bye:
   return rc;
 }
 
-void mutt_free_enter_state(struct EnterState **esp)
+/**
+ * mutt_enter_state_free - Free an EnterState
+ * @param esp EnterState to free
+ */
+void mutt_enter_state_free(struct EnterState **esp)
 {
   if (!esp)
     return;
@@ -766,10 +784,3 @@ void mutt_free_enter_state(struct EnterState **esp)
   FREE(&(*esp)->wbuf);
   FREE(esp);
 }
-
-/*
- * TODO:
- * very narrow screen might crash it
- * sort out the input side
- * unprintable chars
- */

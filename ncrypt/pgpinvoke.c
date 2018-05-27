@@ -20,8 +20,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* This file contains the new pgp invocation code.  Note that this
- * is almost entirely format based.
+/**
+ * @page crypt_pgpinvoke Wrapper around calls to external PGP program
+ *
+ * This file contains the new pgp invocation code.
+ *
+ * @note This is almost entirely format based.
  */
 
 #include "config.h"
@@ -35,6 +39,7 @@
 #include "format_flags.h"
 #include "globals.h"
 #include "mutt_curses.h"
+#include "mutt_window.h"
 #include "ncrypt.h"
 #include "pgp.h"
 #include "pgpkey.h"
@@ -65,18 +70,6 @@ static const char *fmt_pgp_command(char *buf, size_t buflen, size_t col, int col
 
   switch (op)
   {
-    case 'r':
-    {
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-        snprintf(buf, buflen, fmt, NONULL(cctx->ids));
-      }
-      else if (!cctx->ids)
-        optional = 0;
-      break;
-    }
-
     case 'a':
     {
       if (!optional)
@@ -88,19 +81,6 @@ static const char *fmt_pgp_command(char *buf, size_t buflen, size_t col, int col
         optional = 0;
       break;
     }
-
-    case 's':
-    {
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-        snprintf(buf, buflen, fmt, NONULL(cctx->sig_fname));
-      }
-      else if (!cctx->sig_fname)
-        optional = 0;
-      break;
-    }
-
     case 'f':
     {
       if (!optional)
@@ -112,7 +92,6 @@ static const char *fmt_pgp_command(char *buf, size_t buflen, size_t col, int col
         optional = 0;
       break;
     }
-
     case 'p':
     {
       if (!optional)
@@ -121,6 +100,28 @@ static const char *fmt_pgp_command(char *buf, size_t buflen, size_t col, int col
         snprintf(buf, buflen, fmt, cctx->need_passphrase ? "PGPPASSFD=0" : "");
       }
       else if (!cctx->need_passphrase || pgp_use_gpg_agent())
+        optional = 0;
+      break;
+    }
+    case 'r':
+    {
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
+        snprintf(buf, buflen, fmt, NONULL(cctx->ids));
+      }
+      else if (!cctx->ids)
+        optional = 0;
+      break;
+    }
+    case 's':
+    {
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
+        snprintf(buf, buflen, fmt, NONULL(cctx->sig_fname));
+      }
+      else if (!cctx->sig_fname)
         optional = 0;
       break;
     }
@@ -229,11 +230,11 @@ pid_t pgp_invoke_traditional(FILE **pgpin, FILE **pgpout, FILE **pgperr,
 {
   if (flags & ENCRYPT)
     return pgp_invoke(pgpin, pgpout, pgperr, pgpinfd, pgpoutfd, pgperrfd,
-                      flags & SIGN ? 1 : 0, fname, NULL, uids,
-                      flags & SIGN ? PgpEncryptSignCommand : PgpEncryptOnlyCommand);
+                      (flags & SIGN) ? 1 : 0, fname, NULL, uids,
+                      (flags & SIGN) ? PgpEncryptSignCommand : PgpEncryptOnlyCommand);
   else
     return pgp_invoke(pgpin, pgpout, pgperr, pgpinfd, pgpoutfd, pgperrfd, 1,
-                      fname, NULL, NULL, PgpClearSignCommand);
+                      fname, NULL, NULL, PgpClearsignCommand);
 }
 
 void pgp_invoke_import(const char *fname)
@@ -315,6 +316,19 @@ pid_t pgp_invoke_verify_key(FILE **pgpin, FILE **pgpout, FILE **pgperr, int pgpi
                     NULL, uids, PgpVerifyKeyCommand);
 }
 
+/**
+ * pgp_invoke_list_keys - Find matching PGP Keys
+ * @param pgpin    File stream pointing to stdin for the command process, can be NULL
+ * @param pgpout   File stream pointing to stdout for the command process, can be NULL
+ * @param pgperr   File stream pointing to stderr for the command process, can be NULL
+ * @param pgpinfd  If `pgpin` is NULL and pgpin is not -1 then pgpin will be used as stdin for the command process
+ * @param pgpoutfd If `pgpout` is NULL and pgpout is not -1 then pgpout will be used as stdout for the command process
+ * @param pgperrfd If `pgperr` is NULL and pgperr is not -1 then pgperr will be used as stderr for the command process
+ * @param keyring  Keyring type, e.g. #PGP_SECRING
+ * @param hints    Match keys to these strings
+ * @retval num  PID of the created process
+ * @retval -1   Error creating pipes or forking
+ */
 pid_t pgp_invoke_list_keys(FILE **pgpin, FILE **pgpout, FILE **pgperr,
                            int pgpinfd, int pgpoutfd, int pgperrfd,
                            enum PgpRing keyring, struct ListHead *hints)

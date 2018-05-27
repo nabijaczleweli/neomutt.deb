@@ -42,15 +42,15 @@
 int *ColorQuote = NULL;
 int ColorQuoteUsed;
 int ColorDefs[MT_COLOR_MAX];
-struct ColorLineHead ColorHdrList = STAILQ_HEAD_INITIALIZER(ColorHdrList);
-struct ColorLineHead ColorBodyList = STAILQ_HEAD_INITIALIZER(ColorBodyList);
 struct ColorLineHead ColorAttachList = STAILQ_HEAD_INITIALIZER(ColorAttachList);
-struct ColorLineHead ColorStatusList = STAILQ_HEAD_INITIALIZER(ColorStatusList);
-struct ColorLineHead ColorIndexList = STAILQ_HEAD_INITIALIZER(ColorIndexList);
+struct ColorLineHead ColorBodyList = STAILQ_HEAD_INITIALIZER(ColorBodyList);
+struct ColorLineHead ColorHdrList = STAILQ_HEAD_INITIALIZER(ColorHdrList);
 struct ColorLineHead ColorIndexAuthorList = STAILQ_HEAD_INITIALIZER(ColorIndexAuthorList);
 struct ColorLineHead ColorIndexFlagsList = STAILQ_HEAD_INITIALIZER(ColorIndexFlagsList);
+struct ColorLineHead ColorIndexList = STAILQ_HEAD_INITIALIZER(ColorIndexList);
 struct ColorLineHead ColorIndexSubjectList = STAILQ_HEAD_INITIALIZER(ColorIndexSubjectList);
 struct ColorLineHead ColorIndexTagList = STAILQ_HEAD_INITIALIZER(ColorIndexTagList);
+struct ColorLineHead ColorStatusList = STAILQ_HEAD_INITIALIZER(ColorStatusList);
 
 /* local to this file */
 static int ColorQuoteSize;
@@ -92,26 +92,14 @@ static const struct Mapping Colors[] = {
 #endif /* HAVE_COLOR */
 
 static const struct Mapping Fields[] = {
-  { "hdrdefault", MT_COLOR_HDEFAULT },
-  { "quoted", MT_COLOR_QUOTED },
-  { "signature", MT_COLOR_SIGNATURE },
-  { "indicator", MT_COLOR_INDICATOR },
-  { "status", MT_COLOR_STATUS },
-  { "tree", MT_COLOR_TREE },
-  { "error", MT_COLOR_ERROR },
-  { "normal", MT_COLOR_NORMAL },
-  { "tilde", MT_COLOR_TILDE },
-  { "markers", MT_COLOR_MARKERS },
-  { "header", MT_COLOR_HEADER },
-  { "body", MT_COLOR_BODY },
-  { "message", MT_COLOR_MESSAGE },
   { "attachment", MT_COLOR_ATTACHMENT },
   { "attach_headers", MT_COLOR_ATTACH_HEADERS },
-  { "search", MT_COLOR_SEARCH },
+  { "body", MT_COLOR_BODY },
   { "bold", MT_COLOR_BOLD },
-  { "underline", MT_COLOR_UNDERLINE },
+  { "error", MT_COLOR_ERROR },
+  { "hdrdefault", MT_COLOR_HDEFAULT },
+  { "header", MT_COLOR_HEADER },
   { "index", MT_COLOR_INDEX },
-  { "progress", MT_COLOR_PROGRESS },
   { "index_author", MT_COLOR_INDEX_AUTHOR },
   { "index_collapsed", MT_COLOR_INDEX_COLLAPSED },
   { "index_date", MT_COLOR_INDEX_DATE },
@@ -122,7 +110,14 @@ static const struct Mapping Fields[] = {
   { "index_subject", MT_COLOR_INDEX_SUBJECT },
   { "index_tag", MT_COLOR_INDEX_TAG },
   { "index_tags", MT_COLOR_INDEX_TAGS },
+  { "indicator", MT_COLOR_INDICATOR },
+  { "markers", MT_COLOR_MARKERS },
+  { "message", MT_COLOR_MESSAGE },
+  { "normal", MT_COLOR_NORMAL },
+  { "progress", MT_COLOR_PROGRESS },
   { "prompt", MT_COLOR_PROMPT },
+  { "quoted", MT_COLOR_QUOTED },
+  { "search", MT_COLOR_SEARCH },
 #ifdef USE_SIDEBAR
   { "sidebar_divider", MT_COLOR_DIVIDER },
   { "sidebar_flagged", MT_COLOR_FLAGGED },
@@ -132,6 +127,11 @@ static const struct Mapping Fields[] = {
   { "sidebar_ordinary", MT_COLOR_ORDINARY },
   { "sidebar_spoolfile", MT_COLOR_SB_SPOOLFILE },
 #endif
+  { "signature", MT_COLOR_SIGNATURE },
+  { "status", MT_COLOR_STATUS },
+  { "tilde", MT_COLOR_TILDE },
+  { "tree", MT_COLOR_TREE },
+  { "underline", MT_COLOR_UNDERLINE },
   { NULL, 0 },
 };
 
@@ -161,7 +161,7 @@ static void free_color_line(struct ColorLine *tmp, int free_colors)
     return;
 
 #ifdef HAVE_COLOR
-  if (free_colors && tmp->fg != -1 && tmp->bg != -1)
+  if (free_colors && (tmp->fg != -1) && (tmp->bg != -1))
     mutt_free_color(tmp->fg, tmp->bg);
 #endif
 
@@ -340,9 +340,9 @@ int mutt_combine_color(int fg_attr, int bg_attr)
 
 void mutt_free_color(int fg, int bg)
 {
-  struct ColorList *p = NULL, *q = NULL;
+  struct ColorList *q = NULL;
 
-  p = ColorList;
+  struct ColorList *p = ColorList;
   while (p)
   {
     if (p->fg == fg && p->bg == bg)
@@ -403,7 +403,7 @@ static int parse_color_name(const char *s, int *col, int *attr, int is_fg, struc
   {
     s += 5;
     *col = strtol(s, &eptr, 10);
-    if (!*s || *eptr || *col < 0 || (*col >= COLORS && !OPT_NO_CURSES && has_colors()))
+    if (!*s || *eptr || *col < 0 || (*col >= COLORS && !OptNoCurses && has_colors()))
     {
       snprintf(err->data, err->dsize, _("%s: color not supported by term"), s);
       return -1;
@@ -515,7 +515,7 @@ static int parse_uncolor(struct Buffer *buf, struct Buffer *s, unsigned long dat
   if (object > MT_COLOR_INDEX_SUBJECT)
   { /* uncolor index column */
     ColorDefs[object] = 0;
-    mutt_set_menu_redraw_full(MENU_MAIN);
+    mutt_menu_set_redraw_full(MENU_MAIN);
     return 0;
   }
 
@@ -539,7 +539,7 @@ static int parse_uncolor(struct Buffer *buf, struct Buffer *s, unsigned long dat
   if (
 #ifdef HAVE_COLOR
       /* we're running without curses */
-      OPT_NO_CURSES || /* we're parsing an uncolor command, and have no colors */
+      OptNoCurses || /* we're parsing an uncolor command, and have no colors */
       (parse_uncolor && !has_colors())
       /* we're parsing an unmono command, and have colors */
       || (!parse_uncolor && has_colors())
@@ -578,9 +578,9 @@ static int parse_uncolor(struct Buffer *buf, struct Buffer *s, unsigned long dat
                    (object == MT_COLOR_INDEX_FLAGS) || (object == MT_COLOR_INDEX_SUBJECT) ||
                    (object == MT_COLOR_INDEX_TAG));
 
-  if (is_index && do_cache && !OPT_NO_CURSES)
+  if (is_index && do_cache && !OptNoCurses)
   {
-    mutt_set_menu_redraw_full(MENU_MAIN);
+    mutt_menu_set_redraw_full(MENU_MAIN);
     /* force re-caching of index colors */
     for (int i = 0; Context && i < Context->msgcount; i++)
       Context->hdrs[i]->pair = 0;
@@ -727,7 +727,7 @@ static int parse_object(struct Buffer *buf, struct Buffer *s, int *o, int *ql,
 
     *o = MT_COLOR_QUOTED;
   }
-  else if (!mutt_str_strcasecmp(buf->data, "compose"))
+  else if (mutt_str_strcasecmp(buf->data, "compose") == 0)
   {
     if (!MoreArgs(s))
     {
@@ -885,16 +885,16 @@ static int parse_color(struct Buffer *buf, struct Buffer *s, struct Buffer *err,
 
 #ifdef HAVE_COLOR
 #ifdef HAVE_USE_DEFAULT_COLORS
-  if (!OPT_NO_CURSES &&
+  if (!OptNoCurses &&
       has_colors()
       /* delay use_default_colors() until needed, since it initializes things */
       && (fg == COLOR_DEFAULT || bg == COLOR_DEFAULT || object == MT_COLOR_TREE) &&
       use_default_colors() != OK)
   /* the case of the tree object is special, because a non-default
-       * fg color of the tree element may be combined dynamically with
-       * the default bg color of an index line, not necessarily defined in
-       * a rc file.
-       */
+   * fg color of the tree element may be combined dynamically with
+   * the default bg color of an index line, not necessarily defined in
+   * a rc file.
+   */
   {
     mutt_str_strfcpy(err->data, _("default colors not supported"), err->dsize);
     return -1;
@@ -937,27 +937,27 @@ static int parse_color(struct Buffer *buf, struct Buffer *s, struct Buffer *err,
   else if (object == MT_COLOR_INDEX)
   {
     r = add_pattern(&ColorIndexList, buf->data, 1, fg, bg, attr, err, 1, match);
-    mutt_set_menu_redraw_full(MENU_MAIN);
+    mutt_menu_set_redraw_full(MENU_MAIN);
   }
   else if (object == MT_COLOR_INDEX_AUTHOR)
   {
     r = add_pattern(&ColorIndexAuthorList, buf->data, 1, fg, bg, attr, err, 1, match);
-    mutt_set_menu_redraw_full(MENU_MAIN);
+    mutt_menu_set_redraw_full(MENU_MAIN);
   }
   else if (object == MT_COLOR_INDEX_FLAGS)
   {
     r = add_pattern(&ColorIndexFlagsList, buf->data, 1, fg, bg, attr, err, 1, match);
-    mutt_set_menu_redraw_full(MENU_MAIN);
+    mutt_menu_set_redraw_full(MENU_MAIN);
   }
   else if (object == MT_COLOR_INDEX_SUBJECT)
   {
     r = add_pattern(&ColorIndexSubjectList, buf->data, 1, fg, bg, attr, err, 1, match);
-    mutt_set_menu_redraw_full(MENU_MAIN);
+    mutt_menu_set_redraw_full(MENU_MAIN);
   }
   else if (object == MT_COLOR_INDEX_TAG)
   {
     r = add_pattern(&ColorIndexTagList, buf->data, 1, fg, bg, attr, err, 1, match);
-    mutt_set_menu_redraw_full(MENU_MAIN);
+    mutt_menu_set_redraw_full(MENU_MAIN);
   }
   else if (object == MT_COLOR_QUOTED)
   {
@@ -987,7 +987,7 @@ static int parse_color(struct Buffer *buf, struct Buffer *s, struct Buffer *err,
   {
     ColorDefs[object] = fgbgattr_to_color(fg, bg, attr);
     if (object > MT_COLOR_INDEX_AUTHOR)
-      mutt_set_menu_redraw_full(MENU_MAIN);
+      mutt_menu_set_redraw_full(MENU_MAIN);
   }
 
   return r;
@@ -1000,7 +1000,7 @@ int mutt_parse_color(struct Buffer *buf, struct Buffer *s, unsigned long data,
 {
   bool dry_run = false;
 
-  if (OPT_NO_CURSES || !has_colors())
+  if (OptNoCurses || !has_colors())
     dry_run = true;
 
   return parse_color(buf, s, err, parse_color_pair, dry_run, true);
@@ -1014,12 +1014,49 @@ int mutt_parse_mono(struct Buffer *buf, struct Buffer *s, unsigned long data,
   bool dry_run = false;
 
 #ifdef HAVE_COLOR
-  if (OPT_NO_CURSES || has_colors())
+  if (OptNoCurses || has_colors())
     dry_run = true;
 #else
-  if (OPT_NO_CURSES)
+  if (OptNoCurses)
     dry_run = true;
 #endif
 
   return parse_color(buf, s, err, parse_attr_spec, dry_run, false);
+}
+
+/**
+ * mutt_free_color_list - Free a list of colours
+ * @param head ColorLine List
+ */
+static void mutt_free_color_list(struct ColorLineHead *head)
+{
+  struct ColorLine *np, *tmp;
+  STAILQ_FOREACH_SAFE(np, head, entries, tmp)
+  {
+    STAILQ_REMOVE(head, np, ColorLine, entries);
+    free_color_line(np, true);
+  }
+}
+
+void mutt_free_colors(void)
+{
+  mutt_free_color_list(&ColorAttachList);
+  mutt_free_color_list(&ColorBodyList);
+  mutt_free_color_list(&ColorHdrList);
+  mutt_free_color_list(&ColorIndexAuthorList);
+  mutt_free_color_list(&ColorIndexFlagsList);
+  mutt_free_color_list(&ColorIndexList);
+  mutt_free_color_list(&ColorIndexSubjectList);
+  mutt_free_color_list(&ColorIndexTagList);
+  mutt_free_color_list(&ColorStatusList);
+
+  struct ColorList *cl = ColorList;
+  struct ColorList *next = NULL;
+  while (cl)
+  {
+    next = cl->next;
+    FREE(&cl);
+    cl = next;
+  }
+  ColorList = NULL;
 }

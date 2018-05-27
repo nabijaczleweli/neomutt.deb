@@ -48,11 +48,11 @@ static int perform_auxsort(int retval, const void *a, const void *b)
 {
   /* If the items compared equal by the main sort
    * and we're not already doing an 'aux' sort...  */
-  if ((retval == 0) && AuxSort && !OPT_AUX_SORT)
+  if ((retval == 0) && AuxSort && !OptAuxSort)
   {
-    OPT_AUX_SORT = true;
+    OptAuxSort = true;
     retval = AuxSort(a, b);
-    OPT_AUX_SORT = false;
+    OptAuxSort = false;
   }
   /* If the items still match, use their index positions
    * to maintain a stable sort order */
@@ -131,12 +131,10 @@ static int compare_to(const void *a, const void *b)
   struct Header **ppa = (struct Header **) a;
   struct Header **ppb = (struct Header **) b;
   char fa[SHORT_STRING];
-  const char *fb = NULL;
-  int result;
 
   mutt_str_strfcpy(fa, mutt_get_name((*ppa)->env->to), SHORT_STRING);
-  fb = mutt_get_name((*ppb)->env->to);
-  result = mutt_str_strncasecmp(fa, fb, SHORT_STRING);
+  const char *fb = mutt_get_name((*ppb)->env->to);
+  int result = mutt_str_strncasecmp(fa, fb, SHORT_STRING);
   result = perform_auxsort(result, a, b);
   return (SORTCODE(result));
 }
@@ -146,12 +144,10 @@ static int compare_from(const void *a, const void *b)
   struct Header **ppa = (struct Header **) a;
   struct Header **ppb = (struct Header **) b;
   char fa[SHORT_STRING];
-  const char *fb = NULL;
-  int result;
 
   mutt_str_strfcpy(fa, mutt_get_name((*ppa)->env->from), SHORT_STRING);
-  fb = mutt_get_name((*ppb)->env->from);
-  result = mutt_str_strncasecmp(fa, fb, SHORT_STRING);
+  const char *fb = mutt_get_name((*ppb)->env->from);
+  int result = mutt_str_strncasecmp(fa, fb, SHORT_STRING);
   result = perform_auxsort(result, a, b);
   return (SORTCODE(result));
 }
@@ -275,26 +271,26 @@ sort_t *mutt_get_sort_func(int method)
 {
   switch (method & SORT_MASK)
   {
-    case SORT_RECEIVED:
-      return compare_date_received;
-    case SORT_ORDER:
-      return compare_order;
     case SORT_DATE:
       return compare_date_sent;
-    case SORT_SUBJECT:
-      return compare_subject;
     case SORT_FROM:
       return compare_from;
-    case SORT_SIZE:
-      return compare_size;
-    case SORT_TO:
-      return compare_to;
-    case SORT_SCORE:
-      return compare_score;
-    case SORT_SPAM:
-      return compare_spam;
     case SORT_LABEL:
       return compare_label;
+    case SORT_ORDER:
+      return compare_order;
+    case SORT_RECEIVED:
+      return compare_date_received;
+    case SORT_SCORE:
+      return compare_score;
+    case SORT_SIZE:
+      return compare_size;
+    case SORT_SPAM:
+      return compare_spam;
+    case SORT_SUBJECT:
+      return compare_subject;
+    case SORT_TO:
+      return compare_to;
     default:
       return NULL;
   }
@@ -307,7 +303,7 @@ void mutt_sort_headers(struct Context *ctx, int init)
   struct MuttThread *thread = NULL, *top = NULL;
   sort_t *sortfunc = NULL;
 
-  OPT_NEED_RESORT = false;
+  OptNeedResort = false;
 
   if (!ctx)
     return;
@@ -326,16 +322,16 @@ void mutt_sort_headers(struct Context *ctx, int init)
   if (!ctx->quiet)
     mutt_message(_("Sorting mailbox..."));
 
-  if (OPT_NEED_RESCORE && Score)
+  if (OptNeedRescore && Score)
   {
     for (int i = 0; i < ctx->msgcount; i++)
       mutt_score_message(ctx, ctx->hdrs[i], 1);
   }
-  OPT_NEED_RESCORE = false;
+  OptNeedRescore = false;
 
-  if (OPT_RESORT_INIT)
+  if (OptResortInit)
   {
-    OPT_RESORT_INIT = false;
+    OptResortInit = false;
     init = 1;
   }
 
@@ -347,14 +343,14 @@ void mutt_sort_headers(struct Context *ctx, int init)
     AuxSort = NULL;
     /* if $sort_aux changed after the mailbox is sorted, then all the
        subthreads need to be resorted */
-    if (OPT_SORT_SUBTHREADS)
+    if (OptSortSubthreads)
     {
       int i = Sort;
       Sort = SortAux;
       if (ctx->tree)
         ctx->tree = mutt_sort_subthreads(ctx->tree, 1);
       Sort = i;
-      OPT_SORT_SUBTHREADS = false;
+      OptSortSubthreads = false;
     }
     mutt_sort_threads(ctx, init);
   }

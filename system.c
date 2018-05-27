@@ -20,6 +20,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @page system Execute external programs
+ *
+ * Execute external programs
+ */
+
 #include "config.h"
 #include <signal.h>
 #include <stdlib.h>
@@ -80,7 +86,7 @@ int mutt_system(const char *cmd)
     sigaction(SIGTSTP, &act, NULL);
     sigaction(SIGCONT, &act, NULL);
 
-    execle(EXECSHELL, "sh", "-c", cmd, NULL, mutt_envlist());
+    execle(EXECSHELL, "sh", "-c", cmd, NULL, mutt_envlist_getlist());
     _exit(127); /* execl error */
   }
   else if (thepid != -1)

@@ -71,7 +71,7 @@ static sasl_secret_t *secret_ptr = NULL;
 /**
  * getnameinfo_err - Convert a getaddrinfo() error code into an SASL error code
  * @param ret getaddrinfo() error code, e.g. EAI_AGAIN
- * @retval int SASL error code, e.g. SASL_FAIL
+ * @retval num SASL error code, e.g. SASL_FAIL
  */
 static int getnameinfo_err(int ret)
 {
@@ -128,7 +128,7 @@ static int getnameinfo_err(int ret)
  * @param addrlen Size of addr struct
  * @param out     Buffer for result
  * @param outlen  Length of buffer
- * @retval int SASL error code, e.g. SASL_BADPARAM
+ * @retval num SASL error code, e.g. SASL_BADPARAM
  *
  * utility function, copied from sasl2 sample code
  */
@@ -163,7 +163,7 @@ static int iptostring(const struct sockaddr *addr, socklen_t addrlen, char *out,
  * @param context  Supplied context, always NULL
  * @param priority Debug level
  * @param message  Message
- * @retval int SASL_OK, always
+ * @retval num SASL_OK, always
  */
 static int mutt_sasl_cb_log(void *context, int priority, const char *message)
 {
@@ -174,7 +174,7 @@ static int mutt_sasl_cb_log(void *context, int priority, const char *message)
 
 /**
  * mutt_sasl_start - Initialise SASL library
- * @retval int SASL error code, e.g. SASL_OK
+ * @retval num SASL error code, e.g. SASL_OK
  *
  * Call before doing an SASL exchange - initialises library (if necessary).
  */
@@ -216,7 +216,7 @@ static int mutt_sasl_start(void)
  * @param[in]  id      Field to get.  SASL_CB_USER or SASL_CB_AUTHNAME
  * @param[out] result  Resulting string
  * @param[out] len     Length of result
- * @retval int SASL error code, e.g. SASL_FAIL
+ * @retval num SASL error code, e.g. SASL_FAIL
  */
 static int mutt_sasl_cb_authname(void *context, int id, const char **result, unsigned int *len)
 {
@@ -260,7 +260,7 @@ static int mutt_sasl_cb_authname(void *context, int id, const char **result, uns
  * @param[in]  context Account
  * @param[in]  id      SASL_CB_PASS
  * @param[out] psecret SASL secret
- * @retval int SASL error code, e.g SASL_FAIL
+ * @retval num SASL error code, e.g SASL_FAIL
  */
 static int mutt_sasl_cb_pass(sasl_conn_t *conn, void *context, int id, sasl_secret_t **psecret)
 {
@@ -293,9 +293,7 @@ static int mutt_sasl_cb_pass(sasl_conn_t *conn, void *context, int id, sasl_secr
  */
 static sasl_callback_t *mutt_sasl_get_callbacks(struct Account *account)
 {
-  sasl_callback_t *callback = NULL;
-
-  callback = MuttSaslCallbacks;
+  sasl_callback_t *callback = MuttSaslCallbacks;
 
   callback->id = SASL_CB_USER;
   callback->proc = (int (*)(void)) mutt_sasl_cb_authname;
@@ -336,12 +334,9 @@ static sasl_callback_t *mutt_sasl_get_callbacks(struct Account *account)
  */
 static int mutt_sasl_conn_open(struct Connection *conn)
 {
-  struct SaslData *sasldata = NULL;
-  int rc;
-
-  sasldata = (struct SaslData *) conn->sockdata;
+  struct SaslData *sasldata = (struct SaslData *) conn->sockdata;
   conn->sockdata = sasldata->sockdata;
-  rc = (sasldata->msasl_open)(conn);
+  int rc = (sasldata->msasl_open)(conn);
   conn->sockdata = sasldata;
 
   return rc;
@@ -358,10 +353,7 @@ static int mutt_sasl_conn_open(struct Connection *conn)
  */
 static int mutt_sasl_conn_close(struct Connection *conn)
 {
-  struct SaslData *sasldata = NULL;
-  int rc;
-
-  sasldata = (struct SaslData *) conn->sockdata;
+  struct SaslData *sasldata = (struct SaslData *) conn->sockdata;
 
   /* restore connection's underlying methods */
   conn->sockdata = sasldata->sockdata;
@@ -376,7 +368,7 @@ static int mutt_sasl_conn_close(struct Connection *conn)
   FREE(&sasldata);
 
   /* call underlying close */
-  rc = (conn->conn_close)(conn);
+  int rc = (conn->conn_close)(conn);
 
   return rc;
 }
@@ -391,12 +383,10 @@ static int mutt_sasl_conn_close(struct Connection *conn)
  */
 static int mutt_sasl_conn_read(struct Connection *conn, char *buf, size_t len)
 {
-  struct SaslData *sasldata = NULL;
   int rc;
-
   unsigned int olen;
 
-  sasldata = (struct SaslData *) conn->sockdata;
+  struct SaslData *sasldata = (struct SaslData *) conn->sockdata;
 
   /* if we still have data in our read buffer, copy it into buf */
   if (sasldata->blen > sasldata->bpos)
@@ -431,7 +421,7 @@ static int mutt_sasl_conn_read(struct Connection *conn, char *buf, size_t len)
         mutt_debug(1, "SASL decode failed: %s\n", sasl_errstring(rc, NULL, NULL));
         goto out;
       }
-    } while (!sasldata->blen);
+    } while (sasldata->blen == 0);
 
     olen = (sasldata->blen - sasldata->bpos > len) ? len :
                                                      sasldata->blen - sasldata->bpos;
@@ -460,13 +450,11 @@ out:
  */
 static int mutt_sasl_conn_write(struct Connection *conn, const char *buf, size_t len)
 {
-  struct SaslData *sasldata = NULL;
   int rc;
-
   const char *pbuf = NULL;
   unsigned int olen, plen;
 
-  sasldata = (struct SaslData *) conn->sockdata;
+  struct SaslData *sasldata = (struct SaslData *) conn->sockdata;
   conn->sockdata = sasldata->sockdata;
 
   /* encode data, if necessary */
@@ -639,7 +627,7 @@ int mutt_sasl_client_new(struct Connection *conn, sasl_conn_t **saslconn)
 /**
  * mutt_sasl_interact - Perform an SASL interaction with the user
  * @param interaction Details of interaction
- * @retval int SASL error code: SASL_OK or SASL_FAIL
+ * @retval num SASL error code: SASL_OK or SASL_FAIL
  *
  * An example interaction might be asking the user for a password.
  */
@@ -654,7 +642,7 @@ int mutt_sasl_interact(sasl_interact_t *interaction)
 
     snprintf(prompt, sizeof(prompt), "%s: ", interaction->prompt);
     resp[0] = '\0';
-    if (OPT_NO_CURSES || mutt_get_field(prompt, resp, sizeof(resp), 0))
+    if (OptNoCurses || mutt_get_field(prompt, resp, sizeof(resp), 0))
       return SASL_FAIL;
 
     interaction->len = mutt_str_strlen(resp) + 1;

@@ -3,6 +3,7 @@
 
 PACKAGE=	@PACKAGE@
 PACKAGE_VERSION=@PACKAGE_VERSION@
+PACKAGE_DATE=	@PACKAGE_DATE@
 
 # Build-time compiler and flags. These are used for building executables that
 # are only used at build-time, e.g., doc/makedoc. These are different from CC /
@@ -43,8 +44,9 @@ datadir=	@PKGDATADIR@
 docdir=		@PKGDOCDIR@
 mandir=		@mandir@
 libdir=		@libdir@
-libexecdir=		@libexecdir@
+libexecdir=	@libexecdir@
 sysconfdir=	@SYSCONFDIR@
+textdomaindir=	@MUTTLOCALEDIR@
 
 # targets for specific subdirectories
 ALL_TARGETS=		@ALL_TARGETS@
@@ -65,12 +67,12 @@ NEOMUTTOBJS=	addrbook.o alias.o attach.o bcache.o body.o browser.o buffy.o \
 		enter.o envelope.o filter.o flags.o from.o group.o handler.o \
 		hdrline.o header.o help.o history.o hook.o init.o keymap.o \
 		main.o mbox.o menu.o mh.o muttlib.o mutt_account.o \
-		mutt_logging.o mutt_signal.o mutt_socket.o mx.o newsrc.o \
+		mutt_logging.o mutt_signal.o mutt_socket.o mutt_window.o mx.o newsrc.o \
 		nntp.o pager.o parse.o pattern.o pop.o pop_auth.o pop_lib.o \
-		postpone.o query.o recvattach.o recvcmd.o resize.o rfc1524.o \
+		postpone.o progress.o query.o recvattach.o recvcmd.o resize.o rfc1524.o \
 		rfc2047.o rfc2231.o rfc3676.o safe_asprintf.o score.o send.o \
 		sendlib.o sidebar.o smtp.o sort.o state.o status.o system.o \
-		tags.o thread.o url.o version.o
+		tags.o terminal.o thread.o url.o version.o
 
 @if !HAVE_WCSCASECMP
 NEOMUTTOBJS+=	wcscasecmp.o
@@ -91,11 +93,11 @@ ALLOBJS+=	$(NEOMUTTOBJS)
 # libmutt
 LIBMUTT=	libmutt.a
 LIBMUTTOBJS=	mutt/address.o mutt/base64.o mutt/buffer.o mutt/charset.o \
-		mutt/date.o mutt/exit.o mutt/file.o mutt/hash.o mutt/idna.o \
-		mutt/list.o mutt/logging.o mutt/mapping.o mutt/mbyte.o \
-		mutt/md5.o mutt/memory.o mutt/mime.o mutt/parameter.o \
-		mutt/regex.o mutt/rfc2047.o mutt/sha1.o mutt/signal.o \
-		mutt/string.o
+		mutt/date.o mutt/envlist.o mutt/exit.o mutt/file.o mutt/hash.o \
+		mutt/idna.o mutt/list.o mutt/logging.o mutt/mapping.o \
+		mutt/mbyte.o mutt/md5.o mutt/memory.o mutt/mime.o \
+		mutt/parameter.o mutt/regex.o mutt/rfc2047.o mutt/sha1.o \
+		mutt/signal.o mutt/string.o
 CLEANFILES+=	$(LIBMUTT) $(LIBMUTTOBJS)
 MUTTLIBS+=	$(LIBMUTT)
 ALLOBJS+=	$(LIBMUTTOBJS)
@@ -140,8 +142,8 @@ ALLOBJS+=	$(LIBIMAPOBJS)
 ###############################################################################
 # libconn
 LIBCONN=	libconn.a
-LIBCONNOBJS=	conn/conn_globals.o conn/getdomain.o conn/sasl_plain.o \
-		conn/socket.o conn/tunnel.o
+LIBCONNOBJS=	conn/conn_globals.o conn/conn_raw.o conn/getdomain.o \
+		conn/sasl_plain.o  conn/socket.o conn/tunnel.o
 @if HAVE_SASL
 LIBCONNOBJS+=	conn/sasl.o
 @endif
@@ -313,7 +315,7 @@ uninstall: $(UNINSTALL_TARGETS)
 distclean: clean
 	$(RM) $(DEPFILES) conststrings.c config.h config.log doc/neomutt.1 \
 		Makefile po/Makefile contrib/Makefile doc/Makefile \
-		test/Makefile autosetup/jimsh0
+		test/Makefile autosetup/jimsh0 .clang_complete
 
 ##############################################################################
 # include generated dependency files
