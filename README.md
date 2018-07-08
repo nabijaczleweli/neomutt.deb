@@ -6,7 +6,7 @@
 [![Release](https://img.shields.io/github/release/neomutt/neomutt.svg)](https://github.com/neomutt/neomutt/releases/latest "Latest Release Notes")
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://github.com/neomutt/neomutt/blob/master/COPYRIGHT.md "Copyright Statement")
 [![Code build](https://img.shields.io/travis/neomutt/neomutt.svg?label=code)](https://travis-ci.org/neomutt/neomutt "Latest Automatic Code Build")
-[![Coverity Scan](https://img.shields.io/coverity/scan/8495.svg)](https://scan.coverity.com/projects/neomutt-neomutt "Latest Code Static Analysis)
+[![Coverity Scan](https://img.shields.io/coverity/scan/8495.svg)](https://scan.coverity.com/projects/neomutt-neomutt "Latest Code Static Analysis")
 [![Website build](https://img.shields.io/travis/neomutt/neomutt.github.io.svg?label=website)](https://travis-ci.org/neomutt/neomutt.github.io "Latest Website Test")
 
 ## What is NeoMutt?
@@ -69,7 +69,7 @@ sorted through them, fixed them up and documented them.
 - Releases:        https://github.com/neomutt/neomutt/releases/latest
 - Questions/Bugs:  https://github.com/neomutt/neomutt/issues
 - Website:         https://neomutt.org
-- IRC:             irc://irc.freenode.net/neomutt - please be patient.
+- IRC:             [irc://irc.freenode.net/neomutt](https://webchat.freenode.net/ "IRC Web Client") - please be patient.
   We're a small group, so our answer might take some time.
 - Mailinglists:    [neomutt-users](mailto:neomutt-users-request@neomutt.org?subject=subscribe)
   and [neomutt-devel](mailto:neomutt-devel-request@neomutt.org?subject=subscribe)
@@ -80,6 +80,7 @@ sorted through them, fixed them up and documented them.
 Here's a list of everyone who's helped NeoMutt:
 
 [Adam Borowski](https://github.com/kilobyte "kilobyte"),
+[Ahmed El Gabri](https://github.com/ahmedelgabri "ahmedelgabri"),
 [Alad Wenter](https://github.com/aladw "aladw"),
 [Aleksa Sarai](https://github.com/cyphar "cyphar"),
 [Alex Pearce](https://github.com/alexpearce "alexpearce"),
@@ -95,6 +96,7 @@ Here's a list of everyone who's helped NeoMutt:
 [Baptiste Daroussin](https://github.com/bapt "bapt"),
 [Benjamin Mako Hill](https://github.com/makoshark "makoshark"),
 [Bernard Pratz](https://github.com/guyzmo "guyzmo"),
+[Bertram Scharpf](https://github.com/bertramscharpf "bertramscharpf"),
 [Bletchley Park](https://github.com/libBletchley "libBletchley"),
 [Bo Yu](https://github.com/yuzibo "yuzibo"),
 [Bryan Bennett](https://github.com/bbenne10 "bbenne10"),
@@ -126,6 +128,7 @@ Here's a list of everyone who's helped NeoMutt:
 [Hugo Barrera](https://github.com/whynothugo "whynothugo"),
 [Ian Zimmerman](https://github.com/nobrowser "nobrowser"),
 [Ismaël Bouya](https://github.com/immae "immae"),
+[Ivan J](https://github.com/parazyd "parazyd"),
 [Ivan Tham](https://github.com/pickfire "pickfire"),
 [J Lewis Muir](https://github.com/jlmuir "jlmuir"),
 [Jack Stratton](https://github.com/phroa "phroa"),
