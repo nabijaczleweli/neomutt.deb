@@ -49,11 +49,10 @@ WHERE char *Username;
 WHERE char *CurrentFolder;
 WHERE char *LastFolder;
 
-WHERE const char *GitVer;
+extern const char *GitVer;
 
 WHERE struct Hash *Groups;
 WHERE struct Hash *ReverseAliases;
-WHERE struct Hash *TagTransforms;
 WHERE struct Hash *TagFormats;
 
 /* Lists of strings */
@@ -95,7 +94,7 @@ WHERE SIG_ATOMIC_VOLATILE_T SigWinch;
 
 WHERE int CurrentMenu;
 
-WHERE struct Alias *Aliases;
+WHERE struct AliasList Aliases INITVAL(TAILQ_HEAD_INITIALIZER(Aliases));
 
 /* All the variables below are backing for config items */
 
@@ -226,8 +225,6 @@ WHERE char *TsStatusFormat;
 WHERE char *TsIconFormat;
 WHERE char *Visual;
 
-WHERE char *HiddenTags;
-
 #ifdef USE_NNTP
 WHERE short NntpPoll;
 WHERE short NntpContext;
@@ -267,7 +264,7 @@ WHERE struct Regex *PgpGoodSign;
 WHERE struct Regex *PgpDecryptionOkay;
 WHERE char *PgpDefaultKey;
 WHERE char *PgpSignAs;
-WHERE short PgpTimeout;
+WHERE long  PgpTimeout;
 WHERE char *PgpEntryFormat;
 WHERE char *PgpClearsignCommand;
 WHERE char *PgpDecodeCommand;
@@ -286,7 +283,7 @@ WHERE char *PgpGetkeysCommand;
 /* -- formerly in smime.h -- */
 WHERE char *SmimeDefaultKey;
 WHERE char *SmimeSignAs;
-WHERE short SmimeTimeout;
+WHERE long  SmimeTimeout;
 WHERE char *SmimeCertificates;
 WHERE char *SmimeKeys;
 WHERE char *SmimeEncryptWith;

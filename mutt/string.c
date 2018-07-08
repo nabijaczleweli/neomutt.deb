@@ -123,6 +123,7 @@ const char *mutt_str_sysexit(int e)
  * @param[out] dst Store the result
  * @retval  0 Success
  * @retval -1 Error
+ * @retval -2 Overflow
  *
  * This is a strtol() wrapper with range checking.
  * errno may be set on error, e.g. ERANGE
@@ -140,9 +141,12 @@ int mutt_str_atol(const char *str, long *dst)
     return 0;
   }
 
+  errno = 0;
   *res = strtol(str, &e, 10);
-  if (((*res == LONG_MAX) && (errno == ERANGE)) || (e && (*e != '\0')))
+  if (e && (*e != '\0'))
     return -1;
+  if (errno == ERANGE)
+    return -2;
   return 0;
 }
 
@@ -595,8 +599,10 @@ const char *mutt_str_stristr(const char *haystack, const char *needle)
   while (*(p = haystack))
   {
     for (q = needle;
-         *p && *q && tolower((unsigned char) *p) == tolower((unsigned char) *q); p++, q++)
-      ;
+         *p && *q && (tolower((unsigned char) *p) == tolower((unsigned char) *q));
+         p++, q++)
+    {
+    }
     if (!*q)
       return haystack;
     haystack++;
@@ -624,7 +630,7 @@ char *mutt_str_skip_whitespace(char *p)
  */
 void mutt_str_remove_trailing_ws(char *s)
 {
-  for (char *p = s + mutt_str_strlen(s) - 1; p >= s && ISSPACE(*p); p--)
+  for (char *p = s + mutt_str_strlen(s) - 1; (p >= s) && ISSPACE(*p); p--)
     *p = '\0';
 }
 
@@ -650,7 +656,7 @@ size_t mutt_str_strfcpy(char *dest, const char *src, size_t dsize)
     *dest++ = *src++;
 
   *dest = '\0';
-  return dest - dest0;
+  return (dest - dest0);
 }
 
 /**
@@ -848,7 +854,7 @@ int mutt_str_word_casecmp(const char *a, const char *b)
   char tmp[SHORT_STRING] = "";
 
   int i;
-  for (i = 0; i < SHORT_STRING - 2; i++, b++)
+  for (i = 0; i < (SHORT_STRING - 2); i++, b++)
   {
     if (!*b || ISSPACE(*b))
     {

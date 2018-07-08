@@ -5915,6 +5915,14 @@ set spam_separator=", "
             </listitem>
           </varlistentry>
           <varlistentry>
+            <term>number (long)</term>
+            <listitem>
+              <para>
+                A signed integer number in the range -2147483648 to 2147483647.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
             <term>string</term>
             <listitem>
               <para>
@@ -7217,18 +7225,18 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
               <row>
                 <entry>~h <emphasis>EXPR</emphasis></entry>
                 <entry>
-                   messages which contain <emphasis>EXPR</emphasis>in the
-                   message header ***)
+                  messages which contain <emphasis>EXPR</emphasis>in the
+                  message header ***)
                 </entry>
               </row>
               <row>
                 <entry>=h <emphasis>STRING</emphasis></entry>
                 <entry>
-                   If IMAP is enabled, like ~h but searches for
-                   <emphasis>STRING</emphasis>on the server, rather than
-                   downloading each message and searching it locally;
-                   <emphasis>STRING</emphasis>must be of the form
-                   <quote>header: substring</quote>(see below).
+                  If IMAP is enabled, like ~h but searches for
+                  <emphasis>STRING</emphasis>on the server, rather than
+                  downloading each message and searching it locally;
+                  <emphasis>STRING</emphasis>must be of the form
+                  <quote>header: substring</quote>(see below).
                 </entry>
               </row>
               <row>
@@ -7420,8 +7428,8 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
               <row>
                 <entry>~X [ <emphasis>MIN</emphasis>]-[ <emphasis>MAX</emphasis>]</entry>
                 <entry>
-                   messages with <emphasis>MIN</emphasis>to
-                   <emphasis>MAX</emphasis>attachments *) ****)
+                  messages with <emphasis>MIN</emphasis>to
+                  <emphasis>MAX</emphasis>attachments *) ****)
                 </entry>
               </row>
               <row>
@@ -8918,7 +8926,7 @@ macro pager \cb |urlview\n
       <para>
         You can print messages to the message window using the "echo" command.
         This might be useful after a macro finishes executing. After printing
-        the message, echo will pause for the number of seconds specified by 
+        the message, echo will pause for the number of seconds specified by
         <link linkend="sleep-time">$sleep_time</link>.
       </para>
 
@@ -9908,7 +9916,7 @@ application/postscript; ps2ascii %s; copiousoutput
         kind of email is heavily used by many modern mail user agents to send
         HTML messages which contain an alternative plain text representation.
         You can read and write <literal>multipart/alternative</literal> emails
-        in NeoMutt. 
+        in NeoMutt.
       </para>
 
       <sect2 id="read-alternative-order">
