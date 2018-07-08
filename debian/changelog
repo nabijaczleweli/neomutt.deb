@@ -1,3 +1,10 @@
+neomutt (20180622+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * debian/patches: all patches refreshed
+
+ -- Antonio Radici <antonio@debian.org>  Sun, 08 Jul 2018 07:21:03 +0100
+
 neomutt (20180512+dfsg.1-1) unstable; urgency=medium
 
   * New upstream release.
