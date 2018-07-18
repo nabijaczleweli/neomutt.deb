@@ -245,6 +245,12 @@ header_cache_t *imap_hcache_open(struct ImapData *idata, const char *path)
     FREE(&mx.mbox);
   }
 
+  if (strstr(mbox, "/../") || (strcmp(mbox, "..") == 0) || (strncmp(mbox, "../", 3) == 0))
+    return NULL;
+  size_t len = strlen(mbox);
+  if ((len > 3) && (strcmp(mbox + len - 3, "/..") == 0))
+    return NULL;
+
   mutt_account_tourl(&idata->conn->account, &url);
   url.path = mbox;
   url_tostring(&url, cachepath, sizeof(cachepath), U_PATH);
@@ -798,23 +804,26 @@ void imap_qualify_path(char *dest, size_t len, struct ImapMbox *mx, char *path)
  *
  * Surround string with quotes, escape " and \ with backslash
  */
-void imap_quote_string(char *dest, size_t dlen, const char *src)
+void imap_quote_string(char *dest, size_t dlen, const char *src, bool quote_backtick)
 {
-  static const char quote[] = "\"\\";
+  const char *quote = "`\"\\";
+  if (!quote_backtick)
+    quote++;
+
   char *pt = dest;
   const char *s = src;
 
   *pt++ = '"';
-  /* save room for trailing quote-char */
-  dlen -= 2;
+  /* save room for quote-chars */
+  dlen -= 3;
 
   for (; *s && dlen; s++)
   {
     if (strchr(quote, *s))
     {
-      dlen -= 2;
-      if (dlen == 0)
+      if (dlen < 2)
         break;
+      dlen -= 2;
       *pt++ = '\\';
       *pt++ = *s;
     }
@@ -874,7 +883,7 @@ void imap_munge_mbox_name(struct ImapData *idata, char *dest, size_t dlen, const
   char *buf = mutt_str_strdup(src);
   imap_utf_encode(idata, &buf);
 
-  imap_quote_string(dest, dlen, buf);
+  imap_quote_string(dest, dlen, buf, false);
 
   FREE(&buf);
 }
