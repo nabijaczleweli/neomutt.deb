@@ -1,3 +1,10 @@
+neomutt (20180716+dfsg.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Important security updates for POP and IMAP users.
+
+ -- Antonio Radici <antonio@debian.org>  Wed, 18 Jul 2018 22:15:56 +0100
+
 neomutt (20180622+dfsg.1-1) unstable; urgency=medium
 
   * New upstream release.
