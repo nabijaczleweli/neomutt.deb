@@ -1,3 +1,11 @@
+neomutt (20180716+dfsg.1-1.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Fix remaining references to /usr/lib/neomutt, especially in neomuttrc
+    so we can load configuration from neomuttrc.d again (Closes: #931746)
+
+ -- Julian Andres Klode <jak@debian.org>  Thu, 11 Jul 2019 09:44:48 +0200
+
 neomutt (20180716+dfsg.1-1.1) unstable; urgency=medium
 
   * Non-maintainer upload.

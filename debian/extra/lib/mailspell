@@ -3,7 +3,7 @@
 # Wrapper to call ispell on mail messages, ignoring quoted portions
 # and signatures.
 # By Brendan O'Dea <bod@debian.org>, public domain.
-# Usage: set ispell = /usr/lib/neomutt/mailspell
+# Usage: set ispell = /usr/libexec/neomutt/mailspell
 #
 
 use IO::File;
