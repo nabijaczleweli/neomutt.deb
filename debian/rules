@@ -24,7 +24,7 @@ override_dh_autoreconf:
 override_dh_auto_configure:
 	dh_auto_configure --  \
 		--mandir=/usr/share/man \
-		--libexecdir=/usr/lib \
+		--libexecdir=/usr/libexec \
 		--with-mailpath=/var/mail \
 		--gpgme	\
 		--lua \

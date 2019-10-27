@@ -1,3 +1,12 @@
+neomutt (20180716+dfsg.1-1.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Use /usr/libexec as libexecdir (Closes: #905159)
+    (dh compat >= 12 does the right thing, so once bumped then
+    --libexecdir can be dropped from debian/rules.)
+
+ -- Andreas Henriksson <andreas@fatal.se>  Wed, 10 Apr 2019 08:34:57 +0200
+
 neomutt (20180716+dfsg.1-1) unstable; urgency=medium
 
   * New upstream release.
