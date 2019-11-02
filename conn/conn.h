@@ -21,7 +21,7 @@
  */
 
 /**
- * @page conn Network connections and their encryption
+ * @page conn CONN: Network connections and their encryption
  *
  * Manage external connections.
  *
@@ -38,11 +38,14 @@
  * | conn/tunnel.c       | @subpage conn_tunnel     |
  */
 
-#ifndef _CONN_CONN_H
-#define _CONN_CONN_H
+#ifndef MUTT_CONN_CONN_H
+#define MUTT_CONN_CONN_H
 
-#include "account.h"
+#include "config.h"
+#include <stdio.h>
+// IWYU pragma: begin_exports
 #include "conn_globals.h"
+#include "connaccount.h"
 #include "connection.h"
 #include "sasl_plain.h"
 #include "socket.h"
@@ -51,5 +54,8 @@
 #ifdef USE_SASL
 #include "sasl.h"
 #endif
+// IWYU pragma: end_exports
 
-#endif /* _CONN_CONN_H */
+int getdnsdomainname(char *buf, size_t buflen);
+
+#endif /* MUTT_CONN_CONN_H */

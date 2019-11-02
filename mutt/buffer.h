@@ -4,7 +4,7 @@
  *
  * @authors
  * Copyright (C) 2017 Ian Zimmerman <itz@primate.net>
- * Copyright (C) 2017 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2019 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -21,8 +21,8 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _MUTT_BUFFER_H
-#define _MUTT_BUFFER_H
+#ifndef MUTT_LIB_BUFFER_H
+#define MUTT_LIB_BUFFER_H
 
 #include <stddef.h>
 #include <stdbool.h>
@@ -32,24 +32,39 @@
  */
 struct Buffer
 {
-  char *data;   /**< pointer to data */
-  char *dptr;   /**< current read/write position */
-  size_t dsize; /**< length of data */
-  int destroy;  /**< destroy 'data' when done? */
+  char *data;   ///< Pointer to data
+  char *dptr;   ///< Current read/write position
+  size_t dsize; ///< Length of data
 };
 
-#define MoreArgs(p) (*p->dptr && (*p->dptr != ';') && (*p->dptr != '#'))
+/* Convert a buffer to a const char * "string" */
+#define mutt_b2s(buf) ((buf)->data ? (const char *) (buf)->data : "")
 
-size_t         mutt_buffer_add(struct Buffer *buf, const char *s, size_t len);
-size_t         mutt_buffer_addch(struct Buffer *buf, char c);
-size_t         mutt_buffer_addstr(struct Buffer *buf, const char *s);
-struct Buffer *mutt_buffer_alloc(size_t size);
-void           mutt_buffer_free(struct Buffer **p);
-struct Buffer *mutt_buffer_from(char *seed);
-struct Buffer *mutt_buffer_init(struct Buffer *b);
-bool           mutt_buffer_is_empty(const struct Buffer *buf);
-struct Buffer *mutt_buffer_new(void);
-int            mutt_buffer_printf(struct Buffer *buf, const char *fmt, ...);
-void           mutt_buffer_reset(struct Buffer *b);
+#define MoreArgs(buf) (*(buf)->dptr && (*(buf)->dptr != ';') && (*(buf)->dptr != '#'))
 
-#endif /* _MUTT_BUFFER_H */
+void           mutt_buffer_alloc        (struct Buffer *buf, size_t size);
+void           mutt_buffer_dealloc      (struct Buffer *buf);
+void           mutt_buffer_fix_dptr     (struct Buffer *buf);
+struct Buffer *mutt_buffer_init         (struct Buffer *buf);
+bool           mutt_buffer_is_empty     (const struct Buffer *buf);
+size_t         mutt_buffer_len          (const struct Buffer *buf);
+struct Buffer  mutt_buffer_make         (size_t size);
+void           mutt_buffer_reset        (struct Buffer *buf);
+char *         mutt_buffer_strdup       (struct Buffer *buf);
+
+// Functions that APPEND to a Buffer
+size_t         mutt_buffer_addch        (struct Buffer *buf, char c);
+size_t         mutt_buffer_addstr       (struct Buffer *buf, const char *s);
+size_t         mutt_buffer_addstr_n     (struct Buffer *buf, const char *s, size_t len);
+int            mutt_buffer_add_printf   (struct Buffer *buf, const char *fmt, ...);
+
+// Functions that OVERWRITE a Buffer
+size_t         mutt_buffer_concat_path  (struct Buffer *buf, const char *dir, const char *fname);
+size_t         mutt_buffer_concatn_path (struct Buffer *dst, const char *dir, size_t dirlen, const char *fname, size_t fnamelen);
+size_t         mutt_buffer_copy         (struct Buffer *dst, const struct Buffer *src);
+int            mutt_buffer_printf       (struct Buffer *buf, const char *fmt, ...);
+size_t         mutt_buffer_strcpy       (struct Buffer *buf, const char *s);
+size_t         mutt_buffer_strcpy_n     (struct Buffer *buf, const char *s, size_t len);
+size_t         mutt_buffer_substrcpy    (struct Buffer *buf, const char *beg, const char *end);
+
+#endif /* MUTT_LIB_BUFFER_H */
