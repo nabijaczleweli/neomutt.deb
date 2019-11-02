@@ -20,8 +20,14 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @page wcscasecmp For systems lacking wcscasecmp()
+ *
+ * For systems lacking wcscasecmp()
+ */
+
 #include "config.h"
-#include <stddef.h>
+#include <wchar.h>
 #include <wctype.h>
 
 /**

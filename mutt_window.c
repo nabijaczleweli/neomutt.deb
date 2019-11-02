@@ -32,6 +32,7 @@
 #include "mutt/mutt.h"
 #include "mutt_window.h"
 #include "globals.h"
+#include "mutt_curses.h"
 #include "mutt_menu.h"
 #include "options.h"
 
@@ -43,6 +44,31 @@ struct MuttWindow *MuttMessageWindow = NULL; /**< Message Window */
 struct MuttWindow *MuttSidebarWindow = NULL; /**< Sidebar Window */
 #endif
 
+/**
+ * mutt_window_new - Create a new Window
+ * @retval ptr New Window
+ */
+struct MuttWindow *mutt_window_new(void)
+{
+  struct MuttWindow *win = mutt_mem_calloc(1, sizeof(struct MuttWindow));
+
+  return win;
+}
+
+/**
+ * mutt_window_free - Free a Window
+ * @param ptr Window to free
+ */
+void mutt_window_free(struct MuttWindow **ptr)
+{
+  if (!ptr || !*ptr)
+    return;
+
+  // struct MuttWindow *win = *ptr;
+
+  FREE(ptr);
+}
+
 #ifdef USE_SLANG_CURSES
 /**
  * vw_printw - Write a formatted string to a Window (function missing from Slang)
@@ -53,7 +79,7 @@ struct MuttWindow *MuttSidebarWindow = NULL; /**< Sidebar Window */
  */
 static int vw_printw(SLcurses_Window_Type *win, const char *fmt, va_list ap)
 {
-  char buf[LONG_STRING];
+  char buf[1024];
 
   (void) SLvsnprintf(buf, sizeof(buf), (char *) fmt, ap);
   SLcurses_waddnstr(win, buf, -1);
@@ -70,6 +96,16 @@ void mutt_window_clearline(struct MuttWindow *win, int row)
 {
   mutt_window_move(win, row, 0);
   mutt_window_clrtoeol(win);
+}
+
+/**
+ * mutt_window_clrtobot - Clear to the bottom of the Window
+ *
+ * @note Assumes the cursor has already been positioned within the Window.
+ */
+void mutt_window_clrtobot(void)
+{
+  clrtobot();
 }
 
 /**
@@ -101,9 +137,9 @@ void mutt_window_clrtoeol(struct MuttWindow *win)
 }
 
 /**
- * mutt_window_free - Free the default Windows
+ * mutt_window_free_all - Free all the default Windows
  */
-void mutt_window_free(void)
+void mutt_window_free_all(void)
 {
   FREE(&MuttHelpWindow);
   FREE(&MuttIndexWindow);
@@ -115,24 +151,24 @@ void mutt_window_free(void)
 }
 
 /**
- * mutt_window_getxy - Get the cursor position in the Window
+ * mutt_window_get_coords - Get the cursor position in the Window
  * @param[in]  win Window
- * @param[out] x   X-Coordinate
- * @param[out] y   Y-Coordinate
+ * @param[out] row Row in Window
+ * @param[out] col Column in Window
  *
  * Assumes the current position is inside the window.  Otherwise it will
  * happily return negative or values outside the window boundaries
  */
-void mutt_window_getxy(struct MuttWindow *win, int *x, int *y)
+void mutt_window_get_coords(struct MuttWindow *win, int *row, int *col)
 {
-  int row = 0;
-  int col = 0;
+  int x = 0;
+  int y = 0;
 
-  getyx(stdscr, row, col);
-  if (x)
-    *x = col - win->col_offset;
-  if (y)
-    *y = row - win->row_offset;
+  getyx(stdscr, y, x);
+  if (col)
+    *col = x - win->col_offset;
+  if (row)
+    *row = y - win->row_offset;
 }
 
 /**
@@ -142,12 +178,12 @@ void mutt_window_getxy(struct MuttWindow *win, int *x, int *y)
  */
 void mutt_window_init(void)
 {
-  MuttHelpWindow = mutt_mem_calloc(1, sizeof(struct MuttWindow));
-  MuttIndexWindow = mutt_mem_calloc(1, sizeof(struct MuttWindow));
-  MuttStatusWindow = mutt_mem_calloc(1, sizeof(struct MuttWindow));
-  MuttMessageWindow = mutt_mem_calloc(1, sizeof(struct MuttWindow));
+  MuttHelpWindow = mutt_window_new();
+  MuttIndexWindow = mutt_window_new();
+  MuttStatusWindow = mutt_window_new();
+  MuttMessageWindow = mutt_window_new();
 #ifdef USE_SIDEBAR
-  MuttSidebarWindow = mutt_mem_calloc(1, sizeof(struct MuttWindow));
+  MuttSidebarWindow = mutt_window_new();
 #endif
 }
 
@@ -165,20 +201,6 @@ int mutt_window_move(struct MuttWindow *win, int row, int col)
 }
 
 /**
- * mutt_window_mvaddch - Move the cursor and write a character to a Window
- * @param win Window to write to
- * @param row Row to move to
- * @param col Column to move to
- * @param ch  Character to write
- * @retval OK  Success
- * @retval ERR Error
- */
-int mutt_window_mvaddch(struct MuttWindow *win, int row, int col, const chtype ch)
-{
-  return mvaddch(win->row_offset + row, win->col_offset + col, ch);
-}
-
-/**
  * mutt_window_mvaddstr - Move the cursor and write a fixed string to a Window
  * @param win Window to write to
  * @param row Row to move to
@@ -189,7 +211,11 @@ int mutt_window_mvaddch(struct MuttWindow *win, int row, int col, const chtype c
  */
 int mutt_window_mvaddstr(struct MuttWindow *win, int row, int col, const char *str)
 {
+#ifdef USE_SLANG_CURSES
+  return mvaddstr(win->row_offset + row, win->col_offset + col, (char *) str);
+#else
   return mvaddstr(win->row_offset + row, win->col_offset + col, str);
+#endif
 }
 
 /**
@@ -217,6 +243,22 @@ int mutt_window_mvprintw(struct MuttWindow *win, int row, int col, const char *f
 }
 
 /**
+ * mutt_window_copy_size - Copy the size of one Window to another
+ * @param win_src Window to copy
+ * @param win_dst Window to resize
+ */
+void mutt_window_copy_size(const struct MuttWindow *win_src, struct MuttWindow *win_dst)
+{
+  if (!win_src || !win_dst)
+    return;
+
+  win_dst->rows = win_src->rows;
+  win_dst->cols = win_src->cols;
+  win_dst->row_offset = win_src->row_offset;
+  win_dst->col_offset = win_src->col_offset;
+}
+
+/**
  * mutt_window_reflow - Resize the Windows to fit the screen
  */
 void mutt_window_reflow(void)
@@ -224,42 +266,42 @@ void mutt_window_reflow(void)
   if (OptNoCurses)
     return;
 
-  mutt_debug(2, "entering\n");
+  mutt_debug(LL_DEBUG2, "entering\n");
 
   MuttStatusWindow->rows = 1;
   MuttStatusWindow->cols = COLS;
-  MuttStatusWindow->row_offset = StatusOnTop ? 0 : LINES - 2;
+  MuttStatusWindow->row_offset = C_StatusOnTop ? 0 : LINES - 2;
   MuttStatusWindow->col_offset = 0;
 
-  memcpy(MuttHelpWindow, MuttStatusWindow, sizeof(struct MuttWindow));
-  if (!Help)
-    MuttHelpWindow->rows = 0;
+  mutt_window_copy_size(MuttStatusWindow, MuttHelpWindow);
+  if (C_Help)
+    MuttHelpWindow->row_offset = C_StatusOnTop ? LINES - 2 : 0;
   else
-    MuttHelpWindow->row_offset = StatusOnTop ? LINES - 2 : 0;
+    MuttHelpWindow->rows = 0;
 
-  memcpy(MuttMessageWindow, MuttStatusWindow, sizeof(struct MuttWindow));
+  mutt_window_copy_size(MuttStatusWindow, MuttMessageWindow);
   MuttMessageWindow->row_offset = LINES - 1;
 
-  memcpy(MuttIndexWindow, MuttStatusWindow, sizeof(struct MuttWindow));
+  mutt_window_copy_size(MuttStatusWindow, MuttIndexWindow);
   MuttIndexWindow->rows = MAX(
       LINES - MuttStatusWindow->rows - MuttHelpWindow->rows - MuttMessageWindow->rows, 0);
   MuttIndexWindow->row_offset =
-      StatusOnTop ? MuttStatusWindow->rows : MuttHelpWindow->rows;
+      C_StatusOnTop ? MuttStatusWindow->rows : MuttHelpWindow->rows;
 
 #ifdef USE_SIDEBAR
-  if (SidebarVisible)
+  if (C_SidebarVisible)
   {
-    memcpy(MuttSidebarWindow, MuttIndexWindow, sizeof(struct MuttWindow));
-    MuttSidebarWindow->cols = SidebarWidth;
-    MuttIndexWindow->cols -= SidebarWidth;
+    mutt_window_copy_size(MuttIndexWindow, MuttSidebarWindow);
+    MuttSidebarWindow->cols = C_SidebarWidth;
+    MuttIndexWindow->cols -= C_SidebarWidth;
 
-    if (SidebarOnRight)
+    if (C_SidebarOnRight)
     {
-      MuttSidebarWindow->col_offset = COLS - SidebarWidth;
+      MuttSidebarWindow->col_offset = COLS - C_SidebarWidth;
     }
     else
     {
-      MuttIndexWindow->col_offset += SidebarWidth;
+      MuttIndexWindow->col_offset += C_SidebarWidth;
     }
   }
 #endif
@@ -280,16 +322,16 @@ void mutt_window_reflow_message_rows(int mw_rows)
   MuttMessageWindow->rows = mw_rows;
   MuttMessageWindow->row_offset = LINES - mw_rows;
 
-  MuttStatusWindow->row_offset = StatusOnTop ? 0 : LINES - mw_rows - 1;
+  MuttStatusWindow->row_offset = C_StatusOnTop ? 0 : LINES - mw_rows - 1;
 
-  if (Help)
-    MuttHelpWindow->row_offset = StatusOnTop ? LINES - mw_rows - 1 : 0;
+  if (C_Help)
+    MuttHelpWindow->row_offset = C_StatusOnTop ? LINES - mw_rows - 1 : 0;
 
   MuttIndexWindow->rows = MAX(
       LINES - MuttStatusWindow->rows - MuttHelpWindow->rows - MuttMessageWindow->rows, 0);
 
 #ifdef USE_SIDEBAR
-  if (SidebarVisible)
+  if (C_SidebarVisible)
     MuttSidebarWindow->rows = MuttIndexWindow->rows;
 #endif
 
@@ -299,19 +341,101 @@ void mutt_window_reflow_message_rows(int mw_rows)
 }
 
 /**
- * mutt_window_wrap_cols - Calculate the wrap column for a Window
- * @param win  Window
- * @param wrap Wrap config
+ * mutt_window_wrap_cols - Calculate the wrap column for a given screen width
+ * @param width Screen width
+ * @param wrap  Wrap config
  * @retval num Column that text should be wrapped at
  *
  * The wrap variable can be negative, meaning there should be a right margin.
  */
-int mutt_window_wrap_cols(struct MuttWindow *win, short wrap)
+int mutt_window_wrap_cols(int width, short wrap)
 {
   if (wrap < 0)
-    return (win->cols > -wrap) ? (win->cols + wrap) : win->cols;
-  else if (wrap)
-    return (wrap < win->cols) ? wrap : win->cols;
-  else
-    return win->cols;
+    return (width > -wrap) ? (width + wrap) : width;
+  if (wrap)
+    return (wrap < width) ? wrap : width;
+  return width;
+}
+
+/**
+ * mutt_window_addch - Write one character to a Window
+ * @param ch  Character to write
+ * @retval  0 Success
+ * @retval -1 Error
+ */
+int mutt_window_addch(int ch)
+{
+  return addch(ch);
+}
+
+/**
+ * mutt_window_addnstr - Write a partial string to a Window
+ * @param str String
+ * @param num Maximum number of characters to write
+ * @retval  0 Success
+ * @retval -1 Error
+ */
+int mutt_window_addnstr(const char *str, int num)
+{
+  if (!str)
+    return -1;
+
+#ifdef USE_SLANG_CURSES
+  return addnstr((char *) str, num);
+#else
+  return addnstr(str, num);
+#endif
+}
+
+/**
+ * mutt_window_addstr - Write a string to a Window
+ * @param str String
+ * @retval  0 Success
+ * @retval -1 Error
+ */
+int mutt_window_addstr(const char *str)
+{
+  if (!str)
+    return -1;
+
+#ifdef USE_SLANG_CURSES
+  return addstr((char *) str);
+#else
+  return addstr(str);
+#endif
+}
+
+/**
+ * mutt_window_move_abs - Move the cursor to an absolute screen position
+ * @param row Screen row (0-based)
+ * @param col Screen column (0-based)
+ */
+void mutt_window_move_abs(int row, int col)
+{
+  move(row, col);
+}
+
+/**
+ * mutt_window_printf - Write a formatted string to a Window
+ * @param fmt Format string
+ * @param ... Arguments
+ * @retval num Number of characters written
+ */
+int mutt_window_printf(const char *fmt, ...)
+{
+  va_list ap;
+  va_start(ap, fmt);
+  int rc = vw_printw(stdscr, fmt, ap);
+  va_end(ap);
+
+  return rc;
+}
+
+/**
+ * mutt_window_clear_screen - Clear the entire screen
+ */
+void mutt_window_clear_screen(void)
+{
+  move(0, 0);
+  clrtobot();
 }

@@ -20,6 +20,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+/**
+ * @page state Keep track when processing files
+ *
+ * Keep track when processing files
+ */
+
 #include "config.h"
 #include <limits.h>
 #include <stdarg.h>
@@ -28,90 +34,147 @@
 #include "state.h"
 #include "globals.h"
 
+/**
+ * state_mark_attach - Write a unique marker around content
+ * @param s State to write to
+ */
 void state_mark_attach(struct State *s)
 {
-  if (!s || !s->fpout)
+  if (!s || !s->fp_out)
     return;
-  if ((s->flags & MUTT_DISPLAY) && (mutt_str_strcmp(Pager, "builtin") == 0))
-    state_puts(AttachmentMarker, s);
+  if ((s->flags & MUTT_DISPLAY) &&
+      (!C_Pager || (mutt_str_strcmp(C_Pager, "builtin") == 0)))
+  {
+    state_puts(s, AttachmentMarker);
+  }
 }
 
-void state_attach_puts(const char *t, struct State *s)
+/**
+ * state_mark_protected_header - Write a unique marker around protected headers
+ * @param s State to write to
+ */
+void state_mark_protected_header(struct State *s)
 {
-  if (!t || !s || !s->fpout)
+  if ((s->flags & MUTT_DISPLAY) &&
+      (!C_Pager || (mutt_str_strcmp(C_Pager, "builtin") == 0)))
+  {
+    state_puts(s, ProtectedHeaderMarker);
+  }
+}
+
+/**
+ * state_attach_puts - Write a string to the state
+ * @param s State to write to
+ * @param t Text to write
+ */
+void state_attach_puts(struct State *s, const char *t)
+{
+  if (!s || !s->fp_out || !t)
     return;
 
   if (*t != '\n')
     state_mark_attach(s);
   while (*t)
   {
-    state_putc(*t, s);
-    if (*t++ == '\n' && *t)
+    state_putc(s, *t);
+    if ((*t++ == '\n') && *t)
       if (*t != '\n')
         state_mark_attach(s);
   }
 }
 
-static int state_putwc(wchar_t wc, struct State *s)
+/**
+ * state_putwc - Write a wide character to the state
+ * @param s  State to write to
+ * @param wc Wide character to write
+ * @retval  0 Success
+ * @retval -1 Error
+ */
+static int state_putwc(struct State *s, wchar_t wc)
 {
-  char mb[MB_LEN_MAX] = "";
+  char mb[MB_LEN_MAX] = { 0 };
   int rc;
 
   rc = wcrtomb(mb, wc, NULL);
   if (rc < 0)
     return rc;
-  if (fputs(mb, s->fpout) == EOF)
+  if (fputs(mb, s->fp_out) == EOF)
     return -1;
   return 0;
 }
 
-int state_putws(const wchar_t *ws, struct State *s)
+/**
+ * state_putws - Write a wide string to the state
+ * @param s  State to write to
+ * @param ws Wide string to write
+ * @retval  0 Success
+ * @retval -1 Error
+ */
+int state_putws(struct State *s, const wchar_t *ws)
 {
   const wchar_t *p = ws;
 
-  while (p && *p != L'\0')
+  while (p && (*p != L'\0'))
   {
-    if (state_putwc(*p, s) < 0)
+    if (state_putwc(s, *p) < 0)
       return -1;
     p++;
   }
   return 0;
 }
 
-void state_prefix_putc(char c, struct State *s)
+/**
+ * state_prefix_putc - Write a prefixed character to the state
+ * @param s State to write to
+ * @param c Character to write
+ */
+void state_prefix_putc(struct State *s, char c)
 {
   if (s->flags & MUTT_PENDINGPREFIX)
   {
     state_reset_prefix(s);
     if (s->prefix)
-      state_puts(s->prefix, s);
+      state_puts(s, s->prefix);
   }
 
-  state_putc(c, s);
+  state_putc(s, c);
 
   if (c == '\n')
     state_set_prefix(s);
 }
 
+/**
+ * state_printf - Write a formatted string to the State
+ * @param s   State to write to
+ * @param fmt printf format string
+ * @param ... Arguments to formatting string
+ * @retval num Number of characters written
+ */
 int state_printf(struct State *s, const char *fmt, ...)
 {
   int rc;
   va_list ap;
 
   va_start(ap, fmt);
-  rc = vfprintf(s->fpout, fmt, ap);
+  rc = vfprintf(s->fp_out, fmt, ap);
   va_end(ap);
 
   return rc;
 }
 
-void state_prefix_put(const char *d, size_t dlen, struct State *s)
+/**
+ * state_prefix_put - Write a prefixed fixed-string to the State
+ * @param s      State to write to
+ * @param buf    String to write
+ * @param buflen Length of string
+ */
+void state_prefix_put(struct State *s, const char *buf, size_t buflen)
 {
   if (s->prefix)
   {
-    while (dlen--)
-      state_prefix_putc(*d++, s);
+    while (buflen--)
+      state_prefix_putc(s, *buf++);
   }
   else
-    fwrite(d, dlen, 1, s->fpout);
+    fwrite(buf, buflen, 1, s->fp_out);
 }

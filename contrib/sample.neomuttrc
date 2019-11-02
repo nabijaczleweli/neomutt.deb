@@ -35,7 +35,7 @@ set edit_headers		# let me edit the message header when composing
 #set fast_reply			# skip initial prompts when replying
 #set fcc_attach			# keep attachments in copies of sent messages?
 #set force_name			# fcc by recipient, create if mailbox doesn't exist
-#set forward_decode		# weed and MIME decode forwaded messages
+#set forward_decode		# weed and MIME decode forwarded messages
 #set forward_format="[%a: %s]"	# subject to use when forwarding messages
 #set forward_quote		# quote the header and body of forward msgs
 #set index_format="%4C %Z %{%m/%d} [%2N] %-15.15F (%4c) %s"
@@ -141,10 +141,11 @@ color message brightcyan default
 color markers brightcyan default
 color attachment brightmagenta default
 color search default green	# how to hilite search patterns in the pager
+color warning brightyellow default
 
-color header brightred default ^(From|Subject):
+color header brightred default "^(From|Subject):"
 color body magenta default "(ftp|http|https)://[^ ]+"	# point out URLs
-color body magenta default [-a-z_0-9.\+]+@[-a-z_0-9.]+	# e-mail addresses
+color body magenta default "[-a-z_0-9.\+]+@[-a-z_0-9.]+"	# e-mail addresses
 color underline brightgreen default
 
 # attributes when using a mono terminal
