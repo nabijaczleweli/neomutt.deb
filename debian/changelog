@@ -1,3 +1,10 @@
+neomutt (20191102+dfsg.1-1) UNRELEASED; urgency=medium
+
+  * New upstream release.
+  * debian/watch: modified to download the source using the new git tags.
+
+ -- Antonio Radici <antonio@debian.org>  Sat, 02 Nov 2019 16:21:21 -0700
+
 neomutt (20180716+dfsg.1-1.2) unstable; urgency=medium
 
   * Non-maintainer upload.
