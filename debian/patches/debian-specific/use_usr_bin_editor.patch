@@ -12,7 +12,7 @@ to vi.
 
 --- a/init.c
 +++ b/init.c
-@@ -3041,6 +3041,8 @@
+@@ -3050,6 +3050,8 @@
    const char *env_ed = mutt_str_getenv("VISUAL");
    if (!env_ed)
      env_ed = mutt_str_getenv("EDITOR");
