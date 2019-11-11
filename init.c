@@ -1351,6 +1351,13 @@ static enum CommandResult parse_mailboxes(struct Buffer *buf, struct Buffer *s,
     mutt_buffer_strcpy(&m->pathbuf, buf->data);
     /* int rc = */ mx_path_canon2(m, C_Folder);
 
+    if (m->magic <= MUTT_UNKNOWN)
+    {
+      mutt_error("Unknown Mailbox: %s", m->realpath);
+      mailbox_free(&m);
+      return MUTT_CMD_ERROR;
+    }
+
     bool new_account = false;
     struct Account *a = mx_ac_find(m);
     if (!a)
@@ -1381,6 +1388,9 @@ static enum CommandResult parse_mailboxes(struct Buffer *buf, struct Buffer *s,
       mailbox_free(&m);
       if (new_account)
       {
+        cs_subset_free(&a->sub);
+        FREE(&a->name);
+        notify_free(&a->notify);
         FREE(&a);
       }
       continue;
@@ -2735,9 +2745,6 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
     {
       FILE *fp = NULL;
       pid_t pid;
-      char *ptr = NULL;
-      size_t expnlen;
-      struct Buffer expn;
       int line = 0;
 
       pc = tok->dptr;
@@ -2783,7 +2790,7 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
       tok->dptr = pc + 1;
 
       /* read line */
-      mutt_buffer_init(&expn);
+      struct Buffer expn = mutt_buffer_make(0);
       expn.data = mutt_file_read_line(NULL, &expn.dsize, fp, &line, 0);
       mutt_file_fclose(&fp);
       mutt_wait_filter(pid);
@@ -2792,21 +2799,22 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
        * plus whatever else was left on the original line */
       /* BUT: If this is inside a quoted string, directly add output to
        * the token */
-      if (expn.data && qc)
+      if (expn.data)
       {
-        mutt_buffer_addstr(dest, expn.data);
-        FREE(&expn.data);
-      }
-      else if (expn.data)
-      {
-        expnlen = mutt_str_strlen(expn.data);
-        tok->dsize = expnlen + mutt_str_strlen(tok->dptr) + 1;
-        ptr = mutt_mem_malloc(tok->dsize);
-        memcpy(ptr, expn.data, expnlen);
-        strcpy(ptr + expnlen, tok->dptr);
-        mutt_buffer_strcpy(tok, ptr);
-        tok->dptr = tok->data;
-        FREE(&ptr);
+        if (qc)
+        {
+          mutt_buffer_addstr(dest, expn.data);
+        }
+        else
+        {
+          struct Buffer *copy = mutt_buffer_pool_get();
+          mutt_buffer_fix_dptr(&expn);
+          mutt_buffer_copy(copy, &expn);
+          mutt_buffer_addstr(copy, tok->dptr);
+          mutt_buffer_copy(tok, copy);
+          tok->dptr = tok->data;
+          mutt_buffer_pool_release(&copy);
+        }
         FREE(&expn.data);
       }
     }
@@ -2970,6 +2978,7 @@ int mutt_init(bool skip_sys_rc, struct ListHead *commands)
 {
   char buf[1024];
   int need_pause = 0;
+  int rc = 1;
   struct Buffer err = mutt_buffer_make(256);
 
   mutt_grouplist_init();
@@ -3103,7 +3112,7 @@ int mutt_init(bool skip_sys_rc, struct ListHead *commands)
       if (access(np->data, F_OK))
       {
         mutt_perror(np->data);
-        return 1; // TEST10: neomutt -F missing
+        goto done; // TEST10: neomutt -F missing
       }
     }
   }
@@ -3165,7 +3174,7 @@ int mutt_init(bool skip_sys_rc, struct ListHead *commands)
     need_pause = 1; // TEST13: neomutt -e broken
 
   if (!get_hostname())
-    return 1;
+    goto done;
 
   if (!C_Realname)
   {
@@ -3182,7 +3191,7 @@ int mutt_init(bool skip_sys_rc, struct ListHead *commands)
   {
     log_queue_flush(log_disp_terminal);
     if (mutt_any_key_to_continue(NULL) == 'q')
-      return 1; // TEST14: neomutt -e broken (press 'q')
+      goto done; // TEST14: neomutt -e broken (press 'q')
   }
 
   mutt_file_mkdir(C_Tmpdir, S_IRWXU);
@@ -3201,9 +3210,11 @@ int mutt_init(bool skip_sys_rc, struct ListHead *commands)
     neomutt_mailboxlist_clear(&ml);
   }
 #endif
+  rc = 0;
 
+done:
   FREE(&err.data);
-  return 0;
+  return rc;
 }
 
 /**
