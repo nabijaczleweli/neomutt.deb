@@ -299,11 +299,6 @@ struct Context *mx_mbox_open(struct Mailbox *m, OpenMailboxFlags flags)
   ctx->msg_not_read_yet = -1;
   ctx->collapsed = false;
 
-  m->size = 0;
-  m->msg_unread = 0;
-  m->msg_flagged = 0;
-  m->rights = MUTT_ACL_ALL;
-
   m->quiet = (flags & MUTT_QUIET);
   if (flags & MUTT_READONLY)
     m->readonly = true;
@@ -316,6 +311,13 @@ struct Context *mx_mbox_open(struct Mailbox *m, OpenMailboxFlags flags)
       goto error;
     }
     return ctx;
+  }
+  else
+  {
+    m->size = 0;
+    m->msg_unread = 0;
+    m->msg_flagged = 0;
+    m->rights = MUTT_ACL_ALL;
   }
 
   if (m->magic == MUTT_UNKNOWN)
@@ -373,6 +375,9 @@ struct Context *mx_mbox_open(struct Mailbox *m, OpenMailboxFlags flags)
 
   OptForceRefresh = false;
 
+  if (C_MailCheckRecent)
+    ctx->mailbox->has_new = false;
+
   return ctx;
 
 error:
@@ -381,7 +386,6 @@ error:
     account_mailbox_remove(m->account, m);
   ctx_free(&ctx);
   return NULL;
-
 }
 
 /**
@@ -512,7 +516,7 @@ static int trash_append(struct Mailbox *m)
 #endif
 
   struct Mailbox *m_trash = mx_path_resolve(C_Trash);
-  struct Context *ctx_trash = mx_mbox_open(m_trash, MUTT_OPEN_NO_FLAGS);
+  struct Context *ctx_trash = mx_mbox_open(m_trash, MUTT_APPEND);
   if (ctx_trash)
   {
     bool old_append = m_trash->append;
