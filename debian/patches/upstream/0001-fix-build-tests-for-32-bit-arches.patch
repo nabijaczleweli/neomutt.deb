@@ -1,0 +1,254 @@
+Upstream fix of build failures in 32 bit architectures.
+
+----
+From 4fee2b720436500a1cd73a37e3b50a76eafa2d90 Mon Sep 17 00:00:00 2001
+From: Richard Russon <rich@flatcap.org>
+Date: Tue, 12 Nov 2019 12:03:19 +0000
+Subject: [PATCH] fix build/tests for 32-bit arches
+
+- Force mutt_date_epoch_ms() to return a 64-bit value
+- Fix typo in test_mutt_date_gmtime()
+- Fix some string-to-number tests
+---
+ email/parse.c                 |  2 +-
+ mutt/date.c                   |  5 +++--
+ mutt/date.h                   |  3 ++-
+ test/date/mutt_date_gmtime.c  |  2 +-
+ test/string/mutt_str_atol.c   | 23 +++++++++++++++++++++++
+ test/string/mutt_str_atoui.c  | 13 +++++++++++++
+ test/string/mutt_str_atoul.c  | 19 +++++++++++++++++++
+ test/string/mutt_str_atoull.c |  6 +++---
+ 8 files changed, 65 insertions(+), 8 deletions(-)
+
+diff --git a/email/parse.c b/email/parse.c
+index 8acfdbc24..e1c1bb3cc 100644
+--- a/email/parse.c
++++ b/email/parse.c
+@@ -694,7 +694,7 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, char *line,
+           {
+             if (e)
+             {
+-              int rc = mutt_str_atol(p, &e->content->length);
++              int rc = mutt_str_atol(p, (long *) &e->content->length);
+               if ((rc < 0) || (e->content->length < 0))
+                 e->content->length = -1;
+               if (e->content->length > CONTENT_TOO_BIG)
+diff --git a/mutt/date.c b/mutt/date.c
+index 8fe6aca96..5baf053c9 100644
+--- a/mutt/date.c
++++ b/mutt/date.c
+@@ -29,6 +29,7 @@
+ #include "config.h"
+ #include <ctype.h>
+ #include <stdbool.h>
++#include <stdint.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -416,13 +417,13 @@ time_t mutt_date_epoch(void)
+  * mutt_date_epoch_ms - Return the number of milliseconds since the Unix epoch
+  * @retval ms The number of ms since the Unix epoch, or 0 on failure
+  */
+-size_t mutt_date_epoch_ms(void)
++uint64_t mutt_date_epoch_ms(void)
+ {
+   struct timeval tv = { 0, 0 };
+   gettimeofday(&tv, NULL);
+   /* We assume that gettimeofday doesn't modify its first argument on failure.
+    * We also kind of assume that gettimeofday does not fail. */
+-  return tv.tv_sec * 1000 + tv.tv_usec / 1000;
++  return (uint64_t) tv.tv_sec * 1000 + tv.tv_usec / 1000;
+ }
+ 
+ /**
+diff --git a/mutt/date.h b/mutt/date.h
+index eb19adf3c..2f7f2bc56 100644
+--- a/mutt/date.h
++++ b/mutt/date.h
+@@ -24,6 +24,7 @@
+ #define MUTT_LIB_DATE_H
+ 
+ #include <stdbool.h>
++#include <stdint.h>
+ #include <time.h>
+ 
+ /* theoretically time_t can be float but it is integer on most (if not all) systems */
+@@ -49,7 +50,7 @@ struct Tz
+ time_t    mutt_date_add_timeout(time_t now, long timeout);
+ int       mutt_date_check_month(const char *s);
+ time_t    mutt_date_epoch(void);
+-size_t    mutt_date_epoch_ms(void);
++uint64_t  mutt_date_epoch_ms(void);
+ struct tm mutt_date_gmtime(time_t t);
+ bool      mutt_date_is_day_name(const char *s);
+ size_t    mutt_date_localtime_format(char *buf, size_t buflen, const char *format, time_t t);
+diff --git a/test/date/mutt_date_gmtime.c b/test/date/mutt_date_gmtime.c
+index 933120eb2..95a030232 100644
+--- a/test/date/mutt_date_gmtime.c
++++ b/test/date/mutt_date_gmtime.c
+@@ -56,6 +56,6 @@ void test_mutt_date_gmtime(void)
+   {
+     TEST_CASE("Today");
+     struct tm tm = mutt_date_gmtime(MUTT_DATE_NOW);
+-    TEST_CHECK(tm.tm_yday >= 119);
++    TEST_CHECK(tm.tm_year >= 119);
+   }
+ }
+diff --git a/test/string/mutt_str_atol.c b/test/string/mutt_str_atol.c
+index 8be49b2ae..9571ab835 100644
+--- a/test/string/mutt_str_atol.c
++++ b/test/string/mutt_str_atol.c
+@@ -43,9 +43,15 @@ static const struct TestValue tests[] = {
+   { " 3",                   0,  3 },
+   { " 3",                   0,  3 },
+ 
++#if (__WORDSIZE == 64)
+   { "9223372036854775805",  0,  9223372036854775805 },
+   { "9223372036854775806",  0,  9223372036854775806 },
+   { "9223372036854775807",  0,  LONG_MAX },
++#else
++  { "2147483645",           0,  2147483645 },
++  { "2147483646",           0,  2147483646 },
++  { "2147483647",           0,  LONG_MAX },
++#endif
+ 
+   { "-1",                   0,  -1 },
+   { "-2",                   0,  -2 },
+@@ -53,10 +59,17 @@ static const struct TestValue tests[] = {
+   { " -3",                  0,  -3 },
+   { " -3",                  0,  -3 },
+ 
++#if (__WORDSIZE == 64)
+   { "-9223372036854775806", 0,  -9223372036854775806 },
+   { "-9223372036854775807", 0,  -9223372036854775807 },
+   { "-9223372036854775808", 0,  LONG_MIN },
++#else
++  { "-2147483646",          0,  -2147483646 },
++  { "-2147483647",          0,  -2147483647 },
++  { "-2147483648",          0,  LONG_MIN },
++#endif
+ 
++#if (__WORDSIZE == 64)
+   // Out of range tests
+   { "9223372036854775808",  -2, LONG_MAX },
+   { "9223372036854775809",  -2, LONG_MAX },
+@@ -65,6 +78,16 @@ static const struct TestValue tests[] = {
+   { "-9223372036854775809", -2, LONG_MIN },
+   { "-9223372036854775810", -2, LONG_MIN },
+   { "-9223372036854775811", -2, LONG_MIN },
++#else
++  // Out of range tests
++  { "2147483648",           -2, LONG_MAX },
++  { "2147483649",           -2, LONG_MAX },
++  { "2147483650",           -2, LONG_MAX },
++
++  { "-2147483649",          -2, LONG_MIN },
++  { "-2147483650",          -2, LONG_MIN },
++  { "-2147483651",          -2, LONG_MIN },
++#endif
+ 
+   // Invalid tests
+   { "abc",                  -1, 0 },
+diff --git a/test/string/mutt_str_atoui.c b/test/string/mutt_str_atoui.c
+index ec0eb7ec7..fa79f9d83 100644
+--- a/test/string/mutt_str_atoui.c
++++ b/test/string/mutt_str_atoui.c
+@@ -24,6 +24,7 @@
+ #include "acutest.h"
+ #include "config.h"
+ #include "mutt/mutt.h"
++#include <limits.h>
+ 
+ struct TestValue
+ {
+@@ -47,15 +48,27 @@ static const struct TestValue tests[] = {
+   { "4294967295",  0,    4294967295 },
+ 
+   // Out of range tests
++#if (__WORDSIZE == 64)
+   { "4294967296",  -2,   0 },
+   { "4294967297",  -2,   0 },
+   { "4294967298",  -2,   0 },
++#else
++  { "4294967296",  -1,   0 },
++  { "4294967297",  -1,   0 },
++  { "4294967298",  -1,   0 },
++#endif
+   { "18446744073709551616", -1, 0 },
+ 
+   // Invalid tests
++#if (__WORDSIZE == 64)
+   { "-3",          -2,   0 },
+   { " -3",         -2,   0 },
+   { "  -3",        -2,   0 },
++#else
++  { "-3",          0,   4294967293 },
++  { " -3",         0,   4294967293 },
++  { "  -3",        0,   4294967293 },
++#endif
+   { "abc",         1,    0 },
+   { "a123",        1,    0 },
+   { "a-123",       1,    0 },
+diff --git a/test/string/mutt_str_atoul.c b/test/string/mutt_str_atoul.c
+index 622508acb..aecb58f07 100644
+--- a/test/string/mutt_str_atoul.c
++++ b/test/string/mutt_str_atoul.c
+@@ -43,19 +43,38 @@ static const struct TestValue tests[] = {
+   { " 3",  0, 3 },
+   { "  3", 0, 3 },
+ 
++#if (__WORDSIZE == 64)
+   { "18446744073709551613",  0, 18446744073709551613UL },
+   { "18446744073709551614",  0, 18446744073709551614UL },
+   { "18446744073709551615",  0, 18446744073709551615UL },
++#else
++  { "4294967293",            0, 4294967293UL },
++  { "4294967294",            0, 4294967294UL },
++  { "4294967295",            0, 4294967295UL },
++#endif
+ 
++#if (__WORDSIZE == 64)
+   // Out of range tests
+   { "18446744073709551616", -1, ULONG_MAX },
+   { "18446744073709551617", -1, ULONG_MAX },
+   { "18446744073709551618", -1, ULONG_MAX },
++#else
++  // Out of range tests
++  { "4294967296",           -1, ULONG_MAX },
++  { "4294967297",           -1, ULONG_MAX },
++  { "4294967298",           -1, ULONG_MAX },
++#endif
+ 
+   // Invalid tests
++#if (__WORDSIZE == 64)
+   { "-3",          0,    18446744073709551613UL },
+   { " -3",         0,    18446744073709551613UL },
+   { "  -3",        0,    18446744073709551613UL },
++#else
++  { "-3",          0,    4294967293UL },
++  { " -3",         0,    4294967293UL },
++  { "  -3",        0,    4294967293UL },
++#endif
+   { "abc",         1,    0 },
+   { "a123",        1,    0 },
+   { "a-123",       1,    0 },
+diff --git a/test/string/mutt_str_atoull.c b/test/string/mutt_str_atoull.c
+index d685e98df..1489c965e 100644
+--- a/test/string/mutt_str_atoull.c
++++ b/test/string/mutt_str_atoull.c
+@@ -48,9 +48,9 @@ static const struct TestValue tests[] = {
+   { "18446744073709551615",  0, 18446744073709551615UL },
+ 
+   // Out of range tests
+-  { "18446744073709551616", -1, ULONG_MAX },
+-  { "18446744073709551617", -1, ULONG_MAX },
+-  { "18446744073709551618", -1, ULONG_MAX },
++  { "18446744073709551616", -1, ULLONG_MAX },
++  { "18446744073709551617", -1, ULLONG_MAX },
++  { "18446744073709551618", -1, ULLONG_MAX },
+ 
+   // Invalid tests
+   { "-3",          0,    18446744073709551613UL },
+-- 
+2.24.0.rc1
+
