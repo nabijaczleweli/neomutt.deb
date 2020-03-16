@@ -5,12 +5,14 @@ Subject: document_debian_defaults
 Some customization of the option which are straying
 from the default only on Debian systems.
 ---
- init.h | 22 ++++++++++++++++++++++
- 1 file changed, 22 insertions(+)
+ mutt_config.c | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
 
---- a/init.h
-+++ b/init.h
-@@ -471,6 +471,9 @@
+diff --git a/mutt_config.c b/mutt_config.c
+index c568f93..4b42da9 100644
+--- a/mutt_config.c
++++ b/mutt_config.c
+@@ -469,6 +469,9 @@ struct ConfigDef MuttVars[] = {
    ** .pp
    ** When this variable is \fIset\fP, NeoMutt will include Delivered-To headers when
    ** bouncing messages.  Postfix users may wish to \fIunset\fP this variable.
@@ -20,7 +22,7 @@ from the default only on Debian systems.
    */
    { "braille_friendly", DT_BOOL, &C_BrailleFriendly, false },
    /*
-@@ -1568,6 +1571,9 @@
+@@ -1603,6 +1606,9 @@ struct ConfigDef MuttVars[] = {
    ** Optionally, NeoMutt can be compiled with a fixed domain name.
    ** .pp
    ** Also see $$use_domain and $$hidden_host.
@@ -30,7 +32,7 @@ from the default only on Debian systems.
    */
  #ifdef HAVE_LIBIDN
    { "idn_decode", DT_BOOL|R_MENU, &C_IdnDecode, true },
-@@ -2291,6 +2297,9 @@
+@@ -2338,6 +2344,9 @@ struct ConfigDef MuttVars[] = {
    ** system.  It is used with various sets of parameters to gather the
    ** list of known remailers, and to finally send a message through the
    ** mixmaster chain.
@@ -40,7 +42,7 @@ from the default only on Debian systems.
    */
  #endif
    { "move", DT_QUAD, &C_Move, MUTT_NO },
-@@ -4042,6 +4051,10 @@
+@@ -4096,6 +4105,10 @@ struct ConfigDef MuttVars[] = {
    ** This is a format string, see the $$smime_decrypt_command command for
    ** possible \fCprintf(3)\fP-like sequences.
    ** (S/MIME only)
@@ -51,7 +53,7 @@ from the default only on Debian systems.
    */
    { "smime_get_signer_cert_command", DT_STRING|DT_COMMAND, &C_SmimeGetSignerCertCommand, 0 },
    /*
-@@ -4335,6 +4348,9 @@
+@@ -4398,6 +4411,9 @@ struct ConfigDef MuttVars[] = {
    ** .ts
    ** set ssl_ca_certificates_file=/etc/ssl/certs/ca-certificates.crt
    ** .te
@@ -61,10 +63,10 @@ from the default only on Debian systems.
    */
  #endif /* USE_SSL_GNUTLS */
    { "ssl_ciphers", DT_STRING, &C_SslCiphers, 0 },
-@@ -4877,6 +4893,9 @@
-   ** is set to deliver directly via SMTP (see $$smtp_url), this
-   ** option does nothing: NeoMutt will never write out the "Bcc:" header
-   ** in this case.
+@@ -4948,6 +4964,9 @@ struct ConfigDef MuttVars[] = {
+   ** Note this option only affects the sending of messages.  Fcc'ed
+   ** copies of a message will always contain the ``Bcc:'' header if
+   ** one exists.
 +  ** .pp
 +  ** \fBNote:\fP On Debian systems, exim4 and postfix strip BCC headers by
 +  ** default. The above warning applies to exim3 users, see /etc/Muttrc.

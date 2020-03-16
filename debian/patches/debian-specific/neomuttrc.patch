@@ -1,8 +1,7 @@
 Some changes to the official documentation for neomutt.rc.
-
 --- a/doc/neomuttrc.head
 +++ b/doc/neomuttrc.head
-@@ -12,6 +12,34 @@
+@@ -12,6 +12,34 @@ unignore from: subject to cc date x-mailer x-url user-agent
  # Display the fields in this order
  hdr_order date from to cc subject
  
@@ -37,7 +36,7 @@ Some changes to the official documentation for neomutt.rc.
  # imitate the old search-body function
  macro index \eb "<search>~b " "search in message bodies"
  
-@@ -23,7 +51,7 @@
+@@ -23,7 +51,7 @@ macro index,pager,attach,compose \cb "\
  "call urlview to extract URLs out of a message"
  
  # Show documentation when pressing F1
@@ -46,7 +45,7 @@ Some changes to the official documentation for neomutt.rc.
  
  # show the incoming mailboxes list (just like "neomutt -y") and back when pressing "y"
  macro index y "<change-folder>?" "show incoming mailboxes list"
-@@ -36,7 +64,7 @@
+@@ -36,7 +64,7 @@ bind browser y exit
  # append-hook '\.gz$' "gzip --stdout              '%t' >> '%f'"
  
  # If NeoMutt is unable to determine your site's domain name correctly, you can
@@ -55,7 +54,7 @@ Some changes to the official documentation for neomutt.rc.
  #
  # set hostname=cs.hmc.edu
  
-@@ -48,6 +76,13 @@
+@@ -48,6 +76,13 @@ bind browser y exit
  # be undone with unmime_lookup.
  mime_lookup application/octet-stream
  

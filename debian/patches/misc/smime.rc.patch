@@ -7,9 +7,11 @@ distributed by the default installation of Mutt.
 
 Signed-off-by: Matteo F. Vescovi <mfv@debian.org>
 ---
- contrib/smime.rc | 19 ++++++++++---------
- 1 file changed, 10 insertions(+), 9 deletions(-)
+ contrib/smime.rc | 20 +++++++++++---------
+ 1 file changed, 11 insertions(+), 9 deletions(-)
 
+diff --git a/contrib/smime.rc b/contrib/smime.rc
+index 0450a04..5a5ff5e 100644
 --- a/contrib/smime.rc
 +++ b/contrib/smime.rc
 @@ -4,20 +4,20 @@
@@ -40,7 +42,7 @@ Signed-off-by: Matteo F. Vescovi <mfv@debian.org>
  
  
  # Section A: Key Management
-@@ -47,9 +47,11 @@
+@@ -47,9 +47,11 @@ set crypt_verify_sig = yes
  # unset smime_decrypt_use_default_key
  
  # Path to a file or directory with trusted certificates
@@ -53,7 +55,7 @@ Signed-off-by: Matteo F. Vescovi <mfv@debian.org>
  set smime_certificates="~/.smime/certificates"
  
  # Path to where all private keys go. (must exist!)
-@@ -94,7 +96,7 @@
+@@ -94,7 +96,7 @@ set smime_sign_command="openssl smime -sign -md %d -signer %c -inkey %k -passin
  # Section C: Incoming messages
  
  # Decrypt a message.  Output is a MIME entity.

@@ -1,4 +1,3 @@
-upstream/0001-fix-build-tests-for-32-bit-arches.patch
 debian-specific/neomuttrc.patch
 debian-specific/use_usr_bin_editor.patch
 debian-specific/document_debian_defaults.patch

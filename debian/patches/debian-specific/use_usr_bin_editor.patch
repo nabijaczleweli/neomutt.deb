@@ -6,13 +6,15 @@ Even if EDITOR is not set, mutt will always use /usr/bin/editor
 (which is set by update-alternatives), rather than falling back
 to vi.
 ---
- init.c | 2 +-
- init.h | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ init.c        | 2 ++
+ mutt_config.c | 2 +-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
 
+diff --git a/init.c b/init.c
+index 5c3ec1a..62b090a 100644
 --- a/init.c
 +++ b/init.c
-@@ -3050,6 +3050,8 @@
+@@ -806,6 +806,8 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
    const char *env_ed = mutt_str_getenv("VISUAL");
    if (!env_ed)
      env_ed = mutt_str_getenv("EDITOR");
@@ -20,10 +22,12 @@ to vi.
 +      env_ed = "/usr/bin/editor";
    if (env_ed)
    {
-     cs_str_string_set(Config, "editor", env_ed, NULL);
---- a/init.h
-+++ b/init.h
-@@ -1024,7 +1024,7 @@
+     cs_str_string_set(cs, "editor", env_ed, NULL);
+diff --git a/mutt_config.c b/mutt_config.c
+index 7037633..c568f93 100644
+--- a/mutt_config.c
++++ b/mutt_config.c
+@@ -1036,7 +1036,7 @@ struct ConfigDef MuttVars[] = {
    ** .pp
    ** This variable specifies which editor is used by NeoMutt.
    ** It defaults to the value of the \fC$$$VISUAL\fP, or \fC$$$EDITOR\fP, environment
