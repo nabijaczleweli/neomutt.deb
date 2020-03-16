@@ -36,7 +36,8 @@ override_dh_auto_configure:
 		--mixmaster \
 		--sasl \
 		--tokyocabinet \
-		--zlib
+		--zlib \
+		--zstd
 
 override_dh_auto_install:
 	dh_auto_install --destdir=debian/tmp
