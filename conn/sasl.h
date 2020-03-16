@@ -27,36 +27,13 @@
 
 #include <stddef.h>
 #include <sasl/sasl.h>
-#include <time.h>
+#include <sys/types.h>
 
 struct Connection;
 
-int mutt_sasl_client_new(struct Connection *conn, sasl_conn_t **saslconn);
-int mutt_sasl_interact(sasl_interact_t *interaction);
+int  mutt_sasl_client_new(struct Connection *conn, sasl_conn_t **saslconn);
+void mutt_sasl_done      (void);
+int  mutt_sasl_interact  (sasl_interact_t *interaction);
 void mutt_sasl_setup_conn(struct Connection *conn, sasl_conn_t *saslconn);
-void mutt_sasl_done(void);
-
-/**
- * struct SaslSockData - SASL authentication API
- */
-struct SaslSockData
-{
-  sasl_conn_t *saslconn;
-  const sasl_ssf_t *ssf;
-  const unsigned int *pbufsize;
-
-  /* read buffer */
-  const char *buf;
-  unsigned int blen;
-  unsigned int bpos;
-
-  /* underlying socket data */
-  void *sockdata;
-  int (*msasl_open) (struct Connection *conn);
-  int (*msasl_close)(struct Connection *conn);
-  int (*msasl_read) (struct Connection *conn, char *buf, size_t len);
-  int (*msasl_write)(struct Connection *conn, const char *buf, size_t count);
-  int (*msasl_poll) (struct Connection *conn, time_t wait_secs);
-};
 
 #endif /* MUTT_CONN_SASL_H */

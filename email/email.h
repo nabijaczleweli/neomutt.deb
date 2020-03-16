@@ -27,8 +27,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <time.h>
-#include "mutt/mutt.h"
-#include "ncrypt/ncrypt.h"
+#include "mutt/lib.h"
+#include "ncrypt/lib.h"
 #include "tags.h"
 
 /**
@@ -37,7 +37,7 @@
 struct Email
 {
   SecurityFlags security;      ///< bit 0-10: flags, bit 11,12: application, bit 13: traditional pgp
-                               ///< See: ncrypt/ncrypt.h pgplib.h, smime.h
+                               ///< See: ncrypt/lib.h pgplib.h, smime.h
 
   bool mime            : 1;    ///< Has a MIME-Version header?
   bool flagged         : 1;    ///< Marked important?
@@ -103,9 +103,9 @@ struct Email
 
   char *maildir_flags;         ///< Unknown maildir flags
 
-  void *edata;                 ///< Driver-specific data
-  void (*free_edata)(void **); ///< Driver-specific data free function
-  struct Notify *notify;       ///< Notifications handler
+  void *edata;                    ///< Driver-specific data
+  void (*free_edata)(void **ptr); ///< Driver-specific data free function
+  struct Notify *notify;          ///< Notifications handler
 };
 
 /**
@@ -142,6 +142,7 @@ void          email_free      (struct Email **ptr);
 struct Email *email_new       (void);
 size_t        email_size      (const struct Email *e);
 
-void emaillist_clear(struct EmailList *el);
+int  emaillist_add_email(struct EmailList *el, struct Email *e);
+void emaillist_clear    (struct EmailList *el);
 
 #endif /* MUTT_EMAIL_EMAIL_H */

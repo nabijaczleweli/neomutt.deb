@@ -27,6 +27,7 @@
 #define MUTT_IMAP_AUTH_H
 
 #include "config.h"
+
 struct ImapAccountData;
 
 /**
@@ -37,18 +38,6 @@ enum ImapAuthRes
   IMAP_AUTH_SUCCESS = 0, ///< Authentication successful
   IMAP_AUTH_FAILURE,     ///< Authentication failed
   IMAP_AUTH_UNAVAIL,     ///< Authentication method not permitted
-};
-
-/**
- * struct ImapAuth - IMAP authentication multiplexor
- */
-struct ImapAuth
-{
-  /* do authentication, using named method or any available if method is NULL */
-  enum ImapAuthRes (*authenticate)(struct ImapAccountData *adata, const char *method);
-  /* name of authentication method supported, NULL means variable. If this
-   * is not null, authenticate may ignore the second parameter. */
-  const char *method;
 };
 
 /* external authenticator prototypes */

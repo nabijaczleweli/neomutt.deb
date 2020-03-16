@@ -30,6 +30,7 @@
 
 #include "config.h"
 #include <sys/stat.h>
+#include "config/lib.h"
 #include "email/lib.h"
 #include "mailbox.h"
 #include "neomutt.h"
@@ -43,7 +44,11 @@ struct Mailbox *mailbox_new(void)
   struct Mailbox *m = mutt_mem_calloc(1, sizeof(struct Mailbox));
 
   mutt_buffer_init(&m->pathbuf);
-  m->notify = notify_new(m, NT_MAILBOX);
+  m->notify = notify_new();
+
+  m->email_max = 25;
+  m->emails = mutt_mem_calloc(m->email_max, sizeof(struct Email *));
+  m->v2r = mutt_mem_calloc(m->email_max, sizeof(int));
 
   return m;
 }
@@ -58,14 +63,20 @@ void mailbox_free(struct Mailbox **ptr)
     return;
 
   struct Mailbox *m = *ptr;
-  mailbox_changed(m, MBN_CLOSED);
+  if (m->mdata && m->free_mdata)
+    m->free_mdata(&m->mdata);
+
+  mailbox_changed(m, NT_MAILBOX_CLOSED);
 
   if (m->mdata && m->free_mdata)
     m->free_mdata(&m->mdata);
 
   mutt_buffer_dealloc(&m->pathbuf);
+  cs_subset_free(&m->sub);
   FREE(&m->name);
   FREE(&m->realpath);
+  FREE(&m->emails);
+  FREE(&m->v2r);
   notify_free(&m->notify);
 
   FREE(ptr);
@@ -157,12 +168,13 @@ void mailbox_update(struct Mailbox *m)
  * @param m      Mailbox
  * @param action Change to Mailbox
  */
-void mailbox_changed(struct Mailbox *m, enum MailboxNotification action)
+void mailbox_changed(struct Mailbox *m, enum NotifyMailbox action)
 {
   if (!m)
     return;
 
-  notify_send(m->notify, NT_MAILBOX, action, 0);
+  struct EventMailbox ev_m = { m };
+  notify_send(m->notify, NT_MAILBOX, action, &ev_m);
 }
 
 /**
@@ -183,4 +195,20 @@ void mailbox_size_add(struct Mailbox *m, const struct Email *e)
 void mailbox_size_sub(struct Mailbox *m, const struct Email *e)
 {
   m->size -= email_size(e);
+}
+
+/**
+ * mailbox_set_subset - Set a Mailbox's Config Subset
+ * @param m   Mailbox
+ * @param sub Parent Config Subset
+ * @retval true Success
+ */
+bool mailbox_set_subset(struct Mailbox *m, struct ConfigSubset *sub)
+{
+  if (!m || m->sub || !sub)
+    return false;
+
+  m->sub = cs_subset_new(m->name, sub, m->notify);
+  m->sub->scope = SET_SCOPE_MAILBOX;
+  return true;
 }

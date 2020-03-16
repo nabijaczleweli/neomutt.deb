@@ -28,11 +28,11 @@
  */
 
 #include "config.h"
+#include <stddef.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
-#include "mutt_curses.h"
-#include "mutt_window.h"
+#include "mutt/lib.h"
+#include "gui/lib.h"
 #ifdef USE_SLANG_CURSES
 #include <stdbool.h>
 #endif
@@ -48,7 +48,7 @@
  * mutt_get_winsize - Use an ioctl to get the window size
  * @retval obj Window size
  */
-struct winsize mutt_get_winsize(void)
+static struct winsize mutt_get_winsize(void)
 {
   struct winsize w = { 0 };
   int fd = open("/dev/tty", O_RDONLY);
@@ -91,7 +91,8 @@ void mutt_resize_screen(void)
   SLsmg_init_smg();
   stdscr = newwin(0, 0, 0, 0);
   keypad(stdscr, true);
-  mutt_window_reflow();
+  mutt_window_set_root(w.ws_row, w.ws_col);
+  mutt_window_reflow(NULL);
 }
 #else
 /**
@@ -119,6 +120,7 @@ void mutt_resize_screen(void)
   }
 
   resizeterm(screenrows, screencols);
-  mutt_window_reflow();
+  mutt_window_set_root(w.ws_row, w.ws_col);
+  mutt_window_reflow(NULL);
 }
 #endif

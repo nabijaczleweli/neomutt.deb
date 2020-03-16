@@ -37,49 +37,48 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
+#include "commands.h"
 #include "alias.h"
 #include "context.h"
 #include "copy.h"
-#include "curs_lib.h"
-#include "filter.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "hdrline.h"
 #include "hook.h"
 #include "icommands.h"
+#include "init.h"
 #include "keymap.h"
 #include "mutt_commands.h"
-#include "mutt_curses.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
 #include "mutt_menu.h"
 #include "mutt_parse.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "ncrypt/ncrypt.h"
 #include "options.h"
 #include "pager.h"
 #include "protos.h"
 #include "sendlib.h"
 #include "sort.h"
+#include "ncrypt/lib.h"
 #ifdef USE_IMAP
-#include "imap/imap.h"
+#include "imap/lib.h"
 #endif
 #ifdef USE_NOTMUCH
-#include "notmuch/mutt_notmuch.h"
+#include "notmuch/lib.h"
 #endif
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
 #ifdef USE_AUTOCRYPT
-#include "autocrypt/autocrypt.h"
+#include "autocrypt/lib.h"
 #endif
 
 /* These Config Variables are only used in commands.c */
@@ -172,8 +171,8 @@ static void process_protected_headers(struct Email *e)
     if (C_CryptProtectedHeadersSave)
     {
       e->env->changed |= MUTT_ENV_CHANGED_SUBJECT;
-      e->changed = 1;
-      Context->mailbox->changed = 1;
+      e->changed = true;
+      Context->mailbox->changed = true;
     }
   }
 
@@ -187,13 +186,18 @@ static void process_protected_headers(struct Email *e)
 
 /**
  * mutt_display_message - Display a message in the pager
- * @param win Window
- * @param m   Mailbox
- * @param e   Email to display
+ * @param win_index Index Window
+ * @param win_ibar  Index Bar Window
+ * @param win_pager Pager Window
+ * @param win_pbar  Pager Bar Window
+ * @param m         Mailbox
+ * @param e         Email to display
  * @retval  0 Success
  * @retval -1 Error
  */
-int mutt_display_message(struct MuttWindow *win, struct Mailbox *m, struct Email *e)
+int mutt_display_message(struct MuttWindow *win_index, struct MuttWindow *win_ibar,
+                         struct MuttWindow *win_pager, struct MuttWindow *win_pbar,
+                         struct Mailbox *m, struct Email *e)
 {
   int rc = 0;
   bool builtin = false;
@@ -207,7 +211,7 @@ int mutt_display_message(struct MuttWindow *win, struct Mailbox *m, struct Email
   mutt_message_hook(m, e, MUTT_MESSAGE_HOOK);
 
   char columns[16];
-  snprintf(columns, sizeof(columns), "%d", win->cols);
+  snprintf(columns, sizeof(columns), "%d", win_pager->state.cols);
   mutt_envlist_set("COLUMNS", columns, true);
 
   /* see if crypto is needed for this message.  if so, we should exit curses */
@@ -261,8 +265,8 @@ int mutt_display_message(struct MuttWindow *win, struct Mailbox *m, struct Email
   {
     fp_filter_out = fp_out;
     fp_out = NULL;
-    filterpid = mutt_create_filter_fd(C_DisplayFilter, &fp_out, NULL, NULL, -1,
-                                      fileno(fp_filter_out), -1);
+    filterpid = filter_create_fd(C_DisplayFilter, &fp_out, NULL, NULL, -1,
+                                 fileno(fp_filter_out), -1);
     if (filterpid < 0)
     {
       mutt_error(_("Can't create display filter"));
@@ -283,8 +287,8 @@ int mutt_display_message(struct MuttWindow *win, struct Mailbox *m, struct Email
     hfi.mailbox = m;
     hfi.pager_progress = ExtPagerProgress;
     hfi.email = e;
-    mutt_make_string_info(buf, sizeof(buf), win->cols, NONULL(C_PagerFormat),
-                          &hfi, MUTT_FORMAT_NO_FLAGS);
+    mutt_make_string_info(buf, sizeof(buf), win_pager->state.cols,
+                          NONULL(C_PagerFormat), &hfi, MUTT_FORMAT_NO_FLAGS);
     fputs(buf, fp_out);
     fputs("\n\n", fp_out);
   }
@@ -294,21 +298,21 @@ int mutt_display_message(struct MuttWindow *win, struct Mailbox *m, struct Email
   if (m->magic == MUTT_NOTMUCH)
     chflags |= CH_VIRTUAL;
 #endif
-  res = mutt_copy_message(fp_out, m, e, cmflags, chflags, win->cols);
+  res = mutt_copy_message(fp_out, m, e, cmflags, chflags, win_pager->state.cols);
 
   if (((mutt_file_fclose(&fp_out) != 0) && (errno != EPIPE)) || (res < 0))
   {
     mutt_error(_("Could not copy message"));
     if (fp_filter_out)
     {
-      mutt_wait_filter(filterpid);
+      filter_wait(filterpid);
       mutt_file_fclose(&fp_filter_out);
     }
     mutt_file_unlink(mutt_b2s(tempfile));
     goto cleanup;
   }
 
-  if (fp_filter_out && (mutt_wait_filter(filterpid) != 0))
+  if (fp_filter_out && (filter_wait(filterpid) != 0))
     mutt_any_key_to_continue(NULL);
 
   mutt_file_fclose(&fp_filter_out); /* XXX - check result? */
@@ -358,6 +362,10 @@ int mutt_display_message(struct MuttWindow *win, struct Mailbox *m, struct Email
     /* Invoke the builtin pager */
     info.email = e;
     info.ctx = Context;
+    info.win_ibar = win_ibar;
+    info.win_index = win_index;
+    info.win_pbar = win_pbar;
+    info.win_pager = win_pager;
     rc = mutt_pager(NULL, mutt_b2s(tempfile), MUTT_PAGER_MESSAGE, &info);
   }
   else
@@ -401,8 +409,8 @@ void ci_bounce_message(struct Mailbox *m, struct EmailList *el)
   if (!m || !el || STAILQ_EMPTY(el))
     return;
 
-  char prompt[129];
-  char scratch[128];
+  char prompt[8193];
+  char scratch[8192];
   char buf[8192] = { 0 };
   struct AddressList al = TAILQ_HEAD_INITIALIZER(al);
   char *err = NULL;
@@ -447,20 +455,20 @@ void ci_bounce_message(struct Mailbox *m, struct EmailList *el)
   }
 
   buf[0] = '\0';
-  mutt_addrlist_write(buf, sizeof(buf), &al, true);
+  mutt_addrlist_write(&al, buf, sizeof(buf), true);
 
 #define EXTRA_SPACE (15 + 7 + 2)
   snprintf(scratch, sizeof(scratch),
            ngettext("Bounce message to %s?", "Bounce messages to %s?", msg_count), buf);
 
-  if (mutt_strwidth(prompt) > MuttMessageWindow->cols - EXTRA_SPACE)
+  if (mutt_strwidth(scratch) > MuttMessageWindow->state.cols - EXTRA_SPACE)
   {
-    mutt_simple_format(prompt, sizeof(prompt), 0, MuttMessageWindow->cols - EXTRA_SPACE,
+    mutt_simple_format(prompt, sizeof(prompt), 0, MuttMessageWindow->state.cols - EXTRA_SPACE,
                        JUSTIFY_LEFT, 0, scratch, sizeof(scratch), false);
     mutt_str_strcat(prompt, sizeof(prompt), "...?");
   }
   else
-    snprintf(prompt, sizeof(prompt), "%s?", scratch);
+    snprintf(prompt, sizeof(prompt), "%s", scratch);
 
   if (query_quadoption(C_Bounce, prompt) != MUTT_YES)
   {
@@ -599,7 +607,7 @@ static int pipe_message(struct Mailbox *m, struct EmailList *el, char *cmd,
     }
     mutt_endwin();
 
-    pid = mutt_create_filter(cmd, &fp_out, NULL, NULL);
+    pid = filter_create(cmd, &fp_out, NULL, NULL);
     if (pid < 0)
     {
       mutt_perror(_("Can't create filter process"));
@@ -609,7 +617,7 @@ static int pipe_message(struct Mailbox *m, struct EmailList *el, char *cmd,
     OptKeepQuiet = true;
     pipe_msg(m, en->email, fp_out, decode, print);
     mutt_file_fclose(&fp_out);
-    rc = mutt_wait_filter(pid);
+    rc = filter_wait(pid);
     OptKeepQuiet = false;
   }
   else
@@ -635,7 +643,7 @@ static int pipe_message(struct Mailbox *m, struct EmailList *el, char *cmd,
       {
         mutt_message_hook(m, en->email, MUTT_MESSAGE_HOOK);
         mutt_endwin();
-        pid = mutt_create_filter(cmd, &fp_out, NULL, NULL);
+        pid = filter_create(cmd, &fp_out, NULL, NULL);
         if (pid < 0)
         {
           mutt_perror(_("Can't create filter process"));
@@ -647,7 +655,7 @@ static int pipe_message(struct Mailbox *m, struct EmailList *el, char *cmd,
         if (sep)
           fputs(sep, fp_out);
         mutt_file_fclose(&fp_out);
-        if (mutt_wait_filter(pid) != 0)
+        if (filter_wait(pid) != 0)
           rc = 1;
         OptKeepQuiet = false;
       }
@@ -655,7 +663,7 @@ static int pipe_message(struct Mailbox *m, struct EmailList *el, char *cmd,
     else
     {
       mutt_endwin();
-      pid = mutt_create_filter(cmd, &fp_out, NULL, NULL);
+      pid = filter_create(cmd, &fp_out, NULL, NULL);
       if (pid < 0)
       {
         mutt_perror(_("Can't create filter process"));
@@ -671,7 +679,7 @@ static int pipe_message(struct Mailbox *m, struct EmailList *el, char *cmd,
           fputs(sep, fp_out);
       }
       mutt_file_fclose(&fp_out);
-      if (mutt_wait_filter(pid) != 0)
+      if (filter_wait(pid) != 0)
         rc = 1;
       OptKeepQuiet = false;
     }
@@ -815,7 +823,7 @@ int mutt_select_sort(bool reverse)
   if (reverse)
     new_sort |= SORT_REVERSE;
 
-  cs_str_native_set(Config, "sort", new_sort, NULL);
+  cs_subset_str_native_set(NeoMutt->sub, "sort", new_sort, NULL);
   return (C_Sort != method) ? 0 : -1; /* no need to resort if it's the same */
 }
 
@@ -910,7 +918,7 @@ void mutt_display_address(struct Envelope *env)
    * paste the on-the-wire form of the address to other, IDN-unable
    * software.  */
   buf[0] = '\0';
-  mutt_addrlist_write(buf, sizeof(buf), al, false);
+  mutt_addrlist_write(al, buf, sizeof(buf), false);
   mutt_message("%s: %s", pfx, buf);
 }
 
@@ -1058,7 +1066,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
   mutt_buffer_fix_dptr(buf);
 
   mutt_buffer_pretty_mailbox(buf);
-  if (mutt_buffer_enter_fname(prompt, buf, 0) == -1)
+  if (mutt_buffer_enter_fname(prompt, buf, false) == -1)
     goto cleanup;
 
   size_t pathlen = mutt_buffer_len(buf);
@@ -1112,13 +1120,13 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
 #endif
 
   struct Mailbox *m_save = mx_path_resolve(mutt_b2s(buf));
+  bool old_append = m_save->append;
   struct Context *ctx_save = mx_mbox_open(m_save, MUTT_NEWFOLDER);
   if (!ctx_save)
   {
     mailbox_free(&m_save);
     goto cleanup;
   }
-  bool old_append = m_save->append;
   m_save->append = true;
 
 #ifdef USE_COMPRESSED
@@ -1138,8 +1146,8 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
     if (mutt_save_message_ctx(en->email, delete_original, decode, decrypt,
                               ctx_save->mailbox) != 0)
     {
-      m_save->append = old_append;
       mx_mbox_close(&ctx_save);
+      m_save->append = old_append;
       goto cleanup;
     }
 #ifdef USE_COMPRESSED
@@ -1194,8 +1202,8 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
 #endif
     if (rc != 0)
     {
-      m_save->append = old_append;
       mx_mbox_close(&ctx_save);
+      m_save->append = old_append;
       goto cleanup;
     }
   }
@@ -1203,8 +1211,8 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
   const bool need_mailbox_cleanup = ((ctx_save->mailbox->magic == MUTT_MBOX) ||
                                      (ctx_save->mailbox->magic == MUTT_MMDF));
 
-  m_save->append = old_append;
   mx_mbox_close(&ctx_save);
+  m_save->append = old_append;
 
   if (need_mailbox_cleanup)
     mutt_mailbox_cleanup(mutt_b2s(buf), &st);
@@ -1259,8 +1267,11 @@ bool mutt_edit_content_type(struct Email *e, struct Body *b, FILE *fp)
     }
   }
 
-  if ((mutt_get_field("Content-Type: ", buf, sizeof(buf), 0) != 0) || (buf[0] == '\0'))
+  if ((mutt_get_field("Content-Type: ", buf, sizeof(buf), MUTT_COMP_NO_FLAGS) != 0) ||
+      (buf[0] == '\0'))
+  {
     return false;
+  }
 
   /* clean up previous junk */
   mutt_param_free(&b->parameter);

@@ -1,23 +1,50 @@
+/**
+ * @file
+ * Mailbox helper functions
+ *
+ * Copyright (C) 2019 Richard Russon <rich@flatcap.org>
+ *
+ * @copyright
+ * This program is free software: you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free Software
+ * Foundation, either version 2 of the License, or (at your option) any later
+ * version.
+ *
+ * This program is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+ * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU General Public License along with
+ * this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/**
+ * @page mailbox Mailbox helper functions
+ *
+ * Mailbox helper functions
+ */
+
 #include "config.h"
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/time.h>
 #include <time.h>
 #include <utime.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt_mailbox.h"
 #include "globals.h"
 #include "mutt_menu.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "protos.h"
 
-static time_t MailboxTime = 0; /**< last time we started checking for mail */
-static time_t MailboxStatsTime = 0; /**< last time we check performed mail_check_stats */
-static short MailboxCount = 0;  /**< how many boxes with new mail */
-static short MailboxNotify = 0; /**< # of unnotified new boxes */
+static time_t MailboxTime = 0; ///< last time we started checking for mail
+static time_t MailboxStatsTime = 0; ///< last time we check performed mail_check_stats
+static short MailboxCount = 0;  ///< how many boxes with new mail
+static short MailboxNotify = 0; ///< # of unnotified new boxes
 
 /* These Config Variables are only used in mutt_mailbox.c */
 short C_MailCheck; ///< Config: Number of seconds before NeoMutt checks for new mail
@@ -43,7 +70,10 @@ static void mailbox_check(struct Mailbox *m_cur, struct Mailbox *m_check,
   int orig_flagged = m_check->msg_flagged;
 #endif
 
-  enum MailboxType mb_magic = mx_path_probe(mailbox_path(m_check), NULL);
+  enum MailboxType mb_magic = mx_path_probe(mailbox_path(m_check));
+
+  if ((m_cur == m_check) && C_MailCheckRecent)
+    m_check->has_new = false;
 
   switch (mb_magic)
   {
@@ -51,18 +81,13 @@ static void mailbox_check(struct Mailbox *m_cur, struct Mailbox *m_check,
     case MUTT_NNTP:
     case MUTT_NOTMUCH:
     case MUTT_IMAP:
-      if ((mb_magic != MUTT_IMAP) && C_MailCheckRecent)
-        m_check->has_new = false;
       m_check->magic = mb_magic;
       break;
     default:
-      if ((m_cur == m_check) && C_MailCheckRecent)
-        m_check->has_new = false;
-
       if ((stat(mailbox_path(m_check), &sb) != 0) ||
-          (S_ISREG(sb.st_mode) && (sb.st_size == 0)) ||
+          ((m_check->magic == MUTT_UNKNOWN) && S_ISREG(sb.st_mode) && (sb.st_size == 0)) ||
           ((m_check->magic == MUTT_UNKNOWN) &&
-           ((m_check->magic = mx_path_probe(mailbox_path(m_check), NULL)) <= 0)))
+           ((m_check->magic = mx_path_probe(mailbox_path(m_check))) <= 0)))
       {
         /* if the mailbox still doesn't exist, set the newly created flag to be
          * ready for when it does. */
@@ -172,6 +197,9 @@ int mutt_mailbox_check(struct Mailbox *m_cur, int force)
   struct MailboxNode *np = NULL;
   STAILQ_FOREACH(np, &ml, entries)
   {
+    if (np->mailbox->flags & MB_HIDDEN)
+      continue;
+
     mailbox_check(m_cur, np->mailbox, &contex_sb,
                   check_stats || (!np->mailbox->first_check_stats_done && C_MailCheckStats));
     np->mailbox->first_check_stats_done = true;
@@ -222,8 +250,8 @@ bool mutt_mailbox_list(void)
     mutt_buffer_strcpy(path, mailbox_path(np->mailbox));
     mutt_buffer_pretty_mailbox(path);
 
-    if (!first && (MuttMessageWindow->cols >= 7) &&
-        ((pos + mutt_buffer_len(path)) >= ((size_t) MuttMessageWindow->cols - 7)))
+    if (!first && (MuttMessageWindow->state.cols >= 7) &&
+        ((pos + mutt_buffer_len(path)) >= ((size_t) MuttMessageWindow->state.cols - 7)))
     {
       break;
     }
@@ -272,7 +300,7 @@ void mutt_mailbox_set_notified(struct Mailbox *m)
     return;
 
   m->notified = true;
-#if HAVE_CLOCK_GETTIME
+#ifdef HAVE_CLOCK_GETTIME
   clock_gettime(CLOCK_REALTIME, &m->last_visited);
 #else
   m->last_visited.tv_sec = mutt_date_epoch();

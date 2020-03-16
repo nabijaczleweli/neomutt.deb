@@ -23,6 +23,7 @@
 #ifndef MUTT_MAILCAP_H
 #define MUTT_MAILCAP_H
 
+#include <stddef.h>
 #include <stdbool.h>
 
 struct Body;
@@ -44,9 +45,9 @@ struct MailcapEntry
   char *printcommand;
   char *nametemplate;
   char *convert;
-  bool needsterminal : 1; /**< endwin() and system */
-  bool copiousoutput : 1; /**< needs pager, basically */
-  bool xneomuttkeep  : 1; /**< do not remove the file on command exit */
+  bool needsterminal : 1; ///< endwin() and system
+  bool copiousoutput : 1; ///< needs pager, basically
+  bool xneomuttkeep  : 1; ///< do not remove the file on command exit
 };
 
 /**

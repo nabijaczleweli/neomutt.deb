@@ -38,12 +38,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include "imap_private.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
-#include "conn/conn.h"
-#include "mutt.h"
+#include "conn/lib.h"
 #include "globals.h"
+#include "init.h"
 #include "message.h"
 #include "mutt_account.h"
 #include "mutt_logging.h"
@@ -62,12 +62,25 @@ bool C_ImapServernoise; ///< Config: (imap) Display server warnings as error mes
  * @note This must be kept in the same order as ImapCaps.
  */
 static const char *const Capabilities[] = {
-  "IMAP4",       "IMAP4rev1",      "STATUS",
-  "ACL",         "NAMESPACE",      "AUTH=CRAM-MD5",
-  "AUTH=GSSAPI", "AUTH=ANONYMOUS", "AUTH=OAUTHBEARER",
-  "STARTTLS",    "LOGINDISABLED",  "IDLE",
-  "SASL-IR",     "ENABLE",         "CONDSTORE",
-  "QRESYNC",     "LIST-EXTENDED",  "X-GM-EXT-1",
+  "IMAP4",
+  "IMAP4rev1",
+  "STATUS",
+  "ACL",
+  "NAMESPACE",
+  "AUTH=CRAM-MD5",
+  "AUTH=GSSAPI",
+  "AUTH=ANONYMOUS",
+  "AUTH=OAUTHBEARER",
+  "STARTTLS",
+  "LOGINDISABLED",
+  "IDLE",
+  "SASL-IR",
+  "ENABLE",
+  "CONDSTORE",
+  "QRESYNC",
+  "LIST-EXTENDED",
+  "COMPRESS=DEFLATE",
+  "X-GM-EXT-1",
   NULL,
 };
 
@@ -78,7 +91,7 @@ static const char *const Capabilities[] = {
  */
 static bool cmd_queue_full(struct ImapAccountData *adata)
 {
-  if ((adata->nextcmd + 1) % adata->cmdslots == adata->lastcmd)
+  if (((adata->nextcmd + 1) % adata->cmdslots) == adata->lastcmd)
     return true;
 
   return false;
@@ -552,7 +565,7 @@ static void cmd_parse_capability(struct ImapAccountData *adata, char *s)
 static void cmd_parse_list(struct ImapAccountData *adata, char *s)
 {
   struct ImapList *list = NULL;
-  struct ImapList lb;
+  struct ImapList lb = { 0 };
   char delimbuf[5]; /* worst case: "\\"\0 */
   unsigned int litlen;
 
@@ -649,8 +662,8 @@ static void cmd_parse_lsub(struct ImapAccountData *adata, char *s)
   char buf[256];
   char errstr[256];
   struct Buffer err, token;
-  struct Url url;
-  struct ImapList list;
+  struct Url url = { 0 };
+  struct ImapList list = { 0 };
 
   if (adata->cmdresult)
   {
@@ -781,6 +794,28 @@ static void cmd_parse_search(struct ImapAccountData *adata, const char *s)
 }
 
 /**
+ * find_mailbox - Find a Mailbox by its name
+ * @param adata Imap Account data
+ * @param name  Mailbox to find
+ * @retval ptr Mailbox
+ */
+static struct Mailbox *find_mailbox(struct ImapAccountData *adata, const char *name)
+{
+  if (!adata || !adata->account || !name)
+    return NULL;
+
+  struct MailboxNode *np = NULL;
+  STAILQ_FOREACH(np, &adata->account->mailboxes, entries)
+  {
+    struct ImapMboxData *mdata = imap_mdata_get(np->mailbox);
+    if (mutt_str_strcmp(name, mdata->name) == 0)
+      return np->mailbox;
+  }
+
+  return NULL;
+}
+
+/**
  * cmd_parse_status - Parse status from server
  * @param adata Imap Account data
  * @param s     Command string with status info
@@ -790,10 +825,7 @@ static void cmd_parse_search(struct ImapAccountData *adata, const char *s)
  */
 static void cmd_parse_status(struct ImapAccountData *adata, char *s)
 {
-  char *value = NULL;
-  unsigned int olduv, oldun;
-  unsigned int litlen;
-  short new_mail = 0;
+  unsigned int litlen = 0;
 
   char *mailbox = imap_next_word(s);
 
@@ -814,41 +846,35 @@ static void cmd_parse_status(struct ImapAccountData *adata, char *s)
 
     mailbox = adata->buf;
     s = mailbox + litlen;
-    *s = '\0';
+    s[0] = '\0';
     s++;
     SKIPWS(s);
   }
   else
   {
     s = imap_next_word(mailbox);
-    *(s - 1) = '\0';
+    s[-1] = '\0';
     imap_unmunge_mbox_name(adata->unicode, mailbox);
   }
 
-  struct Url url;
-  mutt_account_tourl(&adata->conn_account, &url);
-  url.path = mailbox;
-  char path[PATH_MAX];
-  url_tostring(&url, path, sizeof(path), 0);
-
-  struct Mailbox *m = mx_mbox_find2(path);
+  struct Mailbox *m = find_mailbox(adata, mailbox);
   struct ImapMboxData *mdata = imap_mdata_get(m);
   if (!mdata)
   {
     mutt_debug(LL_DEBUG3, "Received status for an unexpected mailbox: %s\n", mailbox);
     return;
   }
-  olduv = mdata->uid_validity;
-  oldun = mdata->uid_next;
+  unsigned int olduv = mdata->uid_validity;
+  unsigned int oldun = mdata->uid_next;
 
   if (*s++ != '(')
   {
     mutt_debug(LL_DEBUG1, "Error parsing STATUS\n");
     return;
   }
-  while (*s && (*s != ')'))
+  while ((s[0] != '\0') && (s[0] != ')'))
   {
-    value = imap_next_word(s);
+    char *value = imap_next_word(s);
 
     errno = 0;
     const unsigned long ulcount = strtoul(value, &value, 10);
@@ -871,7 +897,7 @@ static void cmd_parse_status(struct ImapAccountData *adata, char *s)
       mdata->unseen = count;
 
     s = value;
-    if (*s && (*s != ')'))
+    if ((s[0] != '\0') && (*s != ')'))
       s = imap_next_word(s);
   }
   mutt_debug(LL_DEBUG3, "%s (UIDVALIDITY: %u, UIDNEXT: %u) %d messages, %d recent, %d unseen\n",
@@ -883,14 +909,15 @@ static void cmd_parse_status(struct ImapAccountData *adata, char *s)
   mutt_debug(LL_DEBUG3, "Found %s in mailbox list (OV: %u ON: %u U: %d)\n",
              mailbox, olduv, oldun, mdata->unseen);
 
+  bool new_mail = false;
   if (C_MailCheckRecent)
   {
-    if (olduv && (olduv == mdata->uid_validity))
+    if ((olduv != 0) && (olduv == mdata->uid_validity))
     {
       if (oldun < mdata->uid_next)
         new_mail = (mdata->unseen > 0);
     }
-    else if (!olduv && !oldun)
+    else if ((olduv == 0) && (oldun == 0))
     {
       /* first check per session, use recent. might need a flag for this. */
       new_mail = (mdata->recent > 0);
@@ -904,7 +931,9 @@ static void cmd_parse_status(struct ImapAccountData *adata, char *s)
 #ifdef USE_SIDEBAR
   if ((m->has_new != new_mail) || (m->msg_count != mdata->messages) ||
       (m->msg_unread != mdata->unseen))
+  {
     mutt_menu_set_current_redraw(REDRAW_SIDEBAR);
+  }
 #endif
 
   m->has_new = new_mail;
@@ -1261,12 +1290,12 @@ int imap_exec(struct ImapAccountData *adata, const char *cmdstr, ImapCmdFlags fl
   }
 
   /* Allow interruptions, particularly useful if there are network problems. */
-  mutt_sig_allow_interrupt(1);
+  mutt_sig_allow_interrupt(true);
   do
   {
     rc = imap_cmd_step(adata);
   } while (rc == IMAP_RES_CONTINUE);
-  mutt_sig_allow_interrupt(0);
+  mutt_sig_allow_interrupt(false);
 
   if (rc == IMAP_RES_NO)
     return IMAP_EXEC_ERROR;

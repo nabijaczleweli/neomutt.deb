@@ -24,8 +24,14 @@
 #ifndef MUTT_SMTP_H
 #define MUTT_SMTP_H
 
+#include "config.h"
+#include <stdbool.h>
+
 /* These Config Variables are only used in smtp.c */
 extern struct Slist *C_SmtpAuthenticators;
+extern char *C_SmtpOauthRefreshCommand;
+extern char *C_SmtpPass;
+extern char *C_SmtpUser;
 
 #ifdef USE_SMTP
 struct AddressList;

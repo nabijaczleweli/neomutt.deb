@@ -32,7 +32,7 @@
 #include <regex.h>
 #include <string.h>
 #include <time.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "mutt.h"
 #include "parse.h"
@@ -41,14 +41,16 @@
 #include "email_globals.h"
 #include "envelope.h"
 #include "from.h"
-#include "globals.h"
 #include "mime.h"
 #include "parameter.h"
 #include "rfc2047.h"
 #include "rfc2231.h"
 #include "url.h"
 #ifdef USE_AUTOCRYPT
-#include "autocrypt/autocrypt.h"
+#include "globals.h"
+#endif
+#ifdef USE_AUTOCRYPT
+#include "autocrypt/lib.h"
 #endif
 
 /* If the 'Content-Length' is bigger than 1GiB, then it's clearly wrong.
@@ -57,7 +59,7 @@
 
 /**
  * mutt_auto_subscribe - Check if user is subscribed to mailing list
- * @param mailto URI of mailing list subscribe
+ * @param mailto URL of mailing list subscribe
  */
 void mutt_auto_subscribe(const char *mailto)
 {
@@ -694,7 +696,7 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, char *line,
           {
             if (e)
             {
-              int rc = mutt_str_atol(p, &e->content->length);
+              int rc = mutt_str_atol(p, (long *) &e->content->length);
               if ((rc < 0) || (e->content->length < 0))
                 e->content->length = -1;
               if (e->content->length > CONTENT_TOO_BIG)
@@ -722,22 +724,22 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, char *line,
       break;
 
     case 'd':
-      if (mutt_str_strcasecmp("ate", line + 1) == 0)
+      if (mutt_str_strcasecmp("ate", line + 1) != 0)
+        break;
+
+      mutt_str_replace(&env->date, p);
+      if (e)
       {
-        mutt_str_replace(&env->date, p);
-        if (e)
+        struct Tz tz;
+        e->date_sent = mutt_date_parse_date(p, &tz);
+        if (e->date_sent > 0)
         {
-          struct Tz tz;
-          e->date_sent = mutt_date_parse_date(p, &tz);
-          if (e->date_sent > 0)
-          {
-            e->zhours = tz.zhours;
-            e->zminutes = tz.zminutes;
-            e->zoccident = tz.zoccident;
-          }
+          e->zhours = tz.zhours;
+          e->zminutes = tz.zminutes;
+          e->zoccident = tz.zoccident;
         }
-        matched = true;
       }
+      matched = true;
       break;
 
     case 'e':
@@ -768,12 +770,12 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, char *line,
       break;
 
     case 'i':
-      if (mutt_str_strcasecmp(line + 1, "n-reply-to") == 0)
-      {
-        mutt_list_free(&env->in_reply_to);
-        parse_references(&env->in_reply_to, p);
-        matched = true;
-      }
+      if (mutt_str_strcasecmp(line + 1, "n-reply-to") != 0)
+        break;
+
+      mutt_list_free(&env->in_reply_to);
+      parse_references(&env->in_reply_to, p);
+      matched = true;
       break;
 
     case 'l':
@@ -1424,16 +1426,16 @@ void mutt_parse_part(FILE *fp, struct Body *b)
       break;
 
     case TYPE_MESSAGE:
-      if (b->subtype)
-      {
-        fseeko(fp, b->offset, SEEK_SET);
-        if (mutt_is_message_type(b->type, b->subtype))
-          b->parts = mutt_rfc822_parse_message(fp, b);
-        else if (mutt_str_strcasecmp(b->subtype, "external-body") == 0)
-          b->parts = mutt_read_mime_header(fp, 0);
-        else
-          return;
-      }
+      if (!b->subtype)
+        break;
+
+      fseeko(fp, b->offset, SEEK_SET);
+      if (mutt_is_message_type(b->type, b->subtype))
+        b->parts = mutt_rfc822_parse_message(fp, b);
+      else if (mutt_str_strcasecmp(b->subtype, "external-body") == 0)
+        b->parts = mutt_read_mime_header(fp, 0);
+      else
+        return;
       break;
 
     default:

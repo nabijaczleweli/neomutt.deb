@@ -34,19 +34,27 @@
 #include <string.h>
 #include <sys/utsname.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
+#include "gui/lib.h"
+#include "version.h"
+#ifdef HAVE_LIBIDN
 #include "address/lib.h"
-#include "mutt_curses.h"
-#include "ncrypt/crypt_gpgme.h"
+#endif
+#ifdef CRYPT_BACKEND_GPGME
+#include "ncrypt/lib.h"
+#endif
+#ifdef HAVE_NOTMUCH
+#include <notmuch.h>
+#endif
 
-/* #include "protos.h" */
+/* #include "muttlib.h" */
 const char *mutt_make_version(void);
-/* #include "hcache/hcache.h" */
+/* #include "hcache/lib.h" */
 const char *mutt_hcache_backend_list(void);
+const char *mutt_hcache_compress_list(void);
 
 const int SCREEN_WIDTH = 80;
 
-extern unsigned char cc_version[];
 extern unsigned char cc_cflags[];
 extern unsigned char configure_options[];
 
@@ -147,6 +155,9 @@ static struct CompileOptions comp_opts[] = {
 #else
   { "autocrypt", 0 },
 #endif
+#ifdef HAVE_LIBUNWIND
+  { "backtrace", 2 },
+#endif
 #ifdef HAVE_BKGDSET
   { "bkgdset", 1 },
 #else
@@ -197,6 +208,9 @@ static struct CompileOptions comp_opts[] = {
 #else
   { "gpgme", 0 },
 #endif
+#ifdef USE_DEBUG_GRAPHVIZ
+  { "graphviz", 2 },
+#endif
 #ifdef USE_GSS
   { "gss", 1 },
 #else
@@ -232,6 +246,11 @@ static struct CompileOptions comp_opts[] = {
 #else
   { "lua", 0 },
 #endif
+#ifdef USE_LZ4
+  { "lz4", 1 },
+#else
+  { "lz4", 0 },
+#endif
 #ifdef HAVE_META
   { "meta", 1 },
 #else
@@ -247,6 +266,9 @@ static struct CompileOptions comp_opts[] = {
 #else
   { "nls", 0 },
 #endif
+#ifdef USE_DEBUG_NOTIFY
+  { "notify", 2 },
+#endif
 #ifdef USE_NOTMUCH
   { "notmuch", 1 },
 #else
@@ -256,6 +278,9 @@ static struct CompileOptions comp_opts[] = {
   { "openssl", 1 },
 #else
   { "openssl", 0 },
+#endif
+#ifdef USE_DEBUG_PARSE_TEST
+  { "parse-test", 2 },
 #endif
 #ifdef CRYPT_BACKEND_CLASSIC_PGP
   { "pgp", 1 },
@@ -292,6 +317,19 @@ static struct CompileOptions comp_opts[] = {
 #else
   { "typeahead", 0 },
 #endif
+#ifdef USE_DEBUG_WINDOW
+  { "window", 2 },
+#endif
+#ifdef USE_ZLIB
+  { "zlib", 1 },
+#else
+  { "zlib", 0 },
+#endif
+#ifdef USE_ZSTD
+  { "zstd", 1 },
+#else
+  { "zstd", 0 },
+#endif
   { NULL, 0 },
 };
 
@@ -311,7 +349,7 @@ static struct CompileOptions comp_opts[] = {
 static void print_compile_options(struct CompileOptions *co, FILE *fp)
 {
   size_t used = 2;
-  bool tty = stdout ? isatty(fileno(stdout)) : false;
+  bool tty = fp ? isatty(fileno(fp)) : false;
 
   fprintf(fp, "  ");
   for (int i = 0; co[i].name; i++)
@@ -381,8 +419,13 @@ static char *rstrip_in_place(char *s)
 void print_version(FILE *fp)
 {
   struct utsname uts;
+  bool tty = fp ? isatty(fileno(fp)) : false;
+  const char *fmt = "%s\n";
 
-  fprintf(fp, "%s\n", mutt_make_version());
+  if (tty)
+    fmt = "\033[1;36m%s\033[0m\n"; // Escape, cyan
+
+  fprintf(fp, fmt, mutt_make_version());
   fprintf(fp, "%s\n", _(Notice));
 
   uname(&uts);
@@ -414,18 +457,24 @@ void print_version(FILE *fp)
   fprintf(fp, "\nGPGme: %s", mutt_gpgme_print_version());
 #endif
 
+#ifdef HAVE_NOTMUCH
+  fprintf(fp, "\nlibnotmuch: %d.%d.%d", LIBNOTMUCH_MAJOR_VERSION,
+          LIBNOTMUCH_MINOR_VERSION, LIBNOTMUCH_MICRO_VERSION);
+#endif
+
 #ifdef USE_HCACHE
   const char *backends = mutt_hcache_backend_list();
   fprintf(fp, "\nhcache backends: %s", backends);
   FREE(&backends);
+#ifdef USE_HCACHE_COMPRESSION
+  backends = mutt_hcache_compress_list();
+  fprintf(fp, "\nhcache compression: %s", backends);
+  FREE(&backends);
+#endif
 #endif
 
-  fputs("\n\nCompiler:\n", fp);
-  rstrip_in_place((char *) cc_version);
-  fprintf(fp, "%s\n", (char *) cc_version);
-
   rstrip_in_place((char *) configure_options);
-  fprintf(fp, "\nConfigure options: %s\n", (char *) configure_options);
+  fprintf(fp, "\n\nConfigure options: %s\n", (char *) configure_options);
 
   rstrip_in_place((char *) cc_cflags);
   fprintf(fp, "\nCompilation CFLAGS: %s\n", (char *) cc_cflags);

@@ -24,14 +24,13 @@
 #define MUTT_MUTT_SOCKET_H
 
 struct ConnAccount;
-struct Connection;
 
 /* logging levels */
 #define MUTT_SOCK_LOG_CMD  2
 #define MUTT_SOCK_LOG_HDR  3
 #define MUTT_SOCK_LOG_FULL 5
 
-struct Connection *mutt_conn_find(const struct Connection *start, const struct ConnAccount *account);
+struct Connection *mutt_conn_find(const struct ConnAccount *account);
 struct Connection *mutt_conn_new(const struct ConnAccount *account);
 
 #define mutt_socket_readln(buf, buflen, conn) mutt_socket_readln_d(buf, buflen, conn, MUTT_SOCK_LOG_CMD)

@@ -33,19 +33,18 @@
 #include <string.h>
 #include <wchar.h>
 #include <wctype.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "alias.h"
 #include "browser.h"
 #include "context.h"
-#include "curs_lib.h"
 #include "enter_state.h"
 #include "globals.h"
+#include "init.h"
 #include "keymap.h"
-#include "mutt_curses.h"
 #include "mutt_history.h"
 #include "mutt_mailbox.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "opcodes.h"
 #include "protos.h"
@@ -153,7 +152,7 @@ int mutt_enter_string(char *buf, size_t buflen, int col, CompletionFlags flags)
     {
       SigWinch = 0;
       mutt_resize_screen();
-      mutt_window_clear_screen();
+      clearok(stdscr, true);
     }
     rc = mutt_enter_string_full(buf, buflen, col, flags, false, NULL, NULL, es);
   } while (rc == 1);
@@ -179,7 +178,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
                            CompletionFlags flags, bool multiple, char ***files,
                            int *numfiles, struct EnterState *state)
 {
-  int width = MuttMessageWindow->cols - col - 1;
+  int width = MuttMessageWindow->state.cols - col - 1;
   enum EnterRedrawFlags redraw = ENTER_REDRAW_NONE;
   bool pass = (flags & MUTT_PASS);
   bool first = true;
@@ -305,7 +304,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
           if (state->curpos == 0)
           {
             // Pressing backspace when no text is in the command prompt should exit the prompt
-            if (state->lastchar == 0)
+            if (C_AbortBackspace && (state->lastchar == 0))
               goto bye;
             // Pressing backspace with text in the command prompt should just beep
             mutt_beep(false);

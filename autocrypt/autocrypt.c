@@ -28,21 +28,23 @@
 
 #include "config.h"
 #include <errno.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include "autocrypt_private.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
-#include "autocrypt.h"
-#include "curs_lib.h"
+#include "gui/lib.h"
 #include "globals.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "ncrypt/ncrypt.h"
 #include "options.h"
 #include "send.h"
+#include "autocrypt/lib.h"
+#include "ncrypt/lib.h"
 
 /**
  * autocrypt_dir_init - Initialise an Autocrypt directory
@@ -100,6 +102,11 @@ int mutt_autocrypt_init(bool can_create)
     return -1;
 
   OptIgnoreMacroEvents = true;
+  /* The init process can display menus at various points
+   *(e.g. browser, pgp key selection).  This allows the screen to be
+   * autocleared after each menu, so the subsequent prompts can be
+   * read. */
+  OptMenuPopClearScreen = true;
 
   if (autocrypt_dir_init(can_create))
     goto bail;
@@ -111,11 +118,13 @@ int mutt_autocrypt_init(bool can_create)
     goto bail;
 
   OptIgnoreMacroEvents = false;
+  OptMenuPopClearScreen = false;
 
   return 0;
 
 bail:
   OptIgnoreMacroEvents = false;
+  OptMenuPopClearScreen = false;
   C_Autocrypt = false;
   mutt_autocrypt_db_close();
   return -1;
@@ -566,6 +575,8 @@ enum AutocryptRec mutt_autocrypt_ui_recommendation(struct Email *e, char **keyli
   struct Address *recip = NULL;
   bool all_encrypt = true, has_discourage = false;
   const char *matching_key = NULL;
+  struct AddressList recips = TAILQ_HEAD_INITIALIZER(recips);
+  struct Buffer *keylist_buf = NULL;
 
   if (!C_Autocrypt || mutt_autocrypt_init(false) || !e)
     return AUTOCRYPT_REC_OFF;
@@ -583,10 +594,8 @@ enum AutocryptRec mutt_autocrypt_ui_recommendation(struct Email *e, char **keyli
   if (!account->enabled)
     goto cleanup;
 
-  struct Buffer *keylist_buf = mutt_buffer_pool_get();
+  keylist_buf = mutt_buffer_pool_get();
   mutt_buffer_addstr(keylist_buf, account->keyid);
-
-  struct AddressList recips = TAILQ_HEAD_INITIALIZER(recips);
 
   mutt_addrlist_copy(&recips, &e->env->to, false);
   mutt_addrlist_copy(&recips, &e->env->cc, false);

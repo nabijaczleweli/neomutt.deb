@@ -29,14 +29,15 @@
 #include "config.h"
 #include <stdbool.h>
 #include <stdio.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
-#include "curs_lib.h"
+#include "mutt_history.h"
 #include "format_flags.h"
+#include "globals.h"
 #include "keymap.h"
 #include "mutt_menu.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "opcodes.h"
 
@@ -73,13 +74,13 @@ static const char *history_format_str(char *buf, size_t buflen, size_t col, int 
 }
 
 /**
- * history_make_entry - Format a menu item for the history list - Implements Menu::menu_make_entry()
+ * history_make_entry - Format a menu item for the history list - Implements Menu::make_entry()
  */
 static void history_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
   char *entry = ((char **) menu->data)[line];
 
-  mutt_expando_format(buf, buflen, 0, menu->indexwin->cols, "%s", history_format_str,
+  mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols, "%s", history_format_str,
                       (unsigned long) entry, MUTT_FORMAT_ARROWCURSOR);
 }
 
@@ -98,8 +99,41 @@ static void history_menu(char *buf, size_t buflen, char **matches, int match_cou
 
   snprintf(title, sizeof(title), _("History '%s'"), buf);
 
+  struct MuttWindow *dlg =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+#ifdef USE_DEBUG_WINDOW
+  dlg->name = "history";
+#endif
+  dlg->type = WT_DIALOG;
+  struct MuttWindow *index =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+  index->type = WT_INDEX;
+  struct MuttWindow *ibar = mutt_window_new(
+      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
+  ibar->type = WT_INDEX_BAR;
+
+  if (C_StatusOnTop)
+  {
+    mutt_window_add_child(dlg, ibar);
+    mutt_window_add_child(dlg, index);
+  }
+  else
+  {
+    mutt_window_add_child(dlg, index);
+    mutt_window_add_child(dlg, ibar);
+  }
+
+  dialog_push(dlg);
+
   struct Menu *menu = mutt_menu_new(MENU_GENERIC);
-  menu->menu_make_entry = history_make_entry;
+
+  menu->pagelen = index->state.rows;
+  menu->win_index = index;
+  menu->win_ibar = ibar;
+
+  menu->make_entry = history_make_entry;
   menu->title = title;
   menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_GENERIC, HistoryHelp);
   mutt_menu_push_current(menu);
@@ -123,6 +157,8 @@ static void history_menu(char *buf, size_t buflen, char **matches, int match_cou
 
   mutt_menu_pop_current(menu);
   mutt_menu_free(&menu);
+  dialog_pop();
+  mutt_window_free(&dlg);
 }
 
 /**
@@ -146,14 +182,16 @@ void mutt_hist_complete(char *buf, size_t buflen, enum HistoryClass hclass)
 }
 
 /**
- * mutt_hist_observer - Listen for config changes affecting the history - Implements ::observer_t()
+ * mutt_hist_observer - Listen for config changes affecting the history - Implements ::observer_t
  */
 int mutt_hist_observer(struct NotifyCallback *nc)
 {
-  if (!nc)
+  if (!nc->event_data)
     return -1;
+  if (nc->event_type != NT_CONFIG)
+    return 0;
 
-  struct EventConfig *ec = (struct EventConfig *) nc->event;
+  struct EventConfig *ec = nc->event_data;
 
   if (mutt_str_strcmp(ec->name, "history") != 0)
     return 0;

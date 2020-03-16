@@ -41,11 +41,11 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "email/lib.h"
-#include "filter.h"
+#include "gnupgparse.h"
+#include "lib.h"
 #include "globals.h"
-#include "ncrypt.h"
 #include "pgpinvoke.h"
 #include "pgpkey.h"
 #ifdef CRYPT_BACKEND_CLASSIC_PGP
@@ -464,7 +464,7 @@ struct PgpKeyInfo *pgp_get_candidates(enum PgpRing keyring, struct ListHead *hin
     mutt_perror("fgets");
 
   mutt_file_fclose(&fp);
-  mutt_wait_filter(pid);
+  filter_wait(pid);
 
   close(fd_null);
 

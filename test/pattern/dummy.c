@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include "core/lib.h"
 
 struct Address;
 struct Body;
@@ -82,11 +83,6 @@ int mutt_count_body_parts(struct Mailbox *m, struct Email *e)
   return g_body_parts;
 }
 
-pid_t mutt_create_filter(const char *s, FILE **fp_in, FILE **fp_out, FILE **fp_err)
-{
-  return -1;
-}
-
 int mutt_buffer_get_field_full(const char *field, struct Buffer *buf, int complete,
                                bool multiple, char ***files, int *numfiles)
 {
@@ -113,8 +109,7 @@ void mutt_parse_mime_message(struct Mailbox *m, struct Email *e)
 {
 }
 
-void mutt_progress_init(struct Progress *progress, const char *msg,
-                        int type, size_t size)
+void mutt_progress_init(struct Progress *progress, const char *msg, int type, size_t size)
 {
 }
 void mutt_progress_update(struct Progress *progress, long pos, int percent)
@@ -123,11 +118,6 @@ void mutt_progress_update(struct Progress *progress, long pos, int percent)
 
 void mutt_set_flag_update(struct Mailbox *m, struct Email *e, int flag, bool bf, bool upd_mbox)
 {
-}
-
-int mutt_wait_filter(pid_t pid)
-{
-  return -1;
 }
 
 int mx_msg_close(struct Mailbox *m, struct Message **msg)
@@ -148,4 +138,30 @@ int mx_msg_padding_size(struct Mailbox *m)
 const char *myvar_get(const char *var)
 {
   return g_myvar;
+}
+
+struct Email *mutt_get_virt_email(struct Mailbox *m, int vnum)
+{
+  if (!m || !m->emails || !m->v2r)
+    return NULL;
+
+  if ((vnum < 0) || (vnum >= m->vcount))
+    return NULL;
+
+  int inum = m->v2r[vnum];
+  if ((inum < 0) || (inum >= m->msg_count))
+    return NULL;
+
+  return m->emails[inum];
+}
+
+void mutt_buffer_mktemp_full(struct Buffer *buf, const char *prefix,
+                             const char *suffix, const char *src, int line)
+{
+}
+
+int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach,
+                             int mode, bool privacy, bool hide_protected_subject)
+{
+  return 0;
 }

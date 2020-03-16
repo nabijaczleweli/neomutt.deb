@@ -30,12 +30,13 @@
 #include <stddef.h>
 #include <limits.h>
 #include <stdint.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
+#include "number.h"
 #include "set.h"
 #include "types.h"
 
 /**
- * number_string_set - Set a Number by string - Implements ::cst_string_set()
+ * number_string_set - Set a Number by string - Implements ConfigSetType::string_set()
  */
 static int number_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                              const char *value, struct Buffer *err)
@@ -45,26 +46,26 @@ static int number_string_set(const struct ConfigSet *cs, void *var, struct Confi
 
   if (!value || !value[0])
   {
-    mutt_buffer_printf(err, "Option %s may not be empty", cdef->name);
+    mutt_buffer_printf(err, _("Option %s may not be empty"), cdef->name);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
   int num = 0;
   if (mutt_str_atoi(value, &num) < 0)
   {
-    mutt_buffer_printf(err, "Invalid number: %s", value);
+    mutt_buffer_printf(err, _("Invalid number: %s"), value);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
   if ((num < SHRT_MIN) || (num > SHRT_MAX))
   {
-    mutt_buffer_printf(err, "Number is too big: %s", value);
+    mutt_buffer_printf(err, _("Number is too big: %s"), value);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
   if ((num < 0) && (cdef->type & DT_NOT_NEGATIVE))
   {
-    mutt_buffer_printf(err, "Option %s may not be negative", cdef->name);
+    mutt_buffer_printf(err, _("Option %s may not be negative"), cdef->name);
     return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
   }
 
@@ -92,7 +93,7 @@ static int number_string_set(const struct ConfigSet *cs, void *var, struct Confi
 }
 
 /**
- * number_string_get - Get a Number as a string - Implements ::cst_string_get()
+ * number_string_get - Get a Number as a string - Implements ConfigSetType::string_get()
  */
 static int number_string_get(const struct ConfigSet *cs, void *var,
                              const struct ConfigDef *cdef, struct Buffer *result)
@@ -112,7 +113,7 @@ static int number_string_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * number_native_set - Set a Number config item by int - Implements ::cst_native_set()
+ * number_native_set - Set a Number config item by int - Implements ConfigSetType::native_set()
  */
 static int number_native_set(const struct ConfigSet *cs, void *var,
                              const struct ConfigDef *cdef, intptr_t value,
@@ -123,13 +124,13 @@ static int number_native_set(const struct ConfigSet *cs, void *var,
 
   if ((value < SHRT_MIN) || (value > SHRT_MAX))
   {
-    mutt_buffer_printf(err, "Invalid number: %ld", value);
+    mutt_buffer_printf(err, _("Invalid number: %ld"), value);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
   if ((value < 0) && (cdef->type & DT_NOT_NEGATIVE))
   {
-    mutt_buffer_printf(err, "Option %s may not be negative", cdef->name);
+    mutt_buffer_printf(err, _("Option %s may not be negative"), cdef->name);
     return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
   }
 
@@ -149,7 +150,7 @@ static int number_native_set(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * number_native_get - Get an int from a Number config item - Implements ::cst_native_get()
+ * number_native_get - Get an int from a Number config item - Implements ConfigSetType::native_get()
  */
 static intptr_t number_native_get(const struct ConfigSet *cs, void *var,
                                   const struct ConfigDef *cdef, struct Buffer *err)
@@ -161,7 +162,7 @@ static intptr_t number_native_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * number_reset - Reset a Number to its initial value - Implements ::cst_reset()
+ * number_reset - Reset a Number to its initial value - Implements ConfigSetType::reset()
  */
 static int number_reset(const struct ConfigSet *cs, void *var,
                         const struct ConfigDef *cdef, struct Buffer *err)

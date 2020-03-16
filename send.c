@@ -29,7 +29,6 @@
 
 #include "config.h"
 #include <errno.h>
-#include <limits.h>
 #include <locale.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -37,31 +36,30 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "send.h"
 #include "alias.h"
 #include "compose.h"
 #include "context.h"
 #include "copy.h"
-#include "curs_lib.h"
 #include "edit.h"
-#include "filter.h"
 #include "globals.h"
 #include "handler.h"
 #include "hdrline.h"
 #include "hook.h"
+#include "init.h"
 #include "mutt_attach.h"
 #include "mutt_body.h"
 #include "mutt_header.h"
 #include "mutt_logging.h"
 #include "mutt_parse.h"
 #include "muttlib.h"
-#include "ncrypt/ncrypt.h"
 #include "options.h"
 #include "pattern.h"
 #include "protos.h"
@@ -70,21 +68,22 @@
 #include "sendlib.h"
 #include "smtp.h"
 #include "sort.h"
+#include "ncrypt/lib.h"
 #ifdef USE_NNTP
 #include "mx.h"
-#include "nntp/nntp.h"
+#include "nntp/lib.h"
 #endif
 #ifdef MIXMASTER
 #include "remailer.h"
 #endif
 #ifdef USE_NOTMUCH
-#include "notmuch/mutt_notmuch.h"
+#include "notmuch/lib.h"
 #endif
 #ifdef USE_IMAP
-#include "imap/imap.h"
+#include "imap/lib.h"
 #endif
 #ifdef USE_AUTOCRYPT
-#include "autocrypt/autocrypt.h"
+#include "autocrypt/lib.h"
 #endif
 
 /* These Config Variables are only used in send.c */
@@ -150,7 +149,7 @@ static void append_signature(FILE *fp)
     mutt_file_copy_stream(fp_tmp, fp);
     mutt_file_fclose(&fp_tmp);
     if (pid != -1)
-      mutt_wait_filter(pid);
+      filter_wait(pid);
   }
 }
 
@@ -216,7 +215,7 @@ int mutt_edit_address(struct AddressList *al, const char *field, bool expand_ali
   {
     buf[0] = '\0';
     mutt_addrlist_to_local(al);
-    mutt_addrlist_write(buf, sizeof(buf), al, false);
+    mutt_addrlist_write(al, buf, sizeof(buf), false);
     if (mutt_get_field(field, buf, sizeof(buf), MUTT_ALIAS) != 0)
       return -1;
     mutt_addrlist_clear(al);
@@ -251,7 +250,7 @@ static int edit_envelope(struct Envelope *en, SendFlags flags)
       mutt_str_strfcpy(buf, en->newsgroups, sizeof(buf));
     else
       buf[0] = '\0';
-    if (mutt_get_field("Newsgroups: ", buf, sizeof(buf), 0) != 0)
+    if (mutt_get_field("Newsgroups: ", buf, sizeof(buf), MUTT_COMP_NO_FLAGS) != 0)
       return -1;
     FREE(&en->newsgroups);
     en->newsgroups = mutt_str_strdup(buf);
@@ -260,7 +259,8 @@ static int edit_envelope(struct Envelope *en, SendFlags flags)
       mutt_str_strfcpy(buf, en->followup_to, sizeof(buf));
     else
       buf[0] = '\0';
-    if (C_AskFollowUp && (mutt_get_field("Followup-To: ", buf, sizeof(buf), 0) != 0))
+    if (C_AskFollowUp &&
+        (mutt_get_field("Followup-To: ", buf, sizeof(buf), MUTT_COMP_NO_FLAGS) != 0))
     {
       return -1;
     }
@@ -272,7 +272,7 @@ static int edit_envelope(struct Envelope *en, SendFlags flags)
     else
       buf[0] = '\0';
     if (C_XCommentTo && C_AskXCommentTo &&
-        (mutt_get_field("X-Comment-To: ", buf, sizeof(buf), 0) != 0))
+        (mutt_get_field("X-Comment-To: ", buf, sizeof(buf), MUTT_COMP_NO_FLAGS) != 0))
     {
       return -1;
     }
@@ -318,7 +318,7 @@ static int edit_envelope(struct Envelope *en, SendFlags flags)
     }
   }
 
-  if ((mutt_get_field(_("Subject: "), buf, sizeof(buf), 0) != 0) ||
+  if ((mutt_get_field(_("Subject: "), buf, sizeof(buf), MUTT_COMP_NO_FLAGS) != 0) ||
       (!buf[0] &&
        (query_quadoption(C_AbortNosubject, _("No subject, abort?")) != MUTT_NO)))
   {
@@ -588,18 +588,25 @@ cleanup:
  * @retval  0 Success
  * @retval -1 Error
  */
-int mutt_inline_forward(struct Mailbox *m, struct Email *e_edit,
-                        struct Email *e_cur, FILE *out)
+static int mutt_inline_forward(struct Mailbox *m, struct Email *e_edit,
+                               struct Email *e_cur, FILE *out)
 {
-  int i, forwardq = -1;
+  int forwardq = -1;
   struct Body **last = NULL;
 
   if (e_cur)
     include_forward(m, e_cur, out);
   else
-    for (i = 0; i < m->vcount; i++)
-      if (m->emails[m->v2r[i]]->tagged)
-        include_forward(m, m->emails[m->v2r[i]], out);
+  {
+    for (int i = 0; i < m->vcount; i++)
+    {
+      struct Email *e = mutt_get_virt_email(m, i);
+      if (!e)
+        continue;
+      if (e->tagged)
+        include_forward(m, e, out);
+    }
+  }
 
   if (C_ForwardDecode && (C_ForwardAttachments != MUTT_NO))
   {
@@ -613,14 +620,21 @@ int mutt_inline_forward(struct Mailbox *m, struct Email *e_edit,
         return -1;
     }
     else
-      for (i = 0; i < m->vcount; i++)
-        if (m->emails[m->v2r[i]]->tagged)
+    {
+      for (int i = 0; i < m->vcount; i++)
+      {
+        struct Email *e = mutt_get_virt_email(m, i);
+        if (!e)
+          continue;
+        if (e->tagged)
         {
-          if (inline_forward_attachments(m, m->emails[m->v2r[i]], &last, &forwardq) != 0)
+          if (inline_forward_attachments(m, e, &last, &forwardq) != 0)
             return -1;
           if (forwardq == MUTT_NO)
             break;
         }
+      }
+    }
   }
 
   return 0;
@@ -758,8 +772,7 @@ static int default_to(struct AddressList *to, struct Envelope *env, SendFlags fl
         reply_to && TAILQ_NEXT(TAILQ_FIRST(&env->reply_to), entries);
     if ((from_is_reply_to && !multiple_reply_to && !reply_to->personal) ||
         (C_IgnoreListReplyTo && mutt_is_mail_list(reply_to) &&
-         (mutt_addrlist_search(reply_to, &env->to) ||
-          mutt_addrlist_search(reply_to, &env->cc))))
+         (mutt_addrlist_search(&env->to, reply_to) || mutt_addrlist_search(&env->cc, reply_to))))
     {
       /* If the Reply-To: address is a mailing list, assume that it was
        * put there by the mailing list, and use the From: address
@@ -1522,7 +1535,7 @@ int mutt_resend_message(FILE *fp, struct Context *ctx, struct Email *e_cur)
   }
 
   struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
-  el_add_email(&el, e_cur);
+  emaillist_add_email(&el, e_cur);
   int rc = ci_send_message(SEND_RESEND, e_new, NULL, ctx, &el);
   emaillist_clear(&el);
 
@@ -1641,7 +1654,19 @@ static int save_fcc(struct Email *e, struct Buffer *fcc, struct Body *clear_cont
     }
 
     /* check to see if the user wants copies of all attachments */
+    bool save_atts = true;
     if (e->content->type == TYPE_MULTIPART)
+    {
+      /* In batch mode, save attachments if the quadoption is yes or ask-yes */
+      if (flags & SEND_BATCH)
+      {
+        if ((C_FccAttach == MUTT_NO) || (C_FccAttach == MUTT_ASKNO))
+          save_atts = false;
+      }
+      else if (query_quadoption(C_FccAttach, _("Save attachments in Fcc?")) != MUTT_YES)
+        save_atts = false;
+    }
+    if (!save_atts)
     {
       if ((WithCrypto != 0) && (e->security & (SEC_ENCRYPT | SEC_SIGN | SEC_AUTOCRYPT)) &&
           ((mutt_str_strcmp(e->content->subtype, "encrypted") == 0) ||
@@ -1798,6 +1823,7 @@ static int postpone_message(struct Email *e_post, struct Email *e_cur,
       {
         e_post->content = mutt_remove_multipart(e_post->content);
         decode_descriptions(e_post->content);
+        mutt_error(_("Error encrypting message. Check your crypt settings."));
         return -1;
       }
       encrypt_as = AutocryptDefaultKey;
@@ -1813,6 +1839,7 @@ static int postpone_message(struct Email *e_post, struct Email *e_cur,
         FREE(&pgpkeylist);
         e_post->content = mutt_remove_multipart(e_post->content);
         decode_descriptions(e_post->content);
+        mutt_error(_("Error encrypting message. Check your crypt settings."));
         return -1;
       }
 

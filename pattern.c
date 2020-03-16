@@ -36,34 +36,39 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <time.h>
-#include "mutt/mutt.h"
+#include <unistd.h>
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "pattern.h"
 #include "alias.h"
 #include "context.h"
 #include "copy.h"
-#include "curs_lib.h"
-#include "filter.h"
 #include "globals.h"
 #include "handler.h"
 #include "hdrline.h"
+#include "init.h"
 #include "mutt_logging.h"
 #include "mutt_menu.h"
 #include "mutt_parse.h"
+#include "muttlib.h"
 #include "mx.h"
-#include "ncrypt/ncrypt.h"
 #include "opcodes.h"
 #include "options.h"
 #include "progress.h"
 #include "protos.h"
+#include "sendlib.h"
 #include "state.h"
+#include "ncrypt/lib.h"
+#ifndef USE_FMEMOPEN
+#include <sys/stat.h>
+#endif
 #ifdef USE_IMAP
-#include "imap/imap.h"
+#include "imap/lib.h"
 #endif
 
 /* These Config Variables are only used in pattern.c */
@@ -90,8 +95,6 @@ bool C_ThoroughSearch; ///< Config: Decode headers and messages before searching
 #define KILO 1024
 #define MEGA 1048576
 #define EMSG(e) (((e)->msgno) + 1)
-#define CTX_MSGNO(ctx)                                                         \
-  (EMSG((ctx)->mailbox->emails[(ctx)->mailbox->v2r[(ctx)->menu->current]]))
 
 #define MUTT_MAXRANGE -1
 
@@ -159,17 +162,6 @@ enum RangeSide
 };
 
 /**
- * typedef pattern_eat_t - Parse a pattern
- * @param pat   Pattern to store the results in
- * @param flags Flags, e.g. #MUTT_PC_PATTERN_DYNAMIC
- * @param s     String to parse
- * @param err   Buffer for error messages
- * @retval true If the pattern was read successfully
- */
-typedef bool pattern_eat_t(struct Pattern *pat, int flags, struct Buffer *s,
-                           struct Buffer *err);
-
-/**
  * struct PatternFlags - Mapping between user character and internal constant
  */
 struct PatternFlags
@@ -177,7 +169,16 @@ struct PatternFlags
   int tag;   ///< Character used to represent this operation, e.g. 'A' for '~A'
   int op;    ///< Operation to perform, e.g. #MUTT_PAT_SCORE
   int flags; ///< Pattern flags, e.g. #MUTT_PC_FULL_MSG
-  pattern_eat_t *eat_arg; ///< Callback function to parse the argument
+
+  /**
+   * eat_arg - Function to parse a pattern
+   * @param pat   Pattern to store the results in
+   * @param flags Flags, e.g. #MUTT_PC_PATTERN_DYNAMIC
+   * @param s     String to parse
+   * @param err   Buffer for error messages
+   * @retval true If the pattern was read successfully
+   */
+  bool (*eat_arg)(struct Pattern *pat, int flags, struct Buffer *s, struct Buffer *err);
 };
 
 // clang-format off
@@ -195,9 +196,9 @@ static struct RangeRegex range_regexes[] = {
 };
 // clang-format on
 
-static struct PatternList *SearchPattern = NULL; /**< current search pattern */
-static char LastSearch[256] = { 0 };      /**< last pattern searched for */
-static char LastSearchExpn[1024] = { 0 }; /**< expanded version of LastSearch */
+static struct PatternList *SearchPattern = NULL; ///< current search pattern
+static char LastSearch[256] = { 0 };             ///< last pattern searched for
+static char LastSearchExpn[1024] = { 0 }; ///< expanded version of LastSearch
 
 /**
  * typedef addr_predicate_t - Test an Address for some condition
@@ -207,7 +208,7 @@ static char LastSearchExpn[1024] = { 0 }; /**< expanded version of LastSearch */
 typedef bool (*addr_predicate_t)(const struct Address *a);
 
 /**
- * eat_regex - Parse a regex - Implements ::pattern_eat_t
+ * eat_regex - Parse a regex - Implements Pattern::eat_arg()
  */
 static bool eat_regex(struct Pattern *pat, int flags, struct Buffer *s, struct Buffer *err)
 {
@@ -260,7 +261,7 @@ static bool eat_regex(struct Pattern *pat, int flags, struct Buffer *s, struct B
 }
 
 /**
- * add_query_msgid - Parse a Message-Id and add it to a list - Implements mutt_file_map_t
+ * add_query_msgid - Parse a Message-Id and add it to a list - Implements ::mutt_file_map_t
  * @retval true Always
  */
 static bool add_query_msgid(char *line, int line_num, void *user_data)
@@ -275,7 +276,7 @@ static bool add_query_msgid(char *line, int line_num, void *user_data)
 }
 
 /**
- * eat_query - Parse a query for an external search program - Implements ::pattern_eat_t
+ * eat_query - Parse a query for an external search program - Implements Pattern::eat_arg()
  */
 static bool eat_query(struct Pattern *pat, int flags, struct Buffer *s, struct Buffer *err)
 {
@@ -326,7 +327,7 @@ static bool eat_query(struct Pattern *pat, int flags, struct Buffer *s, struct B
   mutt_message(_("Running search command: %s ..."), cmd_buf.data);
   pat->is_multi = true;
   mutt_list_clear(&pat->p.multi_cases);
-  pid_t pid = mutt_create_filter(cmd_buf.data, NULL, &fp, NULL);
+  pid_t pid = filter_create(cmd_buf.data, NULL, &fp, NULL);
   if (pid < 0)
   {
     mutt_buffer_printf(err, "unable to fork command: %s\n", cmd_buf.data);
@@ -336,7 +337,7 @@ static bool eat_query(struct Pattern *pat, int flags, struct Buffer *s, struct B
 
   mutt_file_map_lines(add_query_msgid, &pat->p.multi_cases, fp, 0);
   mutt_file_fclose(&fp);
-  mutt_wait_filter(pid);
+  filter_wait(pid);
   FREE(&cmd_buf.data);
   return true;
 }
@@ -401,15 +402,53 @@ static const char *get_offset(struct tm *tm, const char *s, int sign)
  * are optional and if the year is less than 70 it's assumed to be after 2000.
  *
  * Examples:
- * - "10"         = 23 of this month, this year
+ * - "10"         = 10 of this month, this year
  * - "10/12"      = 10 of December,   this year
  * - "10/12/04"   = 10 of December,   2004
  * - "10/12/2008" = 10 of December,   2008
+ * - "20081210"   = 10 of December,   2008
  */
 static const char *get_date(const char *s, struct tm *t, struct Buffer *err)
 {
   char *p = NULL;
   struct tm tm = mutt_date_localtime(MUTT_DATE_NOW);
+  bool iso8601 = true;
+
+  for (int v = 0; v < 8; v++)
+  {
+    if (s[v] && (s[v] >= '0') && (s[v] <= '9'))
+      continue;
+
+    iso8601 = false;
+    break;
+  }
+
+  if (iso8601)
+  {
+    int year = 0;
+    int month = 0;
+    int mday = 0;
+    sscanf(s, "%4d%2d%2d", &year, &month, &mday);
+
+    t->tm_year = year;
+    if (t->tm_year > 1900)
+      t->tm_year -= 1900;
+    t->tm_mon = month - 1;
+    t->tm_mday = mday;
+
+    if ((t->tm_mday < 1) || (t->tm_mday > 31))
+    {
+      snprintf(err->data, err->dsize, _("Invalid day of month: %s"), s);
+      return NULL;
+    }
+    if ((t->tm_mon < 0) || (t->tm_mon > 11))
+    {
+      snprintf(err->data, err->dsize, _("Invalid month: %s"), s);
+      return NULL;
+    }
+
+    return (s + 8);
+  }
 
   t->tm_mday = strtol(s, &p, 10);
   if ((t->tm_mday < 1) || (t->tm_mday > 31))
@@ -705,7 +744,7 @@ static bool eval_date_minmax(struct Pattern *pat, const char *s, struct Buffer *
 }
 
 /**
- * eat_range - Parse a number range - Implements ::pattern_eat_t
+ * eat_range - Parse a number range - Implements Pattern::eat_arg()
  */
 static bool eat_range(struct Pattern *pat, int flags, struct Buffer *s, struct Buffer *err)
 {
@@ -862,7 +901,10 @@ static int scan_range_num(struct Buffer *s, regmatch_t pmatch[], int group, int 
   switch (kind)
   {
     case RANGE_K_REL:
-      return num + CTX_MSGNO(Context);
+    {
+      struct Email *e = mutt_get_virt_email(Context->mailbox, Context->menu->current);
+      return num + EMSG(e);
+    }
     case RANGE_K_LT:
       return num - 1;
     case RANGE_K_GT:
@@ -900,7 +942,10 @@ static int scan_range_slot(struct Buffer *s, regmatch_t pmatch[], int grp, int s
     case RANGE_DOLLAR:
       return Context->mailbox->msg_count;
     case RANGE_DOT:
-      return CTX_MSGNO(Context);
+    {
+      struct Email *e = mutt_get_virt_email(Context->mailbox, Context->menu->current);
+      return EMSG(e);
+    }
     case RANGE_LT:
     case RANGE_GT:
       return scan_range_num(s, pmatch, grp + 1, kind);
@@ -969,7 +1014,8 @@ static int eat_range_by_regex(struct Pattern *pat, struct Buffer *s, int kind,
       mutt_buffer_strcpy(err, _("No current message"));
       return RANGE_E_CTX;
     }
-    pat->max = CTX_MSGNO(Context);
+    struct Email *e = mutt_get_virt_email(Context->mailbox, Context->menu->current);
+    pat->max = EMSG(e);
     pat->min = pat->max;
   }
 
@@ -982,7 +1028,7 @@ static int eat_range_by_regex(struct Pattern *pat, struct Buffer *s, int kind,
 }
 
 /**
- * eat_message_range - Parse a range of message numbers - Implements ::pattern_eat_t
+ * eat_message_range - Parse a range of message numbers - Implements Pattern::eat_arg()
  */
 static bool eat_message_range(struct Pattern *pat, int flags, struct Buffer *s,
                               struct Buffer *err)
@@ -1026,7 +1072,7 @@ static bool eat_message_range(struct Pattern *pat, int flags, struct Buffer *s,
 }
 
 /**
- * eat_date - Parse a date pattern - Implements ::pattern_eat_t
+ * eat_date - Parse a date pattern - Implements Pattern::eat_arg()
  */
 static bool eat_date(struct Pattern *pat, int flags, struct Buffer *s, struct Buffer *err)
 {
@@ -1153,7 +1199,7 @@ static bool msg_search(struct Mailbox *m, struct Pattern *pat, int msgno)
     }
 
 #ifdef USE_FMEMOPEN
-    fclose(s.fp_out);
+    mutt_file_fclose(&s.fp_out);
     lng = tempsize;
 
     if (tempsize)
@@ -1243,8 +1289,8 @@ static bool msg_search(struct Mailbox *m, struct Pattern *pat, int msgno)
  */
 static const struct PatternFlags Flags[] = {
   { 'A', MUTT_ALL,                 0,                NULL              },
-  { 'b', MUTT_PAT_BODY,            MUTT_PC_FULL_MSG, eat_regex         },
-  { 'B', MUTT_PAT_WHOLE_MSG,       MUTT_PC_FULL_MSG, eat_regex         },
+  { 'b', MUTT_PAT_BODY,            MUTT_PC_FULL_MSG|MUTT_PC_SEND_MODE_SEARCH, eat_regex },
+  { 'B', MUTT_PAT_WHOLE_MSG,       MUTT_PC_FULL_MSG|MUTT_PC_SEND_MODE_SEARCH, eat_regex },
   { 'c', MUTT_PAT_CC,              0,                eat_regex         },
   { 'C', MUTT_PAT_RECIPIENT,       0,                eat_regex         },
   { 'd', MUTT_PAT_DATE,            0,                eat_date          },
@@ -1255,7 +1301,7 @@ static const struct PatternFlags Flags[] = {
   { 'F', MUTT_FLAG,                0,                NULL              },
   { 'g', MUTT_PAT_CRYPT_SIGN,      0,                NULL              },
   { 'G', MUTT_PAT_CRYPT_ENCRYPT,   0,                NULL              },
-  { 'h', MUTT_PAT_HEADER,          MUTT_PC_FULL_MSG, eat_regex         },
+  { 'h', MUTT_PAT_HEADER,          MUTT_PC_FULL_MSG|MUTT_PC_SEND_MODE_SEARCH, eat_regex },
   { 'H', MUTT_PAT_HORMEL,          0,                eat_regex         },
   { 'i', MUTT_PAT_ID,              0,                eat_regex         },
   { 'I', MUTT_PAT_ID_EXTERNAL,     0,                eat_query         },
@@ -1557,6 +1603,9 @@ struct PatternList *mutt_pattern_comp(const char *s, PatternCompFlags flags, str
           mutt_buffer_printf(err, _("%c: not supported in this mode"), *ps.dptr);
           goto cleanup;
         }
+        if (flags & MUTT_PC_SEND_MODE_SEARCH)
+          pat->sendmode = true;
+
         pat->op = entry->op;
 
         ps.dptr++; /* eat the operator and any optional whitespace */
@@ -1984,6 +2033,80 @@ static int is_pattern_cache_set(int cache_entry)
 }
 
 /**
+ * msg_search_sendmode - Search in send-mode
+ * @param e   Email to search
+ * @param pat Pattern to find
+ * @retval  1 Success, pattern matched
+ * @retval  0 Pattern did not match
+ * @retval -1 Error
+ */
+static int msg_search_sendmode(struct Email *e, struct Pattern *pat)
+{
+  bool match = false;
+  char *buf = NULL;
+  size_t blen = 0;
+  FILE *fp = NULL;
+
+  if ((pat->op == MUTT_PAT_HEADER) || (pat->op == MUTT_PAT_WHOLE_MSG))
+  {
+    struct Buffer *tempfile = mutt_buffer_pool_get();
+    mutt_buffer_mktemp(tempfile);
+    fp = mutt_file_fopen(mutt_b2s(tempfile), "w+");
+    if (!fp)
+    {
+      mutt_perror(mutt_b2s(tempfile));
+      mutt_buffer_pool_release(&tempfile);
+      return 0;
+    }
+
+    mutt_rfc822_write_header(fp, e->env, e->content, MUTT_WRITE_HEADER_POSTPONE, false, false);
+    fflush(fp);
+    fseek(fp, 0, 0);
+
+    while ((buf = mutt_file_read_line(buf, &blen, fp, NULL, 0)) != NULL)
+    {
+      if (patmatch(pat, buf) == 0)
+      {
+        match = true;
+        break;
+      }
+    }
+
+    FREE(&buf);
+    mutt_file_fclose(&fp);
+    unlink(mutt_b2s(tempfile));
+    mutt_buffer_pool_release(&tempfile);
+
+    if (match)
+      return match;
+  }
+
+  if ((pat->op == MUTT_PAT_BODY) || (pat->op == MUTT_PAT_WHOLE_MSG))
+  {
+    fp = mutt_file_fopen(e->content->filename, "r");
+    if (!fp)
+    {
+      mutt_perror(e->content->filename);
+      return 0;
+    }
+
+    while ((buf = mutt_file_read_line(buf, &blen, fp, NULL, 0)) != NULL)
+    {
+      if (patmatch(pat, buf) == 0)
+      {
+        match = true;
+        break;
+      }
+    }
+
+    FREE(&buf);
+    mutt_file_fclose(&fp);
+  }
+
+  return match;
+}
+
+/**
  * mutt_pattern_exec - Match a pattern against an email header
  * @param pat   Pattern to match
  * @param flags Flags, e.g. #MUTT_MATCH_FULL_ADDRESS
@@ -2049,6 +2172,12 @@ int mutt_pattern_exec(struct Pattern *pat, PatternExecFlags flags,
     case MUTT_PAT_BODY:
     case MUTT_PAT_HEADER:
     case MUTT_PAT_WHOLE_MSG:
+      if (pat->sendmode)
+      {
+        if (!e->content || !e->content->filename)
+          return 0;
+        return pat->pat_not ^ msg_search_sendmode(e, pat);
+      }
       /* m can be NULL in certain cases, such as when replying to a message
        * from the attachment menu and the user has a reply-hook using "~e".
        * This is also the case when message scoring.  */
@@ -2198,8 +2327,10 @@ int mutt_pattern_exec(struct Pattern *pat, PatternExecFlags flags,
       {
         int *cache_entry = pat->all_addr ? &cache->pers_from_all : &cache->pers_from_one;
         if (!is_pattern_cache_set(*cache_entry))
+        {
           set_pattern_cache_value(cache_entry,
                                   match_user(pat->all_addr, &e->env->from, NULL));
+        }
         result = get_pattern_cache_value(*cache_entry);
       }
       else
@@ -2371,32 +2502,38 @@ static struct MuttThread *top_of_thread(struct Email *e)
  */
 bool mutt_limit_current_thread(struct Email *e)
 {
-  if (!e)
+  if (!e || !Context || !Context->mailbox)
     return false;
 
   struct MuttThread *me = top_of_thread(e);
   if (!me)
     return false;
 
-  Context->mailbox->vcount = 0;
+  struct Mailbox *m = Context->mailbox;
+
+  m->vcount = 0;
   Context->vsize = 0;
   Context->collapsed = false;
 
-  for (int i = 0; i < Context->mailbox->msg_count; i++)
+  for (int i = 0; i < m->msg_count; i++)
   {
-    Context->mailbox->emails[i]->vnum = -1;
-    Context->mailbox->emails[i]->limited = false;
-    Context->mailbox->emails[i]->collapsed = false;
-    Context->mailbox->emails[i]->num_hidden = 0;
+    e = m->emails[i];
+    if (!e)
+      break;
 
-    if (top_of_thread(Context->mailbox->emails[i]) == me)
+    e->vnum = -1;
+    e->limited = false;
+    e->collapsed = false;
+    e->num_hidden = 0;
+
+    if (top_of_thread(e) == me)
     {
-      struct Body *body = Context->mailbox->emails[i]->content;
+      struct Body *body = e->content;
 
-      Context->mailbox->emails[i]->vnum = Context->mailbox->vcount;
-      Context->mailbox->emails[i]->limited = true;
-      Context->mailbox->v2r[Context->mailbox->vcount] = i;
-      Context->mailbox->vcount++;
+      e->vnum = m->vcount;
+      e->limited = true;
+      m->v2r[m->vcount] = i;
+      m->vcount++;
       Context->vsize += (body->length + body->offset - body->hdr_offset);
     }
   }
@@ -2412,10 +2549,14 @@ bool mutt_limit_current_thread(struct Email *e)
  */
 int mutt_pattern_func(int op, char *prompt)
 {
+  if (!Context || !Context->mailbox)
+    return -1;
+
   struct Buffer err;
   int rc = -1;
   struct Progress progress;
   struct Buffer *buf = mutt_buffer_pool_get();
+  struct Mailbox *m = Context->mailbox;
 
   mutt_buffer_strcpy(buf, NONULL(Context->pattern));
   if (prompt || (op != MUTT_LIMIT))
@@ -2444,66 +2585,64 @@ int mutt_pattern_func(int op, char *prompt)
   }
 
 #ifdef USE_IMAP
-  if ((Context->mailbox->magic == MUTT_IMAP) && (imap_search(Context->mailbox, pat) < 0))
+  if ((m->magic == MUTT_IMAP) && (imap_search(m, pat) < 0))
     goto bail;
 #endif
 
-  mutt_progress_init(
-      &progress, _("Executing command on matching messages..."), MUTT_PROGRESS_READ,
-      (op == MUTT_LIMIT) ? Context->mailbox->msg_count : Context->mailbox->vcount);
+  mutt_progress_init(&progress, _("Executing command on matching messages..."),
+                     MUTT_PROGRESS_READ, (op == MUTT_LIMIT) ? m->msg_count : m->vcount);
 
   if (op == MUTT_LIMIT)
   {
-    Context->mailbox->vcount = 0;
+    m->vcount = 0;
     Context->vsize = 0;
     Context->collapsed = false;
-    int padding = mx_msg_padding_size(Context->mailbox);
+    int padding = mx_msg_padding_size(m);
 
-    for (int i = 0; i < Context->mailbox->msg_count; i++)
+    for (int i = 0; i < m->msg_count; i++)
     {
+      struct Email *e = m->emails[i];
+      if (!e)
+        break;
+
       mutt_progress_update(&progress, i, -1);
       /* new limit pattern implicitly uncollapses all threads */
-      Context->mailbox->emails[i]->vnum = -1;
-      Context->mailbox->emails[i]->limited = false;
-      Context->mailbox->emails[i]->collapsed = false;
-      Context->mailbox->emails[i]->num_hidden = 0;
-      if (mutt_pattern_exec(SLIST_FIRST(pat), MUTT_MATCH_FULL_ADDRESS,
-                            Context->mailbox, Context->mailbox->emails[i], NULL))
+      e->vnum = -1;
+      e->limited = false;
+      e->collapsed = false;
+      e->num_hidden = 0;
+      if (mutt_pattern_exec(SLIST_FIRST(pat), MUTT_MATCH_FULL_ADDRESS, m, e, NULL))
       {
-        Context->mailbox->emails[i]->vnum = Context->mailbox->vcount;
-        Context->mailbox->emails[i]->limited = true;
-        Context->mailbox->v2r[Context->mailbox->vcount] = i;
-        Context->mailbox->vcount++;
-        struct Body *b = Context->mailbox->emails[i]->content;
+        e->vnum = m->vcount;
+        e->limited = true;
+        m->v2r[m->vcount] = i;
+        m->vcount++;
+        struct Body *b = e->content;
         Context->vsize += b->length + b->offset - b->hdr_offset + padding;
       }
     }
   }
   else
   {
-    for (int i = 0; i < Context->mailbox->vcount; i++)
+    for (int i = 0; i < m->vcount; i++)
     {
+      struct Email *e = mutt_get_virt_email(Context->mailbox, i);
+      if (!e)
+        continue;
       mutt_progress_update(&progress, i, -1);
-      if (mutt_pattern_exec(SLIST_FIRST(pat), MUTT_MATCH_FULL_ADDRESS, Context->mailbox,
-                            Context->mailbox->emails[Context->mailbox->v2r[i]], NULL))
+      if (mutt_pattern_exec(SLIST_FIRST(pat), MUTT_MATCH_FULL_ADDRESS, m, e, NULL))
       {
         switch (op)
         {
           case MUTT_UNDELETE:
-            mutt_set_flag(Context->mailbox,
-                          Context->mailbox->emails[Context->mailbox->v2r[i]],
-                          MUTT_PURGE, false);
+            mutt_set_flag(m, e, MUTT_PURGE, false);
           /* fallthrough */
           case MUTT_DELETE:
-            mutt_set_flag(Context->mailbox,
-                          Context->mailbox->emails[Context->mailbox->v2r[i]],
-                          MUTT_DELETE, (op == MUTT_DELETE));
+            mutt_set_flag(m, e, MUTT_DELETE, (op == MUTT_DELETE));
             break;
           case MUTT_TAG:
           case MUTT_UNTAG:
-            mutt_set_flag(Context->mailbox,
-                          Context->mailbox->emails[Context->mailbox->v2r[i]],
-                          MUTT_TAG, (op == MUTT_TAG));
+            mutt_set_flag(m, e, MUTT_TAG, (op == MUTT_TAG));
             break;
         }
       }
@@ -2518,7 +2657,7 @@ int mutt_pattern_func(int op, char *prompt)
     FREE(&Context->pattern);
     mutt_pattern_free(&Context->limit_pattern);
 
-    if (Context->mailbox->msg_count && !Context->mailbox->vcount)
+    if (m->msg_count && !m->vcount)
       mutt_error(_("No messages matched criteria"));
 
     /* record new limit pattern, unless match all */
@@ -2653,7 +2792,7 @@ int mutt_search_command(int cur, int op)
       }
     }
 
-    struct Email *e = Context->mailbox->emails[Context->mailbox->v2r[i]];
+    struct Email *e = mutt_get_virt_email(Context->mailbox, i);
     if (e->searched)
     {
       /* if we've already evaluated this message, use the cached value */

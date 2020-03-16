@@ -50,14 +50,15 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
+#include "crypt_gpgme.h"
 #include "alias.h"
 #include "crypt.h"
-#include "curs_lib.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "handler.h"
@@ -66,9 +67,7 @@
 #include "mutt_attach.h"
 #include "mutt_logging.h"
 #include "mutt_menu.h"
-#include "mutt_window.h"
 #include "muttlib.h"
-#include "ncrypt.h"
 #include "opcodes.h"
 #include "options.h"
 #include "pager.h"
@@ -77,6 +76,7 @@
 #include "sendlib.h"
 #include "sort.h"
 #include "state.h"
+#include "ncrypt/lib.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
@@ -120,10 +120,10 @@ struct CryptKeyInfo
 {
   struct CryptKeyInfo *next;
   gpgme_key_t kobj;
-  int idx;                   /**< and the user ID at this index */
-  const char *uid;           /**< and for convenience point to this user ID */
-  KeyFlags flags;            /**< global and per uid flags (for convenience) */
-  gpgme_validity_t validity; /**< uid validity (cached for convenience) */
+  int idx;                   ///< and the user ID at this index
+  const char *uid;           ///< and for convenience point to this user ID
+  KeyFlags flags;            ///< global and per uid flags (for convenience)
+  gpgme_validity_t validity; ///< uid validity (cached for convenience)
 };
 
 /**
@@ -281,7 +281,7 @@ static int cmp_version_strings(const char *a, const char *b, int level)
 {
   return gpgrt_cmp_version(a, b, level);
 }
-#elif GPGME_VERSION_NUMBER >= 0x010900 /* gpgme >= 1.9.0 */
+#elif (GPGME_VERSION_NUMBER >= 0x010900) /* gpgme >= 1.9.0 */
 
 /**
  * parse_version_number - Parse a version string
@@ -460,7 +460,7 @@ static int cmp_version_strings(const char *a, const char *b, int level)
     return positive;
   return negative;
 }
-#endif                                 /* gpgme >= 1.9.0 */
+#endif                                   /* gpgme >= 1.9.0 */
 
 /**
  * crypt_keyid - Find the ID for the key
@@ -1165,48 +1165,34 @@ static gpgme_key_t *create_recipient_set(const char *keylist, bool use_smime)
 #endif /* GPGME_VERSION_NUMBER >= 0x010b00 */
 
 /**
- * set_signer - Make sure that the correct signer is set
+ * set_signer_from_address - Try to set the context's signer from the address
  * @param ctx       GPGME handle
+ * @param address   Address to try to set as a signer
  * @param for_smime Use S/MIME
- * @retval  0 Success
- * @retval -1 Error
+ * @retval true     Address was set as a signer
+ * @retval false    Address could not be set as a signer
  */
-static int set_signer(gpgme_ctx_t ctx, bool for_smime)
+static bool set_signer_from_address(gpgme_ctx_t ctx, const char *address, bool for_smime)
 {
-  char *signid = NULL;
   gpgme_error_t err;
-  gpgme_ctx_t listctx = NULL;
   gpgme_key_t key = NULL, key2 = NULL;
-  char *fpr = NULL, *fpr2 = NULL;
-
-  if (for_smime)
-    signid = C_SmimeSignAs ? C_SmimeSignAs : C_SmimeDefaultKey;
-#ifdef USE_AUTOCRYPT
-  else if (OptAutocryptGpgme)
-    signid = AutocryptSignAs;
-#endif
-  else
-    signid = C_PgpSignAs ? C_PgpSignAs : C_PgpDefaultKey;
-
-  if (!signid)
-    return 0;
-
-  listctx = create_gpgme_context(for_smime);
-  err = gpgme_op_keylist_start(listctx, signid, 1);
+  gpgme_ctx_t listctx = create_gpgme_context(for_smime);
+  err = gpgme_op_keylist_start(listctx, address, 1);
   if (err == 0)
     err = gpgme_op_keylist_next(listctx, &key);
   if (err)
   {
     gpgme_release(listctx);
-    mutt_error(_("secret key '%s' not found: %s"), signid, gpgme_strerror(err));
-    return -1;
+    mutt_error(_("secret key '%s' not found: %s"), address, gpgme_strerror(err));
+    return false;
   }
-  fpr = "fpr1";
+
+  char *fpr = "fpr1";
   if (key->subkeys)
     fpr = key->subkeys->fpr ? key->subkeys->fpr : key->subkeys->keyid;
   while (gpgme_op_keylist_next(listctx, &key2) == 0)
   {
-    fpr2 = "fpr2";
+    char *fpr2 = "fpr2";
     if (key2->subkeys)
       fpr2 = key2->subkeys->fpr ? key2->subkeys->fpr : key2->subkeys->keyid;
     if (mutt_str_strcmp(fpr, fpr2))
@@ -1214,8 +1200,8 @@ static int set_signer(gpgme_ctx_t ctx, bool for_smime)
       gpgme_key_unref(key);
       gpgme_key_unref(key2);
       gpgme_release(listctx);
-      mutt_error(_("ambiguous specification of secret key '%s'\n"), signid);
-      return -1;
+      mutt_error(_("ambiguous specification of secret key '%s'\n"), address);
+      return false;
     }
     else
     {
@@ -1230,10 +1216,53 @@ static int set_signer(gpgme_ctx_t ctx, bool for_smime)
   gpgme_key_unref(key);
   if (err)
   {
-    mutt_error(_("error setting secret key '%s': %s"), signid, gpgme_strerror(err));
-    return -1;
+    mutt_error(_("error setting secret key '%s': %s"), address, gpgme_strerror(err));
+    return false;
   }
-  return 0;
+  return true;
+}
+
+/**
+ * set_signer - Make sure that the correct signer is set
+ * @param ctx       GPGME handle
+ * @param al        From AddressList
+ * @param for_smime Use S/MIME
+ * @retval  0 Success
+ * @retval -1 Error
+ */
+static int set_signer(gpgme_ctx_t ctx, const struct AddressList *al, bool for_smime)
+{
+  char *signid = NULL;
+
+  if (for_smime)
+    signid = C_SmimeSignAs ? C_SmimeSignAs : C_SmimeDefaultKey;
+#ifdef USE_AUTOCRYPT
+  else if (OptAutocryptGpgme)
+    signid = AutocryptSignAs;
+#endif
+  else
+    signid = C_PgpSignAs ? C_PgpSignAs : C_PgpDefaultKey;
+
+  /* Try getting the signing key from config entries */
+  if (signid && set_signer_from_address(ctx, signid, for_smime))
+  {
+    return 0;
+  }
+
+  /* Try getting the signing key from the From line */
+  if (al)
+  {
+    struct Address *a;
+    TAILQ_FOREACH(a, al, entries)
+    {
+      if (a->mailbox && set_signer_from_address(ctx, a->mailbox, for_smime))
+      {
+        return 0;
+      }
+    }
+  }
+
+  return (!signid && !al) ? 0 : -1;
 }
 
 /**
@@ -1258,10 +1287,11 @@ static gpgme_error_t set_pka_sig_notation(gpgme_ctx_t ctx)
  * @param keylist         List of keys to encrypt to
  * @param use_smime       If true, use SMIME
  * @param combined_signed If true, sign and encrypt the message (PGP only)
+ * @param from            The From header line
  * @retval ptr Name of temporary file containing encrypted text
  */
-static char *encrypt_gpgme_object(gpgme_data_t plaintext, char *keylist,
-                                  bool use_smime, bool combined_signed)
+static char *encrypt_gpgme_object(gpgme_data_t plaintext, char *keylist, bool use_smime,
+                                  bool combined_signed, const struct AddressList *from)
 {
   gpgme_error_t err;
   gpgme_ctx_t ctx = NULL;
@@ -1290,7 +1320,7 @@ static char *encrypt_gpgme_object(gpgme_data_t plaintext, char *keylist,
 
   if (combined_signed)
   {
-    if (set_signer(ctx, use_smime))
+    if (set_signer(ctx, from, use_smime))
       goto cleanup;
 
     if (C_CryptUsePka)
@@ -1397,11 +1427,12 @@ static void print_time(time_t t, struct State *s)
 /**
  * sign_message - Sign a message
  * @param a         Message to sign
+ * @param from      The From header line
  * @param use_smime If set, use SMIME instead of PGP
  * @retval ptr  new Body
  * @retval NULL error
  */
-static struct Body *sign_message(struct Body *a, bool use_smime)
+static struct Body *sign_message(struct Body *a, const struct AddressList *from, bool use_smime)
 {
   struct Body *t = NULL;
   char *sigfile = NULL;
@@ -1422,7 +1453,7 @@ static struct Body *sign_message(struct Body *a, bool use_smime)
   if (!use_smime)
     gpgme_set_armor(ctx, 1);
 
-  if (set_signer(ctx, use_smime))
+  if (set_signer(ctx, from, use_smime))
   {
     gpgme_data_release(signature);
     gpgme_data_release(message);
@@ -1522,23 +1553,24 @@ static struct Body *sign_message(struct Body *a, bool use_smime)
 /**
  * pgp_gpgme_sign_message - Implements CryptModuleSpecs::sign_message()
  */
-struct Body *pgp_gpgme_sign_message(struct Body *a)
+struct Body *pgp_gpgme_sign_message(struct Body *a, const struct AddressList *from)
 {
-  return sign_message(a, false);
+  return sign_message(a, from, false);
 }
 
 /**
  * smime_gpgme_sign_message - Implements CryptModuleSpecs::sign_message()
  */
-struct Body *smime_gpgme_sign_message(struct Body *a)
+struct Body *smime_gpgme_sign_message(struct Body *a, const struct AddressList *from)
 {
-  return sign_message(a, true);
+  return sign_message(a, from, true);
 }
 
 /**
  * pgp_gpgme_encrypt_message - Implements CryptModuleSpecs::pgp_encrypt_message()
  */
-struct Body *pgp_gpgme_encrypt_message(struct Body *a, char *keylist, bool sign)
+struct Body *pgp_gpgme_encrypt_message(struct Body *a, char *keylist, bool sign,
+                                       const struct AddressList *from)
 {
   if (sign)
     crypt_convert_to_7bit(a);
@@ -1546,7 +1578,7 @@ struct Body *pgp_gpgme_encrypt_message(struct Body *a, char *keylist, bool sign)
   if (!plaintext)
     return NULL;
 
-  char *outfile = encrypt_gpgme_object(plaintext, keylist, false, sign);
+  char *outfile = encrypt_gpgme_object(plaintext, keylist, false, sign, from);
   gpgme_data_release(plaintext);
   if (!outfile)
     return NULL;
@@ -1592,7 +1624,7 @@ struct Body *smime_gpgme_build_smime_entity(struct Body *a, char *keylist)
   if (!plaintext)
     return NULL;
 
-  char *outfile = encrypt_gpgme_object(plaintext, keylist, true, false);
+  char *outfile = encrypt_gpgme_object(plaintext, keylist, true, false, NULL);
   gpgme_data_release(plaintext);
   if (!outfile)
     return NULL;
@@ -2030,8 +2062,16 @@ static int show_one_sig_status(gpgme_ctx_t ctx, int idx, struct State *s)
 
 /**
  * verify_one - Do the actual verification step
+ * @param sigbdy   Mime part containing signature
+ * @param s        State to read from
+ * @param tempfile Temporary file to read
+ * @param is_smime Is the key S/MIME?
+ * @retval  0 Success
+ * @retval  1 Bad signature
+ * @retval  2 Warnings
+ * @retval -1 Error
  *
- * With IS_SMIME set to true we assume S/MIME (surprise!)
+ * With IS_SMIME set to true we assume S/MIME.
  */
 static int verify_one(struct Body *sigbdy, struct State *s, const char *tempfile, bool is_smime)
 {
@@ -2201,9 +2241,10 @@ static struct Body *decrypt_part(struct Body *a, struct State *s, FILE *fp_out,
   if (r_is_signed)
     *r_is_signed = 0;
 
-  gpgme_ctx_t ctx = create_gpgme_context(is_smime);
-
+  gpgme_ctx_t ctx = NULL;
 restart:
+  ctx = create_gpgme_context(is_smime);
+
   if (a->length < 0)
     return NULL;
   /* Make a data object from the body, create context etc. */
@@ -3059,7 +3100,11 @@ int pgp_gpgme_application_handler(struct Body *m, struct State *s)
           state_puts(s, errbuf);
         }
         else
-        { /* Decryption/Verification succeeded */
+        {
+          /* Decryption/Verification succeeded */
+
+          mutt_message(_("PGP message successfully decrypted"));
+
           bool sig_stat = false;
           char *tmpfname = NULL;
 
@@ -3583,16 +3628,20 @@ static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int co
   }
 
   if (optional)
+  {
     mutt_expando_format(buf, buflen, col, cols, if_str, attach_format_str, data,
                         MUTT_FORMAT_NO_FLAGS);
+  }
   else if (flags & MUTT_FORMAT_OPTIONAL)
+  {
     mutt_expando_format(buf, buflen, col, cols, else_str, attach_format_str,
                         data, MUTT_FORMAT_NO_FLAGS);
+  }
   return src;
 }
 
 /**
- * crypt_make_entry - Format a menu item for the key selection list - Implements Menu::menu_make_entry()
+ * crypt_make_entry - Format a menu item for the key selection list - Implements Menu::make_entry()
  */
 static void crypt_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
@@ -3602,8 +3651,9 @@ static void crypt_make_entry(char *buf, size_t buflen, struct Menu *menu, int li
   entry.key = key_table[line];
   entry.num = line + 1;
 
-  mutt_expando_format(buf, buflen, 0, menu->indexwin->cols, NONULL(C_PgpEntryFormat),
-                      crypt_format_str, (unsigned long) &entry, MUTT_FORMAT_ARROWCURSOR);
+  mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
+                      NONULL(C_PgpEntryFormat), crypt_format_str,
+                      (unsigned long) &entry, MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
@@ -3788,7 +3838,7 @@ static int crypt_compare_trust(const void *a, const void *b)
  *
  * Print the X.500 Distinguished Name part KEY from the array of parts DN to FP.
  */
-bool print_dn_part(FILE *fp, struct DnArray *dn, const char *key)
+static bool print_dn_part(FILE *fp, struct DnArray *dn, const char *key)
 {
   bool any = false;
 
@@ -4734,9 +4784,42 @@ static struct CryptKeyInfo *crypt_select_key(struct CryptKeyInfo *keys,
   mutt_make_help(buf, sizeof(buf), _("Help"), menu_to_use, OP_HELP);
   strcat(helpstr, buf);
 
+  struct MuttWindow *dlg =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+#ifdef USE_DEBUG_WINDOW
+  dlg->name = "crypt-gpgme";
+#endif
+  dlg->type = WT_DIALOG;
+  struct MuttWindow *index =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+  index->type = WT_INDEX;
+  struct MuttWindow *ibar = mutt_window_new(
+      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
+  ibar->type = WT_INDEX_BAR;
+
+  if (C_StatusOnTop)
+  {
+    mutt_window_add_child(dlg, ibar);
+    mutt_window_add_child(dlg, index);
+  }
+  else
+  {
+    mutt_window_add_child(dlg, index);
+    mutt_window_add_child(dlg, ibar);
+  }
+
+  dialog_push(dlg);
+
   struct Menu *menu = mutt_menu_new(menu_to_use);
+
+  menu->pagelen = index->state.rows;
+  menu->win_index = index;
+  menu->win_ibar = ibar;
+
   menu->max = i;
-  menu->menu_make_entry = crypt_make_entry;
+  menu->make_entry = crypt_make_entry;
   menu->help = helpstr;
   menu->data = key_table;
   mutt_menu_push_current(menu);
@@ -4869,6 +4952,8 @@ static struct CryptKeyInfo *crypt_select_key(struct CryptKeyInfo *keys,
   mutt_menu_pop_current(menu);
   mutt_menu_free(&menu);
   FREE(&key_table);
+  dialog_pop();
+  mutt_window_free(&dlg);
 
   return k;
 }
@@ -4978,7 +5063,7 @@ static struct CryptKeyInfo *crypt_getkeybyaddr(struct Address *a,
     {
       if (the_strong_valid_key)
         k = crypt_copy_key(the_strong_valid_key);
-      else if (a_valid_addrmatch_key)
+      else if (a_valid_addrmatch_key && !C_CryptOpportunisticEncryptStrongKeys)
         k = crypt_copy_key(a_valid_addrmatch_key);
       else
         k = NULL;
@@ -5383,6 +5468,7 @@ cleanup:
  */
 struct Body *pgp_gpgme_make_key_attachment(void)
 {
+#ifdef HAVE_GPGME_OP_EXPORT_KEYS
   gpgme_ctx_t context = NULL;
   gpgme_key_t export_keys[2] = { 0 };
   gpgme_data_t keydata = NULL;
@@ -5437,6 +5523,10 @@ bail:
   gpgme_release(context);
 
   return att;
+#else
+  mutt_error("gpgme_op_export_keys not supported");
+  return NULL;
+#endif
 }
 
 /**

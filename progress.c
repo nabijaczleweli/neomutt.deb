@@ -31,14 +31,11 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <string.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
+#include "gui/lib.h"
 #include "progress.h"
-#include "color.h"
-#include "curs_lib.h"
 #include "globals.h"
-#include "mutt_curses.h"
 #include "mutt_logging.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "options.h"
 
@@ -61,7 +58,7 @@ static void message_bar(int percent, const char *fmt, ...)
 
   va_list ap;
   char buf[256], buf2[256];
-  int w = (percent * MuttMessageWindow->cols) / 100;
+  int w = (percent * MuttMessageWindow->state.cols) / 100;
   size_t l;
 
   va_start(ap, fmt);
@@ -69,7 +66,7 @@ static void message_bar(int percent, const char *fmt, ...)
   l = mutt_strwidth(buf);
   va_end(ap);
 
-  mutt_simple_format(buf2, sizeof(buf2), 0, MuttMessageWindow->cols - 2,
+  mutt_simple_format(buf2, sizeof(buf2), 0, MuttMessageWindow->state.cols - 2,
                      JUSTIFY_LEFT, 0, buf, sizeof(buf), false);
 
   mutt_window_move(MuttMessageWindow, 0, 0);

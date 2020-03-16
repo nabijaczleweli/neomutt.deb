@@ -26,8 +26,8 @@
 
 #include <stdbool.h>
 #include <time.h>
-#include "conn/conn.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
+#include "conn/lib.h"
 
 struct Email;
 struct Mailbox;
@@ -78,24 +78,23 @@ struct PopCache
 struct PopAccountData
 {
   struct Connection *conn;
-  struct ConnAccount conn_account;
   unsigned int status : 2;
   bool capabilities : 1;
   unsigned int use_stls : 2;
-  bool cmd_capa : 1;         /**< optional command CAPA */
-  bool cmd_stls : 1;         /**< optional command STLS */
-  unsigned int cmd_user : 2; /**< optional command USER */
-  unsigned int cmd_uidl : 2; /**< optional command UIDL */
-  unsigned int cmd_top : 2;  /**< optional command TOP */
-  bool resp_codes : 1;       /**< server supports extended response codes */
-  bool expire : 1;           /**< expire is greater than 0 */
+  bool cmd_capa : 1;         ///< optional command CAPA
+  bool cmd_stls : 1;         ///< optional command STLS
+  unsigned int cmd_user : 2; ///< optional command USER
+  unsigned int cmd_uidl : 2; ///< optional command UIDL
+  unsigned int cmd_top : 2;  ///< optional command TOP
+  bool resp_codes : 1;       ///< server supports extended response codes
+  bool expire : 1;           ///< expire is greater than 0
   bool clear_cache : 1;
   size_t size;
   time_t check_time;
-  time_t login_delay; /**< minimal login delay  capability */
-  struct Buffer auth_list; /**< list of auth mechanisms */
+  time_t login_delay; ///< minimal login delay  capability
+  struct Buffer auth_list; ///< list of auth mechanisms
   char *timestamp;
-  struct BodyCache *bcache; /**< body cache */
+  struct BodyCache *bcache; ///< body cache
   char err_msg[POP_CMD_RESPONSE];
   struct PopCache cache[POP_CACHE_LEN];
 };
@@ -114,11 +113,16 @@ struct PopEmailData
  */
 struct PopAuth
 {
-  /* do authentication, using named method or any available if method is NULL */
-  enum PopAuthRes (*authenticate)(struct PopAccountData *, const char *);
-  /* name of authentication method supported, NULL means variable. If this
-   * is not null, authenticate may ignore the second parameter. */
-  const char *method;
+  /**
+   * authenticate - Authenticate a POP connection
+   * @param adata Pop Account data
+   * @param method Use this named method, or any available method if NULL
+   * @retval #ImapAuthRes Result, e.g. #IMAP_AUTH_SUCCESS
+   */
+  enum PopAuthRes (*authenticate)(struct PopAccountData *adata, const char *method);
+
+  const char *method; ///< Name of authentication method supported, NULL means variable.
+                      ///< If this is not null, authenticate may ignore the second parameter.
 };
 
 /* pop_auth.c */
@@ -146,5 +150,6 @@ int pop_reconnect(struct Mailbox *m);
 void pop_logout(struct Mailbox *m);
 struct PopAccountData *pop_adata_get(struct Mailbox *m);
 struct PopEmailData *pop_edata_get(struct Email *e);
+const char *pop_get_field(enum ConnAccountField field);
 
 #endif /* MUTT_POP_POP_PRIVATE_H */

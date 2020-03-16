@@ -28,20 +28,18 @@
 
 #include "config.h"
 #include <errno.h>
-#include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
-#include "color.h"
-#include "curs_lib.h"
+#include "core/lib.h"
+#include "gui/lib.h"
+#include "mutt_logging.h"
 #include "globals.h"
-#include "mutt_curses.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "options.h"
 
@@ -49,8 +47,8 @@ size_t LastError = 0; ///< Time of the last error message (in milliseconds since
 
 short C_DebugLevel = 0;   ///< Config: Logging level for debug logs
 char *C_DebugFile = NULL; ///< Config: File to save debug logs
-char *CurrentFile = NULL; /**< The previous log file name */
-const int NumOfLogs = 5;  /**< How many log files to rotate */
+char *CurrentFile = NULL; ///< The previous log file name
+const int NumOfLogs = 5;  ///< How many log files to rotate
 
 #define S_TO_MS 1000L
 
@@ -127,7 +125,7 @@ void mutt_clear_error(void)
  * log_disp_curses - Display a log line in the message line - Implements ::log_dispatcher_t
  */
 int log_disp_curses(time_t stamp, const char *file, int line,
-                    const char *function, int level, ...)
+                    const char *function, enum LogLevel level, ...)
 {
   if (level > C_DebugLevel)
     return 0;
@@ -169,7 +167,7 @@ int log_disp_curses(time_t stamp, const char *file, int line,
     error_pause();
 
   mutt_simple_format(ErrorBuf, sizeof(ErrorBuf), 0,
-                     MuttMessageWindow ? MuttMessageWindow->cols : sizeof(ErrorBuf),
+                     MuttMessageWindow ? MuttMessageWindow->state.cols : sizeof(ErrorBuf),
                      JUSTIFY_LEFT, 0, buf, sizeof(buf), false);
   ErrorBufMessage = true;
 
@@ -250,7 +248,7 @@ int mutt_log_set_file(const char *file, bool verbose)
     mutt_str_replace(&CurrentFile, C_DebugFile);
   }
 
-  cs_str_string_set(Config, "debug_file", file, NULL);
+  cs_subset_str_string_set(NeoMutt->sub, "debug_file", file, NULL);
 
   return 0;
 }
@@ -262,7 +260,7 @@ int mutt_log_set_file(const char *file, bool verbose)
  * @retval  0 Success
  * @retval -1 Error, level is out of range
  */
-int mutt_log_set_level(int level, bool verbose)
+int mutt_log_set_level(enum LogLevel level, bool verbose)
 {
   if (!CurrentFile)
     mutt_log_set_file(C_DebugFile, false);
@@ -270,7 +268,7 @@ int mutt_log_set_level(int level, bool verbose)
   if (log_file_set_level(level, verbose) != 0)
     return -1;
 
-  cs_str_native_set(Config, "debug_level", level, NULL);
+  cs_subset_str_native_set(NeoMutt->sub, "debug_level", level, NULL);
   return 0;
 }
 
@@ -299,7 +297,7 @@ int mutt_log_start(void)
 }
 
 /**
- * level_validator - Validate the "debug_level" config variable
+ * level_validator - Validate the "debug_level" config variable - Implements ConfigDef::validator()
  * @param cs    Config items
  * @param cdef  Config definition
  * @param value Native value
@@ -320,14 +318,16 @@ int level_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
 }
 
 /**
- * mutt_log_observer - Listen for config changes affecting the log file - Implements ::observer_t()
+ * mutt_log_observer - Listen for config changes affecting the log file - Implements ::observer_t
  */
 int mutt_log_observer(struct NotifyCallback *nc)
 {
-  if (!nc)
+  if (!nc->event_data)
     return -1;
+  if (nc->event_type != NT_CONFIG)
+    return 0;
 
-  struct EventConfig *ec = (struct EventConfig *) nc->event;
+  struct EventConfig *ec = nc->event_data;
 
   if (mutt_str_strcmp(ec->name, "debug_file") == 0)
     mutt_log_set_file(C_DebugFile, true);

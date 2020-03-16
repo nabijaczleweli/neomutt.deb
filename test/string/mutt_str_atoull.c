@@ -24,7 +24,7 @@
 #include "acutest.h"
 #include "config.h"
 #include <limits.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 
 struct TestValue
 {
@@ -48,9 +48,9 @@ static const struct TestValue tests[] = {
   { "18446744073709551615",  0, 18446744073709551615UL },
 
   // Out of range tests
-  { "18446744073709551616", -1, ULONG_MAX },
-  { "18446744073709551617", -1, ULONG_MAX },
-  { "18446744073709551618", -1, ULONG_MAX },
+  { "18446744073709551616", -1, ULLONG_MAX },
+  { "18446744073709551617", -1, ULLONG_MAX },
+  { "18446744073709551618", -1, ULLONG_MAX },
 
   // Invalid tests
   { "-3",          0,    18446744073709551613UL },

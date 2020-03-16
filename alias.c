@@ -36,14 +36,14 @@
 #include <string.h>
 #include <wchar.h>
 #include <wctype.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "alias.h"
 #include "addrbook.h"
-#include "curs_lib.h"
 #include "globals.h"
 #include "hdrline.h"
 #include "muttlib.h"
@@ -402,8 +402,11 @@ void mutt_alias_create(struct Envelope *cur, struct AddressList *al)
 
 retry_name:
   /* L10N: prompt to add a new alias */
-  if ((mutt_get_field(_("Alias as: "), buf, sizeof(buf), 0) != 0) || !buf[0])
+  if ((mutt_get_field(_("Alias as: "), buf, sizeof(buf), MUTT_COMP_NO_FLAGS) != 0) ||
+      !buf[0])
+  {
     return;
+  }
 
   /* check to see if the user already has an alias defined */
   if (mutt_alias_lookup(buf))
@@ -439,7 +442,8 @@ retry_name:
 
   do
   {
-    if ((mutt_get_field(_("Address: "), buf, sizeof(buf), 0) != 0) || !buf[0])
+    if ((mutt_get_field(_("Address: "), buf, sizeof(buf), MUTT_COMP_NO_FLAGS) != 0) ||
+        !buf[0])
     {
       mutt_alias_free(&alias);
       return;
@@ -461,7 +465,7 @@ retry_name:
   else
     buf[0] = '\0';
 
-  if (mutt_get_field(_("Personal name: "), buf, sizeof(buf), 0) != 0)
+  if (mutt_get_field(_("Personal name: "), buf, sizeof(buf), MUTT_COMP_NO_FLAGS) != 0)
   {
     mutt_alias_free(&alias);
     return;
@@ -469,7 +473,7 @@ retry_name:
   mutt_str_replace(&TAILQ_FIRST(&alias->addr)->personal, buf);
 
   buf[0] = '\0';
-  mutt_addrlist_write(buf, sizeof(buf), &alias->addr, true);
+  mutt_addrlist_write(&alias->addr, buf, sizeof(buf), true);
   snprintf(prompt, sizeof(prompt), _("[%s = %s] Accept?"), alias->name, buf);
   if (mutt_yesorno(prompt, MUTT_YES) != MUTT_YES)
   {
@@ -517,7 +521,7 @@ retry_name:
   recode_buf(buf, sizeof(buf));
   fprintf(fp_alias, "alias %s ", buf);
   buf[0] = '\0';
-  mutt_addrlist_write(buf, sizeof(buf), &alias->addr, false);
+  mutt_addrlist_write(&alias->addr, buf, sizeof(buf), false);
   recode_buf(buf, sizeof(buf));
   write_safe_address(fp_alias, buf);
   fputc('\n', fp_alias);

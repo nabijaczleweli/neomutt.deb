@@ -26,19 +26,17 @@
 #include "config.h"
 #include <signal.h> // IWYU pragma: keep
 #include <stdbool.h>
-#include "mutt/mutt.h"
-#include "color.h"
+#include "mutt/lib.h"
 #include "keymap.h"
 #include "where.h"
 
 #ifdef MAIN_C
 /* so that global vars get included */
 #include "mx.h"
-#include "ncrypt/ncrypt.h"
+#include "ncrypt/lib.h"
 #include "sort.h"
 #endif /* MAIN_C */
 
-WHERE struct ConfigSet *Config; ///< Wrapper around the user's config settings
 WHERE struct Colors    *Colors; ///< Wrapper around the user's colour settings
 
 WHERE struct Context *Context;
@@ -95,6 +93,8 @@ WHERE char *AutocryptDefaultKey; ///< Autocrypt default key id (used for postpon
 WHERE struct Address *C_EnvelopeFromAddress; ///< Config: Manually set the sender for outgoing messages
 WHERE struct Address *C_From;                ///< Config: Default 'From' address to use, if isn't otherwise set
 
+WHERE bool C_AbortBackspace;                 ///< Config: Hitting backspace against an empty prompt aborts the prompt
+WHERE char *C_AbortKeyStr;                   ///< Config: String representation of key to abort prompts
 WHERE char *C_AliasFile;                     ///< Config: Save new aliases to this file
 WHERE char *C_Attribution;                   ///< Config: Message to start a reply, "On DATE, PERSON wrote:"
 WHERE char *C_AttributionLocale;             ///< Config: Locale for dates in the attribution message
@@ -142,7 +142,7 @@ WHERE char *C_Shell;                         ///< Config: External command to ru
 WHERE char *C_SimpleSearch;                  ///< Config: Pattern to search for when search doesn't contain ~'s
 #ifdef USE_SMTP
 WHERE char *C_SmtpUrl;                       ///< Config: (smtp) Url of the SMTP server
-#endif /* USE_SMTP */
+#endif
 WHERE char *C_Spoolfile;                     ///< Config: Inbox
 WHERE char *C_StatusFormat;                  ///< Config: printf-like format string for the index's status line
 WHERE char *C_TsStatusFormat;                ///< Config: printf-like format string for the terminal's status (window title)
@@ -153,9 +153,6 @@ WHERE short C_SleepTime;                     ///< Config: Time to pause after ce
 WHERE short C_Timeout;                       ///< Config: Time to wait for user input in menus
 WHERE short C_Wrap;                          ///< Config: Width to wrap text in the pager
 
-#ifdef USE_SIDEBAR
-WHERE short C_SidebarWidth;                  ///< Config: (sidebar) Width of the sidebar
-#endif
 #ifdef USE_IMAP
 WHERE short C_ImapKeepalive;                 ///< Config: (imap) Time to wait before polling an open IMAP connection
 WHERE short C_ImapPollTimeout;               ///< Config: (imap) Maximum time to wait for a server response
@@ -196,6 +193,7 @@ WHERE unsigned char C_FollowupToPoster;      ///< Config: (nntp) Reply to the po
 #endif
 
 WHERE bool C_ArrowCursor;                    ///< Config: Use an arrow '->' instead of highlighting in the index
+WHERE char *C_ArrowString;                   ///< Config: Use an custom string for arrow_cursor
 WHERE bool C_AsciiChars;                     ///< Config: Use plain ASCII characters, when drawing email threads
 WHERE bool C_Askbcc;                         ///< Config: Ask the user for the blind-carbon-copy recipients
 WHERE bool C_Askcc;                          ///< Config: Ask the user for the carbon-copy recipients
@@ -253,10 +251,6 @@ WHERE bool C_ResumeDraftFiles;               ///< Config: Process draft files li
 WHERE bool C_SaveAddress;                    ///< Config: Use sender's full address as a default save folder
 WHERE bool C_SaveEmpty;                      ///< Config: (mbox,mmdf) Preserve empty mailboxes
 WHERE bool C_Score;                          ///< Config: Use message scoring
-#ifdef USE_SIDEBAR
-WHERE bool C_SidebarVisible;                 ///< Config: (sidebar) Show the sidebar
-WHERE bool C_SidebarOnRight;                 ///< Config: (sidebar) Display the sidebar on the right
-#endif
 WHERE bool C_SizeShowBytes;                  ///< Config: Show smaller sizes in bytes
 WHERE bool C_SizeShowFractions;              ///< Config: Show size fractions with a single decimal place
 WHERE bool C_SizeShowMb;                     ///< Config: Show sizes in megabytes for sizes greater than 1 megabyte
@@ -276,6 +270,7 @@ WHERE bool C_CryptUsePka;                    ///< Config: Use GPGME to use PKA (
 
 WHERE bool C_CryptConfirmhook;               ///< Config: Prompt the user to confirm keys before use
 WHERE bool C_CryptOpportunisticEncrypt;      ///< Config: Enable encryption when the recipient's key is available
+WHERE bool C_CryptOpportunisticEncryptStrongKeys; ///< Config: Enable encryption only when strong a key is available
 WHERE bool C_CryptProtectedHeadersRead;      ///< Config: Display protected headers (Memory Hole) in the pager
 WHERE bool C_CryptProtectedHeadersSave;      ///< Config: Save the cleartext Subject with the headers
 WHERE bool C_CryptProtectedHeadersWrite;     ///< Config: Generate protected header (Memory Hole) for signed and encrypted emails

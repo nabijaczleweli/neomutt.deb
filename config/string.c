@@ -30,12 +30,13 @@
 #include <stddef.h>
 #include <limits.h>
 #include <stdint.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "set.h"
+#include "string3.h" // IWYU pragma: keep
 #include "types.h"
 
 /**
- * string_destroy - Destroy a String - Implements ::cst_destroy()
+ * string_destroy - Destroy a String - Implements ConfigSetType::destroy()
  */
 static void string_destroy(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef)
 {
@@ -57,7 +58,7 @@ static void string_destroy(const struct ConfigSet *cs, void *var, const struct C
 }
 
 /**
- * string_string_set - Set a String by string - Implements ::cst_string_set()
+ * string_string_set - Set a String by string - Implements ConfigSetType::string_set()
  */
 static int string_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                              const char *value, struct Buffer *err)
@@ -71,7 +72,7 @@ static int string_string_set(const struct ConfigSet *cs, void *var, struct Confi
 
   if (!value && (cdef->type & DT_NOT_EMPTY))
   {
-    mutt_buffer_printf(err, "Option %s may not be empty", cdef->name);
+    mutt_buffer_printf(err, _("Option %s may not be empty"), cdef->name);
     return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
   }
 
@@ -115,7 +116,7 @@ static int string_string_set(const struct ConfigSet *cs, void *var, struct Confi
 }
 
 /**
- * string_string_get - Get a String as a string - Implements ::cst_string_get()
+ * string_string_get - Get a String as a string - Implements ConfigSetType::string_get()
  */
 static int string_string_get(const struct ConfigSet *cs, void *var,
                              const struct ConfigDef *cdef, struct Buffer *result)
@@ -138,7 +139,7 @@ static int string_string_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * string_native_set - Set a String config item by string - Implements ::cst_native_set()
+ * string_native_set - Set a String config item by string - Implements ConfigSetType::native_set()
  */
 static int string_native_set(const struct ConfigSet *cs, void *var,
                              const struct ConfigDef *cdef, intptr_t value,
@@ -155,7 +156,7 @@ static int string_native_set(const struct ConfigSet *cs, void *var,
 
   if ((value == 0) && (cdef->type & DT_NOT_EMPTY))
   {
-    mutt_buffer_printf(err, "Option %s may not be empty", cdef->name);
+    mutt_buffer_printf(err, _("Option %s may not be empty"), cdef->name);
     return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
   }
 
@@ -184,7 +185,7 @@ static int string_native_set(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * string_native_get - Get a string from a String config item - Implements ::cst_native_get()
+ * string_native_get - Get a string from a String config item - Implements ConfigSetType::native_get()
  */
 static intptr_t string_native_get(const struct ConfigSet *cs, void *var,
                                   const struct ConfigDef *cdef, struct Buffer *err)
@@ -198,7 +199,7 @@ static intptr_t string_native_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * string_reset - Reset a String to its initial value - Implements ::cst_reset()
+ * string_reset - Reset a String to its initial value - Implements ConfigSetType::reset()
  */
 static int string_reset(const struct ConfigSet *cs, void *var,
                         const struct ConfigDef *cdef, struct Buffer *err)

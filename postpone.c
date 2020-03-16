@@ -28,17 +28,17 @@
  */
 
 #include "config.h"
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "context.h"
 #include "format_flags.h"
@@ -49,10 +49,8 @@
 #include "mutt_logging.h"
 #include "mutt_menu.h"
 #include "mutt_thread.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "ncrypt/ncrypt.h"
 #include "opcodes.h"
 #include "options.h"
 #include "protos.h"
@@ -61,8 +59,9 @@
 #include "sendlib.h"
 #include "sort.h"
 #include "state.h"
+#include "ncrypt/lib.h"
 #ifdef USE_IMAP
-#include "imap/imap.h"
+#include "imap/lib.h"
 #endif
 
 static const struct Mapping PostponeHelp[] = {
@@ -203,19 +202,20 @@ void mutt_update_num_postponed(void)
 }
 
 /**
- * post_make_entry - Format a menu item for the email list - Implements Menu::menu_make_entry()
+ * post_make_entry - Format a menu item for the email list - Implements Menu::make_entry()
  */
 static void post_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
   struct Context *ctx = menu->data;
 
-  mutt_make_string_flags(buf, buflen, menu->indexwin->cols,
+  mutt_make_string_flags(buf, buflen, menu->win_index->state.cols,
                          NONULL(C_IndexFormat), ctx, ctx->mailbox,
                          ctx->mailbox->emails[line], MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
  * select_msg - Create a Menu to select a postponed message
+ * @param ctx Context
  * @retval ptr Email
  */
 static struct Email *select_msg(struct Context *ctx)
@@ -224,8 +224,41 @@ static struct Email *select_msg(struct Context *ctx)
   bool done = false;
   char helpstr[1024];
 
+  struct MuttWindow *dlg =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+#ifdef USE_DEBUG_WINDOW
+  dlg->name = "postpone";
+#endif
+  dlg->type = WT_DIALOG;
+  struct MuttWindow *index =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+  index->type = WT_INDEX;
+  struct MuttWindow *ibar = mutt_window_new(
+      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
+  ibar->type = WT_INDEX_BAR;
+
+  if (C_StatusOnTop)
+  {
+    mutt_window_add_child(dlg, ibar);
+    mutt_window_add_child(dlg, index);
+  }
+  else
+  {
+    mutt_window_add_child(dlg, index);
+    mutt_window_add_child(dlg, ibar);
+  }
+
+  dialog_push(dlg);
+
   struct Menu *menu = mutt_menu_new(MENU_POSTPONE);
-  menu->menu_make_entry = post_make_entry;
+
+  menu->pagelen = index->state.rows;
+  menu->win_index = index;
+  menu->win_ibar = ibar;
+
+  menu->make_entry = post_make_entry;
   menu->max = ctx->mailbox->msg_count;
   menu->title = _("Postponed Messages");
   menu->data = ctx;
@@ -279,6 +312,9 @@ static struct Email *select_msg(struct Context *ctx)
   C_Sort = orig_sort;
   mutt_menu_pop_current(menu);
   mutt_menu_free(&menu);
+  dialog_pop();
+  mutt_window_free(&dlg);
+
   return (r > -1) ? ctx->mailbox->emails[r] : NULL;
 }
 
@@ -316,6 +352,18 @@ int mutt_get_postponed(struct Context *ctx, struct Email *hdr,
     mailbox_free(&m);
     return -1;
   }
+
+  /* TODO:
+   * mx_mbox_open() for IMAP leaves IMAP_REOPEN_ALLOW set.  For the
+   * index this is papered-over because it calls mx_check_mailbox()
+   * every event loop(which resets that flag).
+   *
+   * For a stable-branch fix, I'm doing the same here, to prevent
+   * context changes from occuring behind the scenes and causing
+   * segvs, but probably the flag needs to be reset after downloading
+   * headers in imap_open_mailbox().
+   */
+  mx_mbox_check(ctx_post->mailbox, NULL);
 
   if (ctx_post->mailbox->msg_count == 0)
   {
@@ -502,17 +550,16 @@ SecurityFlags mutt_parse_crypt_hdr(const char *p, bool set_empty_signas, Securit
        * to be able to recall old messages.  */
       case 'm':
       case 'M':
-        if (p[1] == '<')
-        {
-          for (p += 2; (p[0] != '\0') && (p[0] != '>'); p++)
-            ;
-          if (p[0] != '>')
-          {
-            mutt_error(_("Illegal crypto header"));
-            return SEC_NO_FLAGS;
-          }
-        }
+        if (p[1] != '<')
+          break;
 
+        for (p += 2; (p[0] != '\0') && (p[0] != '>'); p++)
+          ;
+        if (p[0] != '>')
+        {
+          mutt_error(_("Illegal crypto header"));
+          return SEC_NO_FLAGS;
+        }
         break;
 
       case 'o':
@@ -565,7 +612,16 @@ SecurityFlags mutt_parse_crypt_hdr(const char *p, bool set_empty_signas, Securit
 
   /* the cryptalg field must not be empty */
   if (((WithCrypto & APPLICATION_SMIME) != 0) && *smime_cryptalg)
-    mutt_str_replace(&C_SmimeEncryptWith, smime_cryptalg);
+  {
+    struct Buffer errmsg = mutt_buffer_make(0);
+    int rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",
+                                      smime_cryptalg, &errmsg);
+
+    if ((CSR_RESULT(rc) != CSR_SUCCESS) && !mutt_buffer_is_empty(&errmsg))
+      mutt_error("%s", mutt_b2s(&errmsg));
+
+    mutt_buffer_dealloc(&errmsg);
+  }
 
   /* Set {Smime,Pgp}SignAs, if desired. */
 

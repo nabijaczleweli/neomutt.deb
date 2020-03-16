@@ -30,7 +30,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <string.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "set.h"
 #include "sort2.h"
 #include "types.h"
@@ -129,7 +129,7 @@ const struct Mapping SortSidebarMethods[] = {
 // clang-format on
 
 /**
- * sort_string_set - Set a Sort by string - Implements ::cst_string_set()
+ * sort_string_set - Set a Sort by string - Implements ConfigSetType::string_set()
  */
 static int sort_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                            const char *value, struct Buffer *err)
@@ -142,7 +142,7 @@ static int sort_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
 
   if (!value || !value[0])
   {
-    mutt_buffer_printf(err, "Option %s may not be empty", cdef->name);
+    mutt_buffer_printf(err, _("Option %s may not be empty"), cdef->name);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
@@ -189,7 +189,7 @@ static int sort_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
 
   if (id < 0)
   {
-    mutt_buffer_printf(err, "Invalid sort name: %s", value);
+    mutt_buffer_printf(err, _("Invalid sort name: %s"), value);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
@@ -219,7 +219,7 @@ static int sort_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
 }
 
 /**
- * sort_string_get - Get a Sort as a string - Implements ::cst_string_get()
+ * sort_string_get - Get a Sort as a string - Implements ConfigSetType::string_get()
  */
 static int sort_string_get(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, struct Buffer *result)
@@ -281,7 +281,7 @@ static int sort_string_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * sort_native_set - Set a Sort config item by int - Implements ::cst_native_set()
+ * sort_native_set - Set a Sort config item by int - Implements ConfigSetType::native_set()
  */
 static int sort_native_set(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, intptr_t value, struct Buffer *err)
@@ -319,7 +319,7 @@ static int sort_native_set(const struct ConfigSet *cs, void *var,
 
   if (!str)
   {
-    mutt_buffer_printf(err, "Invalid sort type: %ld", value);
+    mutt_buffer_printf(err, _("Invalid sort type: %ld"), value);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
@@ -339,7 +339,7 @@ static int sort_native_set(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * sort_native_get - Get an int from a Sort config item - Implements ::cst_native_get()
+ * sort_native_get - Get an int from a Sort config item - Implements ConfigSetType::native_get()
  */
 static intptr_t sort_native_get(const struct ConfigSet *cs, void *var,
                                 const struct ConfigDef *cdef, struct Buffer *err)
@@ -351,7 +351,7 @@ static intptr_t sort_native_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * sort_reset - Reset a Sort to its initial value - Implements ::cst_reset()
+ * sort_reset - Reset a Sort to its initial value - Implements ConfigSetType::reset()
  */
 static int sort_reset(const struct ConfigSet *cs, void *var,
                       const struct ConfigDef *cdef, struct Buffer *err)

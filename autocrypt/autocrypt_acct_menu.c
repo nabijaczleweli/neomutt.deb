@@ -30,19 +30,18 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "autocrypt_private.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
-#include "autocrypt.h"
-#include "curs_lib.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "keymap.h"
 #include "mutt_menu.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "opcodes.h"
+#include "autocrypt/lib.h"
 
 /**
  * struct AccountEntry - An entry in the Autocrypt account Menu
@@ -69,16 +68,16 @@ static const struct Mapping AutocryptAcctHelp[] = {
      toggle an account active/inactive
      The words here are abbreviated to keep the help line compact.
      It currently has the content:
-     q:Exit  c:Create  D:Delete  a:Tgl Active  p:Prf Enc  ?:Help
+     q:Exit  c:Create  D:Delete  a:Tgl Active  p:Prf Encr  ?:Help
   */
   { N_("Tgl Active"), OP_AUTOCRYPT_TOGGLE_ACTIVE },
   /* L10N: Autocrypt Account Menu Help line:
      toggle "prefer-encrypt" on an account
      The words here are abbreviated to keep the help line compact.
      It currently has the content:
-     q:Exit  c:Create  D:Delete  a:Tgl Active  p:Prf Enc  ?:Help
+     q:Exit  c:Create  D:Delete  a:Tgl Active  p:Prf Encr  ?:Help
   */
-  { N_("Prf Enc"), OP_AUTOCRYPT_TOGGLE_PREFER },
+  { N_("Prf Encr"), OP_AUTOCRYPT_TOGGLE_PREFER },
   { N_("Help"), OP_HELP },
   { NULL, 0 }
 };
@@ -116,32 +115,40 @@ static const char *account_format_str(char *dest, size_t destlen, size_t col, in
       break;
     case 'p':
       if (entry->account->prefer_encrypt)
+      {
         /* L10N:
            Autocrypt Account menu.
            flag that an account has prefer-encrypt set
         */
         mutt_format_s(dest, destlen, fmt, _("prefer encrypt"));
+      }
       else
+      {
         /* L10N:
            Autocrypt Account menu.
            flag that an account has prefer-encrypt unset;
            thus encryption will need to be manually enabled.
         */
         mutt_format_s(dest, destlen, fmt, _("manual encrypt"));
+      }
       break;
     case 's':
       if (entry->account->enabled)
+      {
         /* L10N:
            Autocrypt Account menu.
            flag that an account is enabled/active
         */
         mutt_format_s(dest, destlen, fmt, _("active"));
+      }
       else
+      {
         /* L10N:
            Autocrypt Account menu.
            flag that an account is disabled/inactive
         */
         mutt_format_s(dest, destlen, fmt, _("inactive"));
+      }
       break;
   }
 
@@ -149,17 +156,17 @@ static const char *account_format_str(char *dest, size_t destlen, size_t col, in
 }
 
 /**
- * account_entry - Create a line for the Autocrypt account menu
+ * account_make_entry - Create a line for the Autocrypt account menu - Implements Menu::make_entry()
  * @param buf    Buffer to save the string
  * @param buflen Length of the buffer
  * @param menu   Menu to use
  * @param num    Line in the Menu
  */
-static void account_entry(char *buf, size_t buflen, struct Menu *menu, int num)
+static void account_make_entry(char *buf, size_t buflen, struct Menu *menu, int num)
 {
   struct AccountEntry *entry = &((struct AccountEntry *) menu->data)[num];
 
-  mutt_expando_format(buf, buflen, 0, menu->indexwin->cols,
+  mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
                       NONULL(C_AutocryptAcctFormat), account_format_str,
                       (unsigned long) entry, MUTT_FORMAT_ARROWCURSOR);
 }
@@ -177,7 +184,7 @@ static struct Menu *create_menu(void)
     return NULL;
 
   struct Menu *menu = mutt_menu_new(MENU_AUTOCRYPT_ACCT);
-  menu->menu_make_entry = account_entry;
+  menu->make_entry = account_make_entry;
   /* menu->tag = account_tag; */
   // L10N: Autocrypt Account Management Menu title
   menu->title = _("Autocrypt Accounts");
@@ -271,9 +278,41 @@ void mutt_autocrypt_account_menu(void)
   if (mutt_autocrypt_init(false))
     return;
 
+  struct MuttWindow *dlg =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+#ifdef USE_DEBUG_WINDOW
+  dlg->name = "autocrypt";
+#endif
+  dlg->type = WT_DIALOG;
+  struct MuttWindow *index =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+  index->type = WT_INDEX;
+  struct MuttWindow *ibar = mutt_window_new(
+      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
+  ibar->type = WT_INDEX_BAR;
+
+  if (C_StatusOnTop)
+  {
+    mutt_window_add_child(dlg, ibar);
+    mutt_window_add_child(dlg, index);
+  }
+  else
+  {
+    mutt_window_add_child(dlg, index);
+    mutt_window_add_child(dlg, ibar);
+  }
+
+  dialog_push(dlg);
+
   struct Menu *menu = create_menu();
   if (!menu)
     return;
+
+  menu->pagelen = index->state.rows;
+  menu->win_index = index;
+  menu->win_ibar = ibar;
 
   bool done = false;
   while (!done)
@@ -285,51 +324,65 @@ void mutt_autocrypt_account_menu(void)
         break;
 
       case OP_AUTOCRYPT_CREATE_ACCT:
-        if (!mutt_autocrypt_account_init(false))
-        {
-          menu_free(&menu);
-          menu = create_menu();
-        }
+        if (mutt_autocrypt_account_init(false))
+          break;
+
+        menu_free(&menu);
+        menu = create_menu();
+        menu->pagelen = index->state.rows;
+        menu->win_index = index;
+        menu->win_ibar = ibar;
         break;
 
       case OP_AUTOCRYPT_DELETE_ACCT:
-        if (menu->data)
-        {
-          struct AccountEntry *entry = (struct AccountEntry *) (menu->data) + menu->current;
-          char msg[128];
-          snprintf(msg, sizeof(msg),
-                   // L10N: Confirmation message when deleting an autocrypt account
-                   _("Really delete account \"%s\"?"), entry->addr->mailbox);
-          if (mutt_yesorno(msg, MUTT_NO) != MUTT_YES)
-            break;
+      {
+        if (!menu->data)
+          break;
 
-          if (!mutt_autocrypt_db_account_delete(entry->account))
-          {
-            menu_free(&menu);
-            menu = create_menu();
-          }
+        struct AccountEntry *entry = (struct AccountEntry *) (menu->data) + menu->current;
+        char msg[128];
+        snprintf(msg, sizeof(msg),
+                  // L10N: Confirmation message when deleting an autocrypt account
+                  _("Really delete account \"%s\"?"), entry->addr->mailbox);
+        if (mutt_yesorno(msg, MUTT_NO) != MUTT_YES)
+          break;
+
+        if (!mutt_autocrypt_db_account_delete(entry->account))
+        {
+          menu_free(&menu);
+          menu = create_menu();
+          menu->pagelen = index->state.rows;
+          menu->win_index = index;
+          menu->win_ibar = ibar;
         }
         break;
+      }
 
       case OP_AUTOCRYPT_TOGGLE_ACTIVE:
-        if (menu->data)
-        {
-          struct AccountEntry *entry = (struct AccountEntry *) (menu->data) + menu->current;
-          toggle_active(entry);
-          menu->redraw |= REDRAW_FULL;
-        }
+      {
+        if (!menu->data)
+          break;
+
+        struct AccountEntry *entry = (struct AccountEntry *) (menu->data) + menu->current;
+        toggle_active(entry);
+        menu->redraw |= REDRAW_FULL;
         break;
+      }
 
       case OP_AUTOCRYPT_TOGGLE_PREFER:
-        if (menu->data)
-        {
-          struct AccountEntry *entry = (struct AccountEntry *) (menu->data) + menu->current;
-          toggle_prefer_encrypt(entry);
-          menu->redraw |= REDRAW_FULL;
-        }
+      {
+        if (!menu->data)
+          break;
+
+        struct AccountEntry *entry = (struct AccountEntry *) (menu->data) + menu->current;
+        toggle_prefer_encrypt(entry);
+        menu->redraw |= REDRAW_FULL;
         break;
+      }
     }
   }
 
   menu_free(&menu);
+  dialog_pop();
+  mutt_window_free(&dlg);
 }

@@ -37,19 +37,18 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
+#include "edit.h"
 #include "alias.h"
 #include "context.h"
-#include "curs_lib.h"
 #include "globals.h"
 #include "hdrline.h"
-#include "mutt_curses.h"
 #include "mutt_header.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "protos.h"
 
@@ -180,7 +179,7 @@ static int be_barf_file(const char *path, char **buf, int buflen)
   }
   for (int i = 0; i < buflen; i++)
     fputs(buf[i], fp);
-  if (fclose(fp) == 0)
+  if (mutt_file_fclose(&fp) == 0)
     return 0;
   mutt_window_printf("fclose: %s\n", strerror(errno));
   return -1;
@@ -275,7 +274,7 @@ static void be_print_header(struct Envelope *env)
   {
     mutt_window_addstr("To: ");
     tmp[0] = '\0';
-    mutt_addrlist_write(tmp, sizeof(tmp), &env->to, true);
+    mutt_addrlist_write(&env->to, tmp, sizeof(tmp), true);
     mutt_window_addstr(tmp);
     mutt_window_addch('\n');
   }
@@ -283,7 +282,7 @@ static void be_print_header(struct Envelope *env)
   {
     mutt_window_addstr("Cc: ");
     tmp[0] = '\0';
-    mutt_addrlist_write(tmp, sizeof(tmp), &env->cc, true);
+    mutt_addrlist_write(&env->cc, tmp, sizeof(tmp), true);
     mutt_window_addstr(tmp);
     mutt_window_addch('\n');
   }
@@ -291,7 +290,7 @@ static void be_print_header(struct Envelope *env)
   {
     mutt_window_addstr("Bcc: ");
     tmp[0] = '\0';
-    mutt_addrlist_write(tmp, sizeof(tmp), &env->bcc, true);
+    mutt_addrlist_write(&env->bcc, tmp, sizeof(tmp), true);
     mutt_window_addstr(tmp);
     mutt_window_addch('\n');
   }
@@ -318,7 +317,7 @@ static void be_edit_header(struct Envelope *e, bool force)
   mutt_window_addstr("To: ");
   tmp[0] = '\0';
   mutt_addrlist_to_local(&e->to);
-  mutt_addrlist_write(tmp, sizeof(tmp), &e->to, false);
+  mutt_addrlist_write(&e->to, tmp, sizeof(tmp), false);
   if (TAILQ_EMPTY(&e->to) || force)
   {
     if (mutt_enter_string(tmp, sizeof(tmp), 4, MUTT_COMP_NO_FLAGS) == 0)
@@ -328,7 +327,7 @@ static void be_edit_header(struct Envelope *e, bool force)
       mutt_expand_aliases(&e->to);
       mutt_addrlist_to_intl(&e->to, NULL); /* XXX - IDNA error reporting? */
       tmp[0] = '\0';
-      mutt_addrlist_write(tmp, sizeof(tmp), &e->to, true);
+      mutt_addrlist_write(&e->to, tmp, sizeof(tmp), true);
       mutt_window_mvaddstr(MuttMessageWindow, 0, 4, tmp);
     }
   }
@@ -353,7 +352,7 @@ static void be_edit_header(struct Envelope *e, bool force)
     mutt_window_addstr("Cc: ");
     tmp[0] = '\0';
     mutt_addrlist_to_local(&e->cc);
-    mutt_addrlist_write(tmp, sizeof(tmp), &e->cc, false);
+    mutt_addrlist_write(&e->cc, tmp, sizeof(tmp), false);
     if (mutt_enter_string(tmp, sizeof(tmp), 4, MUTT_COMP_NO_FLAGS) == 0)
     {
       mutt_addrlist_clear(&e->cc);
@@ -361,7 +360,7 @@ static void be_edit_header(struct Envelope *e, bool force)
       mutt_expand_aliases(&e->cc);
       tmp[0] = '\0';
       mutt_addrlist_to_intl(&e->cc, NULL);
-      mutt_addrlist_write(tmp, sizeof(tmp), &e->cc, true);
+      mutt_addrlist_write(&e->cc, tmp, sizeof(tmp), true);
       mutt_window_mvaddstr(MuttMessageWindow, 0, 4, tmp);
     }
     else
@@ -374,7 +373,7 @@ static void be_edit_header(struct Envelope *e, bool force)
     mutt_window_addstr("Bcc: ");
     tmp[0] = '\0';
     mutt_addrlist_to_local(&e->bcc);
-    mutt_addrlist_write(tmp, sizeof(tmp), &e->bcc, false);
+    mutt_addrlist_write(&e->bcc, tmp, sizeof(tmp), false);
     if (mutt_enter_string(tmp, sizeof(tmp), 5, MUTT_COMP_NO_FLAGS) == 0)
     {
       mutt_addrlist_clear(&e->bcc);
@@ -382,7 +381,7 @@ static void be_edit_header(struct Envelope *e, bool force)
       mutt_expand_aliases(&e->bcc);
       mutt_addrlist_to_intl(&e->bcc, NULL);
       tmp[0] = '\0';
-      mutt_addrlist_write(tmp, sizeof(tmp), &e->bcc, true);
+      mutt_addrlist_write(&e->bcc, tmp, sizeof(tmp), true);
       mutt_window_mvaddstr(MuttMessageWindow, 0, 5, tmp);
     }
     else
@@ -520,31 +519,31 @@ int mutt_builtin_editor(const char *path, struct Email *e_new, struct Email *e_c
 
         case 'e':
         case 'v':
-          if (be_barf_file(path, buf, buflen) == 0)
+          if (be_barf_file(path, buf, buflen) != 0)
+            break;
+
+          const char *tag = NULL;
+          char *err = NULL;
+          be_free_memory(buf, buflen);
+          buf = NULL;
+          bufmax = 0;
+          buflen = 0;
+
+          if (C_EditHeaders)
           {
-            const char *tag = NULL;
-            char *err = NULL;
-            be_free_memory(buf, buflen);
-            buf = NULL;
-            bufmax = 0;
-            buflen = 0;
-
-            if (C_EditHeaders)
-            {
-              mutt_env_to_local(e_new->env);
-              mutt_edit_headers(NONULL(C_Visual), path, e_new, NULL);
-              if (mutt_env_to_intl(e_new->env, &tag, &err))
-                mutt_window_printf(_("Bad IDN in '%s': '%s'"), tag, err);
-              /* tag is a statically allocated string and should not be freed */
-              FREE(&err);
-            }
-            else
-              mutt_edit_file(NONULL(C_Visual), path);
-
-            buf = be_snarf_file(path, buf, &bufmax, &buflen, false);
-
-            mutt_window_addstr(_("(continue)\n"));
+            mutt_env_to_local(e_new->env);
+            mutt_edit_headers(NONULL(C_Visual), path, e_new, NULL);
+            if (mutt_env_to_intl(e_new->env, &tag, &err))
+              mutt_window_printf(_("Bad IDN in '%s': '%s'"), tag, err);
+            /* tag is a statically allocated string and should not be freed */
+            FREE(&err);
           }
+          else
+            mutt_edit_file(NONULL(C_Visual), path);
+
+          buf = be_snarf_file(path, buf, &bufmax, &buflen, false);
+
+          mutt_window_addstr(_("(continue)\n"));
           break;
         case 'w':
           be_barf_file((p[0] != '\0') ? p : path, buf, buflen);

@@ -33,14 +33,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
-#include "mutt/mutt.h"
-#include "curs_lib.h"
+#include "mutt/lib.h"
+#include "gui/lib.h"
+#include "functions.h"
 #include "globals.h"
 #include "keymap.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "opcodes.h"
 #include "pager.h"
+#include "protos.h" // IWYU pragma: keep
 
 static const char *HelpStrings[] = {
 #define DEFINE_HELP_MESSAGE(opcode, help_string) help_string,

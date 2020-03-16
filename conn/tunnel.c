@@ -35,9 +35,8 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
-#include "mutt.h"
-#include "tunnel.h"
+#include "conn_private.h"
+#include "mutt/lib.h"
 #include "conn_globals.h"
 #include "connaccount.h"
 #include "connection.h"
@@ -48,13 +47,13 @@
  */
 struct TunnelSockData
 {
-  pid_t pid;
-  int fd_read;
-  int fd_write;
+  pid_t pid;    ///< Process ID of tunnel program
+  int fd_read;  ///< File descriptor to read from
+  int fd_write; ///< File descriptor to write to
 };
 
 /**
- * tunnel_socket_open - Open a tunnel socket - Implements Connection::conn_open()
+ * tunnel_socket_open - Open a tunnel socket - Implements Connection::open()
  */
 static int tunnel_socket_open(struct Connection *conn)
 {
@@ -133,7 +132,7 @@ static int tunnel_socket_open(struct Connection *conn)
 }
 
 /**
- * tunnel_socket_read - Read data from a tunnel socket - Implements Connection::conn_read()
+ * tunnel_socket_read - Read data from a tunnel socket - Implements Connection::read()
  */
 static int tunnel_socket_read(struct Connection *conn, char *buf, size_t count)
 {
@@ -155,7 +154,7 @@ static int tunnel_socket_read(struct Connection *conn, char *buf, size_t count)
 }
 
 /**
- * tunnel_socket_write - Write data to a tunnel socket - Implements Connection::conn_write()
+ * tunnel_socket_write - Write data to a tunnel socket - Implements Connection::write()
  */
 static int tunnel_socket_write(struct Connection *conn, const char *buf, size_t count)
 {
@@ -183,7 +182,7 @@ static int tunnel_socket_write(struct Connection *conn, const char *buf, size_t 
 }
 
 /**
- * tunnel_socket_poll - Checks whether tunnel reads would block - Implements Connection::conn_poll()
+ * tunnel_socket_poll - Checks whether tunnel reads would block - Implements Connection::poll()
  */
 static int tunnel_socket_poll(struct Connection *conn, time_t wait_secs)
 {
@@ -200,11 +199,16 @@ static int tunnel_socket_poll(struct Connection *conn, time_t wait_secs)
 }
 
 /**
- * tunnel_socket_close - Close a tunnel socket - Implements Connection::conn_close()
+ * tunnel_socket_close - Close a tunnel socket - Implements Connection::close()
  */
 static int tunnel_socket_close(struct Connection *conn)
 {
   struct TunnelSockData *tunnel = conn->sockdata;
+  if (!tunnel)
+  {
+    return 0;
+  }
+
   int status;
 
   close(tunnel->fd_read);
@@ -228,9 +232,9 @@ static int tunnel_socket_close(struct Connection *conn)
  */
 void mutt_tunnel_socket_setup(struct Connection *conn)
 {
-  conn->conn_open = tunnel_socket_open;
-  conn->conn_close = tunnel_socket_close;
-  conn->conn_read = tunnel_socket_read;
-  conn->conn_write = tunnel_socket_write;
-  conn->conn_poll = tunnel_socket_poll;
+  conn->open = tunnel_socket_open;
+  conn->close = tunnel_socket_close;
+  conn->read = tunnel_socket_read;
+  conn->write = tunnel_socket_write;
+  conn->poll = tunnel_socket_poll;
 }

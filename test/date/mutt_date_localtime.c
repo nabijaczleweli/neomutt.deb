@@ -23,11 +23,14 @@
 #define TEST_NO_MAIN
 #include "acutest.h"
 #include "config.h"
-#include "mutt/mutt.h"
+#include <stdlib.h>
+#include "mutt/lib.h"
 
 void test_mutt_date_localtime(void)
 {
   // struct tm mutt_date_localtime(time_t t);
+
+  setenv("TZ", "UTC", 1);
 
   {
     TEST_CASE("December, 2000");
@@ -58,6 +61,6 @@ void test_mutt_date_localtime(void)
   {
     TEST_CASE("Today");
     struct tm tm = mutt_date_localtime(MUTT_DATE_NOW);
-    TEST_CHECK(tm.tm_yday >= 119);
+    TEST_CHECK(tm.tm_year >= 119);
   }
 }

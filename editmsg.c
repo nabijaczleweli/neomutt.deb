@@ -28,20 +28,19 @@
 
 #include "config.h"
 #include <errno.h>
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "context.h"
 #include "copy.h"
-#include "curs_lib.h"
 #include "globals.h"
 #include "muttlib.h"
 #include "mx.h"

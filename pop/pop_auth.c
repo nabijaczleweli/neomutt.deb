@@ -32,10 +32,10 @@
 #include <stdio.h>
 #include <string.h>
 #include "pop_private.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
-#include "conn/conn.h"
-#include "mutt_account.h"
+#include "conn/lib.h"
+#include "lib.h"
 #include "mutt_logging.h"
 #include "mutt_socket.h"
 #ifdef USE_SASL
@@ -407,12 +407,12 @@ static const struct PopAuth pop_authenticators[] = {
  */
 int pop_authenticate(struct PopAccountData *adata)
 {
-  struct ConnAccount *acct = &adata->conn->account;
+  struct ConnAccount *cac = &adata->conn->account;
   const struct PopAuth *authenticator = NULL;
   int attempts = 0;
   int ret = POP_A_UNAVAIL;
 
-  if ((mutt_account_getuser(acct) < 0) || (acct->user[0] == '\0'))
+  if ((mutt_account_getuser(cac) < 0) || (cac->user[0] == '\0'))
   {
     return -3;
   }

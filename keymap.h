@@ -25,7 +25,7 @@
 
 #include "config.h"
 #include <stddef.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "mutt_commands.h"
 
 #define MUTT_UNBIND  1<<0
@@ -45,13 +45,13 @@ void init_extended_keys(void);
  */
 struct Keymap
 {
-  char *macro;         /**< macro expansion (op == OP_MACRO) */
-  char *desc;          /**< description of a macro for the help menu */
-  struct Keymap *next; /**< next key in map */
-  short op;            /**< operation to perform */
-  short eq;            /**< number of leading keys equal to next entry */
-  short len;           /**< length of key sequence (unit: sizeof (keycode_t)) */
-  keycode_t *keys;     /**< key sequence */
+  char *macro;         ///< macro expansion (op == OP_MACRO)
+  char *desc;          ///< description of a macro for the help menu
+  struct Keymap *next; ///< next key in map
+  short op;            ///< operation to perform
+  short eq;            ///< number of leading keys equal to next entry
+  short len;           ///< length of key sequence (unit: sizeof (keycode_t))
+  keycode_t *keys;     ///< key sequence
 };
 
 /**
@@ -98,6 +98,8 @@ struct Keymap *km_find_func(enum MenuType menu, int func);
 void km_init(void);
 void km_error_key(enum MenuType menu);
 void mutt_what_key(void);
+void mutt_init_abort_key(void);
+int mutt_abort_key_config_observer(struct NotifyCallback *nc);
 
 enum CommandResult km_bind(char *s, enum MenuType menu, int op, char *macro, char *desc);
 int km_dokey(enum MenuType menu);
@@ -105,6 +107,7 @@ int km_dokey(enum MenuType menu);
 extern struct Keymap *Keymaps[]; ///< Array of Keymap keybindings, one for each Menu
 
 extern int LastKey; ///< Last real key pressed, recorded by dokey()
+extern keycode_t AbortKey; ///< key to abort edits etc, normally Ctrl-G
 
 extern const struct Mapping Menus[];
 
@@ -113,36 +116,13 @@ extern const struct Mapping Menus[];
  */
 struct Binding
 {
-  const char *name; /**< name of the function */
-  int op;           /**< function id number */
-  const char *seq;  /**< default key binding */
+  const char *name; ///< name of the function
+  int op;           ///< function id number
+  const char *seq;  ///< default key binding
 };
 
 const struct Binding *km_get_table(enum MenuType menu);
 const char *mutt_get_func(const struct Binding *bindings, int op);
-
-extern const struct Binding OpGeneric[];
-extern const struct Binding OpPost[];
-extern const struct Binding OpMain[];
-extern const struct Binding OpAttach[];
-extern const struct Binding OpPager[];
-extern const struct Binding OpCompose[];
-extern const struct Binding OpBrowser[];
-extern const struct Binding OpEditor[];
-extern const struct Binding OpQuery[];
-extern const struct Binding OpAlias[];
-
-extern const struct Binding OpPgp[];
-
-extern const struct Binding OpSmime[];
-
-#ifdef MIXMASTER
-extern const struct Binding OpMix[];
-#endif
-
-#ifdef USE_AUTOCRYPT
-extern const struct Binding OpAutocryptAcct[];
-#endif
 
 void mutt_keys_free(void);
 

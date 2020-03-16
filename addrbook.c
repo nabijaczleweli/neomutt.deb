@@ -31,17 +31,18 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
+#include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
+#include "addrbook.h"
 #include "alias.h"
-#include "curs_lib.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "keymap.h"
 #include "mutt_menu.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "opcodes.h"
 
@@ -91,7 +92,7 @@ static const char *alias_format_str(char *buf, size_t buflen, size_t col, int co
       break;
     case 'r':
       addr[0] = '\0';
-      mutt_addrlist_write(addr, sizeof(addr), &alias->addr, true);
+      mutt_addrlist_write(&alias->addr, addr, sizeof(addr), true);
       snprintf(fmt, sizeof(fmt), "%%%ss", prec);
       snprintf(buf, buflen, fmt, addr);
       break;
@@ -105,18 +106,18 @@ static const char *alias_format_str(char *buf, size_t buflen, size_t col, int co
 }
 
 /**
- * alias_make_entry - Format a menu item for the alias list - Implements Menu::menu_make_entry()
+ * alias_make_entry - Format a menu item for the alias list - Implements Menu::make_entry()
  */
 static void alias_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
-  mutt_expando_format(buf, buflen, 0, menu->indexwin->cols,
+  mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
                       NONULL(C_AliasFormat), alias_format_str,
                       (unsigned long) ((struct Alias **) menu->data)[line],
                       MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
- * alias_tag - Tag some aliases - Implements Menu::menu_tag()
+ * alias_tag - Tag some aliases - Implements Menu::tag()
  */
 static int alias_tag(struct Menu *menu, int sel, int act)
 {
@@ -185,6 +186,36 @@ static int alias_sort_address(const void *a, const void *b)
 }
 
 /**
+ * mutt_dlg_alias_observer - Listen for config changes affecting the Alias menu - Implements ::observer_t
+ */
+static int mutt_dlg_alias_observer(struct NotifyCallback *nc)
+{
+  if (!nc->event_data || !nc->global_data)
+    return -1;
+  if (nc->event_type != NT_CONFIG)
+    return 0;
+
+  struct EventConfig *ec = nc->event_data;
+  struct MuttWindow *dlg = nc->global_data;
+
+  if (mutt_str_strcmp(ec->name, "status_on_top") != 0)
+    return 0;
+
+  struct MuttWindow *win_first = TAILQ_FIRST(&dlg->children);
+
+  if ((C_StatusOnTop && (win_first->type == WT_INDEX)) ||
+      (!C_StatusOnTop && (win_first->type != WT_INDEX)))
+  {
+    // Swap the Index and the IndexBar Windows
+    TAILQ_REMOVE(&dlg->children, win_first, entries);
+    TAILQ_INSERT_TAIL(&dlg->children, win_first, entries);
+  }
+
+  mutt_window_reflow(dlg);
+  return 0;
+}
+
+/**
  * mutt_alias_menu - Display a menu of Aliases
  * @param buf    Buffer for expanded aliases
  * @param buflen Length of buffer
@@ -208,9 +239,43 @@ void mutt_alias_menu(char *buf, size_t buflen, struct AliasList *aliases)
     return;
   }
 
+  struct MuttWindow *dlg =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+#ifdef USE_DEBUG_WINDOW
+  dlg->name = "aliases";
+#endif
+  dlg->type = WT_DIALOG;
+  struct MuttWindow *index =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+  index->type = WT_INDEX;
+  struct MuttWindow *ibar = mutt_window_new(
+      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
+  ibar->type = WT_INDEX_BAR;
+
+  if (C_StatusOnTop)
+  {
+    mutt_window_add_child(dlg, ibar);
+    mutt_window_add_child(dlg, index);
+  }
+  else
+  {
+    mutt_window_add_child(dlg, index);
+    mutt_window_add_child(dlg, ibar);
+  }
+
+  notify_observer_add(NeoMutt->notify, mutt_dlg_alias_observer, dlg);
+  dialog_push(dlg);
+
   menu = mutt_menu_new(MENU_ALIAS);
-  menu->menu_make_entry = alias_make_entry;
-  menu->menu_tag = alias_tag;
+
+  menu->pagelen = index->state.rows;
+  menu->win_index = index;
+  menu->win_ibar = ibar;
+
+  menu->make_entry = alias_make_entry;
+  menu->tag = alias_tag;
   menu->title = _("Aliases");
   menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_ALIAS, AliasHelp);
   mutt_menu_push_current(menu);
@@ -229,7 +294,7 @@ new_aliases:
   mutt_mem_realloc(&alias_table, menu->max * sizeof(struct Alias *));
   menu->data = alias_table;
   if (!alias_table)
-    return;
+    goto mam_done;
 
   if (last)
     a = TAILQ_NEXT(last, entries);
@@ -297,17 +362,22 @@ new_aliases:
   {
     if (alias_table[i]->tagged)
     {
-      mutt_addrlist_write(buf, buflen, &alias_table[i]->addr, true);
+      mutt_addrlist_write(&alias_table[i]->addr, buf, buflen, true);
       t = -1;
     }
   }
 
   if (t != -1)
   {
-    mutt_addrlist_write(buf, buflen, &alias_table[t]->addr, true);
+    mutt_addrlist_write(&alias_table[t]->addr, buf, buflen, true);
   }
 
+  FREE(&alias_table);
+
+mam_done:
   mutt_menu_pop_current(menu);
   mutt_menu_free(&menu);
-  FREE(&alias_table);
+  dialog_pop();
+  notify_observer_remove(NeoMutt->notify, mutt_dlg_alias_observer, dlg);
+  mutt_window_free(&dlg);
 }

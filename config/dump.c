@@ -29,10 +29,10 @@
 #include "config.h"
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "dump.h"
 #include "set.h"
+#include "subset.h"
 #include "types.h"
 
 void mutt_pretty_mailbox(char *buf, size_t buflen);
@@ -53,6 +53,9 @@ size_t escape_string(struct Buffer *buf, const char *src)
   {
     switch (*src)
     {
+      case '\007':
+        len += mutt_buffer_addstr(buf, "\\g");
+        break;
       case '\n':
         len += mutt_buffer_addstr(buf, "\\n");
         break;
@@ -89,53 +92,6 @@ size_t pretty_var(const char *str, struct Buffer *buf)
   len += mutt_buffer_addch(buf, '"');
 
   return len;
-}
-
-/**
- * elem_list_sort - Sort two HashElem pointers to config
- * @param a First HashElem
- * @param b Second HashElem
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- */
-int elem_list_sort(const void *a, const void *b)
-{
-  if (!a || !b)
-    return 0;
-
-  const struct HashElem *hea = *(struct HashElem const *const *) a;
-  const struct HashElem *heb = *(struct HashElem const *const *) b;
-
-  return mutt_str_strcasecmp(hea->key.strkey, heb->key.strkey);
-}
-
-/**
- * get_elem_list - Create a sorted list of all config items
- * @param cs ConfigSet to read
- * @retval ptr Null-terminated array of HashElem
- */
-struct HashElem **get_elem_list(struct ConfigSet *cs)
-{
-  if (!cs)
-    return NULL;
-
-  struct HashElem **list = mutt_mem_calloc(1024, sizeof(struct HashElem *));
-  size_t index = 0;
-
-  struct HashWalkState walk = { 0 };
-  struct HashElem *he = NULL;
-
-  while ((he = mutt_hash_walk(cs->hash, &walk)))
-  {
-    list[index++] = he;
-    if (index == 1022)
-      break; /* LCOV_EXCL_LINE */
-  }
-
-  qsort(list, index, sizeof(struct HashElem *), elem_list_sort);
-
-  return list;
 }
 
 /**
@@ -249,7 +205,7 @@ bool dump_config(struct ConfigSet *cs, ConfigDumpFlags flags, FILE *fp)
           mutt_buffer_addstr(&value, "***");
         }
 
-        if (IS_PATH(he) && (value.data[0] == '/'))
+        if (((type == DT_PATH) || IS_MAILBOX(he)) && (value.data[0] == '/'))
           mutt_pretty_mailbox(value.data, value.dsize);
 
         if ((type != DT_BOOL) && (type != DT_NUMBER) && (type != DT_LONG) &&
@@ -271,7 +227,7 @@ bool dump_config(struct ConfigSet *cs, ConfigDumpFlags flags, FILE *fp)
           break;          /* LCOV_EXCL_LINE */
         }
 
-        if (IS_PATH(he) && !(he->type & DT_MAILBOX))
+        if (((type == DT_PATH) || IS_MAILBOX(he)) && !(he->type & DT_MAILBOX))
           mutt_pretty_mailbox(initial.data, initial.dsize);
 
         if ((type != DT_BOOL) && (type != DT_NUMBER) && (type != DT_LONG) &&

@@ -32,10 +32,10 @@
 #include <stdbool.h>
 #include <sys/stat.h>
 #include "autocrypt_private.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
-#include "autocrypt.h"
 #include "globals.h"
+#include "autocrypt/lib.h"
 
 /* Prepared statements */
 static sqlite3_stmt *AccountGetStmt;

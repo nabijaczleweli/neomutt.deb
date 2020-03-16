@@ -28,8 +28,7 @@
 
 #include "config.h"
 #include <string.h>
-#include "mutt/mutt.h"
-#include "config/lib.h"
+#include "mutt/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
 #include "context.h"
@@ -37,10 +36,10 @@
 #include "mutt_header.h"
 #include "mutt_thread.h"
 #include "mx.h"
-#include "ncrypt/ncrypt.h"
 #include "pattern.h"
 #include "score.h"
 #include "sort.h"
+#include "ncrypt/lib.h"
 
 /**
  * ctx_free - Free a Context
@@ -54,11 +53,12 @@ void ctx_free(struct Context **ptr)
   struct Context *ctx = *ptr;
 
   struct EventContext ev_ctx = { ctx };
-  notify_send(ctx->notify, NT_CONTEXT, NT_CONTEXT_CLOSE, IP & ev_ctx);
+  notify_send(ctx->notify, NT_CONTEXT, NT_CONTEXT_CLOSE, &ev_ctx);
 
   if (ctx->mailbox)
-    notify_observer_remove(ctx->mailbox->notify, ctx_mailbox_observer, IP ctx);
+    notify_observer_remove(ctx->mailbox->notify, ctx_mailbox_observer, ctx);
 
+  mutt_hash_free(&ctx->thread_hash);
   notify_free(&ctx->notify);
 
   FREE(ptr);
@@ -72,7 +72,7 @@ struct Context *ctx_new(void)
 {
   struct Context *ctx = mutt_mem_calloc(1, sizeof(struct Context));
 
-  ctx->notify = notify_new(ctx, NT_CONTEXT);
+  ctx->notify = notify_new();
   notify_set_parent(ctx->notify, NeoMutt->notify);
 
   return ctx;
@@ -82,16 +82,18 @@ struct Context *ctx_new(void)
  * ctx_cleanup - Release memory and initialize a Context object
  * @param ctx Context to cleanup
  */
-void ctx_cleanup(struct Context *ctx)
+static void ctx_cleanup(struct Context *ctx)
 {
   FREE(&ctx->pattern);
   mutt_pattern_free(&ctx->limit_pattern);
   if (ctx->mailbox)
-    notify_observer_remove(ctx->mailbox->notify, ctx_mailbox_observer, IP ctx);
+    notify_observer_remove(ctx->mailbox->notify, ctx_mailbox_observer, ctx);
 
   struct Notify *notify = ctx->notify;
+  struct Mailbox *m = ctx->mailbox;
   memset(ctx, 0, sizeof(struct Context));
   ctx->notify = notify;
+  ctx->mailbox = m;
 }
 
 /**
@@ -214,6 +216,8 @@ void ctx_update_tables(struct Context *ctx, bool committing)
   padding = mx_msg_padding_size(m);
   for (i = 0, j = 0; i < m->msg_count; i++)
   {
+    if (!m->emails[i])
+      break;
     if (!m->emails[i]->quasi_deleted &&
         ((committing && (!m->emails[i]->deleted || ((m->magic == MUTT_MAILDIR) && C_MaildirTrash))) ||
          (!committing && m->emails[i]->active)))
@@ -289,30 +293,29 @@ void ctx_update_tables(struct Context *ctx, bool committing)
  */
 int ctx_mailbox_observer(struct NotifyCallback *nc)
 {
-  if (!nc)
+  if (!nc->global_data)
     return -1;
-  if ((nc->obj_type != NT_MAILBOX) || (nc->event_type != NT_MAILBOX))
+  if (nc->event_type != NT_MAILBOX)
     return 0;
-  struct Context *ctx = (struct Context *) nc->data;
-  if (!ctx)
-    return -1;
+
+  struct Context *ctx = nc->global_data;
 
   switch (nc->event_subtype)
   {
-    case MBN_CLOSED:
+    case NT_MAILBOX_CLOSED:
       mutt_clear_threads(ctx);
       ctx_cleanup(ctx);
       break;
-    case MBN_INVALID:
+    case NT_MAILBOX_INVALID:
       ctx_update(ctx);
       break;
-    case MBN_UPDATE:
+    case NT_MAILBOX_UPDATE:
       ctx_update_tables(ctx, true);
       break;
-    case MBN_RESORT:
+    case NT_MAILBOX_RESORT:
       mutt_sort_headers(ctx, true);
       break;
-    case MBN_UNTAG:
+    case NT_MAILBOX_UNTAG:
       if (ctx->last_tag && ctx->last_tag->deleted)
         ctx->last_tag = NULL;
       break;
@@ -323,31 +326,31 @@ int ctx_mailbox_observer(struct NotifyCallback *nc)
 
 /**
  * message_is_visible - Is a message in the index within limit
- * @param ctx   Open mailbox
- * @param index Message ID (index into `ctx->emails[]`
+ * @param ctx Context
+ * @param e   Email
  * @retval true The message is within limit
  *
  * If no limit is in effect, all the messages are visible.
  */
-bool message_is_visible(struct Context *ctx, int index)
+bool message_is_visible(struct Context *ctx, struct Email *e)
 {
-  if (!ctx || !ctx->mailbox->emails || (index >= ctx->mailbox->msg_count))
+  if (!ctx || !e)
     return false;
 
-  return !ctx->pattern || ctx->mailbox->emails[index]->limited;
+  return !ctx->pattern || e->limited;
 }
 
 /**
  * message_is_tagged - Is a message in the index tagged (and within limit)
- * @param ctx   Open mailbox
- * @param index Message ID (index into `ctx->emails[]`
+ * @param ctx Open mailbox
+ * @param e   Email
  * @retval true The message is both tagged and within limit
  *
  * If a limit is in effect, the message must be visible within it.
  */
-bool message_is_tagged(struct Context *ctx, int index)
+bool message_is_tagged(struct Context *ctx, struct Email *e)
 {
-  return message_is_visible(ctx, index) && ctx->mailbox->emails[index]->tagged;
+  return message_is_visible(ctx, e) && e->tagged;
 }
 
 /**
@@ -368,13 +371,17 @@ int el_add_tagged(struct EmailList *el, struct Context *ctx, struct Email *e, bo
     if (!ctx || !ctx->mailbox || !ctx->mailbox->emails)
       return -1;
 
-    for (size_t i = 0; i < ctx->mailbox->msg_count; i++)
+    struct Mailbox *m = ctx->mailbox;
+    for (size_t i = 0; i < m->msg_count; i++)
     {
-      if (!message_is_tagged(ctx, i))
+      e = m->emails[i];
+      if (!e)
+        break;
+      if (!message_is_tagged(ctx, e))
         continue;
 
       struct EmailNode *en = mutt_mem_calloc(1, sizeof(*en));
-      en->email = ctx->mailbox->emails[i];
+      en->email = e;
       STAILQ_INSERT_TAIL(el, en, entries);
       count++;
     }
@@ -394,20 +401,26 @@ int el_add_tagged(struct EmailList *el, struct Context *ctx, struct Email *e, bo
 }
 
 /**
- * el_add_email - Get a list of the selected Emails
- * @param e  Current Email
- * @param el EmailList to add to
- * @retval  0 Success
- * @retval -1 Error
+ * mutt_get_virt_email - Get a virtual Email
+ * @param m    Mailbox
+ * @param vnum Virtual index number
+ * @retval ptr  Email
+ * @retval NULL No Email selected, or bad index values
+ *
+ * This safely gets the result of the following:
+ * - `mailbox->emails[mailbox->v2r[vnum]]`
  */
-int el_add_email(struct EmailList *el, struct Email *e)
+struct Email *mutt_get_virt_email(struct Mailbox *m, int vnum)
 {
-  if (!el || !e)
-    return -1;
+  if (!m || !m->emails || !m->v2r)
+    return NULL;
 
-  struct EmailNode *en = mutt_mem_calloc(1, sizeof(*en));
-  en->email = e;
-  STAILQ_INSERT_TAIL(el, en, entries);
+  if ((vnum < 0) || (vnum >= m->vcount))
+    return NULL;
 
-  return 0;
+  int inum = m->v2r[vnum];
+  if ((inum < 0) || (inum >= m->msg_count))
+    return NULL;
+
+  return m->emails[inum];
 }

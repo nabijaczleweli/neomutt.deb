@@ -34,15 +34,15 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
-#include "filter.h"
+#include "gui/lib.h"
+#include "pgpinvoke.h"
+#include "lib.h"
 #include "format_flags.h"
 #include "globals.h"
-#include "mutt_curses.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "ncrypt.h"
 #include "pgpkey.h"
 #include "protos.h"
 #ifdef CRYPT_BACKEND_CLASSIC_PGP
@@ -71,11 +71,11 @@ char *C_PgpVerifyKeyCommand; ///< Config: (pgp) External command to verify key i
  */
 struct PgpCommandContext
 {
-  bool need_passphrase;  /**< %p */
-  const char *fname;     /**< %f */
-  const char *sig_fname; /**< %s */
-  const char *signas;    /**< %a */
-  const char *ids;       /**< %r */
+  bool need_passphrase;  ///< %p
+  const char *fname;     ///< %f
+  const char *sig_fname; ///< %s
+  const char *signas;    ///< %a
+  const char *ids;       ///< %r
 };
 
 /**
@@ -163,11 +163,15 @@ static const char *fmt_pgp_command(char *buf, size_t buflen, size_t col, int col
   }
 
   if (optional)
+  {
     mutt_expando_format(buf, buflen, col, cols, if_str, fmt_pgp_command, data,
                         MUTT_FORMAT_NO_FLAGS);
+  }
   else if (flags & MUTT_FORMAT_OPTIONAL)
+  {
     mutt_expando_format(buf, buflen, col, cols, else_str, fmt_pgp_command, data,
                         MUTT_FORMAT_NO_FLAGS);
+  }
 
   return src;
 }
@@ -228,8 +232,8 @@ static pid_t pgp_invoke(FILE **fp_pgp_in, FILE **fp_pgp_out, FILE **fp_pgp_err,
 
   mutt_pgp_command(cmd, sizeof(cmd), &cctx, format);
 
-  return mutt_create_filter_fd(cmd, fp_pgp_in, fp_pgp_out, fp_pgp_err,
-                               fd_pgp_in, fd_pgp_out, fd_pgp_err);
+  return filter_create_fd(cmd, fp_pgp_in, fp_pgp_out, fp_pgp_err, fd_pgp_in,
+                          fd_pgp_out, fd_pgp_err);
 }
 
 /*

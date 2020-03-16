@@ -30,17 +30,17 @@
 #include "config.h"
 #include <stdio.h>
 #include "imap_private.h"
-#include "mutt/mutt.h"
-#include "conn/conn.h"
+#include "mutt/lib.h"
+#include "conn/lib.h"
 #include "auth.h"
-#include "mutt_account.h"
+#include "lib.h"
 #include "mutt_logging.h"
 #include "mutt_socket.h"
 
 /**
- * imap_auth_oauth - Authenticate an IMAP connection using OAUTHBEARER
+ * imap_auth_oauth - Authenticate an IMAP connection using OAUTHBEARER - Implements ImapAuth::authenticate()
  * @param adata Imap Account data
- * @param method Name of this authentication method (UNUSED)
+ * @param method Name of this authentication method
  * @retval num Result, e.g. #IMAP_AUTH_SUCCESS
  */
 enum ImapAuthRes imap_auth_oauth(struct ImapAccountData *adata, const char *method)
@@ -82,7 +82,7 @@ enum ImapAuthRes imap_auth_oauth(struct ImapAccountData *adata, const char *meth
   if (rc != IMAP_EXEC_SUCCESS)
   {
     /* The error response was in SASL continuation, so continue the SASL
-     * to cause a failure and exit SASL input.  See RFC 7628 3.2.3 */
+     * to cause a failure and exit SASL input.  See RFC7628 3.2.3 */
     mutt_socket_send(adata->conn, "\001");
     rc = imap_exec(adata, ibuf, IMAP_CMD_NO_FLAGS);
   }

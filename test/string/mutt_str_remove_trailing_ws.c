@@ -23,7 +23,7 @@
 #define TEST_NO_MAIN
 #include "acutest.h"
 #include "config.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 
 struct TrailTest
 {
@@ -70,7 +70,7 @@ void test_mutt_str_remove_trailing_ws(void)
     {
       struct TrailTest *t = &trail_tests[i];
       memset(buf, 0, sizeof(buf));
-      strncpy(buf, t->str, sizeof(buf));
+      mutt_str_strfcpy(buf, t->str, sizeof(buf));
       TEST_CASE_("'%s'", buf);
 
       mutt_str_remove_trailing_ws(buf);

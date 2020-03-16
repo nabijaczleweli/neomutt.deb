@@ -37,11 +37,11 @@
 #include <sys/inotify.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "monitor.h"
 #include "context.h"
-#include "curs_lib.h"
 #include "globals.h"
 #ifndef HAVE_INOTIFY_INIT1
 #include <fcntl.h>
@@ -157,7 +157,7 @@ static int monitor_init(void)
 {
   if (INotifyFd == -1)
   {
-#if HAVE_INOTIFY_INIT1
+#ifdef HAVE_INOTIFY_INIT1
     INotifyFd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
     if (INotifyFd == -1)
     {
@@ -437,8 +437,10 @@ int mutt_monitor_poll(void)
               if (len == -1)
               {
                 if (errno != EAGAIN)
+                {
                   mutt_debug(LL_DEBUG2, "read inotify events failed, errno=%d %s\n",
                              errno, strerror(errno));
+                }
                 break;
               }
 

@@ -41,12 +41,12 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "maildir_private.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "lib.h"
 #include "errno.h"
 #include "globals.h"
-#include "lib.h"
 #include "monitor.h"
 #include "mx.h"
 
@@ -168,8 +168,7 @@ void mh_update_sequences(struct Mailbox *m)
   char *buf = NULL;
   char *p = NULL;
   size_t s;
-  int l = 0;
-  int i;
+  int seq_num = 0;
 
   int unseen = 0;
   int flagged = 0;
@@ -198,12 +197,14 @@ void mh_update_sequences(struct Mailbox *m)
   FILE *fp_old = fopen(sequences, "r");
   if (fp_old)
   {
-    while ((buf = mutt_file_read_line(buf, &s, fp_old, &l, 0)))
+    while ((buf = mutt_file_read_line(buf, &s, fp_old, NULL, 0)))
     {
       if (mutt_str_startswith(buf, seq_unseen, CASE_MATCH) ||
           mutt_str_startswith(buf, seq_flagged, CASE_MATCH) ||
           mutt_str_startswith(buf, seq_replied, CASE_MATCH))
+      {
         continue;
+      }
 
       fprintf(fp_new, "%s\n", buf);
     }
@@ -211,33 +212,37 @@ void mh_update_sequences(struct Mailbox *m)
   mutt_file_fclose(&fp_old);
 
   /* now, update our unseen, flagged, and replied sequences */
-  for (l = 0; l < m->msg_count; l++)
+  for (int i = 0; i < m->msg_count; i++)
   {
-    if (m->emails[l]->deleted)
+    struct Email *e = m->emails[i];
+    if (!e)
+      break;
+
+    if (e->deleted)
       continue;
 
-    p = strrchr(m->emails[l]->path, '/');
+    p = strrchr(e->path, '/');
     if (p)
       p++;
     else
-      p = m->emails[l]->path;
+      p = e->path;
 
-    if (mutt_str_atoi(p, &i) < 0)
+    if (mutt_str_atoi(p, &seq_num) < 0)
       continue;
 
-    if (!m->emails[l]->read)
+    if (!e->read)
     {
-      mhs_set(&mhs, i, MH_SEQ_UNSEEN);
+      mhs_set(&mhs, seq_num, MH_SEQ_UNSEEN);
       unseen++;
     }
-    if (m->emails[l]->flagged)
+    if (e->flagged)
     {
-      mhs_set(&mhs, i, MH_SEQ_FLAGGED);
+      mhs_set(&mhs, seq_num, MH_SEQ_FLAGGED);
       flagged++;
     }
-    if (m->emails[l]->replied)
+    if (e->replied)
     {
-      mhs_set(&mhs, i, MH_SEQ_REPLIED);
+      mhs_set(&mhs, seq_num, MH_SEQ_REPLIED);
       replied++;
     }
   }
@@ -412,7 +417,7 @@ bool mh_valid_message(const char *s)
 }
 
 /**
- * mh_mbox_check_stats - Check the Mailbox statistics - Implements MxOps::check_stats
+ * mh_mbox_check_stats - Check the Mailbox statistics - Implements MxOps::mbox_check_stats()
  */
 static int mh_mbox_check_stats(struct Mailbox *m, int flags)
 {
@@ -522,6 +527,8 @@ int mh_sync_message(struct Mailbox *m, int msgno)
     return -1;
 
   struct Email *e = m->emails[msgno];
+  if (!e)
+    return -1;
 
   /* TODO: why the e->env check? */
   if (e->attach_del || (e->env && e->env->changed))
@@ -678,15 +685,19 @@ int mh_mbox_check(struct Mailbox *m, int *index_hint)
 
   for (int i = 0; i < m->msg_count; i++)
   {
-    m->emails[i]->active = false;
+    struct Email *e = m->emails[i];
+    if (!e)
+      break;
 
-    p = mutt_hash_find(fnames, m->emails[i]->path);
-    if (p && p->email && email_cmp_strict(m->emails[i], p->email))
+    e->active = false;
+
+    p = mutt_hash_find(fnames, e->path);
+    if (p && p->email && email_cmp_strict(e, p->email))
     {
-      m->emails[i]->active = true;
+      e->active = true;
       /* found the right message */
-      if (!m->emails[i]->changed)
-        if (maildir_update_flags(m, m->emails[i], p->email))
+      if (!e->changed)
+        if (maildir_update_flags(m, e, p->email))
           flags_changed = true;
 
       email_free(&p->email);
@@ -701,13 +712,13 @@ int mh_mbox_check(struct Mailbox *m, int *index_hint)
 
   /* If we didn't just get new mail, update the tables. */
   if (occult)
-    mailbox_changed(m, MBN_RESORT);
+    mailbox_changed(m, NT_MAILBOX_RESORT);
 
   /* Incorporate new messages */
   num_new = maildir_move_to_mailbox(m, &md);
   if (num_new > 0)
   {
-    mailbox_changed(m, MBN_INVALID);
+    mailbox_changed(m, NT_MAILBOX_INVALID);
     m->changed = true;
   }
 
@@ -756,7 +767,7 @@ static int mh_msg_commit(struct Mailbox *m, struct Message *msg)
 /**
  * mh_path_probe - Is this an mh Mailbox? - Implements MxOps::path_probe()
  */
-enum MailboxType mh_path_probe(const char *path, const struct stat *st)
+static enum MailboxType mh_path_probe(const char *path, const struct stat *st)
 {
   if (!path)
     return MUTT_UNKNOWN;
@@ -803,6 +814,7 @@ enum MailboxType mh_path_probe(const char *path, const struct stat *st)
 struct MxOps MxMhOps = {
   .magic            = MUTT_MH,
   .name             = "mh",
+  .is_local         = true,
   .ac_find          = maildir_ac_find,
   .ac_add           = maildir_ac_add,
   .mbox_open        = mh_mbox_open,

@@ -30,8 +30,10 @@
 #include <stddef.h>
 #include <limits.h>
 #include <stdint.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
+#include "quad.h"
 #include "set.h"
+#include "subset.h"
 #include "types.h"
 
 /**
@@ -44,7 +46,7 @@ const char *QuadValues[] = {
 };
 
 /**
- * quad_string_set - Set a Quad-option by string - Implements ::cst_string_set()
+ * quad_string_set - Set a Quad-option by string - Implements ConfigSetType::string_set()
  */
 static int quad_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                            const char *value, struct Buffer *err)
@@ -64,7 +66,7 @@ static int quad_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
 
   if (num < 0)
   {
-    mutt_buffer_printf(err, "Invalid quad value: %s", value);
+    mutt_buffer_printf(err, _("Invalid quad value: %s"), value);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
@@ -92,7 +94,7 @@ static int quad_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
 }
 
 /**
- * quad_string_get - Get a Quad-option as a string - Implements ::cst_string_get()
+ * quad_string_get - Get a Quad-option as a string - Implements ConfigSetType::string_get()
  */
 static int quad_string_get(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, struct Buffer *result)
@@ -118,7 +120,7 @@ static int quad_string_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * quad_native_set - Set a Quad-option config item by int - Implements ::cst_native_set()
+ * quad_native_set - Set a Quad-option config item by int - Implements ConfigSetType::native_set()
  */
 static int quad_native_set(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, intptr_t value, struct Buffer *err)
@@ -128,7 +130,7 @@ static int quad_native_set(const struct ConfigSet *cs, void *var,
 
   if ((value < 0) || (value >= (mutt_array_size(QuadValues) - 1)))
   {
-    mutt_buffer_printf(err, "Invalid quad value: %ld", value);
+    mutt_buffer_printf(err, _("Invalid quad value: %ld"), value);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
@@ -148,7 +150,7 @@ static int quad_native_set(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * quad_native_get - Get an int object from a Quad-option config item - Implements ::cst_native_get()
+ * quad_native_get - Get an int object from a Quad-option config item - Implements ConfigSetType::native_get()
  */
 static intptr_t quad_native_get(const struct ConfigSet *cs, void *var,
                                 const struct ConfigDef *cdef, struct Buffer *err)
@@ -160,7 +162,7 @@ static intptr_t quad_native_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * quad_reset - Reset a Quad-option to its initial value - Implements ::cst_reset()
+ * quad_reset - Reset a Quad-option to its initial value - Implements ConfigSetType::reset()
  */
 static int quad_reset(const struct ConfigSet *cs, void *var,
                       const struct ConfigDef *cdef, struct Buffer *err)
@@ -203,6 +205,7 @@ void quad_init(struct ConfigSet *cs)
 
 /**
  * quad_toggle - Toggle (invert) the value of a quad option
+ * @param opt Value to toggle
  *
  * By toggling the low bit, the following are swapped:
  * - #MUTT_NO    <--> #MUTT_YES
@@ -215,33 +218,47 @@ static int quad_toggle(int opt)
 
 /**
  * quad_he_toggle - Toggle the value of a quad
- * @param cs  Config items
+ * @param sub Config subset
  * @param he  HashElem representing config item
  * @param err Buffer for error messages
  * @retval num Result, e.g. #CSR_SUCCESS
  *
  * @sa quad_toggle()
  */
-int quad_he_toggle(struct ConfigSet *cs, struct HashElem *he, struct Buffer *err)
+int quad_he_toggle(struct ConfigSubset *sub, struct HashElem *he, struct Buffer *err)
 {
-  if (!cs || !he || !he->data)
+  if (!sub || !he || !he->data)
     return CSR_ERR_CODE;
 
-  if (DTYPE(he->type) != DT_QUAD)
+  struct HashElem *he_base = cs_get_base(he);
+  if (DTYPE(he_base->type) != DT_QUAD)
     return CSR_ERR_CODE;
 
-  const struct ConfigDef *cdef = he->data;
-  char *var = cdef->var;
+  intptr_t value = cs_he_native_get(sub->cs, he, err);
+  if (value == INT_MIN)
+    return CSR_ERR_CODE;
 
-  char value = *var;
-  if ((value < 0) || (value >= (mutt_array_size(QuadValues) - 1)))
-  {
-    mutt_buffer_printf(err, "Invalid quad value: %d", value);
-    return CSR_ERR_INVALID | CSR_INV_TYPE;
-  }
+  value = quad_toggle(value);
+  int rc = cs_he_native_set(sub->cs, he, value, err);
 
-  *(char *) var = quad_toggle(value);
+  if ((CSR_RESULT(rc) == CSR_SUCCESS) && !(rc & CSR_SUC_NO_CHANGE))
+    cs_subset_notify_observers(sub, he, NT_CONFIG_SET);
 
-  cs_notify_observers(cs, he, he->key.strkey, NT_CONFIG_SET);
-  return CSR_SUCCESS;
+  return rc;
+}
+
+/**
+ * quad_str_toggle - Toggle the value of a quad
+ * @param sub  Config subset
+ * @param name HashElem representing config item
+ * @param err  Buffer for error messages
+ * @retval num Result, e.g. #CSR_SUCCESS
+ *
+ * @sa quad_toggle()
+ */
+int quad_str_toggle(struct ConfigSubset *sub, const char *name, struct Buffer *err)
+{
+  struct HashElem *he = cs_subset_create_inheritance(sub, name);
+
+  return quad_he_toggle(sub, he, err);
 }

@@ -24,6 +24,7 @@
 #define MUTT_LIB_DATE_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <time.h>
 
 /* theoretically time_t can be float but it is integer on most (if not all) systems */
@@ -40,16 +41,16 @@
  */
 struct Tz
 {
-  char tzname[5];         /**< Name, e.g. UTC */
-  unsigned char zhours;   /**< Hours away from UTC */
-  unsigned char zminutes; /**< Minutes away from UTC */
-  bool zoccident;         /**< True if west of UTC, False if East */
+  char tzname[5];         ///< Name, e.g. UTC
+  unsigned char zhours;   ///< Hours away from UTC
+  unsigned char zminutes; ///< Minutes away from UTC
+  bool zoccident;         ///< True if west of UTC, False if East
 };
 
 time_t    mutt_date_add_timeout(time_t now, long timeout);
 int       mutt_date_check_month(const char *s);
 time_t    mutt_date_epoch(void);
-size_t    mutt_date_epoch_ms(void);
+uint64_t  mutt_date_epoch_ms(void);
 struct tm mutt_date_gmtime(time_t t);
 bool      mutt_date_is_day_name(const char *s);
 size_t    mutt_date_localtime_format(char *buf, size_t buflen, const char *format, time_t t);

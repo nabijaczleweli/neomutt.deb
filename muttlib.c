@@ -42,30 +42,29 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "muttlib.h"
 #include "alias.h"
-#include "curs_lib.h"
-#include "filter.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "hook.h"
-#include "mutt_window.h"
+#include "init.h"
 #include "mx.h"
-#include "ncrypt/ncrypt.h"
 #include "protos.h"
+#include "ncrypt/lib.h"
 #if defined(HAVE_SYSCALL_H)
 #include <syscall.h>
 #elif defined(HAVE_SYS_SYSCALL_H)
 #include <sys/syscall.h>
 #endif
 #ifdef USE_IMAP
-#include "imap/imap.h"
+#include "imap/lib.h"
 #endif
 
 /* These Config Variables are only used in muttlib.c */
@@ -201,7 +200,7 @@ void mutt_buffer_expand_path_regex(struct Buffer *buf, bool regex)
       case '=':
       case '+':
       {
-        enum MailboxType mb_type = mx_path_probe(C_Folder, NULL);
+        enum MailboxType mb_type = mx_path_probe(C_Folder);
 
         /* if folder = {host} or imap[s]://host/: don't append slash */
         if ((mb_type == MUTT_IMAP) && ((C_Folder[strlen(C_Folder) - 1] == '}') ||
@@ -225,7 +224,7 @@ void mutt_buffer_expand_path_regex(struct Buffer *buf, bool regex)
       case '@':
       {
         struct AddressList *al = mutt_alias_lookup(s + 1);
-        if (!TAILQ_EMPTY(al))
+        if (al && !TAILQ_EMPTY(al))
         {
           struct Email *e = email_new();
           e->env = mutt_env_new();
@@ -892,7 +891,9 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
 
   prefix[0] = '\0';
   buflen--; /* save room for the terminal \0 */
-  wlen = ((flags & MUTT_FORMAT_ARROWCURSOR) && C_ArrowCursor) ? 3 : 0;
+  wlen = ((flags & MUTT_FORMAT_ARROWCURSOR) && C_ArrowCursor) ?
+             mutt_strwidth(C_ArrowString) + 1 :
+             0;
   col += wlen;
 
   if ((flags & MUTT_FORMAT_NOFILTER) == 0)
@@ -963,14 +964,14 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
 
       col -= wlen; /* reset to passed in value */
       wptr = buf;  /* reset write ptr */
-      pid_t pid = mutt_create_filter(cmd.data, NULL, &fp_filter, NULL);
+      pid_t pid = filter_create(cmd.data, NULL, &fp_filter, NULL);
       if (pid != -1)
       {
         int rc;
 
         n = fread(buf, 1, buflen /* already decremented */, fp_filter);
         mutt_file_fclose(&fp_filter);
-        rc = mutt_wait_filter(pid);
+        rc = filter_wait(pid);
         if (rc != 0)
           mutt_debug(LL_DEBUG1, "format pipe cmd exited code %d\n", rc);
         if (n > 0)
@@ -1241,7 +1242,9 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
           }
           else if (soft)
           {
-            int offset = ((flags & MUTT_FORMAT_ARROWCURSOR) && C_ArrowCursor) ? 3 : 0;
+            int offset = ((flags & MUTT_FORMAT_ARROWCURSOR) && C_ArrowCursor) ?
+                             mutt_strwidth(C_ArrowString) + 1 :
+                             0;
             int avail_cols = (cols > offset) ? (cols - offset) : 0;
             /* \0-terminate buf for length computation in mutt_wstr_trunc() */
             *wptr = '\0';
@@ -1420,7 +1423,7 @@ FILE *mutt_open_read(const char *path, pid_t *thepid)
 
     p[len - 1] = 0;
     mutt_endwin();
-    *thepid = mutt_create_filter(p, NULL, &fp, NULL);
+    *thepid = filter_create(p, NULL, &fp, NULL);
     FREE(&p);
   }
   else
@@ -1450,7 +1453,7 @@ int mutt_save_confirm(const char *s, struct stat *st)
 {
   int ret = 0;
 
-  enum MailboxType magic = mx_path_probe(s, NULL);
+  enum MailboxType magic = mx_path_probe(s);
 
 #ifdef USE_POP
   if (magic == MUTT_POP)
@@ -1565,43 +1568,26 @@ const char *mutt_make_version(void)
 }
 
 /**
- * mutt_encode_path - Convert a path into the user's preferred character set
- * @param buf    Buffer for the result
- * @param buflen Length of buffer
- * @param src  Path to convert (OPTIONAL)
- *
- * If `src` is NULL, the path in `buf` will be converted in-place.
- */
-void mutt_encode_path(char *buf, size_t buflen, const char *src)
-{
-  char *p = mutt_str_strdup(src);
-  int rc = mutt_ch_convert_string(&p, C_Charset, "us-ascii", 0);
-  /* 'src' may be NULL, such as when called from the pop3 driver. */
-  size_t len = mutt_str_strfcpy(buf, (rc == 0) ? p : src, buflen);
-
-  /* convert the path to POSIX "Portable Filename Character Set" */
-  for (size_t i = 0; i < len; i++)
-  {
-    if (!isalnum(buf[i]) && !strchr("/.-_", buf[i]))
-    {
-      buf[i] = '_';
-    }
-  }
-  FREE(&p);
-}
-
-/**
- * mutt_buffer_encode_path - Convert a path into the user's preferred character set
+ * mutt_encode_path - Convert a path to 'us-ascii'
  * @param buf Buffer for the result
  * @param src Path to convert (OPTIONAL)
  *
  * If `src` is NULL, the path in `buf` will be converted in-place.
  */
-void mutt_buffer_encode_path(struct Buffer *buf, const char *src)
+void mutt_encode_path(struct Buffer *buf, const char *src)
 {
   char *p = mutt_str_strdup(src);
-  int rc = mutt_ch_convert_string(&p, C_Charset, "utf-8", 0);
-  mutt_buffer_strcpy(buf, (rc == 0) ? NONULL(p) : NONULL(src));
+  int rc = mutt_ch_convert_string(&p, C_Charset, "us-ascii", 0);
+  size_t len = mutt_buffer_strcpy(buf, (rc == 0) ? NONULL(p) : NONULL(src));
+
+  /* convert the path to POSIX "Portable Filename Character Set" */
+  for (size_t i = 0; i < len; i++)
+  {
+    if (!isalnum(buf->data[i]) && !strchr("/.-_", buf->data[i]))
+    {
+      buf->data[i] = '_';
+    }
+  }
   FREE(&p);
 }
 
@@ -1655,7 +1641,7 @@ int mutt_set_xdg_path(enum XdgType type, char *buf, size_t bufsize)
  */
 void mutt_get_parent_path(const char *path, char *buf, size_t buflen)
 {
-  enum MailboxType mb_magic = mx_path_probe(path, NULL);
+  enum MailboxType mb_magic = mx_path_probe(path);
 
   if (mb_magic == MUTT_IMAP)
     imap_get_parent_path(path, buf, buflen);
@@ -1807,5 +1793,57 @@ void mutt_str_pretty_size(char *buf, size_t buflen, size_t num)
   {
     /* (10433332 + 52428) / 1048576 = 10 */
     snprintf(buf, buflen, C_SizeUnitsOnLeft ? ("M%zu") : ("%zuM"), (num + 52428) / 1048576);
+  }
+}
+
+/**
+ * add_to_stailq - Add a string to a list
+ * @param head String list
+ * @param str  String to add
+ *
+ * @note Duplicate or empty strings will not be added
+ */
+void add_to_stailq(struct ListHead *head, const char *str)
+{
+  /* don't add a NULL or empty string to the list */
+  if (!str || (*str == '\0'))
+    return;
+
+  /* check to make sure the item is not already on this list */
+  struct ListNode *np = NULL;
+  STAILQ_FOREACH(np, head, entries)
+  {
+    if (mutt_str_strcasecmp(str, np->data) == 0)
+    {
+      return;
+    }
+  }
+  mutt_list_insert_tail(head, mutt_str_strdup(str));
+}
+
+/**
+ * remove_from_stailq - Remove an item, matching a string, from a List
+ * @param head Head of the List
+ * @param str  String to match
+ *
+ * @note The string comparison is case-insensitive
+ */
+void remove_from_stailq(struct ListHead *head, const char *str)
+{
+  if (mutt_str_strcmp("*", str) == 0)
+    mutt_list_free(head); /* "unCMD *" means delete all current entries */
+  else
+  {
+    struct ListNode *np = NULL, *tmp = NULL;
+    STAILQ_FOREACH_SAFE(np, head, entries, tmp)
+    {
+      if (mutt_str_strcasecmp(str, np->data) == 0)
+      {
+        STAILQ_REMOVE(head, np, ListNode, entries);
+        FREE(&np->data);
+        FREE(&np);
+        break;
+      }
+    }
   }
 }

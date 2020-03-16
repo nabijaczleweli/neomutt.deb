@@ -38,17 +38,21 @@
 #include "config.h"
 #include <stdbool.h>
 #include <stdio.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
+#include "cryptglue.h"
 #include "crypt_mod.h"
-#include "ncrypt.h"
+#include "ncrypt/lib.h"
 #ifndef CRYPT_BACKEND_GPGME
-#include "curs_lib.h"
+#include "gui/lib.h"
 #endif
 #ifdef USE_AUTOCRYPT
 #include "email/lib.h"
-#include "autocrypt/autocrypt.h"
+#include "crypt_gpgme.h"
 #include "globals.h"
 #include "options.h"
+#include "autocrypt/lib.h"
+#else
+struct Envelope;
 #endif
 
 struct Address;
@@ -68,7 +72,6 @@ extern struct CryptModuleSpecs CryptModSmimeClassic;
 #endif
 
 #ifdef CRYPT_BACKEND_GPGME
-#include "ncrypt/crypt_gpgme.h"
 extern struct CryptModuleSpecs CryptModPgpGpgme;
 extern struct CryptModuleSpecs CryptModSmimeGpgme;
 #endif
@@ -315,10 +318,10 @@ char *crypt_pgp_find_keys(struct AddressList *addrlist, bool oppenc_mode)
 /**
  * crypt_pgp_sign_message - Wrapper for CryptModuleSpecs::sign_message()
  */
-struct Body *crypt_pgp_sign_message(struct Body *a)
+struct Body *crypt_pgp_sign_message(struct Body *a, const struct AddressList *from)
 {
   if (CRYPT_MOD_CALL_CHECK(PGP, sign_message))
-    return CRYPT_MOD_CALL(PGP, sign_message)(a);
+    return CRYPT_MOD_CALL(PGP, sign_message)(a, from);
 
   return NULL;
 }
@@ -326,7 +329,8 @@ struct Body *crypt_pgp_sign_message(struct Body *a)
 /**
  * crypt_pgp_encrypt_message - Wrapper for CryptModuleSpecs::pgp_encrypt_message()
  */
-struct Body *crypt_pgp_encrypt_message(struct Email *e, struct Body *a, char *keylist, int sign)
+struct Body *crypt_pgp_encrypt_message(struct Email *e, struct Body *a, char *keylist,
+                                       int sign, const struct AddressList *from)
 {
 #ifdef USE_AUTOCRYPT
   if (e->security & SEC_AUTOCRYPT)
@@ -335,7 +339,7 @@ struct Body *crypt_pgp_encrypt_message(struct Email *e, struct Body *a, char *ke
       return NULL;
 
     OptAutocryptGpgme = true;
-    struct Body *result = pgp_gpgme_encrypt_message(a, keylist, sign);
+    struct Body *result = pgp_gpgme_encrypt_message(a, keylist, sign, from);
     OptAutocryptGpgme = false;
 
     return result;
@@ -343,7 +347,7 @@ struct Body *crypt_pgp_encrypt_message(struct Email *e, struct Body *a, char *ke
 #endif
 
   if (CRYPT_MOD_CALL_CHECK(PGP, pgp_encrypt_message))
-    return CRYPT_MOD_CALL(PGP, pgp_encrypt_message)(a, keylist, sign);
+    return CRYPT_MOD_CALL(PGP, pgp_encrypt_message)(a, keylist, sign, from);
 
   return NULL;
 }
@@ -442,15 +446,6 @@ int crypt_smime_application_handler(struct Body *m, struct State *s)
 }
 
 /**
- * crypt_smime_encrypted_handler - Wrapper for CryptModuleSpecs::encrypted_handler()
- */
-void crypt_smime_encrypted_handler(struct Body *a, struct State *s)
-{
-  if (CRYPT_MOD_CALL_CHECK(SMIME, encrypted_handler))
-    CRYPT_MOD_CALL(SMIME, encrypted_handler)(a, s);
-}
-
-/**
  * crypt_smime_getkeys - Wrapper for CryptModuleSpecs::smime_getkeys()
  */
 void crypt_smime_getkeys(struct Envelope *env)
@@ -484,10 +479,10 @@ char *crypt_smime_find_keys(struct AddressList *addrlist, bool oppenc_mode)
 /**
  * crypt_smime_sign_message - Wrapper for CryptModuleSpecs::sign_message()
  */
-struct Body *crypt_smime_sign_message(struct Body *a)
+struct Body *crypt_smime_sign_message(struct Body *a, const struct AddressList *from)
 {
   if (CRYPT_MOD_CALL_CHECK(SMIME, sign_message))
-    return CRYPT_MOD_CALL(SMIME, sign_message)(a);
+    return CRYPT_MOD_CALL(SMIME, sign_message)(a, from);
 
   return NULL;
 }

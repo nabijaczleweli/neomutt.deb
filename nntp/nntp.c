@@ -33,36 +33,45 @@
 #include <ctype.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <strings.h>
+#include <time.h>
 #include <unistd.h>
 #include "nntp_private.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
-#include "conn/conn.h"
-#include "mutt.h"
-#include "nntp.h"
+#include "conn/lib.h"
+#include "gui/lib.h"
+#include "lib.h"
 #include "bcache.h"
-#include "curs_lib.h"
 #include "globals.h"
-#include "hcache/hcache.h"
 #include "hook.h"
-#include "mutt_account.h"
+#include "init.h"
 #include "mutt_logging.h"
 #include "mutt_parse.h"
 #include "mutt_socket.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "ncrypt/ncrypt.h"
 #include "progress.h"
-#include "protos.h"
 #include "sort.h"
+#include "hcache/lib.h"
+#include "ncrypt/lib.h"
+#ifdef USE_HCACHE
+#include "protos.h"
+#endif
 #ifdef USE_SASL
 #include <sasl/sasl.h>
 #include <sasl/saslutil.h>
 #endif
+#if defined(USE_SSL) || defined(USE_HCACHE)
+#include "mutt.h"
+#endif
+
+struct stat;
 
 /* These Config Variables are only used in nntp/nntp.c */
 char *C_NntpAuthenticators; ///< Config: (nntp) Allowed authentication methods
@@ -136,13 +145,14 @@ static void nntp_adata_free(void **ptr)
 /**
  * nntp_hashelem_free - Free our hash table data - Implements ::hashelem_free_t
  */
-void nntp_hashelem_free(int type, void *obj, intptr_t data)
+static void nntp_hashelem_free(int type, void *obj, intptr_t data)
 {
   nntp_mdata_free(&obj);
 }
 
 /**
  * nntp_adata_new - Allocate and initialise a new NntpAccountData structure
+ * @param conn Network connection
  * @retval ptr New NntpAccountData
  */
 struct NntpAccountData *nntp_adata_new(struct Connection *conn)
@@ -157,6 +167,7 @@ struct NntpAccountData *nntp_adata_new(struct Connection *conn)
   return adata;
 }
 
+#if 0
 /**
  * nntp_adata_get - Get the Account data for this mailbox
  * @retval ptr Private Account data
@@ -170,6 +181,7 @@ struct NntpAccountData *nntp_adata_get(struct Mailbox *m)
     return NULL;
   return a->adata;
 }
+#endif
 
 /**
  * nntp_mdata_free - Free NntpMboxData, used to destroy hash elements
@@ -210,6 +222,7 @@ static struct NntpEmailData *nntp_edata_new(void)
 
 /**
  * nntp_edata_get - Get the private data for this Email
+ * @param e Email
  * @retval ptr Private Email data
  */
 struct NntpEmailData *nntp_edata_get(struct Email *e)
@@ -1173,14 +1186,13 @@ static int parse_overview_line(char *line, void *data)
 
     /* try to replace with header from cache */
     snprintf(buf, sizeof(buf), "%u", anum);
-    void *hdata = mutt_hcache_fetch(fc->hc, buf, strlen(buf));
-    if (hdata)
+    struct HCacheEntry hce = mutt_hcache_fetch(fc->hc, buf, strlen(buf), 0);
+    if (hce.email)
     {
       mutt_debug(LL_DEBUG2, "mutt_hcache_fetch %s\n", buf);
       email_free(&e);
-      e = mutt_hcache_restore(hdata);
+      e = hce.email;
       m->emails[m->msg_count] = e;
-      mutt_hcache_free(fc->hc, &hdata);
       e->edata = NULL;
       e->read = false;
       e->old = false;
@@ -1272,15 +1284,6 @@ static int nntp_fetch_headers(struct Mailbox *m, void *hc, anum_t first, anum_t 
     return -1;
   fc.hc = hc;
 
-  if (!m->emails)
-  {
-    /* Allocate some memory to get started */
-    m->email_max = m->msg_count;
-    m->msg_count = 0;
-    m->vcount = 0;
-    mx_alloc_memory(m);
-  }
-
   /* fetch list of articles */
   if (C_NntpListgroup && mdata->adata->hasLISTGROUP && !mdata->deleted)
   {
@@ -1350,13 +1353,12 @@ static int nntp_fetch_headers(struct Mailbox *m, void *hc, anum_t first, anum_t 
 
 #ifdef USE_HCACHE
     /* try to fetch header from cache */
-    void *hdata = mutt_hcache_fetch(fc.hc, buf, strlen(buf));
-    if (hdata)
+    struct HCacheEntry hce = mutt_hcache_fetch(fc.hc, buf, strlen(buf), 0);
+    if (hce.email)
     {
       mutt_debug(LL_DEBUG2, "mutt_hcache_fetch %s\n", buf);
-      e = mutt_hcache_restore(hdata);
+      e = hce.email;
       m->emails[m->msg_count] = e;
-      mutt_hcache_free(fc.hc, &hdata);
       e->edata = NULL;
 
       /* skip header marked as deleted in cache */
@@ -1586,7 +1588,6 @@ static int check_mailbox(struct Mailbox *m)
 #ifdef USE_HCACHE
     unsigned char *messages = NULL;
     char buf[16];
-    void *hdata = NULL;
     struct Email *e = NULL;
     anum_t first = mdata->first_message;
 
@@ -1601,6 +1602,8 @@ static int check_mailbox(struct Mailbox *m)
     int j = 0;
     for (int i = 0; i < m->msg_count; i++)
     {
+      if (!m->emails[i])
+        continue;
       bool flagged = false;
       anum_t anum = nntp_edata_get(m->emails[i])->article_num;
 
@@ -1612,14 +1615,13 @@ static int check_mailbox(struct Mailbox *m)
           messages[anum - first] = 1;
 
         snprintf(buf, sizeof(buf), "%u", anum);
-        hdata = mutt_hcache_fetch(hc, buf, strlen(buf));
-        if (hdata)
+        struct HCacheEntry hce = mutt_hcache_fetch(hc, buf, strlen(buf), 0);
+        if (hce.email)
         {
           bool deleted;
 
           mutt_debug(LL_DEBUG2, "#1 mutt_hcache_fetch %s\n", buf);
-          e = mutt_hcache_restore(hdata);
-          mutt_hcache_free(hc, &hdata);
+          e = hce.email;
           e->edata = NULL;
           deleted = e->deleted;
           flagged = e->flagged;
@@ -1658,16 +1660,15 @@ static int check_mailbox(struct Mailbox *m)
         continue;
 
       snprintf(buf, sizeof(buf), "%u", anum);
-      hdata = mutt_hcache_fetch(hc, buf, strlen(buf));
-      if (hdata)
+      struct HCacheEntry hce = mutt_hcache_fetch(hc, buf, strlen(buf), 0);
+      if (hce.email)
       {
         mutt_debug(LL_DEBUG2, "#2 mutt_hcache_fetch %s\n", buf);
         if (m->msg_count >= m->email_max)
           mx_alloc_memory(m);
 
-        e = mutt_hcache_restore(hdata);
+        e = hce.email;
         m->emails[m->msg_count] = e;
-        mutt_hcache_free(hc, &hdata);
         e->edata = NULL;
         if (e->deleted)
         {
@@ -1700,7 +1701,7 @@ static int check_mailbox(struct Mailbox *m)
 
   /* some headers were removed, context must be updated */
   if (rc == MUTT_REOPENED)
-    mailbox_changed(m, MBN_INVALID);
+    mailbox_changed(m, NT_MAILBOX_INVALID);
 
   /* fetch headers of new articles */
   if (mdata->last_message > mdata->last_loaded)
@@ -1721,7 +1722,7 @@ static int check_mailbox(struct Mailbox *m)
     if (rc2 == 0)
     {
       if (m->msg_count > old_msg_count)
-        mailbox_changed(m, MBN_INVALID);
+        mailbox_changed(m, NT_MAILBOX_INVALID);
       mdata->last_loaded = mdata->last_message;
     }
     if ((rc == 0) && (m->msg_count > oldmsgcount))
@@ -1789,8 +1790,13 @@ static int fetch_children(char *line, void *data)
   if (!line || (sscanf(line, ANUM, &anum) != 1))
     return 0;
   for (unsigned int i = 0; i < cc->mailbox->msg_count; i++)
-    if (nntp_edata_get(cc->mailbox->emails[i])->article_num == anum)
+  {
+    struct Email *e = cc->mailbox->emails[i];
+    if (!e)
+      break;
+    if (nntp_edata_get(e)->article_num == anum)
       return 0;
+  }
   if (cc->num >= cc->max)
   {
     cc->max *= 2;
@@ -2278,7 +2284,7 @@ int nntp_check_msgid(struct Mailbox *m, const char *msgid)
   e->changed = true;
   e->received = e->date_sent;
   e->index = m->msg_count++;
-  mailbox_changed(m, MBN_INVALID);
+  mailbox_changed(m, NT_MAILBOX_INVALID);
   return 0;
 }
 
@@ -2346,7 +2352,7 @@ int nntp_check_children(struct Mailbox *m, const char *msgid)
       break;
   }
   if (m->msg_count > old_msg_count)
-    mailbox_changed(m, MBN_INVALID);
+    mailbox_changed(m, NT_MAILBOX_INVALID);
 
 #ifdef USE_HCACHE
   mutt_hcache_close(hc);
@@ -2374,24 +2380,24 @@ int nntp_compare_order(const void *a, const void *b)
 /**
  * nntp_ac_find - Find an Account that matches a Mailbox path - Implements MxOps::ac_find()
  */
-struct Account *nntp_ac_find(struct Account *a, const char *path)
+static struct Account *nntp_ac_find(struct Account *a, const char *path)
 {
 #if 0
   if (!a || (a->type != MUTT_NNTP) || !path)
     return NULL;
 
-  struct Url url;
+  struct Url url = { 0 };
   char tmp[PATH_MAX];
   mutt_str_strfcpy(tmp, path, sizeof(tmp));
   url_parse(&url, tmp);
 
   struct ImapAccountData *adata = a->data;
-  struct ConnAccount *ac = &adata->conn_account;
+  struct ConnAccount *cac = &adata->conn_account;
 
-  if (mutt_str_strcasecmp(url.host, ac->host) != 0)
+  if (mutt_str_strcasecmp(url.host, cac->host) != 0)
     return NULL;
 
-  if (mutt_str_strcasecmp(url.user, ac->user) != 0)
+  if (mutt_str_strcasecmp(url.user, cac->user) != 0)
     return NULL;
 
   // if (mutt_str_strcmp(path, a->mailbox->realpath) == 0)
@@ -2403,7 +2409,7 @@ struct Account *nntp_ac_find(struct Account *a, const char *path)
 /**
  * nntp_ac_add - Add a Mailbox to an Account - Implements MxOps::ac_add()
  */
-int nntp_ac_add(struct Account *a, struct Mailbox *m)
+static int nntp_ac_add(struct Account *a, struct Mailbox *m)
 {
   if (!a || !m || (m->magic != MUTT_NNTP))
     return -1;
@@ -2619,6 +2625,9 @@ static int nntp_mbox_sync(struct Mailbox *m, int *index_hint)
   for (int i = 0; i < m->msg_count; i++)
   {
     struct Email *e = m->emails[i];
+    if (!e)
+      break;
+
     char buf[16];
 
     snprintf(buf, sizeof(buf), ANUM, nntp_edata_get(e)->article_num);
@@ -2685,11 +2694,14 @@ static int nntp_mbox_close(struct Mailbox *m)
  */
 static int nntp_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
 {
-  if (!m || !m->emails || !msg)
+  if (!m || !m->emails || (msgno >= m->msg_count) || !msg)
     return -1;
 
   struct NntpMboxData *mdata = m->mdata;
   struct Email *e = m->emails[msgno];
+  if (!e)
+    return -1;
+
   char article[16];
 
   /* try to get article from cache */
@@ -2838,7 +2850,7 @@ enum MailboxType nntp_path_probe(const char *path, const struct stat *st)
 /**
  * nntp_path_canon - Canonicalise a Mailbox path - Implements MxOps::path_canon()
  */
-int nntp_path_canon(char *buf, size_t buflen)
+static int nntp_path_canon(char *buf, size_t buflen)
 {
   if (!buf)
     return -1;
@@ -2849,7 +2861,7 @@ int nntp_path_canon(char *buf, size_t buflen)
 /**
  * nntp_path_pretty - Abbreviate a Mailbox path - Implements MxOps::path_pretty()
  */
-int nntp_path_pretty(char *buf, size_t buflen, const char *folder)
+static int nntp_path_pretty(char *buf, size_t buflen, const char *folder)
 {
   /* Succeed, but don't do anything, for now */
   return 0;
@@ -2858,7 +2870,7 @@ int nntp_path_pretty(char *buf, size_t buflen, const char *folder)
 /**
  * nntp_path_parent - Find the parent of a Mailbox path - Implements MxOps::path_parent()
  */
-int nntp_path_parent(char *buf, size_t buflen)
+static int nntp_path_parent(char *buf, size_t buflen)
 {
   /* Succeed, but don't do anything, for now */
   return 0;
@@ -2871,11 +2883,13 @@ int nntp_path_parent(char *buf, size_t buflen)
 struct MxOps MxNntpOps = {
   .magic            = MUTT_NNTP,
   .name             = "nntp",
+  .is_local         = false,
   .ac_find          = nntp_ac_find,
   .ac_add           = nntp_ac_add,
   .mbox_open        = nntp_mbox_open,
   .mbox_open_append = NULL,
   .mbox_check       = nntp_mbox_check,
+  .mbox_check_stats = NULL,
   .mbox_sync        = nntp_mbox_sync,
   .mbox_close       = nntp_mbox_close,
   .msg_open         = nntp_msg_open,

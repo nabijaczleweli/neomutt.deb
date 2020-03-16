@@ -33,36 +33,35 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "recvattach.h"
 #include "commands.h"
 #include "context.h"
-#include "curs_lib.h"
-#include "filter.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "handler.h"
 #include "hdrline.h"
 #include "hook.h"
+#include "init.h"
 #include "keymap.h"
 #include "mailcap.h"
 #include "mutt_attach.h"
 #include "mutt_menu.h"
 #include "mutt_parse.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "ncrypt/ncrypt.h"
 #include "opcodes.h"
 #include "options.h"
 #include "recvcmd.h"
 #include "send.h"
 #include "sendlib.h"
 #include "state.h"
+#include "ncrypt/lib.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
@@ -324,21 +323,21 @@ const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols,
         mutt_format_s(buf, buflen, prec, ENCODING(aptr->content->encoding));
       break;
     case 'I':
-      if (!optional)
-      {
-        const char dispchar[] = { 'I', 'A', 'F', '-' };
-        char ch;
+      if (optional)
+        break;
 
-        if (aptr->content->disposition < sizeof(dispchar))
-          ch = dispchar[aptr->content->disposition];
-        else
-        {
-          mutt_debug(LL_DEBUG1, "ERROR: invalid content-disposition %d\n",
-                     aptr->content->disposition);
-          ch = '!';
-        }
-        snprintf(buf, buflen, "%c", ch);
+      const char dispchar[] = { 'I', 'A', 'F', '-' };
+      char ch;
+
+      if (aptr->content->disposition < sizeof(dispchar))
+        ch = dispchar[aptr->content->disposition];
+      else
+      {
+        mutt_debug(LL_DEBUG1, "ERROR: invalid content-disposition %d\n",
+                    aptr->content->disposition);
+        ch = '!';
       }
+      snprintf(buf, buflen, "%c", ch);
       break;
     case 'm':
       if (!optional)
@@ -351,11 +350,11 @@ const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols,
         optional = false;
       break;
     case 'n':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
-        snprintf(buf, buflen, fmt, aptr->num + 1);
-      }
+      if (optional)
+        break;
+
+      snprintf(fmt, sizeof(fmt), "%%%sd", prec);
+      snprintf(buf, buflen, fmt, aptr->num + 1);
       break;
     case 'Q':
       if (optional)
@@ -421,28 +420,32 @@ const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols,
   }
 
   if (optional)
+  {
     mutt_expando_format(buf, buflen, col, cols, if_str, attach_format_str, data,
                         MUTT_FORMAT_NO_FLAGS);
+  }
   else if (flags & MUTT_FORMAT_OPTIONAL)
+  {
     mutt_expando_format(buf, buflen, col, cols, else_str, attach_format_str,
                         data, MUTT_FORMAT_NO_FLAGS);
+  }
   return src;
 }
 
 /**
- * attach_make_entry - Format a menu item for the attachment list - Implements Menu::menu_make_entry()
+ * attach_make_entry - Format a menu item for the attachment list - Implements Menu::make_entry()
  */
 static void attach_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
   struct AttachCtx *actx = menu->data;
 
-  mutt_expando_format(buf, buflen, 0, menu->indexwin->cols, NONULL(C_AttachFormat),
-                      attach_format_str, (unsigned long) (actx->idx[actx->v2r[line]]),
-                      MUTT_FORMAT_ARROWCURSOR);
+  mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
+                      NONULL(C_AttachFormat), attach_format_str,
+                      (unsigned long) (actx->idx[actx->v2r[line]]), MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
- * attach_tag - Tag an attachment - Implements Menu::menu_tag()
+ * attach_tag - Tag an attachment - Implements Menu::tag()
  */
 int attach_tag(struct Menu *menu, int sel, int act)
 {
@@ -895,10 +898,10 @@ void mutt_pipe_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag,
   if (!filter && !C_AttachSplit)
   {
     mutt_endwin();
-    pid_t pid = mutt_create_filter(buf, &state.fp_out, NULL, NULL);
+    pid_t pid = filter_create(buf, &state.fp_out, NULL, NULL);
     pipe_attachment_list(buf, actx, fp, tag, top, filter, &state);
     mutt_file_fclose(&state.fp_out);
-    if ((mutt_wait_filter(pid) != 0) || C_WaitKey)
+    if ((filter_wait(pid) != 0) || C_WaitKey)
       mutt_any_key_to_continue(NULL);
   }
   else
@@ -1050,10 +1053,10 @@ void mutt_print_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag, stru
     if (!can_print(actx, top, tag))
       return;
     mutt_endwin();
-    pid_t pid = mutt_create_filter(NONULL(C_PrintCommand), &state.fp_out, NULL, NULL);
+    pid_t pid = filter_create(NONULL(C_PrintCommand), &state.fp_out, NULL, NULL);
     print_attachment_list(actx, fp, tag, top, &state);
     mutt_file_fclose(&state.fp_out);
-    if ((mutt_wait_filter(pid) != 0) || C_WaitKey)
+    if ((filter_wait(pid) != 0) || C_WaitKey)
       mutt_any_key_to_continue(NULL);
   }
 }
@@ -1147,12 +1150,12 @@ int mutt_attach_display_loop(struct Menu *menu, int op, struct Email *e,
     switch (op)
     {
       case OP_DISPLAY_HEADERS:
-        bool_str_toggle(Config, "weed", NULL);
+        bool_str_toggle(NeoMutt->sub, "weed", NULL);
         /* fallthrough */
 
       case OP_VIEW_ATTACH:
         op = mutt_view_attachment(CUR_ATTACH->fp, CUR_ATTACH->content,
-                                  MUTT_VA_REGULAR, e, actx, menu->indexwin);
+                                  MUTT_VA_REGULAR, e, actx, menu->win_index);
         break;
 
       case OP_NEXT_ENTRY:
@@ -1421,10 +1424,43 @@ void mutt_view_attachments(struct Email *e)
   if (!msg)
     return;
 
+  struct MuttWindow *dlg =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+#ifdef USE_DEBUG_WINDOW
+  dlg->name = "attach";
+#endif
+  dlg->type = WT_DIALOG;
+  struct MuttWindow *index =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+  index->type = WT_INDEX;
+  struct MuttWindow *ibar = mutt_window_new(
+      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
+  ibar->type = WT_INDEX_BAR;
+
+  if (C_StatusOnTop)
+  {
+    mutt_window_add_child(dlg, ibar);
+    mutt_window_add_child(dlg, index);
+  }
+  else
+  {
+    mutt_window_add_child(dlg, index);
+    mutt_window_add_child(dlg, ibar);
+  }
+
+  dialog_push(dlg);
+
   struct Menu *menu = mutt_menu_new(MENU_ATTACH);
+
+  menu->pagelen = index->state.rows;
+  menu->win_index = index;
+  menu->win_ibar = ibar;
+
   menu->title = _("Attachments");
-  menu->menu_make_entry = attach_make_entry;
-  menu->menu_tag = attach_tag;
+  menu->make_entry = attach_make_entry;
+  menu->tag = attach_tag;
   menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_ATTACH, AttachHelp);
   mutt_menu_push_current(menu);
 
@@ -1443,13 +1479,13 @@ void mutt_view_attachments(struct Email *e)
     {
       case OP_ATTACH_VIEW_MAILCAP:
         mutt_view_attachment(CUR_ATTACH->fp, CUR_ATTACH->content,
-                             MUTT_VA_MAILCAP, e, actx, menu->indexwin);
+                             MUTT_VA_MAILCAP, e, actx, menu->win_index);
         menu->redraw = REDRAW_FULL;
         break;
 
       case OP_ATTACH_VIEW_TEXT:
         mutt_view_attachment(CUR_ATTACH->fp, CUR_ATTACH->content,
-                             MUTT_VA_AS_TEXT, e, actx, menu->indexwin);
+                             MUTT_VA_AS_TEXT, e, actx, menu->win_index);
         menu->redraw = REDRAW_FULL;
         break;
 
@@ -1705,6 +1741,8 @@ void mutt_view_attachments(struct Email *e)
 
         mutt_menu_pop_current(menu);
         mutt_menu_free(&menu);
+        dialog_pop();
+        mutt_window_free(&dlg);
         return;
     }
 

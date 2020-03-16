@@ -42,7 +42,7 @@ extern bool  C_ForwardDecrypt;
 extern bool  C_HiddenHost;
 extern char *C_Inews;
 extern bool  C_MimeForwardDecode;
-extern bool  C_MimeSubject; /**< encode subject line with RFC2047 */
+extern bool  C_MimeSubject; ///< encode subject line with RFC2047
 extern char *C_MimeTypeQueryCommand;
 extern bool  C_MimeTypeQueryFirst;
 extern char *C_Sendmail;
@@ -58,6 +58,7 @@ extern short C_WrapHeaders;
 enum MuttWriteHeaderMode
 {
   MUTT_WRITE_HEADER_NORMAL,   ///< A normal Email, write full header + MIME headers
+  MUTT_WRITE_HEADER_FCC,      ///< fcc mode, like normal mode but for Bcc header
   MUTT_WRITE_HEADER_POSTPONE, ///< A postponed Email, just the envelope info
   MUTT_WRITE_HEADER_EDITHDRS, ///< "light" mode (used for edit_hdrs)
   MUTT_WRITE_HEADER_MIME,     ///< Write protected headers

@@ -41,7 +41,7 @@
 #include "memory.h"
 #include "string2.h"
 
-bool OptLocales; /**< (pseudo) set if user has valid locale definition */
+bool OptLocales; ///< (pseudo) set if user has valid locale definition
 
 /**
  * mutt_mb_charlen - Count the bytes in a (multibyte) character
@@ -254,7 +254,7 @@ void mutt_mb_wcstombs(char *dest, size_t dlen, const wchar_t *src, size_t slen)
   /* If this works, we can stop now */
   if (dlen >= MB_LEN_MAX)
   {
-    wcrtomb(dest, 0, &st);
+    dest += wcrtomb(dest, 0, &st);
     return;
   }
 

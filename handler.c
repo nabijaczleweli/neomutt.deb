@@ -30,7 +30,6 @@
 #include <stddef.h>
 #include <ctype.h>
 #include <iconv.h>
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -38,25 +37,25 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
+#include "core/lib.h"
 #include "mutt.h"
 #include "handler.h"
 #include "copy.h"
 #include "enriched.h"
-#include "filter.h"
 #include "globals.h"
 #include "keymap.h"
 #include "mailcap.h"
 #include "mutt_attach.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "ncrypt/ncrypt.h"
 #include "opcodes.h"
 #include "options.h"
 #include "rfc3676.h"
 #include "state.h"
+#include "ncrypt/lib.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
@@ -578,13 +577,12 @@ static int autoview_handler(struct Body *a, struct State *s)
       unlink(mutt_b2s(tempfile));
       fflush(fp_in);
       rewind(fp_in);
-      pid = mutt_create_filter_fd(mutt_b2s(cmd), NULL, &fp_out, &fp_err,
-                                  fileno(fp_in), -1, -1);
+      pid = filter_create_fd(mutt_b2s(cmd), NULL, &fp_out, &fp_err, fileno(fp_in), -1, -1);
     }
     else
     {
       mutt_file_fclose(&fp_in);
-      pid = mutt_create_filter(mutt_b2s(cmd), NULL, &fp_out, &fp_err);
+      pid = filter_create(mutt_b2s(cmd), NULL, &fp_out, &fp_err);
     }
 
     if (pid < 0)
@@ -645,7 +643,7 @@ static int autoview_handler(struct Body *a, struct State *s)
     mutt_file_fclose(&fp_out);
     mutt_file_fclose(&fp_err);
 
-    mutt_wait_filter(pid);
+    filter_wait(pid);
     if (piped)
       mutt_file_fclose(&fp_in);
     else
@@ -1141,7 +1139,7 @@ static int multilingual_handler(struct Body *a, struct State *s)
   if (C_PreferredLanguages)
   {
     struct Buffer *langs = mutt_buffer_pool_get();
-    cs_str_string_get(Config, "preferred_languages", langs);
+    cs_subset_str_string_get(NeoMutt->sub, "preferred_languages", langs);
     mutt_debug(LL_DEBUG2, "RFC8255 >> preferred_languages set in config to '%s'\n",
                mutt_b2s(langs));
     mutt_buffer_pool_release(&langs);
@@ -1679,11 +1677,9 @@ int mutt_body_handler(struct Body *b, struct State *s)
   }
   /* print hint to use attachment menu for disposition == attachment
    * if we're not already being called from there */
-  else if ((s->flags & MUTT_DISPLAY) || ((b->disposition == DISP_ATTACH) && !OptViewAttach &&
-                                         C_HonorDisposition && (plaintext || handler)))
+  else if (s->flags & MUTT_DISPLAY)
   {
-    char keystroke[128];
-    keystroke[0] = '\0';
+    char keystroke[128] = { 0 };
     struct Buffer msg = mutt_buffer_make(256);
 
     if (!OptViewAttach)

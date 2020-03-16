@@ -39,25 +39,31 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
-#include "config/lib.h"
 #include "email/lib.h"
-#include "conn/conn.h"
-#include "mutt.h"
+#include "conn/lib.h"
+#include "smtp.h"
 #include "globals.h"
+#include "init.h"
 #include "mutt_account.h"
 #include "mutt_socket.h"
-#include "options.h"
 #include "progress.h"
 #include "sendlib.h"
+#ifdef USE_SSL
+#include "config/lib.h"
+#endif
 #ifdef USE_SASL
 #include <sasl/sasl.h>
 #include <sasl/saslutil.h>
+#include "options.h"
 #endif
 
 /* These Config Variables are only used in smtp.c */
 struct Slist *C_SmtpAuthenticators; ///< Config: (smtp) List of allowed authentication methods
+char *C_SmtpOauthRefreshCommand; ///< Config: (smtp) External command to generate OAUTH refresh token
+char *C_SmtpPass; ///< Config: (smtp) Password for the SMTP server
+char *C_SmtpUser; ///< Config: (smtp) Username for the SMTP server
 
 #define smtp_success(x) ((x) / 100 == 2)
 #define SMTP_READY 334
@@ -317,20 +323,42 @@ static bool addresses_use_unicode(const struct AddressList *al)
 }
 
 /**
+ * smtp_get_field - Get connection login credentials - Implements ConnAccount::get_field()
+ */
+static const char *smtp_get_field(enum ConnAccountField field)
+{
+  switch (field)
+  {
+    case MUTT_CA_LOGIN:
+    case MUTT_CA_USER:
+      return C_SmtpUser;
+    case MUTT_CA_PASS:
+      return C_SmtpPass;
+    case MUTT_CA_OAUTH_CMD:
+      return C_SmtpOauthRefreshCommand;
+    case MUTT_CA_HOST:
+    default:
+      return NULL;
+  }
+}
+
+/**
  * smtp_fill_account - Create ConnAccount object from SMTP Url
- * @param account ConnAccount to populate
+ * @param cac ConnAccount to populate
  * @retval  0 Success
  * @retval -1 Error
  */
-static int smtp_fill_account(struct ConnAccount *account)
+static int smtp_fill_account(struct ConnAccount *cac)
 {
-  account->flags = 0;
-  account->port = 0;
-  account->type = MUTT_ACCT_TYPE_SMTP;
+  cac->flags = 0;
+  cac->port = 0;
+  cac->type = MUTT_ACCT_TYPE_SMTP;
+  cac->service = "smtp";
+  cac->get_field = smtp_get_field;
 
   struct Url *url = url_parse(C_SmtpUrl);
   if (!url || ((url->scheme != U_SMTP) && (url->scheme != U_SMTPS)) ||
-      !url->host || (mutt_account_fromurl(account, url) < 0))
+      !url->host || (mutt_account_fromurl(cac, url) < 0))
   {
     url_free(&url);
     mutt_error(_("Invalid SMTP URL: %s"), C_SmtpUrl);
@@ -338,12 +366,12 @@ static int smtp_fill_account(struct ConnAccount *account)
   }
 
   if (url->scheme == U_SMTPS)
-    account->flags |= MUTT_ACCT_SSL;
+    cac->flags |= MUTT_ACCT_SSL;
 
-  if (account->port == 0)
+  if (cac->port == 0)
   {
-    if (account->flags & MUTT_ACCT_SSL)
-      account->port = SMTPS_PORT;
+    if (cac->flags & MUTT_ACCT_SSL)
+      cac->port = SMTPS_PORT;
     else
     {
       static unsigned short SmtpPort = 0;
@@ -356,7 +384,7 @@ static int smtp_fill_account(struct ConnAccount *account)
           SmtpPort = SMTP_PORT;
         mutt_debug(LL_DEBUG3, "Using default SMTP port %d\n", SmtpPort);
       }
-      account->port = SmtpPort;
+      cac->port = SmtpPort;
     }
   }
 
@@ -737,7 +765,7 @@ int mutt_smtp_send(const struct AddressList *from, const struct AddressList *to,
                    const char *msgfile, bool eightbit)
 {
   struct Connection *conn = NULL;
-  struct ConnAccount account;
+  struct ConnAccount cac = { { 0 } };
   const char *envfrom = NULL;
   char buf[1024];
   int rc = -1;
@@ -754,10 +782,10 @@ int mutt_smtp_send(const struct AddressList *from, const struct AddressList *to,
     return -1;
   }
 
-  if (smtp_fill_account(&account) < 0)
+  if (smtp_fill_account(&cac) < 0)
     return rc;
 
-  conn = mutt_conn_find(NULL, &account);
+  conn = mutt_conn_find(&cac);
   if (!conn)
     return -1;
 

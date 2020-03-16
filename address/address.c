@@ -32,7 +32,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address.h"
 #include "idna2.h"
 
@@ -43,6 +43,7 @@ const char AddressSpecials[] = "@.,:;<>[]\\\"()";
 
 /**
  * is_special - Is this character special to an email address?
+ * @param ch Character
  */
 #define is_special(ch) strchr(AddressSpecials, ch)
 
@@ -404,8 +405,8 @@ struct Address *mutt_addr_create(const char *personal, const char *mailbox)
 
 /**
  * mutt_addrlist_remove - Remove an Address from a list
- * @param[in, out] al AddressList
- * @param[in]  mailbox Email address to match
+ * @param[in,out] al      AddressList
+ * @param[in]     mailbox Email address to match
  * @retval  0 Success
  * @retval -1 Error, or email not found
  */
@@ -864,11 +865,11 @@ bool mutt_addr_cmp(const struct Address *a, const struct Address *b)
 
 /**
  * mutt_addrlist_search - Search for an e-mail address in a list
- * @param needle   Address containing the search email
  * @param haystack Address List
+ * @param needle   Address containing the search email
  * @retval true If the Address is in the list
  */
-bool mutt_addrlist_search(const struct Address *needle, const struct AddressList *haystack)
+bool mutt_addrlist_search(const struct AddressList *haystack, const struct Address *needle)
 {
   if (!needle || !haystack)
     return false;
@@ -1123,9 +1124,9 @@ done:
 
 /**
  * mutt_addrlist_write - Write an Address to a buffer
+ * @param al      AddressList to display
  * @param buf     Buffer for the Address
  * @param buflen  Length of the buffer
- * @param al      AddressList to display
  * @param display This address will be displayed to the user
  * @retval num    Length of the string written to buf
  *
@@ -1134,7 +1135,7 @@ done:
  *
  * @note It is assumed that `buf` is nul terminated!
  */
-size_t mutt_addrlist_write(char *buf, size_t buflen, const struct AddressList *al, bool display)
+size_t mutt_addrlist_write(const struct AddressList *al, char *buf, size_t buflen, bool display)
 {
   if (!buf || buflen == 0 || !al)
     return 0;

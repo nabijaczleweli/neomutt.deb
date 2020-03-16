@@ -32,7 +32,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
+#include "from.h"
 
 /**
  * is_from - Is a string a 'From' header line?
