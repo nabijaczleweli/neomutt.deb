@@ -30,32 +30,30 @@
 
 #include "config.h"
 #include <ctype.h>
-#include <limits.h>
 #include <locale.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "pgpkey.h"
+#include "lib.h"
 #include "crypt.h"
-#include "curs_lib.h"
-#include "filter.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "gnupgparse.h"
 #include "keymap.h"
 #include "mutt_logging.h"
 #include "mutt_menu.h"
-#include "mutt_window.h"
 #include "muttlib.h"
-#include "ncrypt.h"
 #include "opcodes.h"
 #include "options.h"
 #include "pager.h"
@@ -328,16 +326,20 @@ static const char *pgp_entry_fmt(char *buf, size_t buflen, size_t col, int cols,
   }
 
   if (optional)
+  {
     mutt_expando_format(buf, buflen, col, cols, if_str, attach_format_str, data,
                         MUTT_FORMAT_NO_FLAGS);
+  }
   else if (flags & MUTT_FORMAT_OPTIONAL)
+  {
     mutt_expando_format(buf, buflen, col, cols, else_str, attach_format_str,
                         data, MUTT_FORMAT_NO_FLAGS);
+  }
   return src;
 }
 
 /**
- * pgp_make_entry - Format a menu item for the pgp key list - Implements Menu::menu_make_entry()
+ * pgp_make_entry - Format a menu item for the pgp key list - Implements Menu::make_entry()
  */
 static void pgp_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
@@ -347,8 +349,9 @@ static void pgp_make_entry(char *buf, size_t buflen, struct Menu *menu, int line
   entry.uid = key_table[line];
   entry.num = line + 1;
 
-  mutt_expando_format(buf, buflen, 0, menu->indexwin->cols, NONULL(C_PgpEntryFormat),
-                      pgp_entry_fmt, (unsigned long) &entry, MUTT_FORMAT_ARROWCURSOR);
+  mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
+                      NONULL(C_PgpEntryFormat), pgp_entry_fmt,
+                      (unsigned long) &entry, MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
@@ -670,9 +673,42 @@ static struct PgpKeyInfo *pgp_select_key(struct PgpKeyInfo *keys,
   mutt_make_help(buf, sizeof(buf), _("Help"), MENU_PGP, OP_HELP);
   strcat(helpstr, buf);
 
+  struct MuttWindow *dlg =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+#ifdef USE_DEBUG_WINDOW
+  dlg->name = "pgp";
+#endif
+  dlg->type = WT_DIALOG;
+  struct MuttWindow *index =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+  index->type = WT_INDEX;
+  struct MuttWindow *ibar = mutt_window_new(
+      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
+  ibar->type = WT_INDEX_BAR;
+
+  if (C_StatusOnTop)
+  {
+    mutt_window_add_child(dlg, ibar);
+    mutt_window_add_child(dlg, index);
+  }
+  else
+  {
+    mutt_window_add_child(dlg, index);
+    mutt_window_add_child(dlg, ibar);
+  }
+
+  dialog_push(dlg);
+
   menu = mutt_menu_new(MENU_PGP);
+
+  menu->pagelen = index->state.rows;
+  menu->win_index = index;
+  menu->win_ibar = ibar;
+
   menu->max = i;
-  menu->menu_make_entry = pgp_make_entry;
+  menu->make_entry = pgp_make_entry;
   menu->help = helpstr;
   menu->data = key_table;
   mutt_menu_push_current(menu);
@@ -726,7 +762,7 @@ static struct PgpKeyInfo *pgp_select_key(struct PgpKeyInfo *keys,
           mutt_file_fclose(&fp_null);
         }
 
-        mutt_wait_filter(pid);
+        filter_wait(pid);
         mutt_file_fclose(&fp_tmp);
         mutt_file_fclose(&fp_null);
         mutt_clear_error();
@@ -809,6 +845,8 @@ static struct PgpKeyInfo *pgp_select_key(struct PgpKeyInfo *keys,
   mutt_menu_pop_current(menu);
   mutt_menu_free(&menu);
   FREE(&key_table);
+  dialog_pop();
+  mutt_window_free(&dlg);
 
   return kp;
 }
@@ -924,7 +962,7 @@ struct Body *pgp_class_make_key_attachment(void)
     goto cleanup;
   }
 
-  mutt_wait_filter(pid);
+  filter_wait(pid);
 
   mutt_file_fclose(&fp_tmp);
   mutt_file_fclose(&fp_null);
@@ -1089,7 +1127,7 @@ struct PgpKeyInfo *pgp_getkeybyaddr(struct Address *a, KeyFlags abilities,
         pgp_remove_key(&matches, the_strong_valid_key);
         k = the_strong_valid_key;
       }
-      else if (a_valid_addrmatch_key)
+      else if (a_valid_addrmatch_key && !C_CryptOpportunisticEncryptStrongKeys)
       {
         pgp_remove_key(&matches, a_valid_addrmatch_key);
         k = a_valid_addrmatch_key;

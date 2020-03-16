@@ -30,12 +30,11 @@
 #include "config.h"
 #include <dirent.h>
 #include <errno.h>
-#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "email/lib.h"
 #include "bcache.h"
 #include "mutt_account.h"
@@ -63,7 +62,7 @@ struct BodyCache
 static int bcache_path(struct ConnAccount *account, const char *mailbox, struct BodyCache *bcache)
 {
   char host[256];
-  struct Url url = { U_UNKNOWN };
+  struct Url url = { 0 };
 
   if (!account || !C_MessageCachedir || !bcache)
     return -1;
@@ -81,7 +80,7 @@ static int bcache_path(struct ConnAccount *account, const char *mailbox, struct 
 
   struct Buffer *path = mutt_buffer_pool_get();
   struct Buffer *dst = mutt_buffer_pool_get();
-  mutt_buffer_encode_path(path, NONULL(mailbox));
+  mutt_encode_path(path, NONULL(mailbox));
 
   mutt_buffer_printf(dst, "%s/%s%s", C_MessageCachedir, host, mutt_b2s(path));
   if (*(dst->dptr - 1) != '/')
@@ -315,7 +314,7 @@ int mutt_bcache_exists(struct BodyCache *bcache, const char *id)
  * so that this function can be used to count the items in the cache
  * (see below for return value).
  */
-int mutt_bcache_list(struct BodyCache *bcache, bcache_list_t *want_id, void *data)
+int mutt_bcache_list(struct BodyCache *bcache, bcache_list_t want_id, void *data)
 {
   DIR *d = NULL;
   struct dirent *de = NULL;

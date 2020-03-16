@@ -29,10 +29,11 @@
 #include "config.h"
 #include <stdbool.h>
 #include <stdio.h>
+#include "envlist.h"
 #include "memory.h"
 #include "string2.h"
 
-char **EnvList = NULL; /**< Private copy of the environment variables */
+char **EnvList = NULL; ///< Private copy of the environment variables
 
 /**
  * mutt_envlist_free - Free the private copy of the environment

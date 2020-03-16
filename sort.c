@@ -31,7 +31,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
@@ -44,14 +44,14 @@
 #include "options.h"
 #include "score.h"
 #ifdef USE_NNTP
-#include "nntp/nntp.h"
+#include "nntp/lib.h"
 #endif
 
 /* These Config Variables are only used in sort.c */
 bool C_ReverseAlias; ///< Config: Display the alias in the index, rather than the message's sender
 
 /* function to use as discriminator when normal sort method is equal */
-static sort_t *AuxSort = NULL;
+static sort_t AuxSort = NULL;
 
 /**
  * perform_auxsort - Compare two emails using the auxiliary sort method
@@ -77,8 +77,10 @@ int perform_auxsort(int retval, const void *a, const void *b)
   /* If the items still match, use their index positions
    * to maintain a stable sort order */
   if (retval == 0)
+  {
     retval = (*((struct Email const *const *) a))->index -
              (*((struct Email const *const *) b))->index;
+  }
   return retval;
 }
 
@@ -319,7 +321,7 @@ static int compare_label(const void *a, const void *b)
  * @param method Sort type, see #SortType
  * @retval ptr sort function - Implements ::sort_t
  */
-sort_t *mutt_get_sort_func(enum SortType method)
+sort_t mutt_get_sort_func(enum SortType method)
 {
   switch (method)
   {
@@ -361,33 +363,38 @@ sort_t *mutt_get_sort_func(enum SortType method)
  */
 void mutt_sort_headers(struct Context *ctx, bool init)
 {
-  struct Email *e = NULL;
+  if (!ctx || !ctx->mailbox || !ctx->mailbox->emails || !ctx->mailbox->emails[0])
+    return;
+
   struct MuttThread *thread = NULL, *top = NULL;
-  sort_t *sortfunc = NULL;
+  sort_t sortfunc = NULL;
+  struct Mailbox *m = ctx->mailbox;
 
   OptNeedResort = false;
 
-  if (!ctx)
-    return;
-
-  if (ctx->mailbox->msg_count == 0)
+  if (m->msg_count == 0)
   {
     /* this function gets called by mutt_sync_mailbox(), which may have just
      * deleted all the messages.  the virtual message numbers are not updated
      * in that routine, so we must make sure to zero the vcount member.  */
-    ctx->mailbox->vcount = 0;
+    m->vcount = 0;
     ctx->vsize = 0;
     mutt_clear_threads(ctx);
     return; /* nothing to do! */
   }
 
-  if (!ctx->mailbox->quiet)
+  if (!m->quiet)
     mutt_message(_("Sorting mailbox..."));
 
   if (OptNeedRescore && C_Score)
   {
-    for (int i = 0; i < ctx->mailbox->msg_count; i++)
-      mutt_score_message(ctx->mailbox, ctx->mailbox->emails[i], true);
+    for (int i = 0; i < m->msg_count; i++)
+    {
+      struct Email *e = m->emails[i];
+      if (!e)
+        break;
+      mutt_score_message(m, e, true);
+    }
   }
   OptNeedRescore = false;
 
@@ -423,19 +430,23 @@ void mutt_sort_headers(struct Context *ctx, bool init)
     return;
   }
   else
-    qsort((void *) ctx->mailbox->emails, ctx->mailbox->msg_count,
-          sizeof(struct Email *), sortfunc);
+  {
+    qsort((void *) m->emails, m->msg_count, sizeof(struct Email *), sortfunc);
+  }
 
   /* adjust the virtual message numbers */
-  ctx->mailbox->vcount = 0;
-  for (int i = 0; i < ctx->mailbox->msg_count; i++)
+  m->vcount = 0;
+  for (int i = 0; i < m->msg_count; i++)
   {
-    struct Email *e_cur = ctx->mailbox->emails[i];
+    struct Email *e_cur = m->emails[i];
+    if (!e_cur)
+      break;
+
     if ((e_cur->vnum != -1) || (e_cur->collapsed && (!ctx->pattern || e_cur->limited)))
     {
-      e_cur->vnum = ctx->mailbox->vcount;
-      ctx->mailbox->v2r[ctx->mailbox->vcount] = i;
-      ctx->mailbox->vcount++;
+      e_cur->vnum = m->vcount;
+      m->v2r[m->vcount] = i;
+      m->vcount++;
     }
     e_cur->msgno = i;
   }
@@ -448,8 +459,8 @@ void mutt_sort_headers(struct Context *ctx, bool init)
     {
       while (!thread->message)
         thread = thread->child;
-      e = thread->message;
 
+      struct Email *e = thread->message;
       if (e->collapsed)
         mutt_collapse_thread(ctx, e);
       top = top->next;
@@ -457,6 +468,6 @@ void mutt_sort_headers(struct Context *ctx, bool init)
     mutt_set_vnum(ctx);
   }
 
-  if (!ctx->mailbox->quiet)
+  if (!m->quiet)
     mutt_clear_error();
 }

@@ -34,6 +34,7 @@
 struct Address;
 struct Body;
 struct Buffer;
+struct ListHead;
 struct passwd;
 struct stat;
 
@@ -42,14 +43,13 @@ extern struct Regex *C_GecosMask;
 
 void        mutt_adv_mktemp(struct Buffer *buf);
 void        mutt_buffer_mktemp_full(struct Buffer *buf, const char *prefix, const char *suffix, const char *src, int line);
-void        mutt_buffer_encode_path(struct Buffer *buf, const char *src);
 void        mutt_buffer_expand_path(struct Buffer *buf);
 void        mutt_buffer_expand_path_regex(struct Buffer *buf, bool regex);
 void        mutt_buffer_pretty_mailbox(struct Buffer *s);
 void        mutt_buffer_sanitize_filename (struct Buffer *buf, const char *path, short slash);
 void        mutt_buffer_save_path(struct Buffer *dest, const struct Address *a);
 int         mutt_check_overwrite(const char *attname, const char *path, struct Buffer *fname, enum SaveAttach *opt, char **directory);
-void        mutt_encode_path(char *dest, size_t dlen, const char *src);
+void        mutt_encode_path(struct Buffer *buf, const char *src);
 void        mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const char *src, format_t *callback, unsigned long data, MuttFormatFlags flags);
 char *      mutt_expand_path(char *s, size_t slen);
 char *      mutt_expand_path_regex(char *buf, size_t buflen, bool regex);
@@ -58,7 +58,6 @@ void        mutt_get_parent_path(const char *path, char *buf, size_t buflen);
 int         mutt_inbox_cmp(const char *a, const char *b);
 bool        mutt_is_text_part(struct Body *b);
 const char *mutt_make_version(void);
-bool        mutt_matches_ignore(const char *s);
 void        mutt_mktemp_full(char *s, size_t slen, const char *prefix, const char *suffix, const char *src, int line);
 bool        mutt_needs_mailcap(struct Body *m);
 FILE *      mutt_open_read(const char *path, pid_t *thepid);
@@ -72,6 +71,9 @@ int         mutt_save_confirm(const char *s, struct stat *st);
 void        mutt_save_path(char *d, size_t dsize, const struct Address *a);
 void        mutt_sleep(short s);
 void        mutt_str_pretty_size(char *buf, size_t buflen, size_t num);
+
+void add_to_stailq     (struct ListHead *head, const char *str);
+void remove_from_stailq(struct ListHead *head, const char *str);
 
 #define mutt_mktemp(buf, buflen)                         mutt_mktemp_pfx_sfx(buf, buflen, "neomutt", NULL)
 #define mutt_mktemp_pfx_sfx(buf, buflen, prefix, suffix) mutt_mktemp_full(buf, buflen, prefix, suffix, __FILE__, __LINE__)

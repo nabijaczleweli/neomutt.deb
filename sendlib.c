@@ -42,32 +42,30 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "sendlib.h"
 #include "context.h"
 #include "copy.h"
-#include "curs_lib.h"
-#include "filter.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "handler.h"
 #include "mutt_mailbox.h"
 #include "mutt_parse.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "ncrypt/ncrypt.h"
 #include "options.h"
 #include "pager.h"
 #include "send.h"
 #include "smtp.h"
 #include "state.h"
+#include "ncrypt/lib.h"
 #ifdef USE_NNTP
-#include "nntp/nntp.h"
+#include "nntp/lib.h"
 #endif
 #ifdef HAVE_SYSEXITS_H
 #include <sysexits.h>
@@ -75,7 +73,7 @@
 #define EX_OK 0
 #endif
 #ifdef USE_AUTOCRYPT
-#include "autocrypt/autocrypt.h"
+#include "autocrypt/lib.h"
 #endif
 
 /* These Config Variables are only used in sendlib.c */
@@ -610,7 +608,7 @@ int mutt_write_mime_body(struct Body *a, FILE *fp)
   else
     fc = mutt_ch_fgetconv_open(fp_in, 0, 0, 0);
 
-  mutt_sig_allow_interrupt(1);
+  mutt_sig_allow_interrupt(true);
   if (a->encoding == ENC_QUOTED_PRINTABLE)
     encode_quoted(fc, fp, write_as_text_part(a));
   else if (a->encoding == ENC_BASE64)
@@ -619,7 +617,7 @@ int mutt_write_mime_body(struct Body *a, FILE *fp)
     encode_8bit(fc, fp);
   else
     mutt_file_copy_stream(fp_in, fp);
-  mutt_sig_allow_interrupt(0);
+  mutt_sig_allow_interrupt(false);
 
   mutt_ch_fgetconv_close(&fc);
   mutt_file_fclose(&fp_in);
@@ -1620,7 +1618,7 @@ static void run_mime_type_query(struct Body *att)
 
   mutt_buffer_file_expand_fmt_quote(cmd, C_MimeTypeQueryCommand, att->filename);
 
-  pid = mutt_create_filter(mutt_b2s(cmd), NULL, &fp, &fp_err);
+  pid = filter_create(mutt_b2s(cmd), NULL, &fp, &fp_err);
   if (pid < 0)
   {
     mutt_error(_("Error running \"%s\""), mutt_b2s(cmd));
@@ -1639,7 +1637,7 @@ static void run_mime_type_query(struct Body *att)
 
   mutt_file_fclose(&fp);
   mutt_file_fclose(&fp_err);
-  mutt_wait_filter(pid);
+  filter_wait(pid);
 }
 
 /**
@@ -1785,7 +1783,7 @@ struct Body *mutt_remove_multipart(struct Body *b)
 }
 
 /**
- * mutt_write_addrlist - wrapper around mutt_write_address()
+ * mutt_write_addrlist - Wrapper for mutt_write_address()
  * @param al      Address list
  * @param fp      File to write to
  * @param linelen Line length to use
@@ -1923,22 +1921,26 @@ static int print_val(FILE *fp, const char *pfx, const char *value,
  * @param fp      File to write to
  * @param tag     Header key, e.g. "From"
  * @param value   Header value
+ * @param vlen    Length of the header value string
  * @param pfx     Prefix for header
  * @param wraplen Column to wrap at
  * @param chflags Flags, see #CopyHeaderFlags
  * @retval  0 Success
  * @retval -1 Failure
  */
-static int fold_one_header(FILE *fp, const char *tag, const char *value,
+static int fold_one_header(FILE *fp, const char *tag, const char *value, size_t vlen,
                            const char *pfx, int wraplen, CopyHeaderFlags chflags)
 {
+  if (!value || !*value || !vlen)
+    return 0;
+
   const char *p = value;
   char buf[8192] = { 0 };
   int first = 1, col = 0, l = 0;
   const bool display = (chflags & CH_DISPLAY);
 
-  mutt_debug(LL_DEBUG5, "pfx=[%s], tag=[%s], flags=%d value=[%s]\n", pfx, tag,
-             chflags, NONULL(value));
+  mutt_debug(LL_DEBUG5, "pfx=[%s], tag=[%s], flags=%d value=[%.*s]\n", pfx, tag,
+             chflags, ((value[vlen - 1] == '\n') ? vlen - 1 : vlen), value);
 
   if (tag && *tag && (fprintf(fp, "%s%s: ", NONULL(pfx), tag) < 0))
     return -1;
@@ -1960,7 +1962,8 @@ static int fold_one_header(FILE *fp, const char *tag, const char *value,
     const int w = mutt_mb_width(buf, col, display);
     const int enc = mutt_str_startswith(buf, "=?", CASE_MATCH);
 
-    mutt_debug(LL_DEBUG5, "word=[%s], col=%d, w=%d, next=[0x0%x]\n", buf, col, w, *next);
+    mutt_debug(LL_DEBUG5, "word=[%s], col=%d, w=%d, next=[0x0%x]\n",
+               (buf[0] == '\n' ? "\\n" : buf), col, w, *next);
 
     /* insert a folding \n before the current word's lwsp except for
      * header name, first word on a line (word longer than wrap width)
@@ -2004,6 +2007,8 @@ static int fold_one_header(FILE *fp, const char *tag, const char *value,
       sp++;
     if (sp[0] == '\n')
     {
+      if (sp[1] == '\0')
+        break;
       next = sp;
       col = 0;
     }
@@ -2073,53 +2078,43 @@ static char *unfold_header(char *s)
 static int write_one_header(FILE *fp, int pfxw, int max, int wraplen, const char *pfx,
                             const char *start, const char *end, CopyHeaderFlags chflags)
 {
-  char *tagbuf = NULL, *valbuf = NULL, *t = NULL;
-  bool is_from = ((end - start) > 5) && mutt_str_startswith(start, "from ", CASE_IGNORE);
+  const char *t = strchr(start, ':');
+  if (!t || (t > end))
+  {
+    mutt_debug(LL_DEBUG1, "#2 warning: header not in 'key: value' format!\n");
+    return 0;
+  }
+
+  const size_t vallen = end - start;
+  const bool short_enough = (pfxw + max <= wraplen);
+
+  mutt_debug((short_enough ? LL_DEBUG2 : LL_DEBUG5), "buf[%s%.*s] %s, max width = %d %s %d\n",
+             NONULL(pfx), vallen - 1 /* skip newline */, start,
+             (short_enough ? "short enough" : "too long"), max,
+             (short_enough ? "<=" : ">"), wraplen);
+
+  int rc = 0;
+  const char *valbuf = NULL, *tagbuf = NULL;
+  const bool is_from = (vallen > 5) && mutt_str_startswith(start, "from ", CASE_IGNORE);
 
   /* only pass through folding machinery if necessary for sending,
    * never wrap From_ headers on sending */
-  if (!(chflags & CH_DISPLAY) && ((pfxw + max <= wraplen) || is_from))
+  if (!(chflags & CH_DISPLAY) && (short_enough || is_from))
   {
-    valbuf = mutt_str_substr_dup(start, end);
-    mutt_debug(LL_DEBUG5, "buf[%s%s] short enough, max width = %d <= %d\n",
-               NONULL(pfx), valbuf, max, wraplen);
     if (pfx && *pfx)
     {
       if (fputs(pfx, fp) == EOF)
       {
-        FREE(&valbuf);
         return -1;
       }
     }
 
-    t = strchr(valbuf, ':');
-    if (!t)
-    {
-      mutt_debug(LL_DEBUG1, "#1 warning: header not in 'key: value' format!\n");
-      FREE(&valbuf);
-      return 0;
-    }
-    if (print_val(fp, pfx, valbuf, chflags, mutt_str_strlen(pfx)) < 0)
-    {
-      FREE(&valbuf);
-      return -1;
-    }
-    FREE(&valbuf);
+    valbuf = mutt_str_substr_dup(start, end);
+    rc = print_val(fp, pfx, valbuf, chflags, mutt_str_strlen(pfx));
   }
   else
   {
-    t = strchr(start, ':');
-    if (!t || (t > end))
-    {
-      mutt_debug(LL_DEBUG1, "#2 warning: header not in 'key: value' format!\n");
-      return 0;
-    }
-    if (is_from)
-    {
-      tagbuf = NULL;
-      valbuf = mutt_str_substr_dup(start, end);
-    }
-    else
+    if (!is_from)
     {
       tagbuf = mutt_str_substr_dup(start, t);
       /* skip over the colon separating the header field name and value */
@@ -2130,21 +2125,15 @@ static int write_one_header(FILE *fp, int pfxw, int max, int wraplen, const char
        *       See tickets 3609 and 3716. */
       while ((*t == ' ') || (*t == '\t'))
         t++;
-
-      valbuf = mutt_str_substr_dup(t, end);
     }
-    mutt_debug(LL_DEBUG2, "buf[%s%s] too long, max width = %d > %d\n",
-               NONULL(pfx), NONULL(valbuf), max, wraplen);
-    if (fold_one_header(fp, tagbuf, valbuf, pfx, wraplen, chflags) < 0)
-    {
-      FREE(&valbuf);
-      FREE(&tagbuf);
-      return -1;
-    }
-    FREE(&tagbuf);
-    FREE(&valbuf);
+    valbuf = mutt_str_substr_dup(is_from ? start : t, end);
+    rc = fold_one_header(fp, tagbuf, valbuf, end - (is_from ? start : t), pfx,
+                         wraplen, chflags);
   }
-  return 0;
+
+  FREE(&tagbuf);
+  FREE(&valbuf);
+  return rc;
 }
 
 /**
@@ -2184,10 +2173,11 @@ int mutt_write_one_header(FILE *fp, const char *tag, const char *value,
   else if (wraplen <= 0)
     wraplen = 78;
 
+  const size_t vlen = mutt_str_strlen(v);
   if (tag)
   {
     /* if header is short enough, simply print it */
-    if (!display && (mutt_strwidth(tag) + 2 + pfxw + mutt_strwidth(v) <= wraplen))
+    if (!display && (mutt_strwidth(tag) + 2 + pfxw + mutt_strnwidth(v, vlen) <= wraplen))
     {
       mutt_debug(LL_DEBUG5, "buf[%s%s: %s] is short enough\n", NONULL(pfx), tag, v);
       if (fprintf(fp, "%s%s: %s\n", NONULL(pfx), tag, v) <= 0)
@@ -2197,7 +2187,7 @@ int mutt_write_one_header(FILE *fp, const char *tag, const char *value,
     }
     else
     {
-      rc = fold_one_header(fp, tag, v, pfx, wraplen, chflags);
+      rc = fold_one_header(fp, tag, v, vlen, pfx, wraplen, chflags);
       goto out;
     }
   }
@@ -2337,7 +2327,7 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env,
 {
   char buf[1024];
 
-  if ((mode == MUTT_WRITE_HEADER_NORMAL) && !privacy)
+  if (((mode == MUTT_WRITE_HEADER_NORMAL) || (mode == MUTT_WRITE_HEADER_FCC)) && !privacy)
     fputs(mutt_date_make_date(buf, sizeof(buf)), fp);
 
   /* UseFrom is not consulted here so that we can still write a From:
@@ -2345,14 +2335,14 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env,
   if (!TAILQ_EMPTY(&env->from) && !privacy)
   {
     buf[0] = '\0';
-    mutt_addrlist_write(buf, sizeof(buf), &env->from, false);
+    mutt_addrlist_write(&env->from, buf, sizeof(buf), false);
     fprintf(fp, "From: %s\n", buf);
   }
 
   if (!TAILQ_EMPTY(&env->sender) && !privacy)
   {
     buf[0] = '\0';
-    mutt_addrlist_write(buf, sizeof(buf), &env->sender, false);
+    mutt_addrlist_write(&env->sender, buf, sizeof(buf), false);
     fprintf(fp, "Sender: %s\n", buf);
   }
 
@@ -2380,7 +2370,8 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env,
 
   if (!TAILQ_EMPTY(&env->bcc))
   {
-    if ((mode == MUTT_WRITE_HEADER_POSTPONE) || (mode == MUTT_WRITE_HEADER_EDITHDRS) ||
+    if ((mode == MUTT_WRITE_HEADER_POSTPONE) ||
+        (mode == MUTT_WRITE_HEADER_EDITHDRS) || (mode == MUTT_WRITE_HEADER_FCC) ||
         ((mode == MUTT_WRITE_HEADER_NORMAL) && C_WriteBcc))
     {
       fputs("Bcc: ", fp);
@@ -2413,7 +2404,8 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env,
   if (env->subject)
   {
     if (hide_protected_subject &&
-        ((mode == MUTT_WRITE_HEADER_NORMAL) || (mode == MUTT_WRITE_HEADER_POSTPONE)))
+        ((mode == MUTT_WRITE_HEADER_NORMAL) || (mode == MUTT_WRITE_HEADER_FCC) ||
+         (mode == MUTT_WRITE_HEADER_POSTPONE)))
       mutt_write_one_header(fp, "Subject", C_CryptProtectedHeadersSubject, NULL, 0, CH_NO_FLAGS);
     else
       mutt_write_one_header(fp, "Subject", env->subject, NULL, 0, CH_NO_FLAGS);
@@ -2447,7 +2439,8 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env,
   /* Add any user defined headers */
   struct UserHdrsOverride userhdrs_overrides = write_userhdrs(fp, &env->userhdrs, privacy);
 
-  if ((mode == MUTT_WRITE_HEADER_NORMAL) || (mode == MUTT_WRITE_HEADER_POSTPONE))
+  if ((mode == MUTT_WRITE_HEADER_NORMAL) || (mode == MUTT_WRITE_HEADER_FCC) ||
+      (mode == MUTT_WRITE_HEADER_POSTPONE))
   {
     if (!STAILQ_EMPTY(&env->references))
     {
@@ -2474,15 +2467,15 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env,
 #ifdef USE_AUTOCRYPT
   if (C_Autocrypt)
   {
-    if (mode == MUTT_WRITE_HEADER_NORMAL)
+    if (mode == MUTT_WRITE_HEADER_NORMAL || mode == MUTT_WRITE_HEADER_FCC)
       mutt_autocrypt_write_autocrypt_header(env, fp);
     if (mode == MUTT_WRITE_HEADER_MIME)
       mutt_autocrypt_write_gossip_headers(env, fp);
   }
 #endif
 
-  if ((mode == MUTT_WRITE_HEADER_NORMAL) && !privacy && C_UserAgent &&
-      !userhdrs_overrides.is_overridden[USERHDRS_OVERRIDE_USER_AGENT])
+  if (((mode == MUTT_WRITE_HEADER_NORMAL) || (mode == MUTT_WRITE_HEADER_FCC)) && !privacy &&
+      C_UserAgent && !userhdrs_overrides.is_overridden[USERHDRS_OVERRIDE_USER_AGENT])
   {
     /* Add a vanity header */
     fprintf(fp, "User-Agent: NeoMutt/%s%s\n", PACKAGE_VERSION, GitVer);
@@ -2972,8 +2965,10 @@ int mutt_invoke_sendmail(struct AddressList *from, struct AddressList *to,
         struct stat st;
 
         if ((stat(childout, &st) == 0) && (st.st_size > 0))
+        {
           mutt_do_pager(_("Output of the delivery process"), childout,
                         MUTT_PAGER_NO_FLAGS, NULL);
+        }
       }
     }
   }
@@ -3105,12 +3100,16 @@ static int bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
     }
 #ifdef USE_SMTP
     if (C_SmtpUrl)
+    {
       rc = mutt_smtp_send(env_from, to, NULL, NULL, mutt_b2s(tempfile),
                           e->content->encoding == ENC_8BIT);
+    }
     else
 #endif
+    {
       rc = mutt_invoke_sendmail(env_from, to, NULL, NULL, mutt_b2s(tempfile),
                                 e->content->encoding == ENC_8BIT);
+    }
   }
 
   mutt_buffer_pool_release(&tempfile);
@@ -3157,7 +3156,7 @@ int mutt_bounce_message(FILE *fp, struct Email *e, struct AddressList *to)
     mutt_addrlist_clear(&from_list);
     return -1;
   }
-  mutt_addrlist_write(resent_from, sizeof(resent_from), &from_list, false);
+  mutt_addrlist_write(&from_list, resent_from, sizeof(resent_from), false);
 
 #ifdef USE_NNTP
   OptNewsSend = false;
@@ -3247,9 +3246,9 @@ int mutt_write_multiple_fcc(const char *path, struct Email *e, const char *msgid
 /**
  * mutt_write_fcc - Write email to FCC mailbox
  * @param[in]  path      Path to mailbox
- * @param[in]  e       Email
+ * @param[in]  e         Email
  * @param[in]  msgid     Message id
- * @param[in]  post      If true, postpone message
+ * @param[in]  post      If true, postpone message, else fcc mode
  * @param[in]  fcc       fcc setting to save (postpone only)
  * @param[out] finalpath Final path of email
  * @retval  0 Success
@@ -3316,7 +3315,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid,
   /* post == 1 => postpone message.
    * post == 0 => Normal mode.  */
   mutt_rfc822_write_header(
-      msg->fp, e->env, e->content, post ? MUTT_WRITE_HEADER_POSTPONE : MUTT_WRITE_HEADER_NORMAL,
+      msg->fp, e->env, e->content, post ? MUTT_WRITE_HEADER_POSTPONE : MUTT_WRITE_HEADER_FCC,
       false, C_CryptProtectedHeadersRead && mutt_should_hide_protected_subject(e));
 
   /* (postponement) if this was a reply of some sort, <msgid> contains the
@@ -3468,7 +3467,8 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid,
     set_noconv_flags(e->content, false);
 
 done:
-  m_fcc->append = old_append;
+  if (m_fcc)
+    m_fcc->append = old_append;
 #ifdef RECORD_FOLDER_HOOK
   /* We ran a folder hook for the destination mailbox,
    * now we run it for the user's current mailbox */

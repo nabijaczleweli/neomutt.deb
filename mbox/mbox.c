@@ -41,14 +41,13 @@
 #include <time.h>
 #include <unistd.h>
 #include <utime.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
 #include "mutt.h"
-#include "mbox.h"
-#include "context.h"
+#include "lib.h"
 #include "copy.h"
 #include "globals.h"
 #include "mutt_header.h"
@@ -383,16 +382,6 @@ static int mbox_parse_mailbox(struct Mailbox *m)
     mutt_progress_init(&progress, msg, MUTT_PROGRESS_READ, 0);
   }
 
-  if (!m->emails)
-  {
-    /* Allocate some memory to get started */
-    m->email_max = m->msg_count;
-    m->msg_count = 0;
-    m->msg_unread = 0;
-    m->vcount = 0;
-    mx_alloc_memory(m);
-  }
-
   loc = ftello(adata->fp);
   while ((fgets(buf, sizeof(buf), adata->fp)) && (SigInt != 1))
   {
@@ -571,7 +560,7 @@ static int reopen_mailbox(struct Mailbox *m, int *index_hint)
   {
     short old_sort = C_Sort;
     C_Sort = SORT_ORDER;
-    mailbox_changed(m, MBN_RESORT);
+    mailbox_changed(m, NT_MAILBOX_RESORT);
     C_Sort = old_sort;
   }
 
@@ -579,7 +568,6 @@ static int reopen_mailbox(struct Mailbox *m, int *index_hint)
   old_msg_count = 0;
 
   /* simulate a close */
-  mailbox_changed(m, MBN_CLOSED);
   mutt_hash_free(&m->id_hash);
   mutt_hash_free(&m->subj_hash);
   mutt_hash_free(&m->label_hash);
@@ -718,6 +706,7 @@ static int reopen_mailbox(struct Mailbox *m, int *index_hint)
     FREE(&e_old);
   }
 
+  mailbox_changed(m, NT_MAILBOX_UPDATE);
   m->quiet = false;
 
   return (m->changed || msg_mod) ? MUTT_REOPENED : MUTT_NEW_MAIL;
@@ -732,8 +721,13 @@ static int reopen_mailbox(struct Mailbox *m, int *index_hint)
 static bool mbox_has_new(struct Mailbox *m)
 {
   for (int i = 0; i < m->msg_count; i++)
-    if (!m->emails[i]->deleted && !m->emails[i]->read && !m->emails[i]->old)
+  {
+    struct Email *e = m->emails[i];
+    if (!e)
+      break;
+    if (!e->deleted && !e->read && !e->old)
       return true;
+  }
   return false;
 }
 
@@ -805,7 +799,7 @@ static bool test_last_status_new(FILE *fp)
 
   e = email_new();
   tmp_envelope = mutt_rfc822_read_header(fp, e, false, false);
-  if (!(e->read || e->old))
+  if (!e->read && !e->old)
     rc = true;
 
   mutt_env_free(&tmp_envelope);
@@ -823,7 +817,7 @@ bool mbox_test_new_folder(const char *path)
 {
   bool rc = false;
 
-  enum MailboxType magic = mx_path_probe(path, NULL);
+  enum MailboxType magic = mx_path_probe(path);
 
   if ((magic != MUTT_MBOX) && (magic != MUTT_MMDF))
     return false;
@@ -874,7 +868,7 @@ void mbox_reset_atime(struct Mailbox *m, struct stat *st)
 /**
  * mbox_ac_find - Find an Account that matches a Mailbox path - Implements MxOps::ac_find()
  */
-struct Account *mbox_ac_find(struct Account *a, const char *path)
+static struct Account *mbox_ac_find(struct Account *a, const char *path)
 {
   if (!a || (a->magic != MUTT_MBOX) || !path)
     return NULL;
@@ -892,7 +886,7 @@ struct Account *mbox_ac_find(struct Account *a, const char *path)
 /**
  * mbox_ac_add - Add a Mailbox to an Account - Implements MxOps::ac_add()
  */
-int mbox_ac_add(struct Account *a, struct Mailbox *m)
+static int mbox_ac_add(struct Account *a, struct Mailbox *m)
 {
   if (!a || !m || (m->magic != MUTT_MBOX))
     return -1;
@@ -959,6 +953,7 @@ static int mbox_mbox_open(struct Mailbox *m)
     return -1;
   }
 
+  m->has_new = true;
   int rc;
   if (m->magic == MUTT_MBOX)
     rc = mbox_parse_mailbox(m);
@@ -966,6 +961,9 @@ static int mbox_mbox_open(struct Mailbox *m)
     rc = mmdf_parse_mailbox(m);
   else
     rc = -1;
+
+  if (!mbox_has_new(m))
+    m->has_new = false;
   clearerr(adata->fp); // Clear the EOF flag
   mutt_file_touch_atime(fileno(adata->fp));
 
@@ -991,6 +989,16 @@ static int mbox_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
 
   if (!adata->fp)
   {
+    // create dir recursively
+    char *tmp_path = mutt_path_dirname(mailbox_path(m));
+    if (mutt_file_mkdir(tmp_path, S_IRWXU) == -1)
+    {
+      mutt_perror(mailbox_path(m));
+      FREE(&tmp_path);
+      return -1;
+    }
+    FREE(&tmp_path);
+
     adata->fp =
         mutt_file_fopen(mailbox_path(m), (flags & MUTT_NEWFOLDER) ? "w+" : "a+");
     if (!adata->fp)
@@ -1035,7 +1043,7 @@ static int mbox_mbox_check(struct Mailbox *m, int *index_hint)
   {
     if (mbox_mbox_open(m) < 0)
       return -1;
-    mailbox_changed(m, MBN_INVALID);
+    mailbox_changed(m, NT_MAILBOX_INVALID);
   }
 
   struct stat st;
@@ -1096,7 +1104,7 @@ static int mbox_mbox_check(struct Mailbox *m, int *index_hint)
             mmdf_parse_mailbox(m);
 
           if (m->msg_count > old_msg_count)
-            mailbox_changed(m, MBN_INVALID);
+            mailbox_changed(m, NT_MAILBOX_INVALID);
 
           /* Only unlock the folder if it was locked inside of this routine.
            * It may have been locked elsewhere, like in
@@ -1126,7 +1134,7 @@ static int mbox_mbox_check(struct Mailbox *m, int *index_hint)
   {
     if (reopen_mailbox(m, index_hint) != -1)
     {
-      mailbox_changed(m, MBN_INVALID);
+      mailbox_changed(m, NT_MAILBOX_INVALID);
       if (unlock)
       {
         mbox_unlock_mailbox(m);
@@ -1177,7 +1185,7 @@ static int mbox_mbox_sync(struct Mailbox *m, int *index_hint)
   {
     save_sort = C_Sort;
     C_Sort = SORT_ORDER;
-    mailbox_changed(m, MBN_RESORT);
+    mailbox_changed(m, NT_MAILBOX_RESORT);
     C_Sort = save_sort;
     need_sort = 1;
   }
@@ -1334,14 +1342,12 @@ static int mbox_mbox_sync(struct Mailbox *m, int *index_hint)
     }
   }
 
-  if (fclose(fp) != 0)
+  if (mutt_file_fclose(&fp) != 0)
   {
-    fp = NULL;
     mutt_debug(LL_DEBUG1, "mutt_file_fclose (&) returned non-zero\n");
     mutt_perror(mutt_b2s(tempfile));
     goto bail;
   }
-  fp = NULL;
 
   /* Save the state of this folder. */
   if (stat(mailbox_path(m), &statbuf) == -1)
@@ -1507,11 +1513,12 @@ bail: /* Come here in case of disaster */
     goto fatal;
   }
 
+  mailbox_changed(m, NT_MAILBOX_UPDATE);
   if (need_sort)
   {
     /* if the mailbox was reopened, the thread tree will be invalid so make
      * sure to start threading from scratch.  */
-    mailbox_changed(m, MBN_RESORT);
+    mailbox_changed(m, NT_MAILBOX_RESORT);
   }
 
 fatal:
@@ -1709,19 +1716,19 @@ enum MailboxType mbox_path_probe(const char *path, const struct stat *st)
 /**
  * mbox_path_canon - Canonicalise a Mailbox path - Implements MxOps::path_canon()
  */
-int mbox_path_canon(char *buf, size_t buflen)
+static int mbox_path_canon(char *buf, size_t buflen)
 {
   if (!buf)
     return -1;
 
-  mutt_path_canon(buf, buflen, HomeDir);
+  mutt_path_canon(buf, buflen, HomeDir, false);
   return 0;
 }
 
 /**
  * mbox_path_pretty - Abbreviate a Mailbox path - Implements MxOps::path_pretty()
  */
-int mbox_path_pretty(char *buf, size_t buflen, const char *folder)
+static int mbox_path_pretty(char *buf, size_t buflen, const char *folder)
 {
   if (!buf)
     return -1;
@@ -1729,7 +1736,7 @@ int mbox_path_pretty(char *buf, size_t buflen, const char *folder)
   if (mutt_path_abbr_folder(buf, buflen, folder))
     return 0;
 
-  if (mutt_path_pretty(buf, buflen, HomeDir))
+  if (mutt_path_pretty(buf, buflen, HomeDir, false))
     return 0;
 
   return -1;
@@ -1738,7 +1745,7 @@ int mbox_path_pretty(char *buf, size_t buflen, const char *folder)
 /**
  * mbox_path_parent - Find the parent of a Mailbox path - Implements MxOps::path_parent()
  */
-int mbox_path_parent(char *buf, size_t buflen)
+static int mbox_path_parent(char *buf, size_t buflen)
 {
   if (!buf)
     return -1;
@@ -1747,7 +1754,7 @@ int mbox_path_parent(char *buf, size_t buflen)
     return 0;
 
   if (buf[0] == '~')
-    mutt_path_canon(buf, buflen, HomeDir);
+    mutt_path_canon(buf, buflen, HomeDir, false);
 
   if (mutt_path_parent(buf, buflen))
     return 0;
@@ -1823,17 +1830,11 @@ static int mbox_mbox_check_stats(struct Mailbox *m, int flags)
 
   if (flags && mutt_file_stat_timespec_compare(&sb, MUTT_STAT_MTIME, &m->stats_last_checked) > 0)
   {
+    bool old_peek = m->peekonly;
     struct Context *ctx = mx_mbox_open(m, MUTT_QUIET | MUTT_NOSORT | MUTT_PEEK);
-    if (ctx)
-    {
-      m->msg_count = ctx->mailbox->msg_count;
-      m->msg_unread = ctx->mailbox->msg_unread;
-      m->msg_flagged = ctx->mailbox->msg_flagged;
-      m->stats_last_checked = ctx->mailbox->mtime;
-      mx_mbox_close(&ctx);
-    }
+    mx_mbox_close(&ctx);
+    m->peekonly = old_peek;
   }
-
   if (m->msg_new == 0)
     m->has_new = false;
 
@@ -1847,6 +1848,7 @@ static int mbox_mbox_check_stats(struct Mailbox *m, int flags)
 struct MxOps MxMboxOps = {
   .magic            = MUTT_MBOX,
   .name             = "mbox",
+  .is_local         = true,
   .ac_find          = mbox_ac_find,
   .ac_add           = mbox_ac_add,
   .mbox_open        = mbox_mbox_open,
@@ -1875,6 +1877,7 @@ struct MxOps MxMboxOps = {
 struct MxOps MxMmdfOps = {
   .magic            = MUTT_MMDF,
   .name             = "mmdf",
+  .is_local         = true,
   .ac_find          = mbox_ac_find,
   .ac_add           = mbox_ac_add,
   .mbox_open        = mbox_mbox_open,

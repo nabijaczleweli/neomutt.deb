@@ -90,6 +90,18 @@
 #ifndef USE_AUTOCRYPT
 #define USE_AUTOCRYPT
 #endif
+#ifndef USE_ZLIB
+#define USE_ZLIB
+#endif
+#ifndef HAVE_LZ4
+#define HAVE_LZ4
+#endif
+#ifndef HAVE_ZLIB
+#define HAVE_ZLIB
+#endif
+#ifndef HAVE_ZSTD
+#define HAVE_ZSTD
+#endif
 #endif
 
 #endif /* _MUTT_MAKEDOC_DEFS_H */

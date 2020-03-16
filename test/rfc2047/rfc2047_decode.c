@@ -23,7 +23,7 @@
 #define TEST_NO_MAIN
 #include "acutest.h"
 #include "config.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "email/lib.h"
 #include "common.h"
@@ -38,7 +38,7 @@ void test_rfc2047_decode(void)
     TEST_MSG("Cannot set locale to (en_US|C).UTF-8");
     return;
   }
-
+  char *previous_charset = C_Charset;
   C_Charset = "utf-8";
 
   {
@@ -78,4 +78,6 @@ void test_rfc2047_decode(void)
       FREE(&s);
     }
   }
+
+  C_Charset = previous_charset;
 }

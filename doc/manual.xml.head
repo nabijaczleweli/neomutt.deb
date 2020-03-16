@@ -767,7 +767,7 @@ set sidebar_divider_char = '│'          <emphasis role="comment"># Pretty line
                     <entry>%F</entry>
                     <entry>* †</entry>
                     <entry>
-                      Number of Flagged messages in the mailbox
+                      Number of flagged messages in the mailbox
                     </entry>
                   </row>
                   <row>
@@ -782,14 +782,28 @@ set sidebar_divider_char = '│'          <emphasis role="comment"># Pretty line
                     <entry>*</entry>
                     <entry>
                       If there's new mail, display <quote>N</quote>, otherwise
-                      nothing
+                      <quote> </quote> (space).
                     </entry>
                   </row>
                   <row>
                     <entry>%N</entry>
                     <entry>* †</entry>
                     <entry>
-                      Number of New messages in the mailbox
+                      Number of unread messages in the mailbox (seen or unseen)
+                    </entry>
+                  </row>
+                  <row>
+                    <entry>%o</entry>
+                    <entry>* †</entry>
+                    <entry>
+                      Number of old messages in the mailbox (unread, but seen)
+                    </entry>
+                  </row>
+                  <row>
+                    <entry>%r</entry>
+                    <entry>* †</entry>
+                    <entry>
+                      Number of read messages in the mailbox
                     </entry>
                   </row>
                   <row>
@@ -803,7 +817,21 @@ set sidebar_divider_char = '│'          <emphasis role="comment"># Pretty line
                     <entry>%t</entry>
                     <entry>* ‡</entry>
                     <entry>
-                      Number of tagged messages
+                      Number of tagged messages in the mailbox
+                    </entry>
+                  </row>
+                  <row>
+                    <entry>%Z</entry>
+                    <entry>* †</entry>
+                    <entry>
+                      Number of new messages in the mailbox (unread, unseen)
+                    </entry>
+                  </row>
+                  <row>
+                    <entry>%Z</entry>
+                    <entry>* †</entry>
+                    <entry>
+                      Number of new messages in the mailbox (unread, unseen)
                     </entry>
                   </row>
                   <row>
@@ -1058,6 +1086,7 @@ sidebar_whitelist fruit fruit/apple     <emphasis role="comment"># Always displa
 color sidebar_indicator default color17     <emphasis role="comment"># Dark blue background</emphasis>
 color sidebar_highlight white   color238    <emphasis role="comment"># Grey background</emphasis>
 color sidebar_spoolfile yellow  default     <emphasis role="comment"># Yellow</emphasis>
+color sidebar_unread    cyan    default     <emphasis role="comment"># Light blue</emphasis>
 color sidebar_new       green   default     <emphasis role="comment"># Green</emphasis>
 color sidebar_ordinary  default default     <emphasis role="comment"># Default colors</emphasis>
 color sidebar_flagged   red     default     <emphasis role="comment"># Red</emphasis>
@@ -1094,11 +1123,6 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
                 </row>
                 <row>
                   <entry></entry>
-                  <entry><literal>sidebar_spoolfile</literal></entry>
-                  <entry>Mailbox is the spoolfile (receives incoming mail)</entry>
-                </row>
-                <row>
-                  <entry></entry>
                   <entry><literal>sidebar_new</literal></entry>
                   <entry>Mailbox contains new mail</entry>
                 </row>
@@ -1111,6 +1135,11 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
                   <entry></entry>
                   <entry><literal>sidebar_flagged</literal></entry>
                   <entry>Mailbox contains flagged mail</entry>
+                </row>
+                <row>
+                  <entry></entry>
+                  <entry><literal>sidebar_spoolfile</literal></entry>
+                  <entry>Mailbox is the spoolfile (receives incoming mail)</entry>
                 </row>
                 <row>
                   <entry>Lowest</entry>
@@ -2843,16 +2872,27 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
             attach-message mode.
           </para>
         </note>
+        <para>
+          After exiting the compose menu via <literal>&lt;send-message&gt;</literal>,
+          the message will be sent.  If configured and enabled, this can happen via
+          <link linkend="sending-mixmaster">mixmaster</link> or
+          <link linkend="smtp">$smtp_url</link>.  Otherwise
+          <link linkend="sendmail">$sendmail</link> will be invoked.  Prior to
+          version 2019-11-29, NeoMutt enabled <link linkend="write-bcc">$write_bcc</link> by
+          default, assuming the MTA would automatically remove a
+          <literal>Bcc:</literal> header as part of delivery.  Starting with 2019-11-29, the
+          option is unset by default, but no longer affects the fcc copy of the message.
+        </para>
       </sect2>
 
-      <sect2 id="edit-header">
-        <title>Editing the Message Header</title>
-        <para>
-          When editing the header because of
-          <link linkend="edit-headers">$edit_headers</link> being set, there are
-          a several pseudo headers available which will not be included in sent
-          messages but trigger special NeoMutt behavior.
-        </para>
+     <sect2 id="edit-header">
+       <title>Editing the Message Header</title>
+       <para>
+         When editing the header because of
+         <link linkend="edit-headers">$edit_headers</link> being set, there are
+         a several pseudo headers available which will not be included in sent
+         messages but trigger special NeoMutt behavior.
+       </para>
 
         <sect3 id="fcc-header">
           <title>Fcc: Pseudo Header</title>
@@ -4000,7 +4040,7 @@ unalias *
         Unlike other mailers, NeoMutt doesn't require aliases to be defined in
         a special file. The <command>alias</command> command can appear
         anywhere in a configuration file, as long as this file is
-        <link linkend="source"><command>source</command>d</link>. Consequently,
+        <link linkend="source"><command>sourced</command></link>. Consequently,
         you can have multiple alias files, or you can have all aliases defined
         in your <literal>.neomuttrc</literal>.
       </para>
@@ -5018,7 +5058,7 @@ uncolor prompt
               </row>
               <row>
                 <entry>index_size</entry>
-                <entry>Message size, <literal>%c</literal> <literal>%l</literal></entry>
+                <entry>Message size, <literal>%c</literal> <literal>%cr</literal> <literal>%l</literal></entry>
               </row>
               <row>
                 <entry>index_tags</entry>
@@ -5147,7 +5187,8 @@ uncolor compose header
           The first colour, <literal>quoted</literal> provides a default colour
           for all quoted text.  Also, each diffent level of quoting can be given
           a different colour using, <literal>quoted1</literal>,
-          <literal>quoted2</literal>, <literal>quoted3</literal> etc.
+          <literal>quoted2</literal>, <literal>quoted3</literal> up to
+          <literal>quoted9</literal>.
         </para>
         <table id="color-quoted">
           <title>Quoted Email Colours</title>
@@ -5172,8 +5213,12 @@ uncolor compose header
                 <entry>2 level deeper quoted text, e.g. <literal>&gt; &gt; &gt; text</literal></entry>
               </row>
               <row>
-                <entry>quotedN</entry>
-                <entry>n level deeper quoted text</entry>
+                <entry>...</entry>
+                <entry>...</entry>
+              </row>
+              <row>
+                <entry>quoted9</entry>
+                <entry>9 level deeper quoted text</entry>
               </row>
             </tbody>
           </tgroup>
@@ -7235,7 +7280,8 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
           <literal>%s</literal> in <link linkend="attach-format">$attach_format</link>,
           <literal>%l</literal> in <link linkend="compose-format">$compose_format</link>,
           <literal>%s</literal> in <link linkend="folder-format">$folder_format</link>,
-          <literal>%c</literal> in <link linkend="index-format">$index_format</link>,
+          <literal>%c</literal> and <literal>%cr</literal>
+            in <link linkend="index-format">$index_format</link>,
           and %l and %L in <link linkend="status-format">$status_format</link>.
           There are four configuration variables that can be used to customize
           how the numbers are displayed.
@@ -7262,7 +7308,7 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
 
         <para>
           <link linkend="size-units-on-left">$size_units_on_left</link> will
-          display the unit (<quote>K</quote> or <quote>M</quote> to the left
+          display the unit (<quote>K</quote> or <quote>M</quote>) to the left
           of the number, instead of the right if unset.
         </para>
 
@@ -8136,6 +8182,12 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
                 </entry>
               </row>
               <row>
+                <entry>~Y <emphasis>EXPR</emphasis></entry>
+                <entry>
+                  messages whose tags match <emphasis>EXPR</emphasis>
+                </entry>
+              </row>
+              <row>
                 <entry>~z [<emphasis>MIN</emphasis>]-[<emphasis>MAX</emphasis>]</entry>
                 <entry>
                   messages with a size in the range <emphasis>MIN</emphasis> to
@@ -8584,16 +8636,19 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
         <sect3 id="date-absolute">
           <title>Absolute Dates</title>
           <para>
-            Dates <emphasis>must</emphasis> be in DD/MM/YY format (month and
-            year are optional, defaulting to the current month and year). An
+            Dates <emphasis>must</emphasis> be in DD/MM/YY format (month and year
+            are optional, defaulting to the current month and year) or YYYYMMDD.  An
             example of a valid range of dates is:
           </para>
-          <screen>Limit to messages matching: ~d 20/1/95-31/10</screen>
+<screen>
+Limit to messages matching: ~d 20/1/95-31/10
+Limit to messages matching: ~d 19950120-19951031
+</screen>
           <para>
             If you omit the minimum (first) date, and just specify
-            <quote>-DD/MM/YY</quote>, all messages <emphasis>before</emphasis>
-            the given date will be selected. If you omit the maximum (second)
-            date, and specify <quote>DD/MM/YY-</quote>, all messages
+            <quote>-DD/MM/YY</quote> or <quote>-YYYYMMDD</quote>, all messages
+            <emphasis>before</emphasis> the given date will be selected.  If you omit the
+            maximum(second) date, and specify <quote>DD/MM/YY-</quote>, all messages
             <emphasis>after</emphasis> the given date will be selected. If you
             specify a single date with no dash (<quote>-</quote>), only
             messages sent on the given date will be selected.
@@ -10181,8 +10236,8 @@ audio/x-aiff                    aif aifc aiff
     <sect1 id="mailcap">
       <title>MIME Viewer Configuration with Mailcap</title>
       <para>
-        NeoMutt supports RFC 1524 MIME Configuration, in particular the Unix
-        specific format specified in Appendix A of RFC 1524. This file format
+        NeoMutt supports RFC1524 MIME Configuration, in particular the Unix
+        specific format specified in Appendix A of RFC1524. This file format
         is commonly referred to as the <quote>mailcap</quote> format. Many MIME
         compliant programs utilize the mailcap format, allowing you to specify
         handling for all MIME types in one place for all programs. Programs
@@ -10683,7 +10738,7 @@ text/html;      lynx -dump %s; nametemplate=%s.html; copiousoutput
           </variablelist>
           <para>
             NeoMutt does not currently support the <literal>%F</literal> and
-            <literal>%n</literal> keywords specified in RFC 1524. The main
+            <literal>%n</literal> keywords specified in RFC1524. The main
             purpose of these parameters is for multipart messages, which is
             handled internally by NeoMutt.
           </para>
@@ -11378,8 +11433,8 @@ smtp://user@host:587/
         If NeoMutt is compiled with IMAP, POP3 and/or SMTP support, it can also
         be compiled with support for SSL or TLS using either OpenSSL or GnuTLS
         (by running the <emphasis>configure</emphasis> script with the
-        <emphasis>--enable-ssl=...</emphasis> option for OpenSSL or
-        <emphasis>--enable-gnutls=...</emphasis> for GnuTLS). NeoMutt can then
+        <emphasis>--ssl=...</emphasis> option for OpenSSL or
+        <emphasis>--gnutls=...</emphasis> for GnuTLS). NeoMutt can then
         attempt to encrypt communication with remote servers if these protocols
         are suffixed with <quote>s</quote> for
         <quote>secure communication</quote>.
@@ -11982,14 +12037,9 @@ color   attach_headers     brightmagenta   default    "invalid node with packet 
 
       <sect2 id="attach-headers-color-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Guillaume Brogi
-              <email>gui-gui@netcourrier.com</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Guillaume Brogi
+        </para>
       </sect2>
     </sect1>
 
@@ -12074,19 +12124,9 @@ bind index,pager @ compose-to-sender
 
       <sect2 id="compose-to-sender-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Brian Medley
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Guillaume Brogi
-              <email>gui-gui@netcourrier.com</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Brian Medley, Guillaume Brogi
+        </para>
       </sect2>
     </sect1>
 
@@ -12504,38 +12544,10 @@ close-hook  '\.gpg$' "gpg --encrypt --recipient YourGpgUserIdOrKeyId &lt; '%t' &
 
       <sect2 id="compress-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Roland Rosenfeld
-              <email>roland@spinnaker.de</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Alain Penders
-              <email>Alain@Finale-Dev.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Christoph <quote>Myon</quote> Berg
-              <email>myon@debian.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Evgeni Golov
-              <email>evgeni@debian.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Roland Rosenfeld, Alain Penders, Christoph <quote>Myon</quote> Berg,
+          Evgeni Golov, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -12919,26 +12931,9 @@ set index_format='%4C %Z %&lt;[y?%&lt;[m?%&lt;[d?%[%H:%M ]&amp;%[%a %d]&gt;&amp;
 
       <sect2 id="cond-date-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Aaron Schrab
-              <email>aaron@schrab.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Eric Davis
-              <email>edavis@insanum.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Aaron Schrab, Eric Davis, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -13077,26 +13072,9 @@ set smime_default_key = "SMIME-KEY"
 
       <sect2 id="encrypt-to-self-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Omen Wild
-              <email>omen@mandarb.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Guillaume Brogi
-              <email>gui-gui@netcourrier.com</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Omen Wild, Richard Russon, Guillaume Brogi
+        </para>
       </sect2>
     </sect1>
 
@@ -13124,7 +13102,7 @@ set smime_default_key = "SMIME-KEY"
         </variablelist>
         <para>
           This feature can be enabled by running <literal>configure</literal>
-          with the option <literal>--enable-fmemopen</literal>
+          with the option <literal>--fmemopen</literal>
         </para>
       </sect2>
 
@@ -13174,20 +13152,9 @@ set smime_default_key = "SMIME-KEY"
 
       <sect2 id="fmemopen-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Julius Plenz
-              <email>plenz@cis.fu-berlin.de</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Julius Plenz, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -13308,32 +13275,9 @@ set abort_noattach_regex = "\\&lt;attach(|ed|ments?)\\&gt;"
 
       <sect2 id="forgotten-attachment-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Darshit Shah
-              <email>darnir@gmail.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Johannes Weißl
-              <email>jargon@molb.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Steven! Ragnarök
-              <email>steven@nuclearsandwich.com</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Darshit Shah, Richard Russon, Johannes Weißl, Steven Ragnarök
+        </para>
       </sect2>
     </sect1>
 
@@ -13485,28 +13429,164 @@ shutdown-hook 'exec sync-mailbox'
 
       <sect2 id="global-hooks-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Armin Wolfermann
-              <email>armin@wolfermann.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Thomas Adam
-              <email>thomas@xteddy.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Armin Wolfermann, Richard Russon, Thomas Adam
+        </para>
       </sect2>
     </sect1>
+
+    <sect1 id="hccompress">
+      <title>Header Cache Compression Feature</title>
+      <subtitle>Options for compressing the header cache files</subtitle>
+
+      <sect2 id="hccompress-support">
+        <title>Support</title>
+        <para>
+          <emphasis role="bold">Since:</emphasis> NeoMutt 2020-02-22
+        </para>
+        <para>
+          <emphasis role="bold">Dependencies:</emphasis>
+          <link linkend="caching">header cache</link>
+        </para>
+      </sect2>
+
+      <sect2 id="hccompress-intro">
+        <title>Introduction</title>
+        <para>
+          The Header Cache Compression Feature can be used for speeding up the
+          loading of large mailboxes.  Also the space used on disk can be shrunk
+          by about 50% - depending on the compression method being used.
+        </para>
+        <para>
+          The implementation sits on top of the header caching functions. So the
+          header cache compression can be used together with all available
+          database backends.
+        </para>
+      </sect2>
+
+      <sect2 id="hccompress-variables">
+        <title>Variables</title>
+        <table id="table-hccompress-variables">
+          <title>Header Cache Compression Variables</title>
+          <tgroup cols="3">
+            <thead>
+              <row>
+                <entry>Name</entry>
+                <entry>Type</entry>
+                <entry>Default</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry><literal>header_cache_compress_method</literal></entry>
+                <entry>string</entry>
+                <entry>(empty)</entry>
+              </row>
+              <row>
+                <entry><literal>header_cache_compress_level</literal></entry>
+                <entry>number</entry>
+                <entry><literal>1</literal></entry>
+              </row>
+              <row>
+                <entry><literal>header_cache_compress_dictionary</literal></entry>
+                <entry>string</entry>
+                <entry><literal>~/.dictionary</literal></entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+        <para>
+          The <literal>header_cache_compress_method</literal> can be
+          <emphasis>(empty)</emphasis> - which means, that no header cache
+          compression should be used. But when set to <emphasis>lz4</emphasis>,
+          <emphasis>zlib</emphasis> or <emphasis>zstd</emphasis> - then the
+          compression is turned on.
+        </para>
+        <para>
+          The <literal>header_cache_compress_level</literal> defines the
+          compression level, which should be used together with the selected
+          <literal>header_cache_compress_method</literal>. Here is an overview
+          of the possible settings:
+          <table id="table-hccompress-variables-leveldefines">
+            <title>Header Cache Compression Methods and it's Levels</title>
+            <tgroup cols="3">
+              <thead>
+                <row>
+                  <entry>Method Name</entry>
+                  <entry>Min</entry>
+                  <entry>Max</entry>
+                </row>
+              </thead>
+              <tbody>
+                <row>
+                  <entry><literal>lz4</literal></entry>
+                  <entry>1</entry>
+                  <entry>12</entry>
+                </row>
+                <row>
+                  <entry><literal>zlib</literal></entry>
+                  <entry>1</entry>
+                  <entry>9</entry>
+                </row>
+                <row>
+                  <entry><literal>zstd</literal></entry>
+                  <entry>1</entry>
+                  <entry>22</entry>
+                </row>
+              </tbody>
+            </tgroup>
+          </table>
+        </para>
+        <para>
+          The <literal>header_cache_compress_dictionary</literal> is a special
+          option for the <literal>zstd</literal> compression method. On a lot
+          small files, this compression method can be trained for some level by
+          using a command like this for e.g. level 3:
+        </para>
+<screen>
+zstd --train -3 -r cur new tmp -o dict-level-3
+</screen>
+        <para>
+          This command will create an file called <literal>dict-level-3</literal>,
+          which should be put to the path given in the
+          <literal>header_cache_compress_dictionary</literal> variable. The
+          speed and space gain can be huge, when using zstd dictionaries.  See
+          <ulink url="https://github.com/facebook/zstd">https://github.com/facebook/zstd</ulink>
+          for more information about this.
+        </para>
+      </sect2>
+      <sect2 id="hccompress-neomuttrc">
+        <title>neomuttrc</title>
+
+<screen>
+<emphasis role="comment"># Example NeoMutt config file for the header cache compression feature.</emphasis>
+
+<emphasis role="comment"># --------------------------------------------------------------------------</emphasis>
+<emphasis role="comment"># VARIABLES – shown with their default values</emphasis>
+<emphasis role="comment"># --------------------------------------------------------------------------</emphasis>
+set header_cache_compress_dictionary = "~/.dictionary"
+set header_cache_compress_level = 1
+set header_cache_compress_method = ""
+
+<emphasis role="comment"># vim: syntax=neomuttrc</emphasis>
+</screen>
+
+      </sect2>
+
+      <sect2 id="hccompress-known-bugs">
+        <title>Known Bugs</title>
+        <para>
+          None
+        </para>
+      </sect2>
+
+      <sect2 id="hccompress-credits">
+        <title>Credits</title>
+        <para>
+          Tino Reichardt
+        </para>
+      </sect2>
+  </sect1>
 
     <sect1 id="ifdef">
       <title>Ifdef Feature</title>
@@ -13629,26 +13709,9 @@ ifndef sidebar finish
 
       <sect2 id="ifdef-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Cedric Duval
-              <email>cedricduval@free.fr</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Matteo F. Vescovi
-              <email>mfvescovi@gmail.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Cedric Duval, Matteo F. Vescovi, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -13760,7 +13823,7 @@ color index-object foreground background pattern
               <row>
                 <entry><literal>index_size</literal></entry>
                 <entry>no</entry>
-                <entry>Message size, %c %l</entry>
+                <entry>Message size, %c %cr %l</entry>
               </row>
               <row>
                 <entry><literal>index_subject</literal></entry>
@@ -13799,7 +13862,7 @@ color index_date green default
 color index_label default brightgreen
 <emphasis role="comment"># Message number, %C</emphasis>
 color index_number red default
-<emphasis role="comment"># Message size, %c %l</emphasis>
+<emphasis role="comment"># Message size, %c %cr %l</emphasis>
 color index_size cyan default
 
 <emphasis role="comment"># vim: syntax=neomuttrc</emphasis>
@@ -13847,44 +13910,10 @@ color index_size cyan default
 
       <sect2 id="index-color-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Christian Aichinger
-              <email>Greek0@gmx.net</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Christoph <quote>Myon</quote> Berg
-              <email>myon@debian.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Elimar Riesebieter
-              <email>riesebie@lxtec.de</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Eric Davis
-              <email>edavis@insanum.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Vladimir Marek
-              <email>Vladimir.Marek@oracle.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Christian Aichinger, Christoph <quote>Myon</quote> Berg,
+          Elimar Riesebieter, Eric Davis, Vladimir Marek, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -13987,20 +14016,9 @@ set index_format='%4C %Z %{%b %d} %I (%?l?%4l&amp;%4c?) %s'
 
       <sect2 id="initials-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Vsevolod Volkov
-              <email>vvv@mutt.org.ua</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Vsevolod Volkov, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -14083,14 +14101,9 @@ set index_format='%4C %Z %{%b %d} %I (%?l?%4l&amp;%4c?) %s'
 
       <sect2 id="kyoto-cabinet-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Clemens Lang
-              <email>neverpanic@gmail.com</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Clemens Lang
+        </para>
       </sect2>
     </sect1>
 
@@ -14171,20 +14184,9 @@ bind index &lt;esc&gt;L limit-current-thread
 
       <sect2 id="limit-current-thread-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              David Sterba
-              <email>dsterba@suse.cz</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          David Sterba, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -14236,26 +14238,9 @@ bind index &lt;esc&gt;L limit-current-thread
 
       <sect2 id="lmdb-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Pietro Cerutti
-              <email>gahr@gahr.ch</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Jan-Piet Mens
-              <email>jp@mens.de</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Clemens Lang
-              <email>neverpanic@gmail.com</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Pietro Cerutti, Jan-Piet Mens, Clemens Lang
+        </para>
       </sect2>
     </sect1>
 
@@ -14327,20 +14312,9 @@ bind index &lt;esc&gt;L limit-current-thread
 
       <sect2 id="multiple-fcc-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Omen Wild
-              <email>omen@mandarb.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Omen Wild, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -14522,26 +14496,9 @@ set index_format='%4C %Z %{%b %d} %-25.25n %&lt;M?[%M] %s&amp;%s%* %&lt;l?%l&amp
 
       <sect2 id="nested-if-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              David Champion
-              <email>dgc@uchicago.edu</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Aleksa Sarai
-              <email>cyphar@cyphar.com</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          David Champion, Richard Russon, Aleksa Sarai
+        </para>
       </sect2>
     </sect1>
 
@@ -14674,26 +14631,9 @@ set new_mail_command = ""
 
       <sect2 id="new-mail-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Yoshiki Vazquez-Baeza
-              <email>yoshiki@ucsd.edu</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Santiago Torres-Arias
-              <email>santiago@nyu.edu</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Yoshiki Vazquez-Baeza, Santiago Torres-Arias, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -15079,26 +15019,9 @@ bind index \CG get-message
 
       <sect2 id="nntp-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Vsevolod Volkov
-              <email>vvv@mutt.org.ua</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Felix von Leitner
-              <email>leitner@fefe.de</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Vsevolod Volkov, Felix von Leitner, Richard Russon
+        </para>
       </sect2>
   </sect1>
 
@@ -15347,26 +15270,9 @@ color index_tags green default
       </sect2>
       <sect2 id="custom-tags-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Mehdi Abaakouk
-              <email>sileht@sileht.net</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Bernard 'Guyzmo' Pratz
-              <email>guyzmo+github+pub@m0g.net</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Mehdi Abaakouk, Richard Russon, Bernard 'Guyzmo' Pratz
+        </para>
       </sect2>
     </sect1>
 
@@ -15425,8 +15331,8 @@ color index_tags green default
       <sect2 id="notmuch-using">
         <title>Using Notmuch</title>
 
-        <sect3 id="notmuch-folder-uri">
-          <title>Folders URI</title>
+        <sect3 id="notmuch-folder-url">
+          <title>Folders URL</title>
           <para>
             <emphasis role="bold">notmuch://[&lt;path&gt;][?&lt;item&gt;=&lt;name&gt;[&amp; ...]]</emphasis>
           </para>
@@ -15439,12 +15345,12 @@ color index_tags green default
           </para>
           <para>
             If the "&lt;path&gt;" is not defined then
-            <literal>$nm_default_uri</literal> or <literal>$folder</literal> is
+            <literal>$nm_default_url</literal> or <literal>$folder</literal> is
             used, for example:
           </para>
 
 <screen>
-set nm_default_uri = "notmuch:///home/foo/maildir"
+set nm_default_url = "notmuch:///home/foo/maildir"
 virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
 </screen>
 
@@ -15460,7 +15366,7 @@ virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
             operators (<quote>and</quote>/<quote>or</quote>) in your queries.
           </para>
           <para>
-            Note that proper URI should not contain blank space and all
+            Note that proper URL should not contain blank space and all
             <quote>bad</quote> chars should be encoded, for example
           </para>
           <para>
@@ -15604,7 +15510,7 @@ virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
                 <entry></entry>
               </row>
               <row>
-                <entry><literal>nm_default_uri</literal></entry>
+                <entry><literal>nm_default_url</literal></entry>
                 <entry>string</entry>
                 <entry>(empty)</entry>
                 <entry></entry>
@@ -15693,7 +15599,7 @@ virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
                 <entry>
                   switch to another virtual folder, a new folder maybe be
                   specified by vfolder description (see virtual-mailboxes) or
-                  URI. the default is next vfolder with unread messages
+                  URL. the default is next vfolder with unread messages
                 </entry>
               </row>
               <row>
@@ -15758,14 +15664,14 @@ virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
           <arg choice="plain">
             <replaceable class="parameter">description</replaceable>
             <arg choice="plain">
-              <replaceable class="parameter">notmuch-URI</replaceable>
+              <replaceable class="parameter">notmuch-URL</replaceable>
             </arg>
           </arg>
           <group choice="req" rep="repeat">
             <arg choice="plain">
               <replaceable class="parameter">description</replaceable>
               <arg choice="plain">
-                <replaceable class="parameter">notmuch-URI</replaceable>
+                <replaceable class="parameter">notmuch-URL</replaceable>
               </arg>
             </arg>
           </group>
@@ -15816,7 +15722,7 @@ virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
 set nm_db_limit = 0
 <emphasis role="comment"># This variable specifies the default Notmuch database in format:</emphasis>
 <emphasis role="comment"># notmuch://&lt;absolute path&gt;</emphasis>
-set nm_default_uri = ""
+set nm_default_url = ""
 <emphasis role="comment"># The messages tagged with these tags are excluded and not loaded</emphasis>
 <emphasis role="comment"># from notmuch DB to NeoMutt unless specified explicitly.</emphasis>
 set nm_exclude_tags = ""
@@ -15873,7 +15779,7 @@ bind index &gt; vfolder-window-forward
 <emphasis role="comment"># --------------------------------------------------------------------------</emphasis>
 <emphasis role="comment"># COMMANDS – shown with an example</emphasis>
 <emphasis role="comment"># --------------------------------------------------------------------------</emphasis>
-<emphasis role="comment"># virtual-mailboxes description notmuch-URI { description notmuch-URI ...}</emphasis>
+<emphasis role="comment"># virtual-mailboxes description notmuch-URL { description notmuch-URL ...}</emphasis>
 <emphasis role="comment"># virtual-mailboxes "Climbing" "notmuch://?query=climbing"</emphasis>
 <emphasis role="comment"># unvirtual-mailboxes { * | mailbox ...}</emphasis>
 <emphasis role="comment">#</emphasis>
@@ -15904,158 +15810,15 @@ bind index &gt; vfolder-window-forward
 
       <sect2 id="notmuch-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Karel Zak
-              <email>kzak@redhat.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Chris Mason
-              <email>clm@fb.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Christoph Rissner
-              <email>cri@visotech.at</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              David Riebenbauer
-              <email>davrieb@liegesta.at</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              David Sterba
-              <email>dsterba@suse.cz</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              David Wilson
-              <email>dw@botanicus.net</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Don Zickus
-              <email>dzickus@redhat.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Eric Davis
-              <email>edavis@insanum.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Jan Synacek
-              <email>jsynacek@redhat.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Jeremiah C. Foster
-              <email>jeremiah@jeremiahfoster.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Josh Poimboeuf
-              <email>jpoimboe@redhat.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Kirill A. Shutemov
-              <email>kirill@shutemov.name</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Luke Macken
-              <email>lmacken@redhat.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Mantas Mikulėnas
-              <email>grawity@gmail.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Patrick Brisbin
-              <email>pbrisbin@gmail.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Philippe Le Brouster
-              <email>plb@nebkha.net</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Raghavendra D Prabhu
-              <email>rprabhu@wnohang.net</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Sami Farin
-              <email>hvtaifwkbgefbaei@gmail.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Stefan Assmann
-              <email>sassmann@kpanic.de</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Stefan Kuhn
-              <email>p_regius@gmx.ch</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Tim Stoakes
-              <email>tim@stoakes.net</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Vladimir Marek
-              <email>Vladimir.Marek@oracle.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Víctor Manuel Jáquez Leal
-              <email>vjaquez@igalia.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Bernard 'Guyzmo' Pratz
-              <email>guyzmo+github+pub@m0g.net</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Karel Zak, Chris Mason, Christoph Rissner, David Riebenbauer,
+          David Sterba, David Wilson, Don Zickus, Eric Davis, Jan Synacek,
+          Jeremiah C. Foster, Josh Poimboeuf, Kirill A. Shutemov, Luke Macken,
+          Mantas Mikulėnas, Patrick Brisbin, Philippe Le Brouster,
+          Raghavendra D Prabhu, Sami Farin, Stefan Assmann, Stefan Kuhn,
+          Tim Stoakes, Vladimir Marek, Víctor Manuel Jáquez Leal,
+          Richard Russon, Bernard 'Guyzmo' Pratz
+        </para>
       </sect2>
     </sect1>
 
@@ -16143,38 +15906,9 @@ color progress white red
 
       <sect2 id="progress-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Rocco Rutte
-              <email>pdmef@gmx.net</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Vincent Lefevre
-              <email>vincent@vinc17.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Stefan Kuhn
-              <email>wuodan@hispeed.ch</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Karel Zak
-              <email>kzak@redhat.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Rocco Rutte, Vincent Lefevre, Stefan Kuhn, Karel Zak, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -16267,20 +16001,9 @@ bind index,pager Q quasi-delete
 
       <sect2 id="quasi-delete-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Karel Zak
-              <email>kzak@redhat.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Karel Zak, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -16351,14 +16074,9 @@ set reply_with_xorig = "yes"
 
       <sect2 id="reply-with-xorig-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Pierre-Elliott Bécue
-              <email>becue@crans.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Pierre-Elliott Bécue
+        </para>
       </sect2>
     </sect1>
 
@@ -16465,26 +16183,9 @@ set sort_browser="reverse-size"
 
       <sect2 id="sensible-browser-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Pierre-Elliott Bécue
-              <email>becue@crans.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Haakon Riiser
-              <email>haakon.riiser@fys.uio.no</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Pierre-Elliott Bécue, Haakon Riiser, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -16534,6 +16235,11 @@ set sort_browser="reverse-size"
             </thead>
             <tbody>
               <row>
+                <entry><literal>sidebar_component_depth</literal></entry>
+                <entry>number</entry>
+                <entry><literal>0</literal></entry>
+              </row>
+              <row>
                 <entry><literal>sidebar_delim_chars</literal></entry>
                 <entry>string</entry>
                 <entry><literal>/.</literal></entry>
@@ -16568,6 +16274,11 @@ set sort_browser="reverse-size"
                 <entry><literal>no</literal></entry>
               </row>
               <row>
+                <entry><literal>sidebar_non_empty_mailbox_only</literal></entry>
+                <entry>boolean</entry>
+                <entry><literal>no</literal></entry>
+              </row>
+              <row>
                 <entry><literal>sidebar_on_right</literal></entry>
                 <entry>boolean</entry>
                 <entry><literal>no</literal></entry>
@@ -16576,11 +16287,6 @@ set sort_browser="reverse-size"
                 <entry><literal>sidebar_short_path</literal></entry>
                 <entry>boolean</entry>
                 <entry><literal>no</literal></entry>
-              </row>
-              <row>
-                <entry><literal>sidebar_component_depth</literal></entry>
-                <entry>number</entry>
-                <entry><literal>0</literal></entry>
               </row>
               <row>
                 <entry><literal>sidebar_sort_method</literal></entry>
@@ -16808,6 +16514,10 @@ set sort_browser="reverse-size"
                 <entry>Total number of messages</entry>
               </row>
               <row>
+                <entry><literal>desc</literal></entry>
+                <entry>Descriptive name of the mailbox</entry>
+              </row>
+              <row>
                 <entry><literal>flagged</literal></entry>
                 <entry>Number of flagged messages</entry>
               </row>
@@ -16868,6 +16578,8 @@ set sidebar_indent_string = '  '
 set sidebar_new_mail_only = no
 <emphasis role="comment"># Any mailboxes that are whitelisted will always be visible, even if the</emphasis>
 <emphasis role="comment"># sidebar_new_mail_only option is enabled.</emphasis>
+set sidebar_non_empty_mailbox_only = no
+<emphasis role="comment"># Only show mailboxes that contain some mail</emphasis>
 sidebar_whitelist '/home/user/mailbox1'
 sidebar_whitelist '/home/user/mailbox2'
 <emphasis role="comment"># When searching for mailboxes containing new mail, should the search wrap</emphasis>
@@ -16920,6 +16632,8 @@ bind index,pager B sidebar-toggle-visible
 <emphasis role="comment"># Color of the current, open, mailbox</emphasis>
 <emphasis role="comment"># Note: This is a general NeoMutt option which colors all selected items.</emphasis>
 color indicator cyan black
+<emphasis role="comment"># Sidebar-specific color of the selected item</emphasis>
+color sidebar_indicator cyan black
 <emphasis role="comment"># Color of the highlighted, but not open, mailbox.</emphasis>
 color sidebar_highlight black color8
 <emphasis role="comment"># Color of the divider separating the Sidebar from NeoMutt panels</emphasis>
@@ -16930,6 +16644,10 @@ color sidebar_flagged red black
 color sidebar_new green black
 <emphasis role="comment"># Color to give mailboxes containing no new/flagged mail, etc.</emphasis>
 color sidebar_ordinary color245 default
+<emphasis role="comment"># Color to give the spoolfile mailbox</emphasis>
+color sidebar_spoolfile color207 default
+<emphasis role="comment"># Color to give mailboxes containing no unread mail</emphasis>
+color sidebar_unread color136 default
 <emphasis role="comment"># --------------------------------------------------------------------------</emphasis>
 
 <emphasis role="comment"># vim: syntax=neomuttrc</emphasis>
@@ -16972,74 +16690,11 @@ color sidebar_ordinary color245 default
 
       <sect2 id="sidebar-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
             <para>
-              Justin Hibbits
-              <email>jrh29@po.cwru.edu</email>
+              Justin Hibbits, Thomer M. Gil, David Sterba, Evgeni Golov,
+              Fabian Groffen, Jason DeTiberus, Stefan Assmann, Steve Kemp,
+              Terry Chan, Tyler Earnest, Richard Russon
             </para>
-          </listitem>
-          <listitem>
-            <para>
-              Thomer M. Gil
-              <email>mutt@thomer.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              David Sterba
-              <email>dsterba@suse.cz</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Evgeni Golov
-              <email>evgeni@debian.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Fabian Groffen
-              <email>grobian@gentoo.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Jason DeTiberus
-              <email>jdetiber@redhat.com</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Stefan Assmann
-              <email>sassmann@kpanic.de</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Steve Kemp
-              <email>steve@steve.org.uk</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Terry Chan
-              <email>tchan@lunar-linux.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Tyler Earnest
-              <email>tylere@rne.st</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
       </sect2>
     </sect1>
 
@@ -17122,20 +16777,9 @@ set skip_quoted_offset = 3
 
       <sect2 id="skip-quoted-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              David Sterba
-              <email>dsterba@suse.cz</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          David Sterba, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -17313,32 +16957,9 @@ color status brightwhite default 'NeoMutt: ([^ ]+)' 1
 
       <sect2 id="status-color-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              David Sterba
-              <email>dsterba@suse.cz</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Thomas Glanzmann
-              <email>thomas@glanzmann.de</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Kirill A. Shutemov
-              <email>kirill@shutemov.name</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          David Sterba, Thomas Glanzmann, Kirill A. Shutemov, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -17401,26 +17022,9 @@ openssl s_client -host &lt;imap server&gt; -port &lt;port&gt; -tls1 -servername 
 
       <sect2 id="tls-sni-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Jeremy Katz
-              <email>katzj@linuxpower.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Phil Pennock
-              <email>mutt-dev@spodhuis.demon.nl</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Jeremy Katz, Phil Pennock, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -17574,32 +17178,9 @@ bind index D purge-message
 
       <sect2 id="trash-folder-credits">
         <title>Credits</title>
-        <itemizedlist>
-          <listitem>
-            <para>
-              Cedric Duval
-              <email>cedricduval@free.fr</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Benjamin Kuperman
-              <email>kuperman@acm.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Paul Miller
-              <email>paul@voltar.org</email>
-            </para>
-          </listitem>
-          <listitem>
-            <para>
-              Richard Russon
-              <email>rich@flatcap.org</email>
-            </para>
-          </listitem>
-        </itemizedlist>
+        <para>
+          Cedric Duval, Benjamin Kuperman, Paul Miller, Richard Russon
+        </para>
       </sect2>
     </sect1>
 
@@ -17609,7 +17190,7 @@ bind index D purge-message
       <para>
         NeoMutt can be compiled with Autocrypt support by running
         <literal>configure</literal> with the
-        <literal>--enable-autocrypt</literal> flag.  Autocrypt provides
+        <literal>--autocrypt</literal> flag.  Autocrypt provides
         easy to use, passive protection against data collection.  Keys are
         distributed via an <literal>Autocrypt:</literal> header added to
         emails.  It does <emphasis>not</emphasis> protect against active
@@ -17632,7 +17213,7 @@ bind index D purge-message
         </para>
         <para>
           Account and peer information is stored in a sqlite3 database, and
-          so NeoMutt must be configured with the <literal>--with-sqlite3</literal>
+          so NeoMutt must be configured with the <literal>--with-sqlite</literal>
           flag when autocrypt is enabled.
         </para>
         <para>
@@ -18132,9 +17713,18 @@ folder-hook ^pop 'set read_inc=1'
         will be gone for the next session.)
       </para>
       <para>
-        To improve performance and permanently cache whole messages, please
-        refer to NeoMutt's so-called
-        <link linkend="body-caching">body caching</link> for details.
+        To improve performance and permanently cache whole messages and
+        headers, please refer to <link linkend="body-caching">body caching</link>
+        and <link linkend="header-caching">header caching</link> for details.
+      </para>
+      <para>
+        Additionally, it may be worth trying some of NeoMutt's experimental
+        features.  <link linkend="imap-qresync">$imap_qresync</link> (which
+        requires header caching) can provide a huge speed boost opening
+        mailboxes if your IMAP server supports it.
+        <link linkend="imap-deflate">$imap_deflate</link> enables compression,
+        which can also noticeably reduce download time for large mailboxes and
+        messages.
       </para>
     </sect1>
 

@@ -28,7 +28,7 @@
 
 #include "config.h"
 #include <stdbool.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "email.h"
 #include "body.h"
 #include "envelope.h"
@@ -132,4 +132,23 @@ void emaillist_clear(struct EmailList *el)
     FREE(&en);
   }
   STAILQ_INIT(el);
+}
+
+/**
+ * emaillist_add_email - Add an Email to a list
+ * @param e  Email to add
+ * @param el EmailList to add to
+ * @retval  0 Success
+ * @retval -1 Error
+ */
+int emaillist_add_email(struct EmailList *el, struct Email *e)
+{
+  if (!el || !e)
+    return -1;
+
+  struct EmailNode *en = mutt_mem_calloc(1, sizeof(*en));
+  en->email = e;
+  STAILQ_INSERT_TAIL(el, en, entries);
+
+  return 0;
 }

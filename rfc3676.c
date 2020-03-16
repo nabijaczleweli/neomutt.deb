@@ -30,16 +30,15 @@
  */
 
 #include "config.h"
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "email/lib.h"
-#include "curs_lib.h"
+#include "gui/lib.h"
+#include "rfc3676.h"
 #include "globals.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "state.h"
 
@@ -444,12 +443,8 @@ static void rfc3676_space_stuff(struct Email *e, bool unstuff)
   }
 
   mutt_file_copy_stream(fp_in, fp_out);
-  mutt_file_fclose(&fp_in);
-  mutt_file_fclose(&fp_out);
   mutt_file_set_mtime(mutt_b2s(tmpfile), e->content->filename);
   unlink(mutt_b2s(tmpfile));
-  mutt_buffer_pool_release(&tmpfile);
-  return;
 
 bail:
   mutt_file_fclose(&fp_in);

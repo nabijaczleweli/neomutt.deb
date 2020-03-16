@@ -33,33 +33,32 @@
  */
 
 #include "config.h"
-#include <limits.h>
 #include <locale.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
+#include "crypt.h"
 #include "alias.h"
 #include "copy.h"
 #include "cryptglue.h"
-#include "curs_lib.h"
 #include "globals.h"
 #include "handler.h"
-#include "mutt_curses.h"
+#include "init.h"
 #include "mutt_parse.h"
-#include "mutt_window.h"
 #include "muttlib.h"
-#include "ncrypt.h"
 #include "options.h"
 #include "send.h"
 #include "sendlib.h"
 #include "state.h"
+#include "ncrypt/lib.h"
 #ifdef USE_AUTOCRYPT
-#include "autocrypt/autocrypt.h"
+#include "autocrypt/lib.h"
 #endif
 
 struct Mailbox;
@@ -291,6 +290,12 @@ int mutt_protect(struct Email *e, char *keylist, bool postpone)
 
     mutt_env_free(&e->content->mime_headers);
     e->content->mime_headers = protected_headers;
+    /* Optional part of the draft RFC, but required by Enigmail */
+    mutt_param_set(&e->content->parameter, "protected-headers", "v1");
+  }
+  else
+  {
+    mutt_param_delete(&e->content->parameter, "protected-headers");
   }
 
   /* A note about e->content->mime_headers.  If postpone or send
@@ -315,7 +320,7 @@ int mutt_protect(struct Email *e, char *keylist, bool postpone)
   {
     if (((WithCrypto & APPLICATION_SMIME) != 0) && (security & APPLICATION_SMIME))
     {
-      tmp_pbody = crypt_smime_sign_message(e->content);
+      tmp_pbody = crypt_smime_sign_message(e->content, &e->env->from);
       if (!tmp_pbody)
         goto bail;
       pbody = tmp_pbody;
@@ -325,7 +330,7 @@ int mutt_protect(struct Email *e, char *keylist, bool postpone)
     if (((WithCrypto & APPLICATION_PGP) != 0) && (security & APPLICATION_PGP) &&
         (!(security & (SEC_ENCRYPT | SEC_AUTOCRYPT)) || C_PgpRetainableSigs))
     {
-      tmp_pbody = crypt_pgp_sign_message(e->content);
+      tmp_pbody = crypt_pgp_sign_message(e->content, &e->env->from);
       if (!tmp_pbody)
         goto bail;
 
@@ -365,7 +370,7 @@ int mutt_protect(struct Email *e, char *keylist, bool postpone)
 
     if (((WithCrypto & APPLICATION_PGP) != 0) && (security & APPLICATION_PGP))
     {
-      pbody = crypt_pgp_encrypt_message(e, tmp_pgp_pbody, keylist, sign);
+      pbody = crypt_pgp_encrypt_message(e, tmp_pgp_pbody, keylist, sign, &e->env->from);
       if (!pbody)
       {
         /* did we perform a retainable signature? */
@@ -1239,8 +1244,10 @@ int mutt_signed_handler(struct Body *a, struct State *s)
       FREE(&signatures);
     }
     else
+    {
       state_attach_puts(s,
                         _("[-- Warning: Can't find any signatures. --]\n\n"));
+    }
   }
 
   rc = mutt_body_handler(a, s);

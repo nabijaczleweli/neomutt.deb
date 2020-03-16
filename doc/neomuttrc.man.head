@@ -1065,6 +1065,10 @@ _
 messages which contain \fIEXPR\fP in their keywords
 T}
 _
+\0~Y \fIEXPR\fP|T{
+messages whose tags match \fIEXPR\fP
+T}
+_
 \0~z \fIMIN\fP-\fIMAX\fP|T{
 messages with a size in the range \fIMIN\fP to \fIMAX\fP \fB**\fP) \fB***\fP)
 T}
@@ -1260,6 +1264,8 @@ range of dates is:
 Limit to messages matching:
 .IR \fB~d\fP\~20 / 1 / 95 - 31 / 10
 .
+.PP
+Alternatively, you may use \fIYYYYMMDD\fP to specify a date.
 .PP
 When given a two-digit year, NeoMutt will interpret values less than \(lq70\(rq
 as lying in the 21st century (i.e., \(lq38\(rq means 2038 and not 1938, and

@@ -30,11 +30,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <time.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
-#include "conn/conn.h"
-#include "hcache/hcache.h"
+#include "hcache/lib.h"
 
+struct Account;
+struct ConnAccount;
 struct Email;
 struct Mailbox;
 struct Message;
@@ -134,9 +135,10 @@ typedef uint32_t ImapCapFlags;              ///< Flags, e.g. #IMAP_CAP_IMAP4
 #define IMAP_CAP_CONDSTORE        (1 << 14) ///< RFC7162
 #define IMAP_CAP_QRESYNC          (1 << 15) ///< RFC7162
 #define IMAP_CAP_LIST_EXTENDED    (1 << 16) ///< RFC5258: IMAP4 LIST Command Extensions
-#define IMAP_CAP_X_GM_EXT_1       (1 << 17) ///< https://developers.google.com/gmail/imap/imap-extensions
+#define IMAP_CAP_COMPRESS         (1 << 17) ///< RFC4978: COMPRESS=DEFLATE
+#define IMAP_CAP_X_GM_EXT_1       (1 << 18) ///< https://developers.google.com/gmail/imap/imap-extensions
 
-#define IMAP_CAP_ALL             ((1 << 18) - 1)
+#define IMAP_CAP_ALL             ((1 << 19) - 1)
 
 /**
  * struct ImapList - Items in an IMAP browser
@@ -166,7 +168,6 @@ struct ImapCommand
 struct ImapAccountData
 {
   struct Connection *conn;
-  struct ConnAccount conn_account;
   bool recovering;
   bool closing; /* If true, we are waiting for CLOSE completion */
   unsigned char state;  ///< ImapState, e.g. #IMAP_AUTHENTICATED
@@ -183,7 +184,7 @@ struct ImapAccountData
   ImapCapFlags capabilities;
   unsigned char seqid; /* tag sequence prefix */
   unsigned int seqno; ///< tag sequence number, e.g. '{seqid}0001'
-  time_t lastread; /**< last time we read a command for the server */
+  time_t lastread; ///< last time we read a command for the server
   char *buf;
   size_t blen;
 
@@ -203,6 +204,7 @@ struct ImapAccountData
 
   char delim;
   struct Mailbox *mailbox;     /* Current selected mailbox */
+  struct Account *account;     ///< Parent Account
 };
 
 /**
@@ -212,13 +214,13 @@ struct ImapAccountData
  */
 struct ImapMboxData
 {
-  char *name;        /**< Mailbox name */
-  char *munge_name;  /**< Munged version of the mailbox name */
-  char *real_name;   /**< Original Mailbox name, e.g.: INBOX can be just \0 */
+  char *name;        ///< Mailbox name
+  char *munge_name;  ///< Munged version of the mailbox name
+  char *real_name;   ///< Original Mailbox name, e.g.: INBOX can be just \0
 
-  ImapOpenFlags reopen;        /**< Flags, e.g. #IMAP_REOPEN_ALLOW */
-  ImapOpenFlags check_status;  /**< Flags, e.g. #IMAP_NEWMAIL_PENDING */
-  unsigned int new_mail_count; /**< Set when EXISTS notifies of new mail */
+  ImapOpenFlags reopen;        ///< Flags, e.g. #IMAP_REOPEN_ALLOW
+  ImapOpenFlags check_status;  ///< Flags, e.g. #IMAP_NEWMAIL_PENDING
+  unsigned int new_mail_count; ///< Set when EXISTS notifies of new mail
 
   // IMAP STATUS information
   struct ListHead flags;
@@ -231,9 +233,9 @@ struct ImapMboxData
 
   // Cached data used only when the mailbox is opened
   struct Hash *uid_hash;
-  struct Email **msn_index;   /**< look up headers by (MSN-1) */
-  size_t msn_index_size;       /**< allocation size */
-  unsigned int max_msn;        /**< the largest MSN fetched so far */
+  struct Email **msn_index;   ///< look up headers by (MSN-1)
+  size_t msn_index_size;       ///< allocation size
+  unsigned int max_msn;        ///< the largest MSN fetched so far
   struct BodyCache *bcache;
 
   header_cache_t *hcache;
@@ -311,7 +313,7 @@ char *imap_hcache_get_uid_seqset(struct ImapMboxData *mdata);
 
 enum QuadOption imap_continue(const char *msg, const char *resp);
 void imap_error(const char *where, const char *msg);
-struct ImapAccountData *imap_adata_new(void);
+struct ImapAccountData *imap_adata_new(struct Account *a);
 void imap_adata_free(void **ptr);
 struct ImapMboxData *imap_mdata_new(struct ImapAccountData *adata, const char* name);
 void imap_mdata_free(void **ptr);
@@ -320,7 +322,6 @@ char *imap_fix_path(char delim, const char *mailbox, char *path, size_t plen);
 void imap_cachepath(char delim, const char *mailbox, struct Buffer *dest);
 int imap_get_literal_count(const char *buf, unsigned int *bytes);
 char *imap_get_qualifier(char *buf);
-int imap_mxcmp(const char *mx1, const char *mx2);
 char *imap_next_word(char *s);
 void imap_qualify_path(char *buf, size_t buflen, struct ConnAccount *conn_account, char *path);
 void imap_quote_string(char *dest, size_t dlen, const char *src, bool quote_backtick);
@@ -332,6 +333,7 @@ int mutt_seqset_iterator_next(struct SeqsetIterator *iter, unsigned int *next);
 void mutt_seqset_iterator_free(struct SeqsetIterator **ptr);
 bool imap_account_match(const struct ConnAccount *a1, const struct ConnAccount *a2);
 void imap_get_parent(const char *mbox, char delim, char *buf, size_t buflen);
+bool  mutt_account_match(const struct ConnAccount *a1, const struct ConnAccount *a2);
 
 /* utf7.c */
 void imap_utf_encode(bool unicode, char **s);

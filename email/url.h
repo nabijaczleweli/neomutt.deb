@@ -24,7 +24,7 @@
 #define MUTT_EMAIL_URL_H
 
 #include <stddef.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 
 /**
  * enum UrlScheme - All recognised Url types
@@ -76,11 +76,12 @@ struct Url
 };
 
 enum UrlScheme url_check_scheme(const char *s);
-void           url_free        (struct Url **u);
+void           url_free        (struct Url **ptr);
+struct Url *   url_new         (void);
 struct Url    *url_parse       (const char *src);
 int            url_pct_decode  (char *s);
 void           url_pct_encode  (char *buf, size_t buflen, const char *src);
-int            url_tobuffer    (struct Url *u, struct Buffer *dest, int flags);
-int            url_tostring    (struct Url *u, char *buf, size_t buflen, int flags);
+int            url_tobuffer    (struct Url *url, struct Buffer *dest, int flags);
+int            url_tostring    (struct Url *url, char *buf, size_t buflen, int flags);
 
 #endif /* MUTT_EMAIL_URL_H */

@@ -36,28 +36,28 @@
 #include <string.h>
 #include <unistd.h>
 #include "imap_private.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
-#include "conn/conn.h"
+#include "conn/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "message.h"
 #include "bcache.h"
-#include "curs_lib.h"
 #include "globals.h"
-#include "hcache/hcache.h"
-#include "imap/imap.h"
-#include "mutt_account.h"
-#include "mutt_curses.h"
 #include "mutt_logging.h"
 #include "mutt_socket.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "progress.h"
 #include "protos.h"
+#include "imap/lib.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
+#endif
+#ifdef USE_HCACHE
+#include "hcache/lib.h"
 #endif
 
 struct BodyCache;
@@ -93,6 +93,7 @@ static struct ImapEmailData *imap_edata_new(void)
 
 /**
  * imap_edata_get - Get the private data for this Email
+ * @param e Email
  * @retval ptr Private Email data
  */
 struct ImapEmailData *imap_edata_get(struct Email *e)
@@ -789,52 +790,53 @@ static int read_headers_normal_eval_cache(struct ImapAccountData *adata,
         continue;
       }
 
-      m->emails[idx] = imap_hcache_get(mdata, h.edata->uid);
-      if (m->emails[idx])
+      struct Email *e = imap_hcache_get(mdata, h.edata->uid);
+      m->emails[idx] = e;
+      if (e)
       {
         mdata->max_msn = MAX(mdata->max_msn, h.edata->msn);
-        mdata->msn_index[h.edata->msn - 1] = m->emails[idx];
-        mutt_hash_int_insert(mdata->uid_hash, h.edata->uid, m->emails[idx]);
+        mdata->msn_index[h.edata->msn - 1] = e;
+        mutt_hash_int_insert(mdata->uid_hash, h.edata->uid, e);
 
-        m->emails[idx]->index = idx;
+        e->index = idx;
         /* messages which have not been expunged are ACTIVE (borrowed from mh
          * folders) */
-        m->emails[idx]->active = true;
-        m->emails[idx]->changed = false;
+        e->active = true;
+        e->changed = false;
         if (eval_condstore)
         {
-          h.edata->read = m->emails[idx]->read;
-          h.edata->old = m->emails[idx]->old;
-          h.edata->deleted = m->emails[idx]->deleted;
-          h.edata->flagged = m->emails[idx]->flagged;
-          h.edata->replied = m->emails[idx]->replied;
+          h.edata->read = e->read;
+          h.edata->old = e->old;
+          h.edata->deleted = e->deleted;
+          h.edata->flagged = e->flagged;
+          h.edata->replied = e->replied;
         }
         else
         {
-          m->emails[idx]->read = h.edata->read;
-          m->emails[idx]->old = h.edata->old;
-          m->emails[idx]->deleted = h.edata->deleted;
-          m->emails[idx]->flagged = h.edata->flagged;
-          m->emails[idx]->replied = h.edata->replied;
+          e->read = h.edata->read;
+          e->old = h.edata->old;
+          e->deleted = h.edata->deleted;
+          e->flagged = h.edata->flagged;
+          e->replied = h.edata->replied;
         }
 
         /*  mailbox->emails[msgno]->received is restored from mutt_hcache_restore */
-        m->emails[idx]->edata = h.edata;
-        m->emails[idx]->free_edata = imap_edata_free;
-        STAILQ_INIT(&m->emails[idx]->tags);
+        e->edata = h.edata;
+        e->free_edata = imap_edata_free;
+        STAILQ_INIT(&e->tags);
 
         /* We take a copy of the tags so we can split the string */
         char *tags_copy = mutt_str_strdup(h.edata->flags_remote);
-        driver_tags_replace(&m->emails[idx]->tags, tags_copy);
+        driver_tags_replace(&e->tags, tags_copy);
         FREE(&tags_copy);
 
         m->msg_count++;
-        mailbox_size_add(m, m->emails[idx]);
+        mailbox_size_add(m, e);
 
         /* If this is the first time we are fetching, we need to
          * store the current state of flags back into the header cache */
         if (!eval_condstore && store_flag_updates)
-          imap_hcache_put(mdata, m->emails[idx]);
+          imap_hcache_put(mdata, e);
 
         h.edata = NULL;
         idx++;
@@ -1165,30 +1167,31 @@ static int read_headers_fetch_new(struct Mailbox *m, unsigned int msn_begin,
           continue;
         }
 
-        m->emails[idx] = email_new();
+        struct Email *e = email_new();
+        m->emails[idx] = e;
 
         mdata->max_msn = MAX(mdata->max_msn, h.edata->msn);
-        mdata->msn_index[h.edata->msn - 1] = m->emails[idx];
-        mutt_hash_int_insert(mdata->uid_hash, h.edata->uid, m->emails[idx]);
+        mdata->msn_index[h.edata->msn - 1] = e;
+        mutt_hash_int_insert(mdata->uid_hash, h.edata->uid, e);
 
-        m->emails[idx]->index = idx;
+        e->index = idx;
         /* messages which have not been expunged are ACTIVE (borrowed from mh
          * folders) */
-        m->emails[idx]->active = true;
-        m->emails[idx]->changed = false;
-        m->emails[idx]->read = h.edata->read;
-        m->emails[idx]->old = h.edata->old;
-        m->emails[idx]->deleted = h.edata->deleted;
-        m->emails[idx]->flagged = h.edata->flagged;
-        m->emails[idx]->replied = h.edata->replied;
-        m->emails[idx]->received = h.received;
-        m->emails[idx]->edata = (void *) (h.edata);
-        m->emails[idx]->free_edata = imap_edata_free;
-        STAILQ_INIT(&m->emails[idx]->tags);
+        e->active = true;
+        e->changed = false;
+        e->read = h.edata->read;
+        e->old = h.edata->old;
+        e->deleted = h.edata->deleted;
+        e->flagged = h.edata->flagged;
+        e->replied = h.edata->replied;
+        e->received = h.received;
+        e->edata = (void *) (h.edata);
+        e->free_edata = imap_edata_free;
+        STAILQ_INIT(&e->tags);
 
         /* We take a copy of the tags so we can split the string */
         char *tags_copy = mutt_str_strdup(h.edata->flags_remote);
-        driver_tags_replace(&m->emails[idx]->tags, tags_copy);
+        driver_tags_replace(&e->tags, tags_copy);
         FREE(&tags_copy);
 
         if (*maxuid < h.edata->uid)
@@ -1197,13 +1200,13 @@ static int read_headers_fetch_new(struct Mailbox *m, unsigned int msn_begin,
         rewind(fp);
         /* NOTE: if Date: header is missing, mutt_rfc822_read_header depends
          *   on h.received being set */
-        m->emails[idx]->env = mutt_rfc822_read_header(fp, m->emails[idx], false, false);
+        e->env = mutt_rfc822_read_header(fp, e, false, false);
         /* content built as a side-effect of mutt_rfc822_read_header */
-        m->emails[idx]->content->length = h.content_length;
-        mailbox_size_add(m, m->emails[idx]);
+        e->content->length = h.content_length;
+        mailbox_size_add(m, e);
 
 #ifdef USE_HCACHE
-        imap_hcache_put(mdata, m->emails[idx]);
+        imap_hcache_put(mdata, e);
 #endif /* USE_HCACHE */
 
         m->msg_count++;
@@ -1308,12 +1311,13 @@ int imap_read_headers(struct Mailbox *m, unsigned int msn_begin,
 
   if (mdata->hcache && initial_download)
   {
-    uid_validity = mutt_hcache_fetch_raw(mdata->hcache, "/UIDVALIDITY", 12);
-    puid_next = mutt_hcache_fetch_raw(mdata->hcache, "/UIDNEXT", 8);
+    size_t dlen = 0;
+    uid_validity = mutt_hcache_fetch_raw(mdata->hcache, "/UIDVALIDITY", 12, &dlen);
+    puid_next = mutt_hcache_fetch_raw(mdata->hcache, "/UIDNEXT", 8, &dlen);
     if (puid_next)
     {
       uid_next = *(unsigned int *) puid_next;
-      mutt_hcache_free(mdata->hcache, &puid_next);
+      mutt_hcache_free_raw(mdata->hcache, &puid_next);
     }
 
     if (mdata->modseq)
@@ -1329,12 +1333,13 @@ int imap_read_headers(struct Mailbox *m, unsigned int msn_begin,
 
     if (uid_validity && uid_next && (*(unsigned int *) uid_validity == mdata->uid_validity))
     {
+      size_t dlen2 = 0;
       evalhc = true;
-      pmodseq = mutt_hcache_fetch_raw(mdata->hcache, "/MODSEQ", 7);
+      pmodseq = mutt_hcache_fetch_raw(mdata->hcache, "/MODSEQ", 7, &dlen2);
       if (pmodseq)
       {
         hc_modseq = *pmodseq;
-        mutt_hcache_free(mdata->hcache, (void **) &pmodseq);
+        mutt_hcache_free_raw(mdata->hcache, (void **) &pmodseq);
       }
       if (hc_modseq)
       {
@@ -1349,7 +1354,7 @@ int imap_read_headers(struct Mailbox *m, unsigned int msn_begin,
           eval_condstore = true;
       }
     }
-    mutt_hcache_free(mdata->hcache, &uid_validity);
+    mutt_hcache_free_raw(mdata->hcache, &uid_validity);
   }
   if (evalhc)
   {
@@ -1591,7 +1596,7 @@ int imap_copy_messages(struct Mailbox *m, struct EmailList *el, const char *dest
   char mmbox[PATH_MAX];
   char prompt[PATH_MAX + 64];
   int rc;
-  struct ConnAccount conn_account;
+  struct ConnAccount cac = { { 0 } };
   enum QuadOption err_continue = MUTT_NO;
   int triedcreate = 0;
   struct EmailNode *en = STAILQ_FIRST(el);
@@ -1604,14 +1609,14 @@ int imap_copy_messages(struct Mailbox *m, struct EmailList *el, const char *dest
     return 1;
   }
 
-  if (imap_parse_path(dest, &conn_account, buf, sizeof(buf)))
+  if (imap_parse_path(dest, &cac, buf, sizeof(buf)))
   {
     mutt_debug(LL_DEBUG1, "bad destination %s\n", dest);
     return -1;
   }
 
   /* check that the save-to folder is in the same account */
-  if (!mutt_account_match(&adata->conn->account, &conn_account))
+  if (!imap_account_match(&adata->conn->account, &cac))
   {
     mutt_debug(LL_DEBUG3, "%s not same server as %s\n", dest, mailbox_path(m));
     return 1;
@@ -1886,6 +1891,8 @@ int imap_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
     return -1;
 
   struct Email *e = m->emails[msgno];
+  if (!e)
+    return -1;
 
   msg->fp = msg_cache_get(m, e);
   if (msg->fp)

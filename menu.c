@@ -32,28 +32,23 @@
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "commands.h"
 #include "context.h"
-#include "curs_lib.h"
 #include "globals.h"
 #include "keymap.h"
-#include "mutt_curses.h"
 #include "mutt_logging.h"
 #include "mutt_menu.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "opcodes.h"
 #include "options.h"
 #include "pattern.h"
 #include "protos.h"
-#ifndef USE_SLANG_CURSES
-#include "color.h"
-#endif
 #ifdef USE_SIDEBAR
 #include "sidebar.h"
 #endif
@@ -88,7 +83,7 @@ static int get_color(int index, unsigned char *s)
 {
   struct ColorLineList *color = NULL;
   struct ColorLine *np = NULL;
-  struct Email *e = Context->mailbox->emails[Context->mailbox->v2r[index]];
+  struct Email *e = mutt_get_virt_email(Context->mailbox, index);
   int type = *s;
 
   switch (type)
@@ -314,13 +309,13 @@ static void print_enriched_string(int index, int attr, unsigned char *s, bool do
 }
 
 /**
- * menu_make_entry - Create string to display in a Menu (the index)
+ * make_entry - Create string to display in a Menu (the index)
  * @param buf    Buffer for the result
  * @param buflen Length of the buffer
  * @param menu Current Menu
  * @param i    Selected item
  */
-static void menu_make_entry(char *buf, size_t buflen, struct Menu *menu, int i)
+static void make_entry(char *buf, size_t buflen, struct Menu *menu, int i)
 {
   if (menu->dialog)
   {
@@ -328,7 +323,7 @@ static void menu_make_entry(char *buf, size_t buflen, struct Menu *menu, int i)
     menu->current = -1; /* hide menubar */
   }
   else
-    menu->menu_make_entry(buf, buflen, menu, i);
+    menu->make_entry(buf, buflen, menu, i);
 }
 
 /**
@@ -342,8 +337,8 @@ static void menu_make_entry(char *buf, size_t buflen, struct Menu *menu, int i)
 static void menu_pad_string(struct Menu *menu, char *buf, size_t buflen)
 {
   char *scratch = mutt_str_strdup(buf);
-  int shift = C_ArrowCursor ? 3 : 0;
-  int cols = menu->indexwin->cols - shift;
+  int shift = C_ArrowCursor ? mutt_strwidth(C_ArrowString) + 1 : 0;
+  int cols = menu->win_index->state.cols - shift;
 
   mutt_simple_format(buf, buflen, cols, cols, JUSTIFY_LEFT, ' ', scratch,
                      mutt_str_strlen(scratch), true);
@@ -358,17 +353,19 @@ static void menu_pad_string(struct Menu *menu, char *buf, size_t buflen)
 void menu_redraw_full(struct Menu *menu)
 {
   mutt_curses_set_color(MT_COLOR_NORMAL);
-  mutt_window_clear_screen();
+  /* clear() doesn't optimize screen redraws */
+  mutt_window_move_abs(0, 0);
+  mutt_window_clrtobot();
 
   if (C_Help)
   {
     mutt_curses_set_color(MT_COLOR_STATUS);
     mutt_window_move(MuttHelpWindow, 0, 0);
-    mutt_paddstr(MuttHelpWindow->cols, menu->help);
+    mutt_paddstr(MuttHelpWindow->state.cols, menu->help);
     mutt_curses_set_color(MT_COLOR_NORMAL);
   }
   menu->offset = 0;
-  menu->pagelen = menu->indexwin->rows;
+  menu->pagelen = menu->win_index->state.rows;
 
   mutt_show_error();
 
@@ -388,8 +385,8 @@ void menu_redraw_status(struct Menu *menu)
 
   snprintf(buf, sizeof(buf), "-- NeoMutt: %s", menu->title);
   mutt_curses_set_color(MT_COLOR_STATUS);
-  mutt_window_move(menu->statuswin, 0, 0);
-  mutt_paddstr(menu->statuswin->cols, buf);
+  mutt_window_move(menu->win_ibar, 0, 0);
+  mutt_paddstr(menu->win_ibar->state.cols, buf);
   mutt_curses_set_color(MT_COLOR_NORMAL);
   menu->redraw &= ~REDRAW_STATUS;
 }
@@ -402,7 +399,9 @@ void menu_redraw_status(struct Menu *menu)
 void menu_redraw_sidebar(struct Menu *menu)
 {
   menu->redraw &= ~REDRAW_SIDEBAR;
-  mutt_sb_draw();
+  struct MuttWindow *dlg = mutt_window_dialog(menu->win_index);
+  struct MuttWindow *sidebar = mutt_window_find(dlg, WT_SIDEBAR);
+  mutt_sb_draw(sidebar);
 }
 #endif
 
@@ -420,13 +419,13 @@ void menu_redraw_index(struct Menu *menu)
   {
     if (i < menu->max)
     {
-      attr = menu->menu_color(i);
+      attr = menu->color(i);
 
-      menu_make_entry(buf, sizeof(buf), menu, i);
+      make_entry(buf, sizeof(buf), menu, i);
       menu_pad_string(menu, buf, sizeof(buf));
 
       mutt_curses_set_attr(attr);
-      mutt_window_move(menu->indexwin, i - menu->top + menu->offset, 0);
+      mutt_window_move(menu->win_index, i - menu->top + menu->offset, 0);
       do_color = true;
 
       if (i == menu->current)
@@ -434,7 +433,7 @@ void menu_redraw_index(struct Menu *menu)
         mutt_curses_set_color(MT_COLOR_INDICATOR);
         if (C_ArrowCursor)
         {
-          mutt_window_addstr("->");
+          mutt_window_addstr(C_ArrowString);
           mutt_curses_set_attr(attr);
           mutt_window_addch(' ');
         }
@@ -442,14 +441,15 @@ void menu_redraw_index(struct Menu *menu)
           do_color = false;
       }
       else if (C_ArrowCursor)
-        mutt_window_addstr("   ");
+        /* Print space chars to match the screen width of C_ArrowString */
+        mutt_window_printf("%*s", mutt_strwidth(C_ArrowString) + 1, "");
 
       print_enriched_string(i, attr, (unsigned char *) buf, do_color);
     }
     else
     {
       mutt_curses_set_color(MT_COLOR_NORMAL);
-      mutt_window_clearline(menu->indexwin, i - menu->top + menu->offset);
+      mutt_window_clearline(menu->win_index, i - menu->top + menu->offset);
     }
   }
   mutt_curses_set_color(MT_COLOR_NORMAL);
@@ -474,40 +474,43 @@ void menu_redraw_motion(struct Menu *menu)
    * over imap (if matching against ~h for instance).  This can
    * generate status messages.  So we want to call it *before* we
    * position the cursor for drawing. */
-  const int old_color = menu->menu_color(menu->oldcurrent);
-  mutt_window_move(menu->indexwin, menu->oldcurrent + menu->offset - menu->top, 0);
+  const int old_color = menu->color(menu->oldcurrent);
+  mutt_window_move(menu->win_index, menu->oldcurrent + menu->offset - menu->top, 0);
   mutt_curses_set_attr(old_color);
 
   if (C_ArrowCursor)
   {
-    /* clear the pointer */
-    mutt_window_addstr("  ");
+    /* clear the arrow */
+    /* Print space chars to match the screen width of C_ArrowString */
+    mutt_window_printf("%*s", mutt_strwidth(C_ArrowString) + 1, "");
 
     if (menu->redraw & REDRAW_MOTION_RESYNC)
     {
-      menu_make_entry(buf, sizeof(buf), menu, menu->oldcurrent);
+      make_entry(buf, sizeof(buf), menu, menu->oldcurrent);
       menu_pad_string(menu, buf, sizeof(buf));
-      mutt_window_move(menu->indexwin, menu->oldcurrent + menu->offset - menu->top, 3);
+      mutt_window_move(menu->win_index, menu->oldcurrent + menu->offset - menu->top,
+                       mutt_strwidth(C_ArrowString) + 1);
       print_enriched_string(menu->oldcurrent, old_color, (unsigned char *) buf, true);
     }
 
     /* now draw it in the new location */
     mutt_curses_set_color(MT_COLOR_INDICATOR);
-    mutt_window_mvaddstr(menu->indexwin, menu->current + menu->offset - menu->top, 0, "->");
+    mutt_window_mvaddstr(menu->win_index, menu->current + menu->offset - menu->top,
+                         0, C_ArrowString);
   }
   else
   {
     /* erase the current indicator */
-    menu_make_entry(buf, sizeof(buf), menu, menu->oldcurrent);
+    make_entry(buf, sizeof(buf), menu, menu->oldcurrent);
     menu_pad_string(menu, buf, sizeof(buf));
     print_enriched_string(menu->oldcurrent, old_color, (unsigned char *) buf, true);
 
     /* now draw the new one to reflect the change */
-    const int cur_color = menu->menu_color(menu->current);
-    menu_make_entry(buf, sizeof(buf), menu, menu->current);
+    const int cur_color = menu->color(menu->current);
+    make_entry(buf, sizeof(buf), menu, menu->current);
     menu_pad_string(menu, buf, sizeof(buf));
     mutt_curses_set_color(MT_COLOR_INDICATOR);
-    mutt_window_move(menu->indexwin, menu->current + menu->offset - menu->top, 0);
+    mutt_window_move(menu->win_index, menu->current + menu->offset - menu->top, 0);
     print_enriched_string(menu->current, cur_color, (unsigned char *) buf, false);
   }
   menu->redraw &= REDRAW_STATUS;
@@ -521,16 +524,16 @@ void menu_redraw_motion(struct Menu *menu)
 void menu_redraw_current(struct Menu *menu)
 {
   char buf[1024];
-  int attr = menu->menu_color(menu->current);
+  int attr = menu->color(menu->current);
 
-  mutt_window_move(menu->indexwin, menu->current + menu->offset - menu->top, 0);
-  menu_make_entry(buf, sizeof(buf), menu, menu->current);
+  mutt_window_move(menu->win_index, menu->current + menu->offset - menu->top, 0);
+  make_entry(buf, sizeof(buf), menu, menu->current);
   menu_pad_string(menu, buf, sizeof(buf));
 
   mutt_curses_set_color(MT_COLOR_INDICATOR);
   if (C_ArrowCursor)
   {
-    mutt_window_addstr("->");
+    mutt_window_addstr(C_ArrowString);
     mutt_curses_set_attr(attr);
     mutt_window_addch(' ');
     menu_pad_string(menu, buf, sizeof(buf));
@@ -629,7 +632,7 @@ static void menu_jump(struct Menu *menu)
     mutt_unget_event(LastKey, 0);
     char buf[128];
     buf[0] = '\0';
-    if ((mutt_get_field(_("Jump to: "), buf, sizeof(buf), 0) == 0) && buf[0])
+    if ((mutt_get_field(_("Jump to: "), buf, sizeof(buf), MUTT_COMP_NO_FLAGS) == 0) && buf[0])
     {
       if ((mutt_str_atoi(buf, &n) == 0) && (n > 0) && (n < menu->max + 1))
       {
@@ -938,7 +941,7 @@ static void menu_prev_entry(struct Menu *menu)
 }
 
 /**
- * default_color - Get the default colour for a line of the menu - Implements Menu::menu_color()
+ * default_color - Get the default colour for a line of the menu - Implements Menu::color()
  */
 static int default_color(int line)
 {
@@ -946,13 +949,13 @@ static int default_color(int line)
 }
 
 /**
- * generic_search - Search a menu for a item matching a regex - Implements Menu::menu_search()
+ * generic_search - Search a menu for a item matching a regex - Implements Menu::search()
  */
 static int generic_search(struct Menu *menu, regex_t *rx, int line)
 {
   char buf[1024];
 
-  menu_make_entry(buf, sizeof(buf), menu, line);
+  make_entry(buf, sizeof(buf), menu, line);
   return regexec(rx, buf, 0, NULL, 0);
 }
 
@@ -974,19 +977,13 @@ struct Menu *mutt_menu_new(enum MenuType type)
 {
   struct Menu *menu = mutt_mem_calloc(1, sizeof(struct Menu));
 
-  if (type >= MENU_MAX)
-    type = MENU_GENERIC;
-
   menu->type = type;
   menu->current = 0;
   menu->top = 0;
   menu->offset = 0;
   menu->redraw = REDRAW_FULL;
-  menu->pagelen = MuttIndexWindow->rows;
-  menu->indexwin = MuttIndexWindow;
-  menu->statuswin = MuttStatusWindow;
-  menu->menu_color = default_color;
-  menu->menu_search = generic_search;
+  menu->color = default_color;
+  menu->search = generic_search;
 
   return menu;
 }
@@ -1080,7 +1077,15 @@ void mutt_menu_pop_current(struct Menu *menu)
   else
   {
     CurrentMenu = MENU_MAIN;
-    mutt_window_clear_screen();
+    /* Clearing when NeoMutt exits would be an annoying change in behavior for
+     * those who have disabled alternative screens.  The option is currently
+     * set by autocrypt initialization which mixes menus and prompts outside of
+     * the normal menu system state.  */
+    if (OptMenuPopClearScreen)
+    {
+      mutt_window_move_abs(0, 0);
+      mutt_window_clrtobot();
+    }
   }
 }
 
@@ -1149,13 +1154,13 @@ void mutt_menu_current_redraw(void)
 }
 
 /**
- * menu_search - Search a menu
+ * search - Search a menu
  * @param menu Menu to search
  * @param op   Search operation, e.g. OP_SEARCH_NEXT
  * @retval >=0 Index of matching item
  * @retval -1  Search failed, or was cancelled
  */
-static int menu_search(struct Menu *menu, int op)
+static int search(struct Menu *menu, int op)
 {
   int rc = 0, wrap = 0;
   int search_dir;
@@ -1207,7 +1212,7 @@ search_next:
     mutt_message(_("Search wrapped to top"));
   while ((rc >= 0) && (rc < menu->max))
   {
-    if (menu->menu_search(menu, &re, rc) == 0)
+    if (menu->search(menu, &re, rc) == 0)
     {
       regfree(&re);
       return rc;
@@ -1298,9 +1303,9 @@ static int menu_dialog_dokey(struct Menu *menu, int *ip)
  */
 int menu_redraw(struct Menu *menu)
 {
-  if (menu->menu_custom_redraw)
+  if (menu->custom_redraw)
   {
-    menu->menu_custom_redraw(menu);
+    menu->custom_redraw(menu);
     return OP_NULL;
   }
 
@@ -1381,13 +1386,13 @@ int mutt_menu_loop(struct Menu *menu)
 
     /* move the cursor out of the way */
     if (C_ArrowCursor)
-      mutt_window_move(menu->indexwin, menu->current - menu->top + menu->offset, 2);
+      mutt_window_move(menu->win_index, menu->current - menu->top + menu->offset, 2);
     else if (C_BrailleFriendly)
-      mutt_window_move(menu->indexwin, menu->current - menu->top + menu->offset, 0);
+      mutt_window_move(menu->win_index, menu->current - menu->top + menu->offset, 0);
     else
     {
-      mutt_window_move(menu->indexwin, menu->current - menu->top + menu->offset,
-                       menu->indexwin->cols - 1);
+      mutt_window_move(menu->win_index, menu->current - menu->top + menu->offset,
+                       menu->win_index->state.cols - 1);
     }
 
     mutt_refresh();
@@ -1432,7 +1437,7 @@ int mutt_menu_loop(struct Menu *menu)
     {
       SigWinch = 0;
       mutt_resize_screen();
-      mutt_window_clear_screen();
+      clearok(stdscr, true); /* force complete redraw */
     }
 
     if (i < 0)
@@ -1503,10 +1508,10 @@ int mutt_menu_loop(struct Menu *menu)
       case OP_SEARCH_REVERSE:
       case OP_SEARCH_NEXT:
       case OP_SEARCH_OPPOSITE:
-        if (menu->menu_search && !menu->dialog) /* Searching dialogs won't work */
+        if (menu->search && !menu->dialog) /* Searching dialogs won't work */
         {
           menu->oldcurrent = menu->current;
-          menu->current = menu_search(menu, i);
+          menu->current = search(menu, i);
           if (menu->current != -1)
             menu->redraw = REDRAW_MOTION;
           else
@@ -1528,17 +1533,17 @@ int mutt_menu_loop(struct Menu *menu)
         break;
 
       case OP_TAG:
-        if (menu->menu_tag && !menu->dialog)
+        if (menu->tag && !menu->dialog)
         {
           if (menu->tagprefix && !C_AutoTag)
           {
             for (i = 0; i < menu->max; i++)
-              menu->tagged += menu->menu_tag(menu, i, 0);
+              menu->tagged += menu->tag(menu, i, 0);
             menu->redraw |= REDRAW_INDEX;
           }
           else if (menu->max)
           {
-            int j = menu->menu_tag(menu, menu->current, -1);
+            int j = menu->tag(menu, menu->current, -1);
             menu->tagged += j;
             if (j && C_Resolve && (menu->current < menu->max - 1))
             {
@@ -1568,12 +1573,12 @@ int mutt_menu_loop(struct Menu *menu)
         break;
 
       case OP_REDRAW:
-        mutt_window_clear_screen();
+        clearok(stdscr, true);
         menu->redraw = REDRAW_FULL;
         break;
 
       case OP_HELP:
-        mutt_help(menu->type, menu->indexwin->cols);
+        mutt_help(menu->type, menu->win_index->state.cols);
         menu->redraw = REDRAW_FULL;
         break;
 
@@ -1594,12 +1599,14 @@ int mutt_menu_loop(struct Menu *menu)
 }
 
 /**
- * mutt_menu_color_observer - Listen for colour changes affecting the menu - Implements ::observer_t()
+ * mutt_menu_color_observer - Listen for colour changes affecting the menu - Implements ::observer_t
  */
 int mutt_menu_color_observer(struct NotifyCallback *nc)
 {
-  if ((!nc) || (nc->event_type != NT_COLOR))
+  if (!nc->event_data)
     return -1;
+  if (nc->event_type != NT_CONFIG)
+    return 0;
 
   int s = nc->event_subtype;
 
@@ -1615,14 +1622,20 @@ int mutt_menu_color_observer(struct NotifyCallback *nc)
   if (!simple && !lists)
     return 0;
 
-  struct EventColor *ec = (struct EventColor *) nc->event;
+  struct EventColor *ec = nc->event_data;
 
   // Colour deleted from a list
   if (!ec->set && lists && Context && Context->mailbox)
   {
+    struct Mailbox *m = Context->mailbox;
     // Force re-caching of index colors
-    for (int i = 0; i < Context->mailbox->msg_count; i++)
-      Context->mailbox->emails[i]->pair = 0;
+    for (int i = 0; i < m->msg_count; i++)
+    {
+      struct Email *e = m->emails[i];
+      if (!e)
+        break;
+      e->pair = 0;
+    }
   }
 
   mutt_menu_set_redraw_full(MENU_MAIN);
@@ -1630,14 +1643,16 @@ int mutt_menu_color_observer(struct NotifyCallback *nc)
 }
 
 /**
- * mutt_menu_config_observer - Listen for config changes affecting the menu - Implements ::observer_t()
+ * mutt_menu_config_observer - Listen for config changes affecting the menu - Implements ::observer_t
  */
 int mutt_menu_config_observer(struct NotifyCallback *nc)
 {
-  if (!nc)
+  if (!nc->event_data)
     return -1;
+  if (nc->event_type != NT_CONFIG)
+    return 0;
 
-  struct EventConfig *ec = (struct EventConfig *) nc->event;
+  struct EventConfig *ec = nc->event_data;
 
   const struct ConfigDef *cdef = ec->he->data;
   ConfigRedrawFlags flags = cdef->type & R_REDRAW_MASK;
@@ -1665,7 +1680,7 @@ int mutt_menu_config_observer(struct NotifyCallback *nc)
     OptRedrawTree = true;
 
   if (flags & R_REFLOW)
-    mutt_window_reflow();
+    mutt_window_reflow(NULL);
 #ifdef USE_SIDEBAR
   if (flags & R_SIDEBAR)
     mutt_menu_set_current_redraw(REDRAW_SIDEBAR);

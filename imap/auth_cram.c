@@ -30,10 +30,9 @@
 #include <stdio.h>
 #include <string.h>
 #include "imap_private.h"
-#include "mutt/mutt.h"
-#include "conn/conn.h"
+#include "mutt/lib.h"
+#include "conn/lib.h"
 #include "auth.h"
-#include "mutt_account.h"
 #include "mutt_socket.h"
 
 #define MD5_BLOCK_LEN 64
@@ -90,7 +89,7 @@ static void hmac_md5(const char *password, char *challenge, unsigned char *respo
 }
 
 /**
- * imap_auth_cram_md5 - Authenticate using CRAM-MD5
+ * imap_auth_cram_md5 - Authenticate using CRAM-MD5 - Implements ImapAuth::authenticate()
  * @param adata Imap Account data
  * @param method Name of this authentication method
  * @retval #ImapAuthRes Result, e.g. #IMAP_AUTH_SUCCESS

@@ -25,9 +25,9 @@
  *
  * IMAP GSS authentication method
  *
- * An overview of the authentication method is in RFC 1731.
+ * An overview of the authentication method is in RFC1731.
  *
- * An overview of the C API used is in RFC 2744.
+ * An overview of the C API used is in RFC2744.
  * Of note is section 3.2, which describes gss_buffer_desc.
  * The length should not include a terminating '\0' byte, and the client
  * should not expect the value field to be '\0'terminated.
@@ -38,10 +38,9 @@
 #include <stdio.h>
 #include <string.h>
 #include "imap_private.h"
-#include "mutt/mutt.h"
-#include "conn/conn.h"
+#include "mutt/lib.h"
+#include "conn/lib.h"
 #include "auth.h"
-#include "mutt_account.h"
 #include "mutt_logging.h"
 #include "mutt_socket.h"
 #ifdef HAVE_HEIMDAL
@@ -99,7 +98,7 @@ static void print_gss_error(OM_uint32 err_maj, OM_uint32 err_min)
 }
 
 /**
- * imap_auth_gss - GSS Authentication support
+ * imap_auth_gss - GSS Authentication support - Implements ImapAuth::authenticate()
  * @param adata Imap Account data
  * @param method Name of this authentication method
  * @retval #ImapAuthRes Result, e.g. #IMAP_AUTH_SUCCESS

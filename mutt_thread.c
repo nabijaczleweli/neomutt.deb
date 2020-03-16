@@ -32,7 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
@@ -512,6 +512,8 @@ static struct Hash *make_subj_hash(struct Mailbox *m)
   for (int i = 0; i < m->msg_count; i++)
   {
     struct Email *e = m->emails[i];
+    if (!e || !e->env)
+      continue;
     if (e->env->real_subj)
       mutt_hash_insert(hash, e->env->real_subj, e);
   }
@@ -605,12 +607,13 @@ void mutt_clear_threads(struct Context *ctx)
 
   for (int i = 0; i < m->msg_count; i++)
   {
+    struct Email *e = m->emails[i];
+    if (!e)
+      break;
+
     /* mailbox may have been only partially read */
-    if (m->emails[i])
-    {
-      m->emails[i]->thread = NULL;
-      m->emails[i]->threaded = false;
-    }
+    e->thread = NULL;
+    e->threaded = false;
   }
   ctx->tree = NULL;
 
@@ -627,7 +630,7 @@ void mutt_clear_threads(struct Context *ctx)
  */
 static int compare_threads(const void *a, const void *b)
 {
-  static sort_t *sort_func = NULL;
+  static sort_t sort_func = NULL;
 
   if (a && b)
   {
@@ -791,18 +794,19 @@ static void check_subjects(struct Mailbox *m, bool init)
   if (!m)
     return;
 
-  struct Email *e = NULL;
-  struct MuttThread *tmp = NULL;
   for (int i = 0; i < m->msg_count; i++)
   {
-    e = m->emails[i];
+    struct Email *e = m->emails[i];
+    if (!e || !e->thread)
+      continue;
+
     if (e->thread->check_subject)
       e->thread->check_subject = false;
     else if (!init)
       continue;
 
     /* figure out which messages have subjects different than their parents' */
-    tmp = e->thread->parent;
+    struct MuttThread *tmp = e->thread->parent;
     while (tmp && !tmp->message)
     {
       tmp = tmp->parent;
@@ -872,6 +876,8 @@ void mutt_sort_threads(struct Context *ctx, bool init)
   for (i = 0; i < m->msg_count; i++)
   {
     e = m->emails[i];
+    if (!e)
+      continue;
 
     if (!e->thread)
     {
@@ -964,11 +970,16 @@ void mutt_sort_threads(struct Context *ctx, bool init)
   for (i = 0; i < m->msg_count; i++)
   {
     e = m->emails[i];
+    if (!e)
+      break;
+
     if (e->threaded)
       continue;
     e->threaded = true;
 
     thread = e->thread;
+    if (!thread)
+      continue;
     using_refs = 0;
 
     while (true)
@@ -1136,6 +1147,9 @@ int mutt_aside_thread(struct Email *e, bool forwards, bool subthreads)
  */
 int mutt_parent_message(struct Context *ctx, struct Email *e, bool find_root)
 {
+  if (!ctx || !e)
+    return -1;
+
   struct MuttThread *thread = NULL;
   struct Email *e_parent = NULL;
 
@@ -1196,6 +1210,9 @@ void mutt_set_vnum(struct Context *ctx)
   for (int i = 0; i < m->msg_count; i++)
   {
     e = m->emails[i];
+    if (!e)
+      break;
+
     if (e->vnum >= 0)
     {
       e->vnum = m->vcount;
@@ -1227,6 +1244,11 @@ int mutt_traverse_thread(struct Context *ctx, struct Email *e_cur, MuttThreadFla
   if (((C_Sort & SORT_MASK) != SORT_THREADS) && !(flag & MUTT_THREAD_GET_HIDDEN))
   {
     mutt_error(_("Threading is not enabled"));
+    return e_cur->vnum;
+  }
+
+  if (!e_cur->thread)
+  {
     return e_cur->vnum;
   }
 
@@ -1438,6 +1460,9 @@ struct Hash *mutt_make_id_hash(struct Mailbox *m)
   for (int i = 0; i < m->msg_count; i++)
   {
     struct Email *e = m->emails[i];
+    if (!e || !e->env)
+      continue;
+
     if (e->env->message_id)
       mutt_hash_insert(hash, e->env->message_id, e);
   }

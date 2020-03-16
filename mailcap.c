@@ -33,11 +33,10 @@
  */
 
 #include "config.h"
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "email/lib.h"
 #include "mailcap.h"
 #include "globals.h"

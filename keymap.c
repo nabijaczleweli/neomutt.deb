@@ -33,24 +33,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "keymap.h"
-#include "curs_lib.h"
 #include "functions.h"
 #include "globals.h"
+#include "init.h"
 #include "mutt_commands.h"
-#include "mutt_curses.h"
 #include "mutt_logging.h"
-#include "mutt_window.h"
-#include "ncrypt/ncrypt.h"
 #include "opcodes.h"
 #include "options.h"
+#include "ncrypt/lib.h"
 #ifndef USE_SLANG_CURSES
 #include <strings.h>
 #endif
 #ifdef USE_IMAP
-#include "imap/imap.h"
+#include "imap/lib.h"
 #endif
 #ifdef USE_INOTIFY
 #include "monitor.h"
@@ -144,7 +143,8 @@ static struct Mapping KeyNames[] = {
   { NULL, 0 },
 };
 
-int LastKey; /**< contains the last key the user pressed */
+int LastKey;        ///< contains the last key the user pressed
+keycode_t AbortKey; ///< code of key to abort prompts, normally Ctrl-G
 
 struct Keymap *Keymaps[MENU_MAX];
 
@@ -818,6 +818,48 @@ static const char *km_keyname(int c)
 }
 
 /**
+ * mutt_init_abort_key - Parse the abort_key config string
+ *
+ * Parse the string into C_AbortKeyStr and put the keycode into AbortKey.
+ */
+void mutt_init_abort_key(void)
+{
+  keycode_t buf[2];
+  size_t len = parsekeys(C_AbortKeyStr, buf, mutt_array_size(buf));
+  if (len == 0)
+  {
+    mutt_error(_("Abort key is not set, defaulting to Ctrl-G"));
+    AbortKey = ctrl('G');
+    return;
+  }
+  if (len > 1)
+  {
+    mutt_warning(
+        _("Specified abort key sequence (%s) will be truncated to first key"), C_AbortKeyStr);
+  }
+  AbortKey = buf[0];
+}
+
+/**
+ * mutt_abort_key_config_observer - Listen for abort_key config changes - Implements ::observer_t
+ */
+int mutt_abort_key_config_observer(struct NotifyCallback *nc)
+{
+  if (!nc->event_data)
+    return -1;
+  if (nc->event_type != NT_CONFIG)
+    return 0;
+
+  struct EventConfig *ec = nc->event_data;
+
+  if (mutt_str_strcmp(ec->name, "abort_key") != 0)
+    return 0;
+
+  mutt_init_abort_key();
+  return 0;
+}
+
+/**
  * km_expand_key - Get the key string bound to a Keymap
  * @param s   Buffer for the key string
  * @param len Length of buffer
@@ -1105,7 +1147,7 @@ void km_error_key(enum MenuType menu)
 }
 
 /**
- * mutt_parse_push - Parse the 'push' command - Implements ::command_t
+ * mutt_parse_push - Parse the 'push' command - Implements Command::parse()
  */
 enum CommandResult mutt_parse_push(struct Buffer *buf, struct Buffer *s,
                                    unsigned long data, struct Buffer *err)
@@ -1266,7 +1308,7 @@ const struct Binding *km_get_table(enum MenuType menu)
 }
 
 /**
- * mutt_parse_bind - Parse the 'bind' command - Implements ::command_t
+ * mutt_parse_bind - Parse the 'bind' command - Implements Command::parse()
  *
  * bind menu-name `<key_sequence>` function-name
  */
@@ -1402,7 +1444,7 @@ static void km_unbind_all(struct Keymap **map, unsigned long mode)
 }
 
 /**
- * mutt_parse_unbind - Parse the 'unbind' command - Implements ::command_t
+ * mutt_parse_unbind - Parse the 'unbind' command - Implements Command::parse()
  *
  * Command unbinds:
  * - one binding in one menu-name
@@ -1472,7 +1514,7 @@ enum CommandResult mutt_parse_unbind(struct Buffer *buf, struct Buffer *s,
 }
 
 /**
- * mutt_parse_macro - Parse the 'macro' command - Implements ::command_t
+ * mutt_parse_macro - Parse the 'macro' command - Implements Command::parse()
  *
  * macro `<menu>` `<key>` `<macro>` `<description>`
  */
@@ -1528,7 +1570,7 @@ enum CommandResult mutt_parse_macro(struct Buffer *buf, struct Buffer *s,
 }
 
 /**
- * mutt_parse_exec - Parse the 'exec' command - Implements ::command_t
+ * mutt_parse_exec - Parse the 'exec' command - Implements Command::parse()
  */
 enum CommandResult mutt_parse_exec(struct Buffer *buf, struct Buffer *s,
                                    unsigned long data, struct Buffer *err)
@@ -1581,15 +1623,16 @@ void mutt_what_key(void)
 {
   int ch;
 
-  mutt_window_mvprintw(MuttMessageWindow, 0, 0, _("Enter keys (^G to abort): "));
+  mutt_window_mvprintw(MuttMessageWindow, 0, 0, _("Enter keys (%s to abort): "),
+                       km_keyname(AbortKey));
   do
   {
     ch = getch();
-    if ((ch != ERR) && (ch != ctrl('G')))
+    if ((ch != ERR) && (ch != AbortKey))
     {
       mutt_message(_("Char = %s, Octal = %o, Decimal = %d"), km_keyname(ch), ch, ch);
     }
-  } while (ch != ERR && ch != ctrl('G'));
+  } while (ch != ERR && ch != AbortKey);
 
   mutt_flushinp();
   mutt_clear_error();

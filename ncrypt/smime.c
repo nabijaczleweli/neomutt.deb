@@ -36,31 +36,30 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
+#include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "alias.h"
 #include "copy.h"
 #include "crypt.h"
 #include "cryptglue.h"
-#include "curs_lib.h"
-#include "filter.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "handler.h"
 #include "keymap.h"
-#include "mutt_curses.h"
 #include "mutt_logging.h"
 #include "mutt_menu.h"
 #include "muttlib.h"
-#include "ncrypt.h"
 #include "opcodes.h"
 #include "protos.h"
 #include "send.h"
 #include "sendlib.h"
 #include "state.h"
+#include "ncrypt/lib.h"
 #ifdef CRYPT_BACKEND_CLASSIC_SMIME
 #include "smime.h"
 #endif
@@ -89,13 +88,13 @@ char *C_SmimeVerifyOpaqueCommand; ///< Config: (smime) External command to verif
  */
 struct SmimeCommandContext
 {
-  const char *key;           /**< %k */
-  const char *cryptalg;      /**< %a */
-  const char *digestalg;     /**< %d */
-  const char *fname;         /**< %f */
-  const char *sig_fname;     /**< %s */
-  const char *certificates;  /**< %c */
-  const char *intermediates; /**< %i */
+  const char *key;           ///< %k
+  const char *cryptalg;      ///< %a
+  const char *digestalg;     ///< %d
+  const char *fname;         ///< %f
+  const char *sig_fname;     ///< %s
+  const char *certificates;  ///< %c
+  const char *intermediates; ///< %i
 };
 
 char SmimePass[256];
@@ -339,11 +338,15 @@ static const char *fmt_smime_command(char *buf, size_t buflen, size_t col, int c
   }
 
   if (optional)
+  {
     mutt_expando_format(buf, buflen, col, cols, if_str, fmt_smime_command, data,
                         MUTT_FORMAT_NO_FLAGS);
+  }
   else if (flags & MUTT_FORMAT_OPTIONAL)
+  {
     mutt_expando_format(buf, buflen, col, cols, else_str, fmt_smime_command,
                         data, MUTT_FORMAT_NO_FLAGS);
+  }
 
   return src;
 }
@@ -407,8 +410,8 @@ static pid_t smime_invoke(FILE **fp_smime_in, FILE **fp_smime_out, FILE **fp_smi
 
   smime_command(cmd, sizeof(cmd), &cctx, format);
 
-  return mutt_create_filter_fd(cmd, fp_smime_in, fp_smime_out, fp_smime_err,
-                               fp_smime_infd, fp_smime_outfd, fp_smime_errfd);
+  return filter_create_fd(cmd, fp_smime_in, fp_smime_out, fp_smime_err,
+                          fp_smime_infd, fp_smime_outfd, fp_smime_errfd);
 }
 
 /*
@@ -442,7 +445,7 @@ static char *smime_key_flags(KeyFlags flags)
 }
 
 /**
- * smime_make_entry - Format a menu item for the smime key list - Implements Menu::menu_make_entry()
+ * smime_make_entry - Format a menu item for the smime key list - Implements Menu::make_entry()
  */
 static void smime_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
@@ -553,10 +556,43 @@ static struct SmimeKey *smime_select_key(struct SmimeKey *keys, char *query)
   mutt_make_help(buf, sizeof(buf), _("Help"), MENU_SMIME, OP_HELP);
   strcat(helpstr, buf);
 
+  struct MuttWindow *dlg =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+#ifdef USE_DEBUG_WINDOW
+  dlg->name = "smime";
+#endif
+  dlg->type = WT_DIALOG;
+  struct MuttWindow *index =
+      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+  index->type = WT_INDEX;
+  struct MuttWindow *ibar = mutt_window_new(
+      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
+  ibar->type = WT_INDEX_BAR;
+
+  if (C_StatusOnTop)
+  {
+    mutt_window_add_child(dlg, ibar);
+    mutt_window_add_child(dlg, index);
+  }
+  else
+  {
+    mutt_window_add_child(dlg, index);
+    mutt_window_add_child(dlg, ibar);
+  }
+
+  dialog_push(dlg);
+
   /* Create the menu */
   menu = mutt_menu_new(MENU_SMIME);
+
+  menu->pagelen = index->state.rows;
+  menu->win_index = index;
+  menu->win_ibar = ibar;
+
   menu->max = table_index;
-  menu->menu_make_entry = smime_make_entry;
+  menu->make_entry = smime_make_entry;
   menu->help = helpstr;
   menu->data = table;
   menu->title = title;
@@ -611,6 +647,8 @@ static struct SmimeKey *smime_select_key(struct SmimeKey *keys, char *query)
   mutt_menu_pop_current(menu);
   mutt_menu_free(&menu);
   FREE(&table);
+  dialog_pop();
+  mutt_window_free(&dlg);
 
   return selected_key;
 }
@@ -773,11 +811,11 @@ static struct SmimeKey *smime_get_key_by_hash(char *hash, bool only_public_key)
  * @param mailbox          Email address to match
  * @param abilities        Abilities to match, see #KeyFlags
  * @param only_public_key  If true, only get the public keys
- * @param may_ask          If true, the user may be asked to select a key
+ * @param oppenc_mode      If true, use opportunistic encryption
  * @retval ptr Matching key
  */
 static struct SmimeKey *smime_get_key_by_addr(char *mailbox, KeyFlags abilities,
-                                              bool only_public_key, bool may_ask)
+                                              bool only_public_key, bool oppenc_mode)
 {
   if (!mailbox)
     return NULL;
@@ -824,11 +862,11 @@ static struct SmimeKey *smime_get_key_by_addr(char *mailbox, KeyFlags abilities,
 
   if (matches)
   {
-    if (!may_ask)
+    if (oppenc_mode)
     {
       if (trusted_match)
         return_key = smime_copy_key(trusted_match);
-      else if (valid_match)
+      else if (valid_match && !C_CryptOpportunisticEncryptStrongKeys)
         return_key = smime_copy_key(valid_match);
       else
         return_key = NULL;
@@ -936,7 +974,7 @@ static void getkeys(char *mailbox)
 {
   char *k = NULL;
 
-  struct SmimeKey *key = smime_get_key_by_addr(mailbox, KEYFLAG_CANENCRYPT, false, true);
+  struct SmimeKey *key = smime_get_key_by_addr(mailbox, KEYFLAG_CANENCRYPT, false, false);
 
   if (!key)
   {
@@ -1042,7 +1080,7 @@ char *smime_class_find_keys(struct AddressList *al, bool oppenc_mode)
   struct Address *a = NULL;
   TAILQ_FOREACH(a, al, entries)
   {
-    key = smime_get_key_by_addr(a->mailbox, KEYFLAG_CANENCRYPT, true, !oppenc_mode);
+    key = smime_get_key_by_addr(a->mailbox, KEYFLAG_CANENCRYPT, true, oppenc_mode);
     if (!key && !oppenc_mode)
     {
       char buf[1024];
@@ -1111,7 +1149,7 @@ static int smime_handle_cert_email(char *certificate, char *mailbox, bool copy,
     return 1;
   }
 
-  mutt_wait_filter(pid);
+  filter_wait(pid);
 
   fflush(fp_out);
   rewind(fp_out);
@@ -1210,7 +1248,7 @@ static char *smime_extract_certificate(const char *infile)
     goto cleanup;
   }
 
-  mutt_wait_filter(pid);
+  filter_wait(pid);
 
   fflush(fp_out);
   rewind(fp_out);
@@ -1245,7 +1283,7 @@ static char *smime_extract_certificate(const char *infile)
     goto cleanup;
   }
 
-  mutt_wait_filter(pid);
+  filter_wait(pid);
 
   mutt_file_unlink(mutt_b2s(pk7out));
 
@@ -1320,7 +1358,7 @@ static char *smime_extract_signer_certificate(const char *infile)
     goto cleanup;
   }
 
-  mutt_wait_filter(pid);
+  filter_wait(pid);
 
   fflush(fp_out);
   rewind(fp_out);
@@ -1376,7 +1414,7 @@ void smime_class_invoke_import(const char *infile, const char *mailbox)
   buf[0] = '\0';
   if (C_SmimeAskCertLabel)
   {
-    if ((mutt_get_field(_("Label for certificate: "), buf, sizeof(buf), 0) != 0) ||
+    if ((mutt_get_field(_("Label for certificate: "), buf, sizeof(buf), MUTT_COMP_NO_FLAGS) != 0) ||
         (buf[0] == '\0'))
     {
       mutt_file_fclose(&fp_out);
@@ -1403,7 +1441,7 @@ void smime_class_invoke_import(const char *infile, const char *mailbox)
     fputc('\n', fp_smime_in);
     mutt_file_fclose(&fp_smime_in);
 
-    mutt_wait_filter(pid);
+    filter_wait(pid);
 
     mutt_file_unlink(certfile);
     FREE(&certfile);
@@ -1612,7 +1650,7 @@ struct Body *smime_class_build_smime_entity(struct Body *a, char *certlist)
 
   mutt_file_fclose(&fp_smime_in);
 
-  mutt_wait_filter(pid);
+  filter_wait(pid);
   mutt_file_unlink(mutt_b2s(smime_infile));
 
   fflush(fp_out);
@@ -1709,7 +1747,7 @@ static char *openssl_md_to_smime_micalg(char *md)
 /**
  * smime_class_sign_message - Implements CryptModuleSpecs::sign_message()
  */
-struct Body *smime_class_sign_message(struct Body *a)
+struct Body *smime_class_sign_message(struct Body *a, const struct AddressList *from)
 {
   struct Body *t = NULL;
   struct Body *retval = NULL;
@@ -1782,7 +1820,7 @@ struct Body *smime_class_sign_message(struct Body *a)
   fputc('\n', fp_smime_in);
   mutt_file_fclose(&fp_smime_in);
 
-  mutt_wait_filter(pid);
+  filter_wait(pid);
 
   /* check for errors from OpenSSL */
   err = 0;
@@ -1977,7 +2015,7 @@ int smime_class_verify_one(struct Body *sigbdy, struct State *s, const char *tem
     fflush(fp_smime_out);
     mutt_file_fclose(&fp_smime_out);
 
-    if (mutt_wait_filter(pid))
+    if (filter_wait(pid))
       badsig = -1;
     else
     {
@@ -2105,7 +2143,7 @@ static struct Body *smime_handle_entity(struct Body *m, struct State *s, FILE *f
 
   mutt_file_fclose(&fp_smime_in);
 
-  mutt_wait_filter(pid);
+  filter_wait(pid);
   mutt_file_unlink(mutt_b2s(&tmpfname));
 
   if (s->flags & MUTT_DISPLAY)
@@ -2446,6 +2484,8 @@ int smime_class_send_menu(struct Email *e)
         e->security |= SEC_ENCRYPT;
         do
         {
+          struct Buffer errmsg = mutt_buffer_make(0);
+          int rc = CSR_SUCCESS;
           switch (mutt_multi_choice(_("Choose algorithm family: (1) DES, (2) "
                                       "RC2, (3) AES, or (c)lear?"),
                                     // L10N: Options for: Choose algorithm family: (1) DES, (2) RC2, (3) AES, or (c)lear?
@@ -2457,10 +2497,12 @@ int smime_class_send_menu(struct Email *e)
                                                  _("12")))
               {
                 case 1:
-                  mutt_str_replace(&C_SmimeEncryptWith, "des");
+                  rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",
+                                                "des", &errmsg);
                   break;
                 case 2:
-                  mutt_str_replace(&C_SmimeEncryptWith, "des3");
+                  rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",
+                                                "des3", &errmsg);
                   break;
               }
               break;
@@ -2472,13 +2514,16 @@ int smime_class_send_menu(struct Email *e)
                           _("123")))
               {
                 case 1:
-                  mutt_str_replace(&C_SmimeEncryptWith, "rc2-40");
+                  rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",
+                                                "rc2-40", &errmsg);
                   break;
                 case 2:
-                  mutt_str_replace(&C_SmimeEncryptWith, "rc2-64");
+                  rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",
+                                                "rc2-64", &errmsg);
                   break;
                 case 3:
-                  mutt_str_replace(&C_SmimeEncryptWith, "rc2-128");
+                  rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",
+                                                "rc2-128", &errmsg);
                   break;
               }
               break;
@@ -2490,25 +2535,34 @@ int smime_class_send_menu(struct Email *e)
                           _("123")))
               {
                 case 1:
-                  mutt_str_replace(&C_SmimeEncryptWith, "aes128");
+                  rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",
+                                                "aes128", &errmsg);
                   break;
                 case 2:
-                  mutt_str_replace(&C_SmimeEncryptWith, "aes192");
+                  rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",
+                                                "aes192", &errmsg);
                   break;
                 case 3:
-                  mutt_str_replace(&C_SmimeEncryptWith, "aes256");
+                  rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",
+                                                "aes256", &errmsg);
                   break;
               }
               break;
 
             case 4:
-              FREE(&C_SmimeEncryptWith);
+              rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",
+                                            NULL, &errmsg);
             /* (c)lear */
             /* fallthrough */
             case -1: /* Ctrl-G or Enter */
               choice = 0;
               break;
           }
+
+          if ((CSR_RESULT(rc) != CSR_SUCCESS) && !mutt_buffer_is_empty(&errmsg))
+            mutt_error("%s", mutt_b2s(&errmsg));
+
+          mutt_buffer_dealloc(&errmsg);
         } while (choice == -1);
         break;
       }

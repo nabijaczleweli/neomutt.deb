@@ -31,8 +31,9 @@
 #include <stdio.h>
 #include "mutt.h"
 #include "keymap.h"
-#include "ncrypt/ncrypt.h"
+#include "ncrypt/lib.h"
 
+struct Buffer;
 struct Context;
 struct Email;
 struct EmailList;

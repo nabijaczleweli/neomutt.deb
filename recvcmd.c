@@ -28,25 +28,25 @@
  */
 
 #include "config.h"
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
+#include "recvcmd.h"
 #include "alias.h"
 #include "context.h"
 #include "copy.h"
-#include "curs_lib.h"
 #include "globals.h"
 #include "handler.h"
 #include "hdrline.h"
+#include "init.h"
 #include "mutt_body.h"
 #include "mutt_logging.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "options.h"
 #include "protos.h"
@@ -235,16 +235,17 @@ void mutt_attach_bounce(struct Mailbox *m, FILE *fp, struct AttachCtx *actx, str
   }
 
   buf[0] = '\0';
-  mutt_addrlist_write(buf, sizeof(buf), &al, true);
+  mutt_addrlist_write(&al, buf, sizeof(buf), true);
 
 #define EXTRA_SPACE (15 + 7 + 2)
   /* See commands.c.  */
   snprintf(prompt, sizeof(prompt) - 4,
            ngettext("Bounce message to %s?", "Bounce messages to %s?", p), buf);
 
-  if (mutt_strwidth(prompt) > MuttMessageWindow->cols - EXTRA_SPACE)
+  if (mutt_strwidth(prompt) > MuttMessageWindow->state.cols - EXTRA_SPACE)
   {
-    mutt_simple_format(prompt, sizeof(prompt) - 4, 0, MuttMessageWindow->cols - EXTRA_SPACE,
+    mutt_simple_format(prompt, sizeof(prompt) - 4, 0,
+                       MuttMessageWindow->state.cols - EXTRA_SPACE,
                        JUSTIFY_LEFT, 0, prompt, sizeof(prompt), false);
     mutt_str_strcat(prompt, sizeof(prompt), "...?");
   }
@@ -598,7 +599,7 @@ static void attach_forward_bodies(FILE *fp, struct Email *e, struct AttachCtx *a
 
   /* now that we have the template, send it. */
   struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
-  el_add_email(&el, e_parent);
+  emaillist_add_email(&el, e_parent);
   ci_send_message(SEND_NO_FLAGS, e_tmp, mutt_b2s(tmpbody), NULL, &el);
   emaillist_clear(&el);
   mutt_buffer_pool_release(&tmpbody);
@@ -733,7 +734,7 @@ static void attach_forward_msgs(FILE *fp, struct AttachCtx *actx,
     email_free(&e_tmp);
 
   struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
-  el_add_email(&el, e_cur);
+  emaillist_add_email(&el, e_cur);
   ci_send_message(flags, e_tmp,
                   mutt_buffer_is_empty(tmpbody) ? NULL : mutt_b2s(tmpbody), NULL, &el);
   emaillist_clear(&el);
@@ -1045,7 +1046,7 @@ void mutt_attach_reply(FILE *fp, struct Email *e, struct AttachCtx *actx,
   mutt_file_fclose(&fp_tmp);
 
   struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
-  el_add_email(&el, e_parent ? e_parent : (e_cur ? e_cur->email : NULL));
+  emaillist_add_email(&el, e_parent ? e_parent : (e_cur ? e_cur->email : NULL));
   if (ci_send_message(flags, e_tmp, mutt_b2s(tmpbody), NULL, &el) == 0)
   {
     mutt_set_flag(Context->mailbox, e, MUTT_REPLIED, true);

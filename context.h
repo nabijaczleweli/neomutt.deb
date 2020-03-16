@@ -28,6 +28,7 @@
 
 struct Email;
 struct EmailList;
+struct Mailbox;
 struct NotifyCallback;
 
 /**
@@ -74,11 +75,10 @@ struct Context *ctx_new             (void);
 void            ctx_update          (struct Context *ctx);
 void            ctx_update_tables   (struct Context *ctx, bool committing);
 
-bool message_is_tagged (struct Context *ctx, int index);
-bool message_is_visible(struct Context *ctx, int index);
+bool message_is_tagged (struct Context *ctx, struct Email *e);
+bool message_is_visible(struct Context *ctx, struct Email *e);
+struct Email *mutt_get_virt_email(struct Mailbox *m, int vnum);
 
-int  el_add_email   (struct EmailList *el, struct Email *e);
 int  el_add_tagged  (struct EmailList *el, struct Context *ctx, struct Email *e, bool use_tagged);
-void emaillist_clear(struct EmailList *el);
 
 #endif /* MUTT_CONTEXT_H */

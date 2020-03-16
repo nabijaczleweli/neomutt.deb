@@ -24,7 +24,7 @@
 #define MUTT_MUTT_PARSE_H
 
 #include <regex.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "email/lib.h"
 
 struct Mailbox;
@@ -47,5 +47,6 @@ extern struct ListHead InlineExclude;
 
 int  mutt_count_body_parts(struct Mailbox *m, struct Email *e);
 void mutt_parse_mime_message(struct Mailbox *m, struct Email *e);
+void mutt_attachmatch_free(struct AttachMatch **ptr);
 
 #endif /* MUTT_MUTT_PARSE_H */

@@ -30,11 +30,29 @@
 
 #include "config.h"
 #include <string.h>
-#include "mutt/mutt.h"
+#include "imap_private.h" // IWYU pragma: keep
+#include "mutt/lib.h"
 #include "auth.h"
 
 /* These Config Variables are only used in imap/auth.c */
 struct Slist *C_ImapAuthenticators; ///< Config: (imap) List of allowed IMAP authentication methods
+
+/**
+ * struct ImapAuth - IMAP authentication multiplexor
+ */
+struct ImapAuth
+{
+  /**
+   * authenticate - Authenticate an IMAP connection
+   * @param adata Imap Account data
+   * @param method Use this named method, or any available method if NULL
+   * @retval #ImapAuthRes Result, e.g. #IMAP_AUTH_SUCCESS
+   */
+  enum ImapAuthRes (*authenticate)(struct ImapAccountData *adata, const char *method);
+
+  const char *method; ///< Name of authentication method supported, NULL means variable.
+      ///< If this is not null, authenticate may ignore the second parameter.
+};
 
 /**
  * imap_authenticators - Accepted authentication methods

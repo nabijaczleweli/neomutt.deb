@@ -33,7 +33,6 @@
  */
 
 #include "config.h"
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,21 +40,20 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
+#include "lib.h"
 #include "crypt.h"
 #include "cryptglue.h"
-#include "curs_lib.h"
-#include "filter.h"
 #include "globals.h"
 #include "handler.h"
 #include "hook.h"
 #include "mutt_attach.h"
 #include "muttlib.h"
-#include "ncrypt.h"
 #include "options.h"
 #include "pgpinvoke.h"
 #include "pgpkey.h"
@@ -610,7 +608,7 @@ int pgp_class_application_handler(struct Body *m, struct State *s)
 
           mutt_file_fclose(&fp_pgp_in);
 
-          wait_filter_rc = mutt_wait_filter(pid);
+          wait_filter_rc = filter_wait(pid);
 
           fflush(fp_pgp_err);
           /* If we are expecting an encrypted message, verify status fd output.
@@ -915,11 +913,11 @@ int pgp_class_verify_one(struct Body *sigbdy, struct State *s, const char *tempf
     if (pgp_copy_checksig(fp_pgp_err, s->fp_out) >= 0)
       badsig = 0;
 
-    const int rv = mutt_wait_filter(pid);
+    const int rv = filter_wait(pid);
     if (rv)
       badsig = -1;
 
-    mutt_debug(LL_DEBUG1, "mutt_wait_filter returned %d\n", rv);
+    mutt_debug(LL_DEBUG1, "filter_wait returned %d\n", rv);
   }
 
   mutt_file_fclose(&fp_pgp_err);
@@ -1064,7 +1062,7 @@ static struct Body *pgp_decrypt_part(struct Body *a, struct State *s,
   }
 
   mutt_file_fclose(&fp_pgp_out);
-  rv = mutt_wait_filter(pid);
+  rv = filter_wait(pid);
   mutt_file_unlink(mutt_b2s(pgptmpfile));
 
   fflush(fp_pgp_err);
@@ -1215,8 +1213,10 @@ int pgp_class_encrypted_handler(struct Body *a, struct State *s)
   {
     mutt_perror(_("Can't create temporary file"));
     if (s->flags & MUTT_DISPLAY)
+    {
       state_attach_puts(s,
                         _("[-- Error: could not create temporary file --]\n"));
+    }
     return -1;
   }
 
@@ -1292,7 +1292,7 @@ int pgp_class_encrypted_handler(struct Body *a, struct State *s)
 /**
  * pgp_class_sign_message - Implements CryptModuleSpecs::sign_message()
  */
-struct Body *pgp_class_sign_message(struct Body *a)
+struct Body *pgp_class_sign_message(struct Body *a, const struct AddressList *from)
 {
   struct Body *t = NULL, *rv = NULL;
   char buf[1024];
@@ -1364,14 +1364,14 @@ struct Body *pgp_class_sign_message(struct Body *a)
     fputs(buf, stdout);
   }
 
-  if (mutt_wait_filter(pid) && C_PgpCheckExit)
+  if (filter_wait(pid) && C_PgpCheckExit)
     empty = true;
 
   mutt_file_fclose(&fp_pgp_err);
   mutt_file_fclose(&fp_pgp_out);
   unlink(mutt_b2s(signedfile));
 
-  if (fclose(fp_sig) != 0)
+  if (mutt_file_fclose(&fp_sig) != 0)
   {
     mutt_perror("fclose");
     unlink(mutt_b2s(sigfile));
@@ -1544,7 +1544,8 @@ char *pgp_class_find_keys(struct AddressList *addrlist, bool oppenc_mode)
  * @warning "a" is no longer freed in this routine, you need to free it later.
  * This is necessary for $fcc_attach.
  */
-struct Body *pgp_class_encrypt_message(struct Body *a, char *keylist, bool sign)
+struct Body *pgp_class_encrypt_message(struct Body *a, char *keylist, bool sign,
+                                       const struct AddressList *from)
 {
   char buf[1024];
   FILE *fp_pgp_in = NULL, *fp_tmp = NULL;
@@ -1609,7 +1610,7 @@ struct Body *pgp_class_encrypt_message(struct Body *a, char *keylist, bool sign)
   }
   mutt_file_fclose(&fp_pgp_in);
 
-  if (mutt_wait_filter(pid) && C_PgpCheckExit)
+  if (filter_wait(pid) && C_PgpCheckExit)
     empty = true;
 
   unlink(mutt_b2s(pgpinfile));
@@ -1780,7 +1781,7 @@ struct Body *pgp_class_traditional_encryptsign(struct Body *a, SecurityFlags fla
     fprintf(fp_pgp_in, "%s\n", PgpPass);
   mutt_file_fclose(&fp_pgp_in);
 
-  if (mutt_wait_filter(pid) && C_PgpCheckExit)
+  if (filter_wait(pid) && C_PgpCheckExit)
     empty = true;
 
   mutt_file_unlink(mutt_b2s(pgpinfile));

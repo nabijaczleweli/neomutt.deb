@@ -45,40 +45,36 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
-#include "conn/conn.h"
-#include "mutt.h"
+#include "conn/lib.h"
+#include "gui/lib.h"
+#include "debug/lib.h"
 #include "alias.h"
 #include "browser.h"
-#include "color.h"
 #include "context.h"
-#include "curs_lib.h"
 #include "globals.h"
 #include "hook.h"
 #include "index.h"
+#include "init.h"
 #include "keymap.h"
 #include "mutt_attach.h"
-#include "mutt_commands.h"
-#include "mutt_curses.h"
 #include "mutt_history.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
 #include "mutt_menu.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "myvar.h"
-#include "ncrypt/ncrypt.h"
 #include "options.h"
 #include "protos.h"
 #include "send.h"
 #include "sendlib.h"
-#include "terminal.h"
 #include "version.h"
+#include "ncrypt/lib.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
@@ -86,13 +82,13 @@
 #include "sidebar.h"
 #endif
 #ifdef USE_IMAP
-#include "imap/imap.h"
+#include "imap/lib.h"
 #endif
 #ifdef USE_NNTP
-#include "nntp/nntp.h"
+#include "nntp/lib.h"
 #endif
 #ifdef USE_AUTOCRYPT
-#include "autocrypt/autocrypt.h"
+#include "autocrypt/lib.h"
 #endif
 
 /* These Config Variables are only used in main.c */
@@ -112,105 +108,11 @@ typedef uint8_t CliFlags;         ///< Flags for command line options, e.g. #MUT
 // clang-format on
 
 /**
- * test_parse_set - Test the config parsing
- */
-static void test_parse_set(void)
-{
-  const char *vars[] = {
-    "from",        // ADDRESS
-    "beep",        // BOOL
-    "ispell",      // COMMAND
-    "mbox_type",   // MAGIC
-    "to_chars",    // MBTABLE
-    "net_inc",     // NUMBER
-    "signature",   // PATH
-    "print",       // QUAD
-    "mask",        // REGEX
-    "sort",        // SORT
-    "attribution", // STRING
-    "zzz",         // UNKNOWN
-    "my_var",      // MY_VAR
-  };
-
-  const char *commands[] = {
-    "set",
-    "toggle",
-    "reset",
-    "unset",
-  };
-
-  const char *tests[] = {
-    "%s %s",       "%s %s=42",  "%s %s?",     "%s ?%s",    "%s ?%s=42",
-    "%s ?%s?",     "%s no%s",   "%s no%s=42", "%s no%s?",  "%s inv%s",
-    "%s inv%s=42", "%s inv%s?", "%s &%s",     "%s &%s=42", "%s &%s?",
-  };
-
-  struct Buffer tmp = mutt_buffer_make(256);
-  struct Buffer err = mutt_buffer_make(256);
-  char line[64];
-
-  for (size_t v = 0; v < mutt_array_size(vars); v++)
-  {
-    // printf("--------------------------------------------------------------------------------\n");
-    // printf("VARIABLE %s\n", vars[v]);
-    for (size_t c = 0; c < mutt_array_size(commands); c++)
-    {
-      // printf("----------------------------------------\n");
-      // printf("COMMAND %s\n", commands[c]);
-      for (size_t t = 0; t < mutt_array_size(tests); t++)
-      {
-        mutt_buffer_reset(&tmp);
-        mutt_buffer_reset(&err);
-
-        snprintf(line, sizeof(line), tests[t], commands[c], vars[v]);
-        printf("%-26s", line);
-        enum CommandResult rc = mutt_parse_rc_line(line, &tmp, &err);
-        printf("%2d %s\n", rc, err.data);
-      }
-      printf("\n");
-    }
-    // printf("\n");
-  }
-
-  mutt_buffer_dealloc(&tmp);
-  mutt_buffer_dealloc(&err);
-}
-
-/**
- * reset_tilde - Temporary measure
- */
-static void reset_tilde(struct ConfigSet *cs)
-{
-  static const char *names[] = {
-    "alias_file", "certificate_file", "debug_file",
-    "folder",     "history_file",     "mbox",
-    "newsrc",     "news_cache_dir",   "postponed",
-    "record",     "signature",
-  };
-
-  struct Buffer value = mutt_buffer_make(256);
-  for (size_t i = 0; i < mutt_array_size(names); i++)
-  {
-    struct HashElem *he = cs_get_elem(cs, names[i]);
-    if (!he)
-      continue;
-    mutt_buffer_reset(&value);
-    cs_he_initial_get(cs, he, &value);
-    mutt_expand_path(value.data, value.dsize);
-    cs_he_initial_set(cs, he, value.data, NULL);
-    cs_he_reset(cs, he, NULL);
-  }
-  mutt_buffer_dealloc(&value);
-}
-
-/**
  * mutt_exit - Leave NeoMutt NOW
  * @param code Value to return to the calling environment
  */
 void mutt_exit(int code)
 {
-  clear();
-  refresh();
   mutt_endwin();
   exit(code);
 }
@@ -299,7 +201,7 @@ static int start_curses(void)
   SLtt_Ignore_Beep = 1; /* don't do that #*$@^! annoying visual beep! */
   SLsmg_Display_Eight_Bit = 128; /* characters above this are printable */
   SLtt_set_color(0, NULL, "default", "default");
-#if SLANG_VERSION >= 20000
+#if (SLANG_VERSION >= 20000)
   SLutf8_enable(-1);
 #endif
 #else
@@ -364,11 +266,8 @@ static void init_locale(void)
  *
  * Find the login name, real name, home directory and shell.
  */
-bool get_user_info(struct ConfigSet *cs)
+static bool get_user_info(struct ConfigSet *cs)
 {
-  mutt_str_replace(&Username, mutt_str_getenv("USER"));
-  mutt_str_replace(&HomeDir, mutt_str_getenv("HOME"));
-
   const char *shell = mutt_str_getenv("SHELL");
   if (shell)
     cs_str_initial_set(cs, "shell", shell, NULL);
@@ -436,15 +335,16 @@ int main(int argc, char *argv[], char *envp[])
   bool hide_sensitive = false;
   bool batch_mode = false;
   bool edit_infile = false;
+#ifdef USE_DEBUG_PARSE_TEST
   bool test_config = false;
-  extern char *optarg;
-  extern int optind;
+#endif
   int double_dash = argc, nargc = 1;
   int rc = 1;
   bool repeat_error = false;
   struct Buffer folder = mutt_buffer_make(0);
   struct Buffer expanded_infile = mutt_buffer_make(0);
   struct Buffer tempfile = mutt_buffer_make(0);
+  struct ConfigSet *cs = NULL;
 
   MuttLogger = log_disp_terminal;
 
@@ -564,9 +464,11 @@ int main(int argc, char *argv[], char *envp[])
         case 's':
           subject = optarg;
           break;
+#ifdef USE_DEBUG_PARSE_TEST
         case 'T':
           test_config = true;
           break;
+#endif
         case 'v':
           version++;
           break;
@@ -607,31 +509,36 @@ int main(int argc, char *argv[], char *envp[])
     goto main_ok; // TEST04: neomutt -v
   }
 
-  Config = init_config(500);
-  if (!Config)
+  mutt_str_replace(&Username, mutt_str_getenv("USER"));
+  mutt_str_replace(&HomeDir, mutt_str_getenv("HOME"));
+
+  cs = init_config(500);
+  if (!cs)
     goto main_curses;
-  NeoMutt = neomutt_new(Config);
+  NeoMutt = neomutt_new(cs);
 
-  notify_set_parent(Config->notify, NeoMutt->notify);
+#ifdef USE_DEBUG_NOTIFY
+  notify_observer_add(NeoMutt->notify, debug_notify_observer, NULL);
+#endif
 
-  if (!get_user_info(Config))
+  if (!get_user_info(cs))
     goto main_exit;
 
+#ifdef USE_DEBUG_PARSE_TEST
   if (test_config)
   {
-    cs_str_initial_set(Config, "from", "rich@flatcap.org", NULL);
-    cs_str_reset(Config, "from", NULL);
+    cs_str_initial_set(cs, "from", "rich@flatcap.org", NULL);
+    cs_str_reset(cs, "from", NULL);
     myvar_set("my_var", "foo");
     test_parse_set();
     goto main_ok;
   }
-
-  reset_tilde(Config);
+#endif
 
   if (dfile)
   {
-    cs_str_initial_set(Config, "debug_file", dfile, NULL);
-    cs_str_reset(Config, "debug_file", NULL);
+    cs_str_initial_set(cs, "debug_file", dfile, NULL);
+    cs_str_reset(cs, "debug_file", NULL);
   }
 
   if (dlevel)
@@ -642,8 +549,8 @@ int main(int argc, char *argv[], char *envp[])
       mutt_error(_("Error: value '%s' is invalid for -d"), dlevel);
       goto main_exit; // TEST07: neomutt -d xyz
     }
-    cs_str_initial_set(Config, "debug_level", dlevel, NULL);
-    cs_str_reset(Config, "debug_level", NULL);
+    cs_str_initial_set(cs, "debug_level", dlevel, NULL);
+    cs_str_reset(cs, "debug_level", NULL);
   }
 
   mutt_log_prep();
@@ -691,26 +598,27 @@ int main(int argc, char *argv[], char *envp[])
   if (!OptNoCurses)
   {
     int crc = start_curses();
-
     if (crc != 0)
       goto main_curses; // TEST08: can't test -- fake term?
 
     /* check whether terminal status is supported (must follow curses init) */
     TsSupported = mutt_ts_capability();
-    mutt_window_reflow();
+    mutt_window_set_root(LINES, COLS);
   }
 
   /* set defaults and read init files */
-  int rc2 = mutt_init(flags & MUTT_CLI_NOSYSRC, &commands);
+  int rc2 = mutt_init(cs, flags & MUTT_CLI_NOSYSRC, &commands);
   mutt_list_free(&commands);
   if (rc2 != 0)
     goto main_curses;
 
+  mutt_init_abort_key();
+
   /* The command line overrides the config */
   if (dlevel)
-    cs_str_reset(Config, "debug_level", NULL);
+    cs_str_reset(cs, "debug_level", NULL);
   if (dfile)
-    cs_str_reset(Config, "debug_file", NULL);
+    cs_str_reset(cs, "debug_file", NULL);
 
   if (mutt_log_start() < 0)
   {
@@ -721,20 +629,20 @@ int main(int argc, char *argv[], char *envp[])
 #ifdef USE_NNTP
   /* "$news_server" precedence: command line, config file, environment, system file */
   if (cli_nntp)
-    cs_str_string_set(Config, "news_server", cli_nntp, NULL);
+    cs_str_string_set(cs, "news_server", cli_nntp, NULL);
   if (!C_NewsServer)
   {
     const char *env_nntp = mutt_str_getenv("NNTPSERVER");
-    cs_str_string_set(Config, "news_server", env_nntp, NULL);
+    cs_str_string_set(cs, "news_server", env_nntp, NULL);
   }
   if (!C_NewsServer)
   {
     char buf[1024];
     char *server = mutt_file_read_keyword(SYSCONFDIR "/nntpserver", buf, sizeof(buf));
-    cs_str_string_set(Config, "news_server", server, NULL);
+    cs_str_string_set(cs, "news_server", server, NULL);
   }
   if (C_NewsServer)
-    cs_str_initial_set(Config, "news_server", C_NewsServer, NULL);
+    cs_str_initial_set(cs, "news_server", C_NewsServer, NULL);
 #endif
 
   /* Initialize crypto backends.  */
@@ -743,14 +651,14 @@ int main(int argc, char *argv[], char *envp[])
   if (new_magic)
   {
     struct Buffer err = mutt_buffer_make(0);
-    int r = cs_str_initial_set(Config, "mbox_type", new_magic, &err);
+    int r = cs_str_initial_set(cs, "mbox_type", new_magic, &err);
     if (CSR_RESULT(r) != CSR_SUCCESS)
     {
       mutt_error(err.data);
       mutt_buffer_dealloc(&err);
       goto main_curses;
     }
-    cs_str_reset(Config, "mbox_type", NULL);
+    cs_str_reset(cs, "mbox_type", NULL);
   }
 
   if (!STAILQ_EMPTY(&queries))
@@ -761,7 +669,7 @@ int main(int argc, char *argv[], char *envp[])
 
   if (dump_variables)
   {
-    dump_config(Config, hide_sensitive ? CS_DUMP_HIDE_SENSITIVE : CS_DUMP_NO_FLAGS, stdout);
+    dump_config(cs, hide_sensitive ? CS_DUMP_HIDE_SENSITIVE : CS_DUMP_NO_FLAGS, stdout);
     goto main_ok; // TEST18: neomutt -D
   }
 
@@ -840,12 +748,13 @@ int main(int argc, char *argv[], char *envp[])
     goto main_ok; // TEST22: neomutt -B
   }
 
-  notify_observer_add(Config->notify, NT_CONFIG, 0, mutt_hist_observer, 0);
-  notify_observer_add(Config->notify, NT_CONFIG, 0, mutt_log_observer, 0);
-  notify_observer_add(Config->notify, NT_CONFIG, 0, mutt_menu_config_observer, 0);
-  notify_observer_add(Config->notify, NT_CONFIG, 0, mutt_reply_observer, 0);
+  notify_observer_add(NeoMutt->notify, mutt_hist_observer, NULL);
+  notify_observer_add(NeoMutt->notify, mutt_log_observer, NULL);
+  notify_observer_add(NeoMutt->notify, mutt_menu_config_observer, NULL);
+  notify_observer_add(NeoMutt->notify, mutt_reply_observer, NULL);
+  notify_observer_add(NeoMutt->notify, mutt_abort_key_config_observer, NULL);
   if (Colors)
-    notify_observer_add(Colors->notify, NT_COLOR, 0, mutt_menu_color_observer, 0);
+    notify_observer_add(Colors->notify, mutt_menu_color_observer, NULL);
 
   if (sendflags & SEND_POSTPONED)
   {
@@ -1019,7 +928,7 @@ int main(int argc, char *argv[], char *envp[])
           if (mutt_str_startswith(np->data, "X-Mutt-Resume-Draft:", CASE_IGNORE))
           {
             if (C_ResumeEditedDraftFiles)
-              cs_str_native_set(Config, "resume_draft_files", true, NULL);
+              cs_str_native_set(cs, "resume_draft_files", true, NULL);
 
             STAILQ_REMOVE(&e->env->userhdrs, np, ListNode, entries);
             FREE(&np->data);
@@ -1081,9 +990,16 @@ int main(int argc, char *argv[], char *envp[])
       mutt_list_free(&attach);
     }
 
-    rv = ci_send_message(sendflags, e, bodyfile, NULL, NULL);
-    /* We WANT the "Mail sent." and any possible, later error */
-    log_queue_empty();
+    if (isatty(0))
+    {
+      rv = ci_send_message(sendflags, e, bodyfile, NULL, NULL);
+      /* We WANT the "Mail sent." and any possible, later error */
+      log_queue_empty();
+    }
+    else
+    {
+      mutt_error(_("Error initializing terminal"));
+    }
     if (ErrorBufMessage)
       mutt_message("%s", ErrorBuf);
 
@@ -1236,7 +1152,7 @@ int main(int argc, char *argv[], char *envp[])
 
     mutt_folder_hook(mutt_b2s(&folder), NULL);
     mutt_startup_shutdown_hook(MUTT_STARTUP_HOOK);
-    notify_send(NeoMutt->notify, NT_GLOBAL, NT_GLOBAL_STARTUP, 0);
+    notify_send(NeoMutt->notify, NT_GLOBAL, NT_GLOBAL_STARTUP, NULL);
 
     repeat_error = true;
     struct Mailbox *m = mx_path_resolve(mutt_b2s(&folder));
@@ -1244,21 +1160,26 @@ int main(int argc, char *argv[], char *envp[])
     if (!Context)
     {
       if (m->account)
-      {
         account_mailbox_remove(m->account, m);
-        mailbox_free(&m);
-        m = NULL;
-      }
-      else
-        mailbox_free(&m);
+
+      mailbox_free(&m);
     }
     if (Context || !explicit_folder)
     {
 #ifdef USE_SIDEBAR
       mutt_sb_set_open_mailbox(Context ? Context->mailbox : NULL);
 #endif
-      mutt_index_menu();
+      struct MuttWindow *dlg = index_pager_init();
+      notify_observer_add(NeoMutt->notify, mutt_dlg_index_observer, dlg);
+      dialog_push(dlg);
+      mutt_index_menu(dlg);
+      dialog_pop();
+      notify_observer_remove(NeoMutt->notify, mutt_dlg_index_observer, dlg);
+      index_pager_shutdown(dlg);
+      mutt_window_free(&dlg);
       ctx_free(&Context);
+      log_queue_empty();
+      repeat_error = false;
     }
 #ifdef USE_IMAP
     imap_logout_all();
@@ -1271,22 +1192,18 @@ int main(int argc, char *argv[], char *envp[])
 #endif
     // TEST43: neomutt (no change to mailbox)
     // TEST44: neomutt (change mailbox)
-    MuttLogger = log_disp_terminal;
-    log_queue_flush(log_disp_terminal);
   }
 
 main_ok:
   rc = 0;
 main_curses:
-  clear();
-  refresh();
   mutt_endwin();
-  log_queue_flush(log_disp_terminal);
   mutt_unlink_temp_attachments();
   /* Repeat the last message to the user */
   if (repeat_error && ErrorBufMessage)
     puts(ErrorBuf);
 main_exit:
+  MuttLogger = log_disp_queue;
   mutt_buffer_dealloc(&folder);
   mutt_buffer_dealloc(&expanded_infile);
   mutt_buffer_dealloc(&tempfile);
@@ -1300,7 +1217,8 @@ main_exit:
   mutt_keys_free();
   myvarlist_free(&MyVars);
   neomutt_free(&NeoMutt);
-  cs_free(&Config);
+  cs_free(&cs);
+  log_queue_flush(log_disp_terminal);
   log_queue_empty();
   mutt_log_stop();
   return rc;

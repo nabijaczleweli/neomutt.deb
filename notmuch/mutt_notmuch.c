@@ -31,8 +31,8 @@
  * - all functions have to be covered by "mailbox->magic == MUTT_NOTMUCH" check
  *   (it's implemented in nm_mdata_get() and init_mailbox() functions).
  *
- * - exception are nm_nonctx_* functions -- these functions use nm_default_uri
- *   (or parse URI from another resource)
+ * - exception are nm_nonctx_* functions -- these functions use nm_default_url
+ *   (or parse URL from another resource)
  */
 
 /**
@@ -52,28 +52,30 @@
 #include <time.h>
 #include <unistd.h>
 #include "notmuch_private.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
-#include "mutt_notmuch.h"
-#include "curs_lib.h"
+#include "lib.h"
 #include "globals.h"
-#include "hcache/hcache.h"
 #include "index.h"
-#include "maildir/lib.h"
 #include "mutt_thread.h"
 #include "mx.h"
 #include "progress.h"
 #include "protos.h"
+#include "hcache/lib.h"
+#include "maildir/lib.h"
 
-const char NmUriProtocol[] = "notmuch://";
-const int NmUriProtocolLen = sizeof(NmUriProtocol) - 1;
+struct stat;
+
+const char NmUrlProtocol[] = "notmuch://";
+const int NmUrlProtocolLen = sizeof(NmUrlProtocol) - 1;
 
 /* These Config Variables are only used in notmuch/mutt_notmuch.c */
 int C_NmDbLimit;       ///< Config: (notmuch) Default limit for Notmuch queries
-char *C_NmDefaultUri;  ///< Config: (notmuch) Path to the Notmuch database
+char *C_NmDefaultUrl;  ///< Config: (notmuch) Path to the Notmuch database
 char *C_NmExcludeTags; ///< Config: (notmuch) Exclude messages with these tags
 int C_NmOpenTimeout;   ///< Config: (notmuch) Database timeout
 char *C_NmQueryType; ///< Config: (notmuch) Default query type: 'threads' or 'messages'
@@ -102,7 +104,7 @@ static header_cache_t *nm_hcache_open(struct Mailbox *m)
  * nm_hcache_close - Close the header cache
  * @param h Header cache handle
  */
-void nm_hcache_close(header_cache_t *h)
+static void nm_hcache_close(header_cache_t *h)
 {
 #ifdef USE_HCACHE
   mutt_hcache_close(h);
@@ -197,15 +199,15 @@ void nm_mdata_free(void **ptr)
 
 /**
  * nm_mdata_new - Create a new NmMboxData object from a query
- * @param uri Notmuch query string
+ * @param url Notmuch query string
  * @retval ptr New NmMboxData struct
  *
  * A new NmMboxData struct is created, then the query is parsed and saved
  * within it.  This should be freed using nm_mdata_free().
  */
-struct NmMboxData *nm_mdata_new(const char *uri)
+struct NmMboxData *nm_mdata_new(const char *url)
 {
-  if (!uri)
+  if (!url)
     return NULL;
 
   struct NmMboxData *mdata = mutt_mem_calloc(1, sizeof(struct NmMboxData));
@@ -213,10 +215,10 @@ struct NmMboxData *nm_mdata_new(const char *uri)
 
   mdata->db_limit = C_NmDbLimit;
   mdata->query_type = string_to_query_type(C_NmQueryType);
-  mdata->db_url = url_parse(uri);
+  mdata->db_url = url_parse(url);
   if (!mdata->db_url)
   {
-    mutt_error(_("failed to parse notmuch uri: %s"), uri);
+    mutt_error(_("failed to parse notmuch url: %s"), url);
     FREE(&mdata);
     return NULL;
   }
@@ -271,21 +273,21 @@ struct NmEmailData *nm_edata_new(void)
  * @retval ptr  Mailbox with default Notmuch settings
  * @retval NULL Error, it's impossible to create an NmMboxData
  */
-struct NmMboxData *nm_get_default_data(void)
+static struct NmMboxData *nm_get_default_data(void)
 {
-  // path to DB + query + URI "decoration"
-  char uri[PATH_MAX + 1024 + 32];
+  // path to DB + query + url "decoration"
+  char url[PATH_MAX + 1024 + 32];
 
-  // Try to use C_NmDefaultUri or C_Folder.
-  // If neither are set, it is impossible to create a Notmuch URI.
-  if (C_NmDefaultUri)
-    snprintf(uri, sizeof(uri), "%s", C_NmDefaultUri);
+  // Try to use C_NmDefaultUrl or C_Folder.
+  // If neither are set, it is impossible to create a Notmuch URL.
+  if (C_NmDefaultUrl)
+    snprintf(url, sizeof(url), "%s", C_NmDefaultUrl);
   else if (C_Folder)
-    snprintf(uri, sizeof(uri), "notmuch://%s", C_Folder);
+    snprintf(url, sizeof(url), "notmuch://%s", C_Folder);
   else
     return NULL;
 
-  return nm_mdata_new(uri);
+  return nm_mdata_new(url);
 }
 
 /**
@@ -385,7 +387,7 @@ static bool query_window_check_timebase(const char *timebase)
 static void query_window_reset(void)
 {
   mutt_debug(LL_DEBUG2, "entering\n");
-  cs_str_native_set(Config, "nm_query_window_current_position", 0, NULL);
+  cs_subset_str_native_set(NeoMutt->sub, "nm_query_window_current_position", 0, NULL);
 }
 
 /**
@@ -940,12 +942,8 @@ static void append_message(header_cache_t *h, struct Mailbox *m,
   }
 
 #ifdef USE_HCACHE
-  void *from_cache = mutt_hcache_fetch(h, path, mutt_str_strlen(path));
-  if (from_cache)
-  {
-    e = mutt_hcache_restore(from_cache);
-  }
-  else
+  e = mutt_hcache_fetch(h, path, mutt_str_strlen(path), 0).email;
+  if (!e)
 #endif
   {
     if (access(path, F_OK) == 0)
@@ -961,13 +959,18 @@ static void append_message(header_cache_t *h, struct Mailbox *m,
         if (fp)
         {
           e = maildir_parse_stream(MUTT_MAILDIR, fp, newpath, false, NULL);
-          fclose(fp);
+          mutt_file_fclose(&fp);
 
           mutt_debug(LL_DEBUG1, "nm: not up-to-date: %s -> %s\n", path, newpath);
         }
       }
       FREE(&folder);
     }
+
+#ifdef USE_HCACHE
+    mutt_hcache_store(h, newpath ? newpath : path,
+                      mutt_str_strlen(newpath ? newpath : path), e, 0);
+#endif
   }
 
   if (!e)
@@ -976,18 +979,6 @@ static void append_message(header_cache_t *h, struct Mailbox *m,
     goto done;
   }
 
-#ifdef USE_HCACHE
-
-  if (from_cache)
-  {
-    mutt_hcache_free(h, &from_cache);
-  }
-  else
-  {
-    mutt_hcache_store(h, newpath ? newpath : path,
-                      mutt_str_strlen(newpath ? newpath : path), e, 0);
-  }
-#endif
   if (init_email(e, newpath ? newpath : path, msg) != 0)
   {
     email_free(&e);
@@ -1694,7 +1685,7 @@ int nm_read_entire_thread(struct Mailbox *m, struct Email *e)
   rc = 0;
 
   if (m->msg_count > mdata->oldmsgcount)
-    mailbox_changed(m, MBN_INVALID);
+    mailbox_changed(m, NT_MAILBOX_INVALID);
 done:
   if (q)
     notmuch_query_destroy(q);
@@ -1713,7 +1704,7 @@ done:
 /**
  * nm_parse_type_from_query - Parse a query type out of a query
  * @param mdata Mailbox, used for the query_type
- * @param buf   Buffer for URI
+ * @param buf   Buffer for URL
  *
  * If a user writes a query for a vfolder and includes a type= statement, that
  * type= will be encoded, which Notmuch will treat as part of the query=
@@ -1741,18 +1732,18 @@ void nm_parse_type_from_query(struct NmMboxData *mdata, char *buf)
 }
 
 /**
- * nm_uri_from_query - Turn a query into a URI
+ * nm_url_from_query - Turn a query into a URL
  * @param m      Mailbox
- * @param buf    Buffer for URI
+ * @param buf    Buffer for URL
  * @param buflen Length of buffer
- * @retval ptr  Query as a URI
+ * @retval ptr  Query as a URL
  * @retval NULL Error
  */
-char *nm_uri_from_query(struct Mailbox *m, char *buf, size_t buflen)
+char *nm_url_from_query(struct Mailbox *m, char *buf, size_t buflen)
 {
   mutt_debug(LL_DEBUG2, "(%s)\n", buf);
   struct NmMboxData *mdata = nm_mdata_get(m);
-  char uri[PATH_MAX + 1024 + 32]; /* path to DB + query + URI "decoration" */
+  char url[PATH_MAX + 1024 + 32]; /* path to DB + query + URL "decoration" */
   int added;
   bool using_default_data = false;
 
@@ -1772,31 +1763,31 @@ char *nm_uri_from_query(struct Mailbox *m, char *buf, size_t buflen)
 
   if (get_limit(mdata) == C_NmDbLimit)
   {
-    added = snprintf(uri, sizeof(uri), "%s%s?type=%s&query=", NmUriProtocol,
+    added = snprintf(url, sizeof(url), "%s%s?type=%s&query=", NmUrlProtocol,
                      nm_db_get_filename(m), query_type_to_string(mdata->query_type));
   }
   else
   {
-    added = snprintf(uri, sizeof(uri), "%s%s?type=%s&limit=%d&query=", NmUriProtocol,
+    added = snprintf(url, sizeof(url), "%s%s?type=%s&limit=%d&query=", NmUrlProtocol,
                      nm_db_get_filename(m),
                      query_type_to_string(mdata->query_type), get_limit(mdata));
   }
 
-  if (added >= sizeof(uri))
+  if (added >= sizeof(url))
   {
-    // snprintf output was truncated, so can't create URI
+    // snprintf output was truncated, so can't create URL
     return NULL;
   }
 
-  url_pct_encode(&uri[added], sizeof(uri) - added, buf);
+  url_pct_encode(&url[added], sizeof(url) - added, buf);
 
-  mutt_str_strfcpy(buf, uri, buflen);
+  mutt_str_strfcpy(buf, url, buflen);
   buf[buflen - 1] = '\0';
 
   if (using_default_data)
     nm_mdata_free((void **) &mdata);
 
-  mutt_debug(LL_DEBUG1, "nm: uri from query '%s'\n", buf);
+  mutt_debug(LL_DEBUG1, "nm: url from query '%s'\n", buf);
   return buf;
 }
 
@@ -1936,7 +1927,7 @@ static int nm_mbox_check_stats(struct Mailbox *m, int flags)
   url = url_parse(mailbox_path(m));
   if (!url)
   {
-    mutt_error(_("failed to parse notmuch uri: %s"), mailbox_path(m));
+    mutt_error(_("failed to parse notmuch url: %s"), mailbox_path(m));
     goto done;
   }
 
@@ -1961,12 +1952,12 @@ static int nm_mbox_check_stats(struct Mailbox *m, int flags)
   db_filename = url->path;
   if (!db_filename)
   {
-    if (C_NmDefaultUri)
+    if (C_NmDefaultUrl)
     {
-      if (nm_path_probe(C_NmDefaultUri, NULL) == MUTT_NOTMUCH)
-        db_filename = C_NmDefaultUri + NmUriProtocolLen;
+      if (nm_path_probe(C_NmDefaultUrl, NULL) == MUTT_NOTMUCH)
+        db_filename = C_NmDefaultUrl + NmUrlProtocolLen;
       else
-        db_filename = C_NmDefaultUri;
+        db_filename = C_NmDefaultUrl;
     }
     else if (C_Folder)
       db_filename = C_Folder;
@@ -1980,6 +1971,8 @@ static int nm_mbox_check_stats(struct Mailbox *m, int flags)
 
   /* all emails */
   m->msg_count = count_query(db, db_query, limit);
+  while (m->email_max < m->msg_count)
+    mx_alloc_memory(m);
 
   // holder variable for extending query to unread/flagged
   char *qstr = NULL;
@@ -2124,7 +2117,7 @@ done:
 /**
  * nm_ac_find - Find an Account that matches a Mailbox path - Implements MxOps::ac_find()
  */
-struct Account *nm_ac_find(struct Account *a, const char *path)
+static struct Account *nm_ac_find(struct Account *a, const char *path)
 {
   if (!a || (a->magic != MUTT_NOTMUCH) || !path)
     return NULL;
@@ -2135,7 +2128,7 @@ struct Account *nm_ac_find(struct Account *a, const char *path)
 /**
  * nm_ac_add - Add a Mailbox to an Account - Implements MxOps::ac_add()
  */
-int nm_ac_add(struct Account *a, struct Mailbox *m)
+static int nm_ac_add(struct Account *a, struct Mailbox *m)
 {
   if (!a || !m || (m->magic != MUTT_NOTMUCH))
     return -1;
@@ -2165,16 +2158,6 @@ static int nm_mbox_open(struct Mailbox *m)
   mutt_debug(LL_DEBUG1, "nm: reading messages...[current count=%d]\n", m->msg_count);
 
   progress_reset(m);
-
-  if (!m->emails)
-  {
-    /* Allocate some memory to get started */
-    m->email_max = m->msg_count;
-    m->msg_count = 0;
-    m->vcount = 0;
-    m->size = 0;
-    mx_alloc_memory(m);
-  }
 
   int rc = -1;
 
@@ -2248,7 +2231,13 @@ static int nm_mbox_check(struct Mailbox *m, int *index_hint)
   mdata->noprogress = true;
 
   for (int i = 0; i < m->msg_count; i++)
-    m->emails[i]->active = false;
+  {
+    struct Email *e = m->emails[i];
+    if (!e)
+      break;
+
+    e->active = false;
+  }
 
   int limit = get_limit(mdata);
 
@@ -2310,7 +2299,11 @@ static int nm_mbox_check(struct Mailbox *m, int *index_hint)
 
   for (int i = 0; i < m->msg_count; i++)
   {
-    if (!m->emails[i]->active)
+    struct Email *e = m->emails[i];
+    if (!e)
+      break;
+
+    if (!e->active)
     {
       occult = true;
       break;
@@ -2318,7 +2311,7 @@ static int nm_mbox_check(struct Mailbox *m, int *index_hint)
   }
 
   if (m->msg_count > mdata->oldmsgcount)
-    mailbox_changed(m, MBN_INVALID);
+    mailbox_changed(m, NT_MAILBOX_INVALID);
 done:
   if (q)
     notmuch_query_destroy(q);
@@ -2350,7 +2343,7 @@ static int nm_mbox_sync(struct Mailbox *m, int *index_hint)
 
   int rc = 0;
   struct Progress progress;
-  char *uri = mutt_str_strdup(mailbox_path(m));
+  char *url = mutt_str_strdup(mailbox_path(m));
   bool changed = false;
 
   mutt_debug(LL_DEBUG1, "nm: sync start\n");
@@ -2369,6 +2362,9 @@ static int nm_mbox_sync(struct Mailbox *m, int *index_hint)
   {
     char old_file[PATH_MAX], new_file[PATH_MAX];
     struct Email *e = m->emails[i];
+    if (!e)
+      break;
+
     struct NmEmailData *edata = e->edata;
 
     if (!m->quiet)
@@ -2389,7 +2385,7 @@ static int nm_mbox_sync(struct Mailbox *m, int *index_hint)
     mutt_buffer_strcpy(&m->pathbuf, edata->folder);
     m->magic = edata->magic;
     rc = mh_sync_mailbox_message(m, i, h);
-    mutt_buffer_strcpy(&m->pathbuf, uri);
+    mutt_buffer_strcpy(&m->pathbuf, url);
     m->magic = MUTT_NOTMUCH;
 
     if (rc)
@@ -2409,7 +2405,7 @@ static int nm_mbox_sync(struct Mailbox *m, int *index_hint)
     FREE(&edata->oldpath);
   }
 
-  mutt_buffer_strcpy(&m->pathbuf, uri);
+  mutt_buffer_strcpy(&m->pathbuf, url);
   m->magic = MUTT_NOTMUCH;
 
   nm_db_release(m);
@@ -2422,7 +2418,7 @@ static int nm_mbox_sync(struct Mailbox *m, int *index_hint)
 
   nm_hcache_close(h);
 
-  FREE(&uri);
+  FREE(&url);
   mutt_debug(LL_DEBUG1, "nm: .... sync done [rc=%d]\n", rc);
   return rc;
 }
@@ -2442,10 +2438,13 @@ static int nm_mbox_close(struct Mailbox *m)
  */
 static int nm_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
 {
-  if (!m || !m->emails || !msg)
+  if (!m || !m->emails || (msgno >= m->msg_count) || !msg)
     return -1;
 
   struct Email *e = m->emails[msgno];
+  if (!e)
+    return -1;
+
   char path[PATH_MAX];
   char *folder = nm_email_get_folder(e);
 
@@ -2540,7 +2539,7 @@ done:
  */
 enum MailboxType nm_path_probe(const char *path, const struct stat *st)
 {
-  if (!path || !mutt_str_startswith(path, NmUriProtocol, CASE_IGNORE))
+  if (!path || !mutt_str_startswith(path, NmUrlProtocol, CASE_IGNORE))
     return MUTT_UNKNOWN;
 
   return MUTT_NOTMUCH;
@@ -2549,7 +2548,7 @@ enum MailboxType nm_path_probe(const char *path, const struct stat *st)
 /**
  * nm_path_canon - Canonicalise a Mailbox path - Implements MxOps::path_canon()
  */
-int nm_path_canon(char *buf, size_t buflen)
+static int nm_path_canon(char *buf, size_t buflen)
 {
   if (!buf)
     return -1;
@@ -2560,7 +2559,7 @@ int nm_path_canon(char *buf, size_t buflen)
 /**
  * nm_path_pretty - Abbreviate a Mailbox path - Implements MxOps::path_pretty()
  */
-int nm_path_pretty(char *buf, size_t buflen, const char *folder)
+static int nm_path_pretty(char *buf, size_t buflen, const char *folder)
 {
   /* Succeed, but don't do anything, for now */
   return 0;
@@ -2569,7 +2568,7 @@ int nm_path_pretty(char *buf, size_t buflen, const char *folder)
 /**
  * nm_path_parent - Find the parent of a Mailbox path - Implements MxOps::path_parent()
  */
-int nm_path_parent(char *buf, size_t buflen)
+static int nm_path_parent(char *buf, size_t buflen)
 {
   /* Succeed, but don't do anything, for now */
   return 0;
@@ -2582,6 +2581,7 @@ int nm_path_parent(char *buf, size_t buflen)
 struct MxOps MxNotmuchOps = {
   .magic            = MUTT_NOTMUCH,
   .name             = "notmuch",
+  .is_local         = false,
   .ac_find          = nm_ac_find,
   .ac_add           = nm_ac_add,
   .mbox_open        = nm_mbox_open,

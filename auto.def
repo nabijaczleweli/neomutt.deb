@@ -16,7 +16,7 @@ use system cc cc-lib mutt-gettext mutt-iconv pkg-config
 ###############################################################################
 # Names and versions
 define PACKAGE          "neomutt"
-define PACKAGE_VERSION  "20191111"
+define PACKAGE_VERSION  "20200313"
 define BUGS_ADDRESS     "neomutt-devel@neomutt.org"
 
 # Subdirectories that contain additional Makefile.autosetup files
@@ -91,12 +91,16 @@ options {
   with-qdbm:path            => "Location of QDBM"
   tokyocabinet=0            => "Use TokyoCabinet for the header cache"
   with-tokyocabinet:path    => "Location of TokyoCabinet"
-# libunwind
-  backtrace=0               => "Enable backtrace support with libunwind"
-  with-backtrace:path       => "Location of libunwind"
 # sqlite
   sqlite=0                  => "Enable SQLite support"
   with-sqlite:path          => "Location of sqlite"
+# compression
+  lz4=0                     => "Enable LZ4 header cache compression support"
+  with-lz4:path             => "Location of LZ4"
+  zlib=0                    => "Enable zlib support"
+  with-zlib:path            => "Location of zlib"
+  zstd=0                    => "Enable Zstandard header cache compression support"
+  with-zstd:path            => "Location of Zstandard"
 # System
   with-sysroot:path         => "Target system root"
 # Testing
@@ -106,6 +110,13 @@ options {
   pkgconf=0                 => "Use pkg-config during configure"
 # Enable all options
   everything=0              => "Enable all options"
+# Debug options
+  debug-backtrace=0         => "DEBUG: Enable backtrace support with libunwind"
+  with-backtrace:path       => "Location of libunwind"
+  debug-graphviz=0          => "DEBUG: Enable Graphviz dump"
+  debug-notify=0            => "DEBUG: Enable Notifications dump"
+  debug-parse-test=0        => "DEBUG: Enable 'neomutt -T' for config testing"
+  debug-window=0            => "DEBUG: Enable windows dump"
 }
 ###############################################################################
 
@@ -116,10 +127,11 @@ options {
 if {1} {
   # Keep sorted, please.
   foreach opt {
-    autocrypt backtrace bdb coverage doc everything fmemopen full-doc gdbm
-    gnutls gpgme gss homespool idn idn2 inotify kyotocabinet lmdb locales-fix
-    lua mixmaster nls notmuch pgp pkgconf qdbm sasl smime sqlite ssl testing
-    tokyocabinet
+    autocrypt bdb coverage debug-backtrace debug-graphviz debug-notify
+    debug-parse-test debug-window doc everything fmemopen full-doc gdbm gnutls
+    gpgme gss homespool idn idn2 inotify kyotocabinet lmdb locales-fix lua lz4
+    mixmaster nls notmuch pgp pkgconf qdbm sasl smime sqlite ssl testing
+    tokyocabinet zlib zstd
   } {
     define want-$opt [opt-bool $opt]
   }
@@ -128,8 +140,8 @@ if {1} {
   # relative --enable-opt to true. This allows "--with-opt=/usr" to be used as
   # a shortcut for "--opt --with-opt=/usr".
   foreach opt {
-    bdb gdbm gnutls gpgme gss homespool idn idn2 kyotocabinet lmdb lua mixmaster
-    ncurses nls notmuch qdbm sasl slang sqlite ssl tokyocabinet
+    bdb gdbm gnutls gpgme gss homespool idn idn2 kyotocabinet lmdb lua lz4 mixmaster
+    ncurses nls notmuch qdbm sasl slang sqlite ssl tokyocabinet zlib zstd
   } {
     if {[opt-val with-$opt] ne {}} {
       define want-$opt 1
@@ -239,16 +251,6 @@ if {1} {
     define SENDMAIL /usr/sbin/sendmail
   }
 
-  # Version of the C compiler
-  set CC [get-define CC]
-  if {[catch {exec $CC -v} cc_version]} {
-    if {[catch {exec $CC --version} cc_version]} {
-      if {[catch {exec $CC -V} cc_version]} {
-        set cc_version "unknown compiler"
-      }
-    }
-  }
-
   # GCC-specifc CFLAGS
   if {![catch {exec [get-define CC] --version} res]} {
     if {[regexp -nocase gcc $res]} {
@@ -354,8 +356,8 @@ set prefix [opt-val with-sysroot][get-define prefix]
 ###############################################################################
 # Everything
 if {[get-define want-everything]} {
-  foreach opt {bdb gdbm gpgme kyotocabinet lmdb lua notmuch pgp qdbm smime
-               tokyocabinet} {
+  foreach opt {bdb gdbm gpgme kyotocabinet lmdb lua lz4 notmuch pgp qdbm smime
+               tokyocabinet zlib zstd} {
     define want-$opt
     append conf_options "--$opt "
   }
@@ -449,6 +451,9 @@ if {[get-define want-gpgme]} {
       }
     }
     define GPGME_VERSION_NUMBER [format "0x%02x%02x%02x" $gpgme_maj $gpgme_min $gpgme_patch]
+
+    # RHEL6 doesn't have this function yet
+    cc-check-functions gpgme_op_export_keys
 
     # CFLAGS
     if {[catch {exec-with-stderr $gpgme_config --cflags} res err]} {
@@ -645,6 +650,16 @@ if {[get-define want-sqlite]} {
 }
 
 ###############################################################################
+# zlib Support
+if {[get-define want-zlib]} {
+  if {![check-inc-and-lib zlib [opt-val with-zlib $prefix] \
+                          zlib.h deflate z]} {
+    user-error "Unable to find zlib"
+  }
+  define USE_ZLIB
+}
+
+###############################################################################
 # fmemopen(3)
 if {[get-define want-fmemopen]} {
   if {![cc-check-functions fmemopen]} {
@@ -749,16 +764,6 @@ if {[get-define want-homespool]} {
   define HOMESPOOL 1
 } else {
   define MAILPATH [opt-val with-mailpath /var/mail]
-}
-
-###############################################################################
-# Backtrace support with libunwind
-if {[get-define want-backtrace]} {
-  if {![check-inc-and-lib libunwind [opt-val with-backtrace $prefix] \
-                          libunwind.h unw_backtrace unwind]} {
-    user-error "Unable to find libunwind"
-  }
-  define LIBS "-lunwind-generic [get-define LIBS]"
 }
 
 ###############################################################################
@@ -1029,6 +1034,45 @@ if {[get-define want-tokyocabinet]} {
 }
 
 ###############################################################################
+# Header Cache Compression with LZ4
+if {[get-define want-lz4]} {
+  if {![check-inc-and-lib lz4 [opt-val with-lz4 $prefix] \
+                          lz4.h LZ4_compress_default lz4]} {
+    user-error "Unable to find LZ4"
+  }
+  define-append LIBS -llz4
+  define USE_LZ4
+  define USE_HCACHE_COMPRESSION
+  define-append COMPRESS_BACKENDS "lz4"
+}
+
+###############################################################################
+# Header Cache Compression with zlib
+if {[get-define want-zlib]} {
+  if {![check-inc-and-lib zlib [opt-val with-zlib $prefix] \
+                          zlib.h deflate z]} {
+    user-error "Unable to find zlib"
+  }
+  define-append LIBS -lz
+  define USE_ZLIB
+  define USE_HCACHE_COMPRESSION
+  define-append COMPRESS_BACKENDS "zlib"
+}
+
+###############################################################################
+# Header Cache Compression with Zstandard
+if {[get-define want-zstd]} {
+  if {![check-inc-and-lib zstd [opt-val with-zstd $prefix] \
+                          zstd.h ZSTD_compress zstd]} {
+    user-error "Unable to find Zstandard"
+  }
+  define-append LIBS -lzstd
+  define USE_ZSTD
+  define USE_HCACHE_COMPRESSION
+  define-append COMPRESS_BACKENDS "zstd"
+}
+
+###############################################################################
 # GSS
 if {[get-define want-gss]} {
 
@@ -1079,9 +1123,40 @@ if {[get-define want-gss]} {
 }
 
 ###############################################################################
+# DEBUG options
+
+# Backtrace support with libunwind
+if {[get-define want-debug-backtrace]} {
+  if {![check-inc-and-lib libunwind [opt-val with-backtrace $prefix] \
+                          libunwind.h unw_backtrace unwind]} {
+    user-error "Unable to find libunwind"
+  }
+  define LIBS "-lunwind-generic [get-define LIBS]"
+}
+
+# Graphviz dump
+if {[get-define want-debug-graphviz]} {
+  define USE_DEBUG_GRAPHVIZ 1
+}
+
+# Notifications dump
+if {[get-define want-debug-notify]} {
+  define USE_DEBUG_NOTIFY 1
+}
+
+# Parse Test
+if {[get-define want-debug-parse-test]} {
+  define USE_DEBUG_PARSE_TEST 1
+}
+
+# Windows dump
+if {[get-define want-debug-window]} {
+  define USE_DEBUG_WINDOW 1
+}
+
+###############################################################################
 # Generate conststrings.c
 set conststrings "\
-  unsigned char cc_version\[\] = {[text2c $cc_version]};\n\
   unsigned char cc_cflags\[\] = {[text2c [get-define CFLAGS]]};\n\
   unsigned char configure_options\[\] = {[text2c $conf_options]};\n"
 if {[catch {set fd [open conststrings.c w]
@@ -1169,18 +1244,19 @@ make-template .clang_complete.in
 # Print a summary
 user-notice "Summary of build options:
 
-  Version:           [get-define PACKAGE_VERSION]
-  Host OS:           [get-define host_os]
-  Install prefix:    [get-define prefix]
-  Compiler:          [get-define CC]
-  CFlags:            [get-define CFLAGS]
-  LDFlags:           [get-define LDFLAGS]
-  Libs:              [get-define LIBS]
+  Version:               [get-define PACKAGE_VERSION]
+  Host OS:               [get-define host_os]
+  Install prefix:        [get-define prefix]
+  Compiler:              [get-define CC]
+  CFlags:                [get-define CFLAGS]
+  LDFlags:               [get-define LDFLAGS]
+  Libs:                  [get-define LIBS]
 
-  GPGME:             [yesno [get-define CRYPT_BACKEND_GPGME]]
-  PGP:               [yesno [get-define CRYPT_BACKEND_CLASSIC_PGP]]
-  SMIME:             [yesno [get-define CRYPT_BACKEND_CLASSIC_SMIME]]
-  Notmuch:           [yesno [get-define USE_NOTMUCH]]
-  Header Cache(s):   [get-define HCACHE_BACKENDS {}]
-  Lua:               [yesno [get-define USE_LUA]]
+  GPGME:                 [yesno [get-define CRYPT_BACKEND_GPGME]]
+  PGP:                   [yesno [get-define CRYPT_BACKEND_CLASSIC_PGP]]
+  SMIME:                 [yesno [get-define CRYPT_BACKEND_CLASSIC_SMIME]]
+  Notmuch:               [yesno [get-define USE_NOTMUCH]]
+  Header Cache(s):       [get-define HCACHE_BACKENDS {}]
+  Header Compression(s): [get-define COMPRESS_BACKENDS {}]
+  Lua:                   [yesno [get-define USE_LUA]]
 "

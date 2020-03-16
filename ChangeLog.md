@@ -1,10 +1,147 @@
+2020-03-13  Richard Russon  <rich@flatcap.org>
+* Features
+  - UI: add number of old messages to sidebar_format
+  - UI: support ISO 8601 calendar date
+  - UI: fix commands that don’t need to have a non-empty mailbox to be valid
+  - PGP: inform about successful decryption of inline PGP messages
+  - PGP: try to infer the signing key from the From address
+  - PGP: enable GPGMe by default
+  - Notmuch: use query as name for vfolder-from-query
+  - IMAP: add network traffic compression (COMPRESS=DEFLATE, RFC4978)
+  - Header cache: add support for generic header cache compression
+* Bug Fixes
+  - Fix uncollapse_jump
+  - Only try to perform entire-thread on maildir/mh mailboxes
+  - Fix crash in pager
+  - Avoid logging single new lines at the end of header fields
+  - Fix listing mailboxes
+  - Do not recurse a non-threaded message
+  - Fix initial window order
+  - Fix leaks on IMAP error paths
+  - Notmuch: compose(attach-message): support notmuch backend
+  - Fix IMAP flag comparison code
+  - Fix $move for IMAP mailboxes
+  - Maildir: maildir_mbox_check_stats should only update mailbox stats if requested
+  - Fix unmailboxes for virtual mailboxes
+  - Maildir: sanitize filename before hashing
+  - OAuth: if 'login' name isn't available use 'user'
+  - Add error message on failed encryption
+  - Fix a bunch of crashes
+  - Force C locale for email date
+  - Abort if run without a terminal
+* Changed Config
+  - `$crypt_use_gpgme`                         - Now defaults to 'yes' (enabled)
+  - `$abort_backspace`                         - Hitting backspace against an empty prompt aborts the prompt
+  - `$abort_key`                               - String representation of key to abort prompts
+  - `$arrow_string`                            - Use an custom string for arrow_cursor
+  - `$crypt_opportunistic_encrypt_strong_keys` - Enable encryption only when strong a key is available
+  - `$header_cache_compress_dictionary`        - Filepath to dictionary for zstd compression
+  - `$header_cache_compress_level`             - Level of compression for method
+  - `$header_cache_compress_method`            - Enable generic hcache database compression
+  - `$imap_deflate`                            - Compress network traffic
+  - `$smtp_user`                               - Username for the SMTP server
+* Translations
+  - 100% Lithuanian
+  - 81% Spanish
+  - 78% Russian
+* Build
+  - Add libdebug
+  - Rename public headers to lib.h
+  - Create libcompress for compressed folders code
+  - Enable Cirrus CI for FreeBSD
+* Code
+  - Refactor Windows and Dialogs
+  - Lots of code tidying
+  - Refactor: mutt_addrlist\_{search,write}
+  - Lots of improvements to the Config code
+  - Use Buffers more pervasively
+  - Unify API function naming
+  - Rename library shared headers
+  - Refactor libconn gui dependencies
+  - Refactor: init.[ch]
+  - Refactor config to use subsets
+  - Config: add path type
+  - Remove backend deps from the connection code
+* Upstream
+  - Allow ~b ~B ~h patterns in send2-hook
+  - Rename smime oppenc mode parameter to get_keys_by_addr()
+  - Add $crypt_opportunistic_encrypt_strong_keys config var
+  - Fix crash when polling a closed ssl connection
+  - Turn off auto-clear outside of autocrypt initialization
+  - Add protected-headers="v1" to Content-Type when protecting headers
+  - Fix segv in IMAP postponed menu caused by reopen_allow
+  - Adding ISO 8601 calendar date
+  - Fix $fcc_attach to not prompt in batch mode
+  - Convert remaining mutt_encode_path() call to use struct Buffer
+  - Fix rendering of replacement_char when Charset_is_utf8
+  - Update to latest acutest.h
+
+2019-12-07  Richard Russon  <rich@flatcap.org>
+* Features
+  - compose: draw status bar with highlights
+* Bug Fixes
+  - crash opening notmuch mailbox
+  - crash in mutt_autocrypt_ui_recommendation
+  - Avoid negative allocation
+  - Mbox new mail
+  - Setting of DT_MAILBOX type variables from Lua
+  - imap: empty cmdbuf before connecting
+  - imap: select the mailbox on reconnect
+  - compose: fix attach message
+* Build
+  - make files conditional
+  - add gpgme check for RHEL6
+* Code
+  - enum-ify log levels
+  - fix function prototypes
+  - refactor virtual email lookups
+  - factor out global Context
+
+2019-11-29  Richard Russon  <rich@flatcap.org>
+* Features
+  - Add raw mailsize expando (%cr)
+* Bug Fixes
+  - Avoid double question marks in bounce confirmation msg
+  - Fix bounce confirmation
+  - fix new-mail flags and behaviour
+  - fix: browser <descend-directory>
+  - fix ssl crash
+  - fix move to trash
+  - fix flickering
+  - Do not check hidden mailboxes for new mail
+  - Fix new_mail_command notifications
+  - fix crash in examine_mailboxes()
+  - fix crash in mutt_sort_threads()
+  - fix: crash after sending
+  - Fix crash in tunnel's conn_close
+  - fix fcc for deep dirs
+  - imap: fix crash when new mail arrives
+  - fix colour 'quoted9'
+  - quieten messages on exit
+  - fix: crash after failed mbox_check
+  - browser: default to a file/dir view when attaching a file
+* Changed Config
+  - Change $write_bcc to default off
+* Translations
+  - 100% Portuguese (Brazil)
+  -  92% Polish
+* Docs
+  - Add a bit more documentation about sending
+  - Clarify $write_bcc documentation.
+  - Update documentation for raw size expando
+  - docbook: set generate.consistent.ids to make generated html reproducible
+* Build
+  - fix build/tests for 32-bit arches
+  - tests: fix test that would fail soon
+  - tests: fix context for failing idna tests
+
 2019-11-11  Richard Russon  \<rich@flatcap.org\>
 * Bug Fixes
   - browser: fix directory view
   - fix crash in mutt_extract_token()
   - force a screen refresh
   - fix crash sending message from command line
-  - notmuch: use nm_default_uri if no mailbox data
+  - notmuch: use nm_default_url if no mailbox data
   - fix forward attachments
   - fix: vfprintf undefined behaviour in body_handler
   - Fix relative symlink resolution
@@ -676,7 +813,7 @@
   - Fix nntp group selection
   - Fix status color
   - Tidy up S/MIME contrib
-  - Do not try to create Maildir if it is an NNTP URI
+  - Do not try to create Maildir if it is an NNTP URL
   - Fix missing NONULL for mutt.set() in Lua
 * Translations
   - Fix German PGP shortkeys

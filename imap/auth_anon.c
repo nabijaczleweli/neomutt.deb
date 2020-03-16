@@ -28,14 +28,13 @@
 
 #include "config.h"
 #include "imap_private.h"
-#include "mutt/mutt.h"
-#include "conn/conn.h"
+#include "mutt/lib.h"
+#include "conn/lib.h"
 #include "auth.h"
-#include "mutt_account.h"
 #include "mutt_socket.h"
 
 /**
- * imap_auth_anon - Authenticate anonymously
+ * imap_auth_anon - Authenticate anonymously - Implements ImapAuth::authenticate()
  * @param adata Imap Account data
  * @param method Name of this authentication method
  * @retval #ImapAuthRes Result, e.g. #IMAP_AUTH_SUCCESS

@@ -32,10 +32,10 @@
 #include <stdlib.h>
 #include <sys/wait.h> // IWYU pragma: keep
 #include <unistd.h>
-#include "mutt/mutt.h"
-#include "mutt.h"
+#include "mutt/lib.h"
+#include "protos.h" // IWYU pragma: keep
 #ifdef USE_IMAP
-#include "imap/imap.h"
+#include "imap/lib.h"
 #endif
 
 /**

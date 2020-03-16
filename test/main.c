@@ -101,6 +101,7 @@
   NEOMUTT_TEST_ITEM(test_mutt_ch_lookup_remove)                                \
   NEOMUTT_TEST_ITEM(test_mutt_ch_set_charset)                                  \
   NEOMUTT_TEST_ITEM(config_set)                                                \
+  NEOMUTT_TEST_ITEM(config_subset)                                             \
   NEOMUTT_TEST_ITEM(config_account)                                            \
   NEOMUTT_TEST_ITEM(config_initial)                                            \
   NEOMUTT_TEST_ITEM(config_synonym)                                            \
@@ -110,6 +111,7 @@
   NEOMUTT_TEST_ITEM(config_long)                                               \
   NEOMUTT_TEST_ITEM(config_mbtable)                                            \
   NEOMUTT_TEST_ITEM(config_number)                                             \
+  NEOMUTT_TEST_ITEM(config_path)                                               \
   NEOMUTT_TEST_ITEM(config_quad)                                               \
   NEOMUTT_TEST_ITEM(config_regex)                                              \
   NEOMUTT_TEST_ITEM(config_slist)                                              \
@@ -403,7 +405,8 @@
   NEOMUTT_TEST_ITEM(test_url_pct_decode)                                       \
   NEOMUTT_TEST_ITEM(test_url_pct_encode)                                       \
   NEOMUTT_TEST_ITEM(test_url_tobuffer)                                         \
-  NEOMUTT_TEST_ITEM(test_url_tostring)
+  NEOMUTT_TEST_ITEM(test_url_tostring)                                         \
+  NEOMUTT_TEST_ITEM(test_window_reflow)
 
 /******************************************************************************
  * You probably don't need to touch what follows.

@@ -27,6 +27,13 @@
  * Integrated Lua scripting
  */
 
+#ifndef LUA_COMPAT_ALL
+#define LUA_COMPAT_ALL
+#endif
+#ifndef LUA_COMPAT_5_1
+#define LUA_COMPAT_5_1
+#endif
+
 #include "config.h"
 #include <lauxlib.h>
 #include <limits.h>
@@ -35,11 +42,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
+#include "core/lib.h"
 #include "mutt.h"
 #include "mutt_lua.h"
-#include "globals.h"
+#include "init.h"
 #include "mutt_commands.h"
 #include "muttlib.h"
 #include "myvar.h"
@@ -110,7 +118,7 @@ static int lua_mutt_call(lua_State *l)
   expn.dptr = buf;
   expn.dsize = mutt_str_strlen(buf);
 
-  if (cmd->func(token, &expn, cmd->data, err))
+  if (cmd->parse(token, &expn, cmd->data, err))
   {
     luaL_error(l, "NeoMutt error: %s", mutt_b2s(err));
     rc = -1;
@@ -146,7 +154,7 @@ static int lua_mutt_set(lua_State *l)
     return 0;
   }
 
-  struct HashElem *he = cs_get_elem(Config, param);
+  struct HashElem *he = cs_subset_lookup(NeoMutt->sub, param);
   if (!he)
   {
     luaL_error(l, "NeoMutt parameter not found %s", param);
@@ -163,13 +171,21 @@ static int lua_mutt_set(lua_State *l)
     case DT_ADDRESS:
     case DT_ENUM:
     case DT_MBTABLE:
+    case DT_PATH:
     case DT_REGEX:
     case DT_SLIST:
     case DT_SORT:
     case DT_STRING:
     {
       const char *value = lua_tostring(l, -1);
-      int rv = cs_he_string_set(Config, he, value, &err);
+      size_t val_size = lua_strlen(l, -1);
+      struct Buffer value_buf = mutt_buffer_make(val_size);
+      mutt_buffer_strcpy_n(&value_buf, value, val_size);
+      if (DTYPE(he->type) == DT_PATH)
+        mutt_buffer_expand_path(&value_buf);
+
+      int rv = cs_subset_he_string_set(NeoMutt->sub, he, value_buf.data, &err);
+      mutt_buffer_dealloc(&value_buf);
       if (CSR_RESULT(rv) != CSR_SUCCESS)
         rc = -1;
       break;
@@ -178,7 +194,7 @@ static int lua_mutt_set(lua_State *l)
     case DT_QUAD:
     {
       const intptr_t value = lua_tointeger(l, -1);
-      int rv = cs_he_native_set(Config, he, value, &err);
+      int rv = cs_subset_he_native_set(NeoMutt->sub, he, value, &err);
       if (CSR_RESULT(rv) != CSR_SUCCESS)
         rc = -1;
       break;
@@ -186,7 +202,7 @@ static int lua_mutt_set(lua_State *l)
     case DT_BOOL:
     {
       const intptr_t value = lua_toboolean(l, -1);
-      int rv = cs_he_native_set(Config, he, value, &err);
+      int rv = cs_subset_he_native_set(NeoMutt->sub, he, value, &err);
       if (CSR_RESULT(rv) != CSR_SUCCESS)
         rc = -1;
       break;
@@ -225,7 +241,7 @@ static int lua_mutt_get(lua_State *l)
     return 1;
   }
 
-  struct HashElem *he = cs_get_elem(Config, param);
+  struct HashElem *he = cs_subset_lookup(NeoMutt->sub, param);
   if (!he)
   {
     mutt_debug(LL_DEBUG2, " * error\n");
@@ -246,7 +262,7 @@ static int lua_mutt_get(lua_State *l)
     case DT_STRING:
     {
       struct Buffer value = mutt_buffer_make(256);
-      int rc = cs_he_string_get(Config, he, &value);
+      int rc = cs_subset_he_string_get(NeoMutt->sub, he, &value);
       if (CSR_RESULT(rc) != CSR_SUCCESS)
       {
         mutt_buffer_dealloc(&value);
@@ -426,7 +442,7 @@ static bool lua_init(lua_State **l)
 }
 
 /**
- * mutt_lua_parse - Parse the 'lua' command - Implements ::command_t
+ * mutt_lua_parse - Parse the 'lua' command - Implements Command::parse()
  */
 enum CommandResult mutt_lua_parse(struct Buffer *buf, struct Buffer *s,
                                   unsigned long data, struct Buffer *err)
@@ -448,7 +464,7 @@ enum CommandResult mutt_lua_parse(struct Buffer *buf, struct Buffer *s,
 }
 
 /**
- * mutt_lua_source_file - Parse the 'lua-source' command - Implements ::command_t
+ * mutt_lua_source_file - Parse the 'lua-source' command - Implements Command::parse()
  */
 enum CommandResult mutt_lua_source_file(struct Buffer *buf, struct Buffer *s,
                                         unsigned long data, struct Buffer *err)

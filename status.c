@@ -29,15 +29,16 @@
 #include "config.h"
 #include <stdbool.h>
 #include <stdio.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
+#include "status.h"
 #include "context.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "mutt_mailbox.h"
 #include "mutt_menu.h"
-#include "mutt_window.h"
 #include "muttlib.h"
 #include "options.h"
 #include "protos.h"
@@ -84,7 +85,7 @@ static char *get_sort_str(char *buf, size_t buflen, enum SortType method)
  * | \%r     | Readonly/wontwrite/changed flag
  * | \%S     | Current aux sorting method (`$sort_aux`)
  * | \%s     | Current sorting method (`$sort`)
- * | \%t     | # of tagged messages
+ * | \%t     | Number of tagged messages
  * | \%u     | Number of unread messages
  * | \%V     | Currently active limit pattern
  * | \%v     | NeoMutt version
@@ -407,6 +408,6 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
  */
 void menu_status_line(char *buf, size_t buflen, struct Menu *menu, const char *p)
 {
-  mutt_expando_format(buf, buflen, 0, menu ? menu->statuswin->cols : buflen, p,
+  mutt_expando_format(buf, buflen, 0, menu ? menu->win_ibar->state.cols : buflen, p,
                       status_format_str, (unsigned long) menu, MUTT_FORMAT_NO_FLAGS);
 }

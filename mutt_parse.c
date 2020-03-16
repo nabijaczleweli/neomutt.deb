@@ -30,11 +30,11 @@
 #include <regex.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "email/lib.h"
 #include "mutt_parse.h"
 #include "mx.h"
-#include "ncrypt/ncrypt.h"
+#include "ncrypt/lib.h"
 
 struct ListHead AttachAllow = STAILQ_HEAD_INITIALIZER(AttachAllow); ///< List of attachment types to be counted
 struct ListHead AttachExclude = STAILQ_HEAD_INITIALIZER(AttachExclude); ///< List of attachment types to be ignored
@@ -229,4 +229,22 @@ int mutt_count_body_parts(struct Mailbox *m, struct Email *e)
     mutt_body_free(&e->content->parts);
 
   return e->attach_total;
+}
+
+/**
+ * mutt_attachmatch_free - Free an AttachMatch - Implements ::list_free_t
+ * @param ptr AttachMatch to free
+ *
+ * @note We don't free minor because it is either a pointer into major,
+ *       or a static string.
+ */
+void mutt_attachmatch_free(struct AttachMatch **ptr)
+{
+  if (!ptr || !*ptr)
+    return;
+
+  struct AttachMatch *am = *ptr;
+  regfree(&am->minor_regex);
+  FREE(&am->major);
+  FREE(ptr);
 }

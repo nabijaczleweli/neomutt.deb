@@ -23,7 +23,7 @@
 #define TEST_NO_MAIN
 #include "acutest.h"
 #include "config.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/common.h"
 #include "config/lib.h"
 #include "core/lib.h"
@@ -41,6 +41,7 @@ static char VarKumquat;
 static struct Regex *VarLemon;
 static short VarMango;
 static char *VarNectarine;
+static char *VarOlive;
 
 // clang-format off
 static struct Mapping MagicMap[] = {
@@ -67,13 +68,14 @@ static struct ConfigDef Vars[] = {
   { "Elderberry", DT_ADDRESS,                        &VarElderberry, IP "elderberry@example.com", 0,            NULL },
   { "Fig",        DT_STRING|DT_COMMAND|DT_NOT_EMPTY, &VarFig,        IP "fig",                    0,            NULL },
   { "Guava",      DT_LONG,                           &VarGuava,      0,                           0,            NULL },
-  { "Hawthorn",   DT_ENUM,                           &VarHawthorn,   1,                           IP &MagicDef, NULL },
+  { "Hawthorn",   DT_ENUM,                           &VarHawthorn,   2,                           IP &MagicDef, NULL },
   { "Ilama",      DT_MBTABLE,                        &VarIlama,      0,                           0,            NULL },
-  { "Jackfruit",  DT_STRING|DT_PATH,                 &VarJackfruit,  IP "/etc/passwd",            0,            NULL },
+  { "Jackfruit",  DT_PATH|DT_PATH_FILE,              &VarJackfruit,  IP "/etc/passwd",            0,            NULL },
   { "Kumquat",    DT_QUAD,                           &VarKumquat,    0,                           0,            NULL },
   { "Lemon",      DT_REGEX,                          &VarLemon,      0,                           0,            NULL },
   { "Mango",      DT_SORT,                           &VarMango,      1,                           0,            NULL },
   { "Nectarine",  DT_STRING|DT_SENSITIVE,            &VarNectarine,  IP "nectarine",              0,            NULL },
+  { "Olive",      DT_STRING|DT_DEPRECATED,           &VarOlive,      IP "olive",                  0,            NULL },
   { NULL },
 };
 // clang-format on
@@ -186,7 +188,9 @@ struct ConfigSet *create_sample_data(void)
   long_init(cs);
   mbtable_init(cs);
   number_init(cs);
+  path_init(cs);
   quad_init(cs);
+  path_init(cs);
   regex_init(cs);
   sort_init(cs);
   string_init(cs);
@@ -259,8 +263,8 @@ bool test_dump_config_neo(void)
     TEST_CHECK_(
         1, "dump_config_neo(cs, he, NULL, &buf_init, CS_DUMP_NO_FLAGS, fp)");
     dump_config_neo(cs, he, &buf_val, NULL, CS_DUMP_NO_FLAGS, fp);
-    TEST_CHECK_(1,
-                "dump_config_neo(cs, he, &buf_val, NULL, CS_DUMP_NO_FLAGS, fp)");
+    TEST_CHECK_(
+        1, "dump_config_neo(cs, he, &buf_val, NULL, CS_DUMP_NO_FLAGS, fp)");
     dump_config_neo(cs, he, &buf_val, &buf_init, CS_DUMP_NO_FLAGS, NULL);
     TEST_CHECK_(
         1,
@@ -270,12 +274,12 @@ bool test_dump_config_neo(void)
 
     dump_config_neo(cs, he, &buf_val, &buf_init, CS_DUMP_NO_FLAGS, fp);
     TEST_CHECK_(
-        1, "dump_config_neo(cs, he, &buf_val, &buf_init, CS_DUMP_NO_FLAGS, fp)");
+        1,
+        "dump_config_neo(cs, he, &buf_val, &buf_init, CS_DUMP_NO_FLAGS, fp)");
 
     dump_config_neo(cs, he, &buf_val, &buf_init, CS_DUMP_ONLY_CHANGED, fp);
-    TEST_CHECK_(
-        1,
-        "dump_config_neo(cs, he, &buf_val, &buf_init, CS_DUMP_ONLY_CHANGED, fp)");
+    TEST_CHECK_(1, "dump_config_neo(cs, he, &buf_val, &buf_init, "
+                   "CS_DUMP_ONLY_CHANGED, fp)");
 
     dump_config_neo(cs, he, &buf_val, &buf_init, CS_DUMP_SHOW_DEFAULTS, fp);
     TEST_CHECK_(1, "dump_config_neo(cs, he, &buf_val, &buf_init, "
@@ -284,7 +288,8 @@ bool test_dump_config_neo(void)
     he = mutt_hash_find_elem(cs->hash, "Damson");
     dump_config_neo(cs, he, &buf_val, &buf_init, CS_DUMP_NO_FLAGS, fp);
     TEST_CHECK_(
-        1, "dump_config_neo(cs, he, &buf_val, &buf_init, CS_DUMP_NO_FLAGS, fp)");
+        1,
+        "dump_config_neo(cs, he, &buf_val, &buf_init, CS_DUMP_NO_FLAGS, fp)");
 
     fclose(fp);
     mutt_buffer_dealloc(&buf_val);

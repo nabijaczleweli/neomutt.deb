@@ -32,24 +32,24 @@
 #include <inttypes.h> // IWYU pragma: keep
 #include <stdbool.h>
 #include <string.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "copy.h"
 #include "context.h"
 #include "globals.h"
 #include "handler.h"
 #include "hdrline.h"
-#include "mutt_window.h"
-#include "muttlib.h"
 #include "mx.h"
-#include "ncrypt/ncrypt.h"
 #include "sendlib.h"
 #include "state.h"
+#include "ncrypt/lib.h"
 #ifdef USE_NOTMUCH
-#include "notmuch/mutt_notmuch.h"
+#include "muttlib.h"
+#include "notmuch/lib.h"
 #endif
 #ifdef ENABLE_NLS
 #include <libintl.h>
@@ -608,8 +608,10 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
     if (C_TextFlowed)
       mutt_str_strfcpy(prefix, ">", sizeof(prefix));
     else
+    {
       mutt_make_string(prefix, sizeof(prefix), wraplen, NONULL(C_IndentString),
                        Context, Context->mailbox, e);
+    }
   }
 
   if ((cmflags & MUTT_CM_NOHEADER) == 0)

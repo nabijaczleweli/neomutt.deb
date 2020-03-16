@@ -42,15 +42,17 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "maildir_private.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
 #include "globals.h"
-#include "hcache/hcache.h"
-#include "maildir/lib.h"
 #include "monitor.h"
 #include "muttlib.h"
 #include "mx.h"
+#include "maildir/lib.h"
+#ifdef USE_HCACHE
+#include "hcache/lib.h"
+#endif
 
 // Flags for maildir_mbox_check()
 #define MMC_NO_DIRS 0        ///< No directories changed
@@ -198,10 +200,13 @@ void maildir_gen_flags(char *dest, size_t destlen, struct Email *e)
  */
 int maildir_sync_message(struct Mailbox *m, int msgno)
 {
-  if (!m || !m->emails)
+  if (!m || !m->emails || (msgno >= m->msg_count))
     return -1;
 
   struct Email *e = m->emails[msgno];
+  if (!e)
+    return -1;
+
   struct Buffer *newpath = NULL;
   struct Buffer *partpath = NULL;
   struct Buffer *fullpath = NULL;
@@ -209,7 +214,7 @@ int maildir_sync_message(struct Mailbox *m, int msgno)
   char suffix[16];
   int rc = 0;
 
-  /* TODO: why the h->env check? */
+  /* TODO: why the e->env check? */
   if (e->attach_del || (e->env && e->env->changed))
   {
     /* when doing attachment deletion/rethreading, fall back to the MH case. */
@@ -306,7 +311,7 @@ static int maildir_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
   }
 
   errno = 0;
-  if ((mkdir(mailbox_path(m), S_IRWXU) != 0) && (errno != EEXIST))
+  if ((mutt_file_mkdir(mailbox_path(m), S_IRWXU) != 0) && (errno != EEXIST))
   {
     mutt_perror(mailbox_path(m));
     return -1;
@@ -450,6 +455,8 @@ int maildir_mbox_check(struct Mailbox *m, int *index_hint)
   for (int i = 0; i < m->msg_count; i++)
   {
     struct Email *e = m->emails[i];
+    if (!e)
+      break;
 
     e->active = false;
     maildir_canon_filename(buf, e->path);
@@ -508,7 +515,7 @@ int maildir_mbox_check(struct Mailbox *m, int *index_hint)
 
   /* If we didn't just get new mail, update the tables. */
   if (occult)
-    mailbox_changed(m, MBN_RESORT);
+    mailbox_changed(m, NT_MAILBOX_RESORT);
 
   /* do any delayed parsing we need to do. */
   maildir_delayed_parsing(m, &md, NULL);
@@ -517,7 +524,7 @@ int maildir_mbox_check(struct Mailbox *m, int *index_hint)
   num_new = maildir_move_to_mailbox(m, &md);
   if (num_new > 0)
   {
-    mailbox_changed(m, MBN_INVALID);
+    mailbox_changed(m, NT_MAILBOX_INVALID);
     m->changed = true;
   }
 
@@ -533,20 +540,23 @@ int maildir_mbox_check(struct Mailbox *m, int *index_hint)
 }
 
 /**
- * maildir_mbox_check_stats - Check the Mailbox statistics - Implements MxOps::mbox_check_stats
+ * maildir_mbox_check_stats - Check the Mailbox statistics - Implements MxOps::mbox_check_stats()
  */
 static int maildir_mbox_check_stats(struct Mailbox *m, int flags)
 {
   if (!m)
     return -1;
 
-  bool check_stats = true;
+  bool check_stats = flags;
   bool check_new = true;
 
-  m->msg_count = 0;
-  m->msg_unread = 0;
-  m->msg_flagged = 0;
-  m->msg_new = 0;
+  if (check_stats)
+  {
+    m->msg_count = 0;
+    m->msg_unread = 0;
+    m->msg_flagged = 0;
+    m->msg_new = 0;
+  }
 
   maildir_check_dir(m, "new", check_new, check_stats);
 
@@ -672,7 +682,7 @@ static int maildir_msg_save_hcache(struct Mailbox *m, struct Email *e)
 /**
  * maildir_path_probe - Is this a Maildir Mailbox? - Implements MxOps::path_probe()
  */
-enum MailboxType maildir_path_probe(const char *path, const struct stat *st)
+static enum MailboxType maildir_path_probe(const char *path, const struct stat *st)
 {
   if (!path)
     return MUTT_UNKNOWN;
@@ -697,6 +707,7 @@ enum MailboxType maildir_path_probe(const char *path, const struct stat *st)
 struct MxOps MxMaildirOps = {
   .magic            = MUTT_MAILDIR,
   .name             = "maildir",
+  .is_local         = true,
   .ac_find          = maildir_ac_find,
   .ac_add           = maildir_ac_add,
   .mbox_open        = maildir_mbox_open,

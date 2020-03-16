@@ -46,13 +46,55 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <time.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
+#include "gui/lib.h"
+#include "mutt.h"
 #include "sasl.h"
 #include "connaccount.h"
 #include "connection.h"
-#include "curs_lib.h"
-#include "mutt_account.h"
 #include "options.h"
+
+/**
+ * struct SaslSockData - SASL authentication API
+ */
+struct SaslSockData
+{
+  sasl_conn_t *saslconn;
+  const sasl_ssf_t *ssf;
+  const unsigned int *pbufsize;
+
+  /* read buffer */
+  const char *buf;
+  unsigned int blen;
+  unsigned int bpos;
+
+  void *sockdata; ///< Underlying socket data
+
+  /**
+   * open - Open a socket Connection - Implements Connection::open()
+   */
+  int (*open)(struct Connection *conn);
+
+  /**
+   * read - Read from a socket Connection - Implements Connection::read()
+   */
+  int (*read)(struct Connection *conn, char *buf, size_t count);
+
+  /**
+   * write - Write to a socket Connection - Implements Connection::write()
+   */
+  int (*write)(struct Connection *conn, const char *buf, size_t count);
+
+  /**
+   * poll - Check whether a socket read would block - Implements Connection::poll()
+   */
+  int (*poll)(struct Connection *conn, time_t wait_secs);
+
+  /**
+   * close - Close a socket Connection - Implements Connection::close()
+   */
+  int (*close)(struct Connection *conn);
+};
 
 /* arbitrary. SASL will probably use a smaller buffer anyway. OTOH it's
  * been a while since I've had access to an SASL server which negotiated
@@ -247,30 +289,29 @@ static int mutt_sasl_cb_authname(void *context, int id, const char **result, uns
   if (!result)
     return SASL_FAIL;
 
-  struct ConnAccount *account = context;
+  struct ConnAccount *cac = context;
 
   *result = NULL;
   if (len)
     *len = 0;
 
-  if (!account)
+  if (!cac)
     return SASL_BADPARAM;
 
   mutt_debug(LL_DEBUG2, "getting %s for %s:%u\n",
-             (id == SASL_CB_AUTHNAME) ? "authname" : "user", account->host,
-             account->port);
+             (id == SASL_CB_AUTHNAME) ? "authname" : "user", cac->host, cac->port);
 
   if (id == SASL_CB_AUTHNAME)
   {
-    if (mutt_account_getlogin(account) < 0)
+    if (mutt_account_getlogin(cac) < 0)
       return SASL_FAIL;
-    *result = account->login;
+    *result = cac->login;
   }
   else
   {
-    if (mutt_account_getuser(account) < 0)
+    if (mutt_account_getuser(cac) < 0)
       return SASL_FAIL;
-    *result = account->user;
+    *result = cac->user;
   }
 
   if (len)
@@ -289,22 +330,21 @@ static int mutt_sasl_cb_authname(void *context, int id, const char **result, uns
  */
 static int mutt_sasl_cb_pass(sasl_conn_t *conn, void *context, int id, sasl_secret_t **psecret)
 {
-  struct ConnAccount *account = context;
+  struct ConnAccount *cac = context;
   int len;
 
-  if (!account || !psecret)
+  if (!cac || !psecret)
     return SASL_BADPARAM;
 
-  mutt_debug(LL_DEBUG2, "getting password for %s@%s:%u\n", account->login,
-             account->host, account->port);
+  mutt_debug(LL_DEBUG2, "getting password for %s@%s:%u\n", cac->login, cac->host, cac->port);
 
-  if (mutt_account_getpass(account) < 0)
+  if (mutt_account_getpass(cac) < 0)
     return SASL_FAIL;
 
-  len = strlen(account->pass);
+  len = strlen(cac->pass);
 
   mutt_mem_realloc(&secret_ptr, sizeof(sasl_secret_t) + len);
-  memcpy((char *) secret_ptr->data, account->pass, (size_t) len);
+  memcpy((char *) secret_ptr->data, cac->pass, (size_t) len);
   secret_ptr->len = len;
   *psecret = secret_ptr;
 
@@ -313,26 +353,26 @@ static int mutt_sasl_cb_pass(sasl_conn_t *conn, void *context, int id, sasl_secr
 
 /**
  * mutt_sasl_get_callbacks - Get the SASL callback functions
- * @param account ConnAccount to associate with callbacks
+ * @param cac ConnAccount to associate with callbacks
  * @retval ptr Array of callback functions
  */
-static sasl_callback_t *mutt_sasl_get_callbacks(struct ConnAccount *account)
+static sasl_callback_t *mutt_sasl_get_callbacks(struct ConnAccount *cac)
 {
   sasl_callback_t *callback = MuttSaslCallbacks;
 
   callback->id = SASL_CB_USER;
   callback->proc = (int (*)(void)) mutt_sasl_cb_authname;
-  callback->context = account;
+  callback->context = cac;
   callback++;
 
   callback->id = SASL_CB_AUTHNAME;
   callback->proc = (int (*)(void)) mutt_sasl_cb_authname;
-  callback->context = account;
+  callback->context = cac;
   callback++;
 
   callback->id = SASL_CB_PASS;
   callback->proc = (int (*)(void)) mutt_sasl_cb_pass;
-  callback->context = account;
+  callback->context = cac;
   callback++;
 
   callback->id = SASL_CB_GETREALM;
@@ -348,7 +388,7 @@ static sasl_callback_t *mutt_sasl_get_callbacks(struct ConnAccount *account)
 }
 
 /**
- * mutt_sasl_conn_open - empty wrapper for underlying open function - Implements Connection::conn_open()
+ * mutt_sasl_conn_open - empty wrapper for underlying open function - Implements Connection::open()
  *
  * We don't know in advance that a connection will use SASL, so we replace
  * conn's methods with sasl methods when authentication is successful, using
@@ -358,14 +398,14 @@ static int mutt_sasl_conn_open(struct Connection *conn)
 {
   struct SaslSockData *sasldata = conn->sockdata;
   conn->sockdata = sasldata->sockdata;
-  int rc = (sasldata->msasl_open)(conn);
+  int rc = sasldata->open(conn);
   conn->sockdata = sasldata;
 
   return rc;
 }
 
 /**
- * mutt_sasl_conn_close - close SASL connection - Implements Connection::conn_close()
+ * mutt_sasl_conn_close - close SASL connection - Implements Connection::close()
  *
  * Calls underlying close function and disposes of the sasl_conn_t object, then
  * restores connection to pre-sasl state
@@ -376,24 +416,24 @@ static int mutt_sasl_conn_close(struct Connection *conn)
 
   /* restore connection's underlying methods */
   conn->sockdata = sasldata->sockdata;
-  conn->conn_open = sasldata->msasl_open;
-  conn->conn_read = sasldata->msasl_read;
-  conn->conn_write = sasldata->msasl_write;
-  conn->conn_poll = sasldata->msasl_poll;
-  conn->conn_close = sasldata->msasl_close;
+  conn->open = sasldata->open;
+  conn->read = sasldata->read;
+  conn->write = sasldata->write;
+  conn->poll = sasldata->poll;
+  conn->close = sasldata->close;
 
   /* release sasl resources */
   sasl_dispose(&sasldata->saslconn);
   FREE(&sasldata);
 
   /* call underlying close */
-  int rc = (conn->conn_close)(conn);
+  int rc = conn->close(conn);
 
   return rc;
 }
 
 /**
- * mutt_sasl_conn_read - Read data from an SASL connection - Implements Connection::conn_read()
+ * mutt_sasl_conn_read - Read data from an SASL connection - Implements Connection::read()
  */
 static int mutt_sasl_conn_read(struct Connection *conn, char *buf, size_t count)
 {
@@ -426,7 +466,7 @@ static int mutt_sasl_conn_read(struct Connection *conn, char *buf, size_t count)
     do
     {
       /* call the underlying read function to fill the buffer */
-      rc = (sasldata->msasl_read)(conn, buf, count);
+      rc = sasldata->read(conn, buf, count);
       if (rc <= 0)
         goto out;
 
@@ -448,7 +488,7 @@ static int mutt_sasl_conn_read(struct Connection *conn, char *buf, size_t count)
     rc = olen;
   }
   else
-    rc = (sasldata->msasl_read)(conn, buf, count);
+    rc = sasldata->read(conn, buf, count);
 
 out:
   conn->sockdata = sasldata;
@@ -457,7 +497,7 @@ out:
 }
 
 /**
- * mutt_sasl_conn_write - Write to an SASL connection - Implements Connection::conn_write()
+ * mutt_sasl_conn_write - Write to an SASL connection - Implements Connection::write()
  */
 static int mutt_sasl_conn_write(struct Connection *conn, const char *buf, size_t count)
 {
@@ -483,7 +523,7 @@ static int mutt_sasl_conn_write(struct Connection *conn, const char *buf, size_t
         goto fail;
       }
 
-      rc = (sasldata->msasl_write)(conn, pbuf, plen);
+      rc = sasldata->write(conn, pbuf, plen);
       if (rc != plen)
         goto fail;
 
@@ -494,7 +534,7 @@ static int mutt_sasl_conn_write(struct Connection *conn, const char *buf, size_t
   else
   {
     /* just write using the underlying socket function */
-    rc = (sasldata->msasl_write)(conn, buf, count);
+    rc = sasldata->write(conn, buf, count);
   }
 
   conn->sockdata = sasldata;
@@ -507,7 +547,7 @@ fail:
 }
 
 /**
- * mutt_sasl_conn_poll - Check an SASL connection for data - Implements Connection::conn_poll()
+ * mutt_sasl_conn_poll - Check an SASL connection for data - Implements Connection::poll()
  */
 static int mutt_sasl_conn_poll(struct Connection *conn, time_t wait_secs)
 {
@@ -515,14 +555,14 @@ static int mutt_sasl_conn_poll(struct Connection *conn, time_t wait_secs)
   int rc;
 
   conn->sockdata = sasldata->sockdata;
-  rc = sasldata->msasl_poll(conn, wait_secs);
+  rc = sasldata->poll(conn, wait_secs);
   conn->sockdata = sasldata;
 
   return rc;
 }
 
 /**
- * mutt_sasl_client_new - wrapper for sasl_client_new
+ * mutt_sasl_client_new - Wrapper for sasl_client_new()
  * @param[in]  conn     Connection to a server
  * @param[out] saslconn SASL connection
  * @retval  0 Success
@@ -539,31 +579,15 @@ int mutt_sasl_client_new(struct Connection *conn, sasl_conn_t **saslconn)
   char iplocalport[IP_PORT_BUFLEN], ipremoteport[IP_PORT_BUFLEN];
   char *plp = NULL;
   char *prp = NULL;
-  const char *service = NULL;
   int rc;
 
   if (mutt_sasl_start() != SASL_OK)
     return -1;
 
-  switch (conn->account.type)
+  if (!conn->account.service)
   {
-    case MUTT_ACCT_TYPE_IMAP:
-      service = "imap";
-      break;
-    case MUTT_ACCT_TYPE_POP:
-      service = "pop";
-      break;
-    case MUTT_ACCT_TYPE_SMTP:
-      service = "smtp";
-      break;
-#ifdef USE_NNTP
-    case MUTT_ACCT_TYPE_NNTP:
-      service = "nntp";
-      break;
-#endif
-    default:
-      mutt_error(_("Unknown SASL profile"));
-      return -1;
+    mutt_error(_("Unknown SASL profile"));
+    return -1;
   }
 
   size = sizeof(local);
@@ -590,7 +614,7 @@ int mutt_sasl_client_new(struct Connection *conn, sasl_conn_t **saslconn)
 
   mutt_debug(LL_DEBUG2, "SASL local ip: %s, remote ip:%s\n", NONULL(plp), NONULL(prp));
 
-  rc = sasl_client_new(service, conn->account.host, plp, prp,
+  rc = sasl_client_new(conn->account.service, conn->account.host, plp, prp,
                        mutt_sasl_get_callbacks(&conn->account), 0, saslconn);
 
   if (rc != SASL_OK)
@@ -653,7 +677,7 @@ int mutt_sasl_interact(sasl_interact_t *interaction)
 
     snprintf(prompt, sizeof(prompt), "%s: ", interaction->prompt);
     resp[0] = '\0';
-    if (OptNoCurses || mutt_get_field(prompt, resp, sizeof(resp), 0))
+    if (OptNoCurses || mutt_get_field(prompt, resp, sizeof(resp), MUTT_COMP_NO_FLAGS))
       return SASL_FAIL;
 
     interaction->len = mutt_str_strlen(resp) + 1;
@@ -699,19 +723,19 @@ void mutt_sasl_setup_conn(struct Connection *conn, sasl_conn_t *saslconn)
 
   /* preserve old functions */
   sasldata->sockdata = conn->sockdata;
-  sasldata->msasl_open = conn->conn_open;
-  sasldata->msasl_read = conn->conn_read;
-  sasldata->msasl_write = conn->conn_write;
-  sasldata->msasl_poll = conn->conn_poll;
-  sasldata->msasl_close = conn->conn_close;
+  sasldata->open = conn->open;
+  sasldata->read = conn->read;
+  sasldata->write = conn->write;
+  sasldata->poll = conn->poll;
+  sasldata->close = conn->close;
 
   /* and set up new functions */
   conn->sockdata = sasldata;
-  conn->conn_open = mutt_sasl_conn_open;
-  conn->conn_read = mutt_sasl_conn_read;
-  conn->conn_write = mutt_sasl_conn_write;
-  conn->conn_poll = mutt_sasl_conn_poll;
-  conn->conn_close = mutt_sasl_conn_close;
+  conn->open = mutt_sasl_conn_open;
+  conn->read = mutt_sasl_conn_read;
+  conn->write = mutt_sasl_conn_write;
+  conn->poll = mutt_sasl_conn_poll;
+  conn->close = mutt_sasl_conn_close;
 }
 
 /**

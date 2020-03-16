@@ -1,6 +1,6 @@
 /**
  * @file
- * Mapping from user command name to function
+ * Definitions of NeoMutt commands
  *
  * @authors
  * Copyright (C) 2016 Bernard Pratz <z+mutt+pub@m0g.net>
@@ -39,26 +39,39 @@ enum CommandResult
 };
 
 /**
- * typedef command_t - Prototype for a function to parse a command
- * @param buf  Temporary Buffer space
- * @param s    Buffer containing string to be parsed
- * @param data Flags associated with the command
- * @param err  Buffer for error messages
- * @retval #CommandResult Result e.g. #MUTT_CMD_SUCCESS
- */
-typedef enum CommandResult (*command_t)(struct Buffer *buf, struct Buffer *s, unsigned long data, struct Buffer *err);
-
-/**
  * struct Command - A user-callable command
  */
 struct Command
 {
   const char *name; ///< Name of the command
-  command_t func;   ///< Function to parse the command
+
+  /**
+   * parse - Function to parse a command
+   * @param buf  Temporary Buffer space
+   * @param s    Buffer containing string to be parsed
+   * @param data Flags associated with the command
+   * @param err  Buffer for error messages
+   * @retval #CommandResult Result e.g. #MUTT_CMD_SUCCESS
+   */
+  enum CommandResult (*parse)(struct Buffer *buf, struct Buffer *s, unsigned long data, struct Buffer *err);
+
   intptr_t data;    ///< Data or flags to pass to the command
 };
 
-const struct Command *mutt_command_get(const char *s);
-void mutt_commands_apply(void *data, void (*application)(void *, const struct Command *));
+/**
+ * enum MuttSetCommand - Flags for parse_set()
+ */
+enum MuttSetCommand
+{
+  MUTT_SET_SET,   ///< default is to set all vars
+  MUTT_SET_INV,   ///< default is to invert all vars
+  MUTT_SET_UNSET, ///< default is to unset all vars
+  MUTT_SET_RESET, ///< default is to reset all vars to default
+};
+
+/* parameter to parse_mailboxes */
+#define MUTT_NAMED   (1 << 0)
+
+extern const struct Command Commands[];
 
 #endif /* MUTT_MUTT_COMMANDS_H */

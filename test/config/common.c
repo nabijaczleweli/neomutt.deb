@@ -28,7 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
 #include "common.h"
@@ -87,7 +87,7 @@ int log_observer(struct NotifyCallback *nc)
   if (!nc)
     return -1;
 
-  struct EventConfig *ec = (struct EventConfig *) nc->event;
+  struct EventConfig *ec = nc->event_data;
 
   struct Buffer result;
   mutt_buffer_init(&result);
@@ -99,9 +99,9 @@ int log_observer(struct NotifyCallback *nc)
   mutt_buffer_reset(&result);
 
   if (nc->event_subtype != NT_CONFIG_INITIAL_SET)
-    cs_he_string_get(ec->cs, ec->he, &result);
+    cs_he_string_get(ec->sub->cs, ec->he, &result);
   else
-    cs_he_initial_get(ec->cs, ec->he, &result);
+    cs_he_initial_get(ec->sub->cs, ec->he, &result);
 
   TEST_MSG("Event: %s has been %s to '%s'\n", ec->name,
            events[nc->event_subtype - 1], result.data);

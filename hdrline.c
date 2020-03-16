@@ -36,26 +36,24 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "hdrline.h"
 #include "alias.h"
-#include "color.h"
 #include "context.h"
-#include "curs_lib.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "hook.h"
 #include "mutt_menu.h"
 #include "mutt_parse.h"
 #include "mutt_thread.h"
-#include "mutt_window.h"
 #include "muttlib.h"
-#include "ncrypt/ncrypt.h"
 #include "sort.h"
+#include "ncrypt/lib.h"
 
 /* These Config Variables are only used in hdrline.c */
 struct MbTable *C_CryptChars; ///< Config: User-configurable crypto flags: signed, encrypted etc.
@@ -109,7 +107,7 @@ enum FieldType
 };
 
 /**
- * mutt_is_mail_list - Is this the email address of a mailing list?
+ * mutt_is_mail_list - Is this the email address of a mailing list? - Implements ::addr_predicate_t
  * @param addr Address to test
  * @retval true If it's a mailing list
  */
@@ -121,7 +119,7 @@ bool mutt_is_mail_list(const struct Address *addr)
 }
 
 /**
- * mutt_is_subscribed_list - Is this the email address of a user-subscribed mailing list?
+ * mutt_is_subscribed_list - Is this the email address of a user-subscribed mailing list? - Implements ::addr_predicate_t
  * @param addr Address to test
  * @retval true If it's a subscribed mailing list
  */
@@ -508,7 +506,8 @@ static bool thread_is_old(struct Context *ctx, struct Email *e)
  * | \%b     | Filename of the original message folder (think mailbox)
  * | \%B     | The list to which the letter was sent, or else the folder name (%b)
  * | \%C     | Current message number
- * | \%c     | Number of characters (bytes) in the message
+ * | \%c     | Number of characters (bytes) in the body of the message
+ * | \%cr    | Number of characters (bytes) in the message, including header
  * | \%D     | Date and time of message using `$date_format` and local timezone
  * | \%d     | Date and time of message using `$date_format` and sender's timezone
  * | \%e     | Current message number in thread
@@ -656,7 +655,15 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
     case 'c':
       colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_SIZE);
-      mutt_str_pretty_size(tmp, sizeof(tmp), email_size(e));
+      if (src[0] == 'r')
+      {
+        mutt_str_pretty_size(tmp, sizeof(tmp), email_size(e));
+        src++;
+      }
+      else
+      {
+        mutt_str_pretty_size(tmp, sizeof(tmp), e->content->length);
+      }
       mutt_format_s(buf + colorlen, buflen - colorlen, prec, tmp);
       add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       break;
@@ -876,7 +883,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
     case 'f':
       tmp[0] = '\0';
-      mutt_addrlist_write(tmp, sizeof(tmp), &e->env->from, true);
+      mutt_addrlist_write(&e->env->from, tmp, sizeof(tmp), true);
       mutt_format_s(buf, buflen, prec, tmp);
       break;
 
@@ -1111,7 +1118,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
     case 'r':
       tmp[0] = '\0';
-      mutt_addrlist_write(tmp, sizeof(tmp), &e->env->to, true);
+      mutt_addrlist_write(&e->env->to, tmp, sizeof(tmp), true);
       if (optional && (tmp[0] == '\0'))
         optional = false;
       mutt_format_s(buf, buflen, prec, tmp);
@@ -1119,7 +1126,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
     case 'R':
       tmp[0] = '\0';
-      mutt_addrlist_write(tmp, sizeof(tmp), &e->env->cc, true);
+      mutt_addrlist_write(&e->env->cc, tmp, sizeof(tmp), true);
       if (optional && (tmp[0] == '\0'))
         optional = false;
       mutt_format_s(buf, buflen, prec, tmp);

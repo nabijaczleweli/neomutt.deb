@@ -23,13 +23,13 @@
 #define TEST_NO_MAIN
 #include "acutest.h"
 #include "config.h"
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 
 void test_mutt_path_canon(void)
 {
   // bool mutt_path_canon(char *buf, size_t buflen, const char *homedir);
 
   {
-    TEST_CHECK(!mutt_path_canon(NULL, 10, "apple"));
+    TEST_CHECK(!mutt_path_canon(NULL, 10, "apple", true));
   }
 }

@@ -29,7 +29,8 @@
 #include "config.h"
 #include <stdbool.h>
 #include <string.h>
-#include "mutt/mutt.h"
+#include "imap_private.h" // IWYU pragma: keep
+#include "mutt/lib.h"
 
 // clang-format off
 /**

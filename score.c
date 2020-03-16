@@ -29,13 +29,14 @@
 #include "config.h"
 #include <stdbool.h>
 #include <stdlib.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
 #include "mutt.h"
 #include "score.h"
 #include "globals.h"
+#include "init.h"
 #include "keymap.h"
 #include "mutt_commands.h"
 #include "mutt_menu.h"
@@ -57,7 +58,7 @@ struct Score
   char *str;
   struct PatternList *pat;
   int val;
-  bool exact; /**< if this rule matches, don't evaluate any more */
+  bool exact; ///< if this rule matches, don't evaluate any more
   struct Score *next;
 };
 
@@ -84,15 +85,19 @@ void mutt_check_rescore(struct Mailbox *m)
 
     for (int i = 0; m && i < m->msg_count; i++)
     {
-      mutt_score_message(m, m->emails[i], true);
-      m->emails[i]->pair = 0;
+      struct Email *e = m->emails[i];
+      if (!e)
+        break;
+
+      mutt_score_message(m, e, true);
+      e->pair = 0;
     }
   }
   OptNeedRescore = false;
 }
 
 /**
- * mutt_parse_score - Parse the 'score' command - Implements ::command_t
+ * mutt_parse_score - Parse the 'score' command - Implements Command::parse()
  */
 enum CommandResult mutt_parse_score(struct Buffer *buf, struct Buffer *s,
                                     unsigned long data, struct Buffer *err)
@@ -196,7 +201,7 @@ void mutt_score_message(struct Mailbox *m, struct Email *e, bool upd_mbox)
 }
 
 /**
- * mutt_parse_unscore - Parse the 'unscore' command - Implements ::command_t
+ * mutt_parse_unscore - Parse the 'unscore' command - Implements Command::parse()
  */
 enum CommandResult mutt_parse_unscore(struct Buffer *buf, struct Buffer *s,
                                       unsigned long data, struct Buffer *err)

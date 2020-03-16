@@ -28,7 +28,7 @@
 
 #include "config.h"
 #include <stddef.h>
-#include "mutt/mutt.h"
+#include "mutt/lib.h"
 #include "myvar.h"
 
 struct MyVarList MyVars = TAILQ_HEAD_INITIALIZER(MyVars);
@@ -53,7 +53,7 @@ static struct MyVar *myvar_new(const char *name, const char *value)
  * myvar_free - Free a MyVar
  * @param ptr MyVar to free
  */
-void myvar_free(struct MyVar **ptr)
+static void myvar_free(struct MyVar **ptr)
 {
   if (!ptr || !*ptr)
     return;
