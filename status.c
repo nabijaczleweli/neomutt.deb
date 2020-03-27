@@ -141,7 +141,7 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
     {
       struct Mailbox *m = Context ? Context->mailbox : NULL;
 
-#ifdef USE_COMPRESSED
+#ifdef USE_COMP_MBOX
       if (m && m->compress_info && (m->realpath[0] != '\0'))
       {
         mutt_str_strfcpy(tmp, m->realpath, sizeof(tmp));
@@ -149,7 +149,7 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
       }
       else
 #endif
-          if (m && (m->magic == MUTT_NOTMUCH) && m->name)
+          if (m && (m->type == MUTT_NOTMUCH) && m->name)
       {
         mutt_str_strfcpy(tmp, m->name, sizeof(tmp));
       }
@@ -300,7 +300,7 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
                      2 :
                      (Context->mailbox->changed ||
                       /* deleted doesn't necessarily mean changed in IMAP */
-                      (Context->mailbox->magic != MUTT_IMAP && Context->mailbox->msg_deleted)) ?
+                      (Context->mailbox->type != MUTT_IMAP && Context->mailbox->msg_deleted)) ?
                      1 :
                      0);
       }

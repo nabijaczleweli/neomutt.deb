@@ -41,7 +41,6 @@
 #include "conn/lib.h"
 #include "gui/lib.h"
 #include "addrbook.h"
-#include "bcache.h"
 #include "browser.h"
 #include "commands.h"
 #include "compose.h"
@@ -75,7 +74,9 @@
 #include "smtp.h"
 #include "sort.h"
 #include "status.h"
+#include "bcache/lib.h"
 #include "hcache/lib.h"
+#include "history/lib.h"
 #include "imap/lib.h"
 #include "maildir/lib.h"
 #include "ncrypt/lib.h"
@@ -101,7 +102,7 @@ struct ConfigDef MuttVars[] = {
    ** If \fIset\fP, hitting backspace against an empty prompt aborts the
    ** prompt.
    */
-  { "abort_key", DT_STRING|DT_NOT_EMPTY, &C_AbortKeyStr, IP "\007" },
+  { "abort_key", DT_STRING|DT_NOT_EMPTY, &C_AbortKey, IP "\007" },
   /*
   ** .pp
   ** Specifies the key that can be used to abort prompts.  The format is the
@@ -221,7 +222,6 @@ struct ConfigDef MuttVars[] = {
   ** be redrawn on the screen when moving to the next or previous entries
   ** in the menu.
   */
-
   { "arrow_string", DT_STRING|DT_NOT_EMPTY, &C_ArrowString, IP "->" },
   /*
   ** .pp
@@ -416,7 +416,7 @@ struct ConfigDef MuttVars[] = {
   /*
   ** .pp
   ** This variable sets where autocrypt files are stored, including the GPG
-  ** keyring and sqlite database.  See ``$autocryptdoc'' for more details.
+  ** keyring and SQLite database.  See ``$autocryptdoc'' for more details.
   ** (Autocrypt only)
   */
   { "autocrypt_reply", DT_BOOL, &C_AutocryptReply, true },
@@ -848,7 +848,7 @@ struct ConfigDef MuttVars[] = {
   /*
   ** .pp
   ** This variable controls the use of the GPGME-enabled crypto backends.
-  ** If it is \fIset\fP and NeoMutt was built with gpgme support, the gpgme code for
+  ** If it is \fIset\fP and NeoMutt was built with GPGME support, the gpgme code for
   ** S/MIME and PGP will be used instead of the classic code.  Note that
   ** you need to set this option in .neomuttrc; it won't have any effect when
   ** used interactively.
@@ -2154,7 +2154,7 @@ struct ConfigDef MuttVars[] = {
   ** .pp
   ** Also see the $$move variable.
   */
-  { "mbox_type", DT_ENUM, &C_MboxType, MUTT_MBOX, IP &MagicDef },
+  { "mbox_type", DT_ENUM, &C_MboxType, MUTT_MBOX, IP &MboxTypeDef },
   /*
   ** .pp
   ** The default mailbox type used when creating new folders. May be any of

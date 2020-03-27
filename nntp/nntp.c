@@ -47,7 +47,6 @@
 #include "conn/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
-#include "bcache.h"
 #include "globals.h"
 #include "hook.h"
 #include "init.h"
@@ -58,6 +57,7 @@
 #include "mx.h"
 #include "progress.h"
 #include "sort.h"
+#include "bcache/lib.h"
 #include "hcache/lib.h"
 #include "ncrypt/lib.h"
 #ifdef USE_HCACHE
@@ -174,7 +174,7 @@ struct NntpAccountData *nntp_adata_new(struct Connection *conn)
  */
 struct NntpAccountData *nntp_adata_get(struct Mailbox *m)
 {
-  if (!m || (m->magic != MUTT_NNTP))
+  if (!m || (m->type != MUTT_NNTP))
     return NULL;
   struct Account *a = m->account;
   if (!a)
@@ -1979,7 +1979,7 @@ int nntp_post(struct Mailbox *m, const char *msg)
   struct NntpMboxData tmp_mdata = { 0 };
   char buf[1024];
 
-  if (m && (m->magic == MUTT_NNTP))
+  if (m && (m->type == MUTT_NNTP))
     mdata = m->mdata;
   else
   {
@@ -2411,7 +2411,7 @@ static struct Account *nntp_ac_find(struct Account *a, const char *path)
  */
 static int nntp_ac_add(struct Account *a, struct Mailbox *m)
 {
-  if (!a || !m || (m->magic != MUTT_NNTP))
+  if (!a || !m || (m->type != MUTT_NNTP))
     return -1;
   return 0;
 }
@@ -2881,7 +2881,7 @@ static int nntp_path_parent(char *buf, size_t buflen)
  * MxNntpOps - NNTP Mailbox - Implements ::MxOps
  */
 struct MxOps MxNntpOps = {
-  .magic            = MUTT_NNTP,
+  .type            = MUTT_NNTP,
   .name             = "nntp",
   .is_local         = false,
   .ac_find          = nntp_ac_find,

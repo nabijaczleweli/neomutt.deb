@@ -46,7 +46,6 @@
 #include "conn/lib.h"
 #include "mutt.h"
 #include "lib.h"
-#include "bcache.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "mutt_account.h"
@@ -55,6 +54,7 @@
 #include "muttlib.h"
 #include "protos.h"
 #include "sort.h"
+#include "bcache/lib.h"
 #ifdef USE_HCACHE
 #include "hcache/lib.h"
 #endif
@@ -1390,7 +1390,7 @@ void nntp_mailbox(struct Mailbox *m, char *buf, size_t buflen)
     if (!mdata || !mdata->subscribed || !mdata->unread)
       continue;
 
-    if ((m->magic == MUTT_NNTP) &&
+    if ((m->type == MUTT_NNTP) &&
         (mutt_str_strcmp(mdata->group, ((struct NntpMboxData *) m->mdata)->group) == 0))
     {
       unsigned int unread = 0;

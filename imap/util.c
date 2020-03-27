@@ -48,10 +48,10 @@
 #include "core/lib.h"
 #include "conn/lib.h"
 #include "gui/lib.h"
-#include "bcache.h"
 #include "globals.h"
 #include "mutt_account.h"
 #include "options.h"
+#include "bcache/lib.h"
 #include "imap/lib.h"
 #ifdef USE_HCACHE
 #include "message.h"
@@ -119,7 +119,7 @@ struct ImapAccountData *imap_adata_new(struct Account *a)
  */
 struct ImapAccountData *imap_adata_get(struct Mailbox *m)
 {
-  if (!m || (m->magic != MUTT_IMAP) || !m->account)
+  if (!m || (m->type != MUTT_IMAP) || !m->account)
     return NULL;
   return m->account->adata;
 }
@@ -145,7 +145,7 @@ int imap_adata_find(const char *path, struct ImapAccountData **adata,
   struct Account *np = NULL;
   TAILQ_FOREACH(np, &NeoMutt->accounts, entries)
   {
-    if (np->magic != MUTT_IMAP)
+    if (np->type != MUTT_IMAP)
       continue;
 
     tmp_adata = np->adata;
@@ -197,11 +197,11 @@ struct ImapMboxData *imap_mdata_new(struct ImapAccountData *adata, const char *n
     unsigned long long *modseq = mutt_hcache_fetch_raw(hc, "/MODSEQ", 7, &dlen);
     if (uidvalidity)
     {
-      mdata->uid_validity = *(unsigned int *) uidvalidity;
+      mdata->uidvalidity = *(unsigned int *) uidvalidity;
       mdata->uid_next = uidnext ? *(unsigned int *) uidnext : 0;
       mdata->modseq = modseq ? *modseq : 0;
       mutt_debug(LL_DEBUG3, "hcache uidvalidity %u, uidnext %u, modseq %llu\n",
-                 mdata->uid_validity, mdata->uid_next, mdata->modseq);
+                 mdata->uidvalidity, mdata->uid_next, mdata->modseq);
     }
     mutt_hcache_free_raw(hc, &uidvalidity);
     mutt_hcache_free_raw(hc, &uidnext);
@@ -251,7 +251,7 @@ void imap_mdata_free(void **ptr)
  */
 struct ImapMboxData *imap_mdata_get(struct Mailbox *m)
 {
-  if (!m || (m->magic != MUTT_IMAP) || !m->mdata)
+  if (!m || (m->type != MUTT_IMAP) || !m->mdata)
     return NULL;
   return m->mdata;
 }
@@ -503,7 +503,7 @@ struct Email *imap_hcache_get(struct ImapMboxData *mdata, unsigned int uid)
 
   sprintf(key, "/%u", uid);
   struct HCacheEntry hce =
-      mutt_hcache_fetch(mdata->hcache, key, mutt_str_strlen(key), mdata->uid_validity);
+      mutt_hcache_fetch(mdata->hcache, key, mutt_str_strlen(key), mdata->uidvalidity);
   if (!hce.email && hce.uidvalidity)
   {
     mutt_debug(LL_DEBUG3, "hcache uidvalidity mismatch: %zu\n", hce.uidvalidity);
@@ -527,7 +527,7 @@ int imap_hcache_put(struct ImapMboxData *mdata, struct Email *e)
   char key[16];
 
   sprintf(key, "/%u", imap_edata_get(e)->uid);
-  return mutt_hcache_store(mdata->hcache, key, mutt_str_strlen(key), e, mdata->uid_validity);
+  return mutt_hcache_store(mdata->hcache, key, mutt_str_strlen(key), e, mdata->uidvalidity);
 }
 
 /**
@@ -1097,7 +1097,7 @@ void imap_keepalive(void)
   struct Account *np = NULL;
   TAILQ_FOREACH(np, &NeoMutt->accounts, entries)
   {
-    if (np->magic != MUTT_IMAP)
+    if (np->type != MUTT_IMAP)
       continue;
 
     struct ImapAccountData *adata = np->adata;

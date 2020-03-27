@@ -51,8 +51,8 @@
 #include "mx.h"
 #include "pattern.h"
 #include "ncrypt/lib.h"
-#ifdef USE_COMPRESSED
-#include "compress/lib.h"
+#ifdef USE_COMP_MBOX
+#include "compmbox/lib.h"
 #endif
 
 /* These Config Variables are only used in hook.c */
@@ -84,7 +84,7 @@ static HookFlags current_hook_type = MUTT_HOOK_NO_FLAGS;
  * This is used by 'account-hook', 'append-hook' and many more.
  */
 enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
-                                   unsigned long data, struct Buffer *err)
+                                   intptr_t data, struct Buffer *err)
 {
   struct Hook *hook = NULL;
   int rc = MUTT_CMD_ERROR;
@@ -160,7 +160,7 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
     mutt_buffer_copy(pattern, tmp);
     mutt_buffer_pool_release(&tmp);
   }
-#ifdef USE_COMPRESSED
+#ifdef USE_COMP_MBOX
   else if (data & (MUTT_APPEND_HOOK | MUTT_OPEN_HOOK | MUTT_CLOSE_HOOK))
   {
     if (mutt_comp_valid_command(mutt_b2s(cmd)) == 0)
@@ -353,7 +353,7 @@ static void delete_idxfmt_hooks(void)
  * mutt_parse_idxfmt_hook - Parse the 'index-format-hook' command - Implements Command::parse()
  */
 enum CommandResult mutt_parse_idxfmt_hook(struct Buffer *buf, struct Buffer *s,
-                                          unsigned long data, struct Buffer *err)
+                                          intptr_t data, struct Buffer *err)
 {
   enum CommandResult rc = MUTT_CMD_ERROR;
   bool pat_not = false;
@@ -455,7 +455,7 @@ out:
  * mutt_parse_unhook - Parse the 'unhook' command - Implements Command::parse()
  */
 enum CommandResult mutt_parse_unhook(struct Buffer *buf, struct Buffer *s,
-                                     unsigned long data, struct Buffer *err)
+                                     intptr_t data, struct Buffer *err)
 {
   while (MoreArgs(s))
   {

@@ -2286,7 +2286,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
   {
     mutt_compile_help(buf, sizeof(buf), MENU_PAGER,
 #ifdef USE_NNTP
-                      (Context && (Context->mailbox->magic == MUTT_NNTP)) ?
+                      (Context && (Context->mailbox->type == MUTT_NNTP)) ?
                           PagerNewsHelpExtra :
 #endif
                           PagerHelpExtra);
@@ -2845,11 +2845,11 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
         {
           while (((new_topline < rd.last_line) ||
                   (0 == (dretval = display_line(
-                              rd.fp, &rd.last_pos, &rd.line_info, new_topline, &rd.last_line,
-                              &rd.max_line, MUTT_TYPES | (flags & MUTT_PAGER_NOWRAP),
-                              &rd.quote_list, &rd.q_level, &rd.force_redraw,
-                              &rd.search_re, rd.extra->win_pager)))) &&
-                  IS_HEADER(rd.line_info[new_topline].type))
+                             rd.fp, &rd.last_pos, &rd.line_info, new_topline, &rd.last_line,
+                             &rd.max_line, MUTT_TYPES | (flags & MUTT_PAGER_NOWRAP),
+                             &rd.quote_list, &rd.q_level, &rd.force_redraw,
+                             &rd.search_re, rd.extra->win_pager)))) &&
+                 IS_HEADER(rd.line_info[new_topline].type))
           {
             new_topline++;
           }
@@ -2859,11 +2859,11 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
 
         while ((((new_topline + C_SkipQuotedOffset) < rd.last_line) ||
                 (0 == (dretval = display_line(
-                            rd.fp, &rd.last_pos, &rd.line_info, new_topline, &rd.last_line,
-                            &rd.max_line, MUTT_TYPES | (flags & MUTT_PAGER_NOWRAP),
-                            &rd.quote_list, &rd.q_level, &rd.force_redraw,
-                            &rd.search_re, rd.extra->win_pager)))) &&
-                (rd.line_info[new_topline + C_SkipQuotedOffset].type != MT_COLOR_QUOTED))
+                           rd.fp, &rd.last_pos, &rd.line_info, new_topline, &rd.last_line,
+                           &rd.max_line, MUTT_TYPES | (flags & MUTT_PAGER_NOWRAP),
+                           &rd.quote_list, &rd.q_level, &rd.force_redraw,
+                           &rd.search_re, rd.extra->win_pager)))) &&
+               (rd.line_info[new_topline + C_SkipQuotedOffset].type != MT_COLOR_QUOTED))
         {
           new_topline++;
         }
@@ -2876,11 +2876,11 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
 
         while ((((new_topline + C_SkipQuotedOffset) < rd.last_line) ||
                 (0 == (dretval = display_line(
-                            rd.fp, &rd.last_pos, &rd.line_info, new_topline, &rd.last_line,
-                            &rd.max_line, MUTT_TYPES | (flags & MUTT_PAGER_NOWRAP),
-                            &rd.quote_list, &rd.q_level, &rd.force_redraw,
-                            &rd.search_re, rd.extra->win_pager)))) &&
-                (rd.line_info[new_topline + C_SkipQuotedOffset].type == MT_COLOR_QUOTED))
+                           rd.fp, &rd.last_pos, &rd.line_info, new_topline, &rd.last_line,
+                           &rd.max_line, MUTT_TYPES | (flags & MUTT_PAGER_NOWRAP),
+                           &rd.quote_list, &rd.q_level, &rd.force_redraw,
+                           &rd.search_re, rd.extra->win_pager)))) &&
+               (rd.line_info[new_topline + C_SkipQuotedOffset].type == MT_COLOR_QUOTED))
         {
           new_topline++;
         }
@@ -3035,8 +3035,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
         /* L10N: CHECK_ACL */
         /* L10N: Due to the implementation details we do not know whether we
            delete zero, 1, 12, ... messages. So in English we use
-           "messages". Your language might have other means to express this.
-         */
+           "messages". Your language might have other means to express this.  */
         CHECK_ACL(MUTT_ACL_DELETE, _("Can't delete messages"));
 
         int subthread = (ch == OP_DELETE_SUBTHREAD);
@@ -3154,7 +3153,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
       case OP_POST:
         CHECK_MODE(IsEmail(extra) && !IsAttach(extra));
         CHECK_ATTACH;
-        if (extra->ctx && (extra->ctx->mailbox->magic == MUTT_NNTP) &&
+        if (extra->ctx && (extra->ctx->mailbox->type == MUTT_NNTP) &&
             !((struct NntpMboxData *) extra->ctx->mailbox->mdata)->allowed && (query_quadoption(C_PostModerated, _("Posting to this group not allowed, may be moderated. Continue?")) != MUTT_YES))
         {
           break;
@@ -3166,7 +3165,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
       case OP_FORWARD_TO_GROUP:
         CHECK_MODE(IsEmail(extra) || IsMsgAttach(extra));
         CHECK_ATTACH;
-        if (extra->ctx && (extra->ctx->mailbox->magic == MUTT_NNTP) &&
+        if (extra->ctx && (extra->ctx->mailbox->type == MUTT_NNTP) &&
             !((struct NntpMboxData *) extra->ctx->mailbox->mdata)->allowed && (query_quadoption(C_PostModerated, _("Posting to this group not allowed, may be moderated. Continue?")) != MUTT_YES))
         {
           break;
@@ -3196,7 +3195,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
             (query_quadoption(C_FollowupToPoster,
                               _("Reply by mail as poster prefers?")) != MUTT_YES))
         {
-          if (extra->ctx && (extra->ctx->mailbox->magic == MUTT_NNTP) &&
+          if (extra->ctx && (extra->ctx->mailbox->type == MUTT_NNTP) &&
               !((struct NntpMboxData *) extra->ctx->mailbox->mdata)->allowed && (query_quadoption(C_PostModerated, _("Posting to this group not allowed, may be moderated. Continue?")) != MUTT_YES))
           {
             break;

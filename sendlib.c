@@ -424,8 +424,7 @@ int mutt_write_mime_header(struct Body *a, FILE *fp)
 
         /* Dirty hack to make messages readable by Outlook Express
          * for the Mac: force quotes around the boundary parameter
-         * even when they aren't needed.
-         */
+         * even when they aren't needed.  */
         if (!mutt_str_strcasecmp(cont->attribute, "boundary") &&
             !mutt_str_strcmp(buf, cont->value))
           snprintf(buf, sizeof(buf), "\"%s\"", cont->value);
@@ -3284,7 +3283,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid,
 
   /* We need to add a Content-Length field to avoid problems where a line in
    * the message body begins with "From " */
-  if ((ctx_fcc->mailbox->magic == MUTT_MMDF) || (ctx_fcc->mailbox->magic == MUTT_MBOX))
+  if ((ctx_fcc->mailbox->type == MUTT_MMDF) || (ctx_fcc->mailbox->type == MUTT_MBOX))
   {
     tempfile = mutt_buffer_pool_get();
     mutt_buffer_mktemp(tempfile);
@@ -3331,7 +3330,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid,
   if (post && fcc)
     fprintf(msg->fp, "X-Mutt-Fcc: %s\n", fcc);
 
-  if ((ctx_fcc->mailbox->magic == MUTT_MMDF) || (ctx_fcc->mailbox->magic == MUTT_MBOX))
+  if ((ctx_fcc->mailbox->type == MUTT_MMDF) || (ctx_fcc->mailbox->type == MUTT_MBOX))
     fprintf(msg->fp, "Status: RO\n");
 
   /* mutt_rfc822_write_header() only writes out a Date: header with
@@ -3444,8 +3443,11 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid,
     if (mutt_file_fclose(&fp_tmp) != 0)
       rc = -1;
     /* if there was an error, leave the temp version */
-    if (rc == 0)
+    if (rc >= 0)
+    {
       unlink(mutt_b2s(tempfile));
+      rc = 0;
+    }
   }
   else
   {

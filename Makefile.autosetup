@@ -61,7 +61,7 @@ ALL_FILES!=	(cd $(SRCDIR) && git ls-files 2>/dev/null) || true
 ###############################################################################
 # neomutt
 NEOMUTT=	neomutt$(EXEEXT)
-NEOMUTTOBJS=	addrbook.o alias.o bcache.o browser.o commands.o \
+NEOMUTTOBJS=	addrbook.o alias.o browser.o commands.o \
 		complete.o compose.o conststrings.o context.o copy.o \
 		edit.o editmsg.o enriched.o enter.o flags.o functions.o \
 		git_ver.o handler.o hdrline.o help.o hook.o icommands.o index.o init.o \
@@ -85,9 +85,6 @@ NEOMUTTOBJS+=	mutt_lua.o
 @if USE_INOTIFY
 NEOMUTTOBJS+=	monitor.o
 @endif
-@if USE_ZLIB
-NEOMUTTOBJS+=	mutt_zstrm.o
-@endif
 
 CLEANFILES+=	$(NEOMUTT) $(NEOMUTTOBJS)
 ALLOBJS+=	$(NEOMUTTOBJS)
@@ -96,9 +93,8 @@ ALLOBJS+=	$(NEOMUTTOBJS)
 # libautocrypt
 @if USE_AUTOCRYPT
 LIBAUTOCRYPT=	libautocrypt.a
-LIBAUTOCRYPTOBJS=	autocrypt/autocrypt.o autocrypt/autocrypt_acct_menu.o \
-			autocrypt/autocrypt_db.o autocrypt/autocrypt_gpgme.o \
-			autocrypt/autocrypt_schema.o
+LIBAUTOCRYPTOBJS=autocrypt/autocrypt.o autocrypt/acct_menu.o autocrypt/db.o \
+		 autocrypt/gpgme.o autocrypt/schema.o
 
 CLEANFILES+=	$(LIBAUTOCRYPT) $(LIBAUTOCRYPTOBJS)
 MUTTLIBS+=	$(LIBAUTOCRYPT)
@@ -122,12 +118,12 @@ MUTTLIBS+=	$(LIBNNTP)
 ALLOBJS+=	$(LIBNNTPOBJS)
 
 ###############################################################################
-# libcompress
-LIBCOMPRESS=	libcompress.a
-LIBCOMPRESSOBJS=compress/compress.o
-CLEANFILES+=	$(LIBCOMPRESS) $(LIBCOMPRESSOBJS)
-MUTTLIBS+=	$(LIBCOMPRESS)
-ALLOBJS+=	$(LIBCOMPRESSOBJS)
+# libcompmbox
+LIBCOMPMBOX=	libcompmbox.a
+LIBCOMPMBOXOBJS=compmbox/compress.o
+CLEANFILES+=	$(LIBCOMPMBOX) $(LIBCOMPMBOXOBJS)
+MUTTLIBS+=	$(LIBCOMPMBOX)
+ALLOBJS+=	$(LIBCOMPMBOXOBJS)
 
 ###############################################################################
 # libgui
@@ -242,6 +238,9 @@ LIBCONNOBJS+=	conn/gnutls.o
 @if USE_SSL_OPENSSL
 LIBCONNOBJS+=	conn/openssl.o
 @endif
+@if USE_ZLIB
+LIBCONNOBJS+=	conn/zstrm.o
+@endif
 CLEANFILES+=	$(LIBCONN) $(LIBCONNOBJS)
 MUTTLIBS+=	$(LIBCONN)
 ALLOBJS+=	$(LIBCONNOBJS)
@@ -272,16 +271,44 @@ LIBHCACHEOBJS+=	hcache/qdbm.o
 @if HAVE_TC
 LIBHCACHEOBJS+=	hcache/tc.o
 @endif
-@if HAVE_LZ4
-LIBHCACHEOBJS+=	hcache/compr_lz4.o
-@endif
-@if HAVE_ZLIB
-LIBHCACHEOBJS+=	hcache/compr_zlib.o
-@endif
-@if HAVE_ZSTD
-LIBHCACHEOBJS+=	hcache/compr_zstd.o
-@endif
 @endif # USE_HCACHE
+
+###############################################################################
+# libcompress
+@if USE_LZ4
+LIBCOMPRESSOBJS+=compress/lz4.o
+@endif
+@if USE_ZLIB
+LIBCOMPRESSOBJS+=compress/zlib.o
+@endif
+@if USE_ZSTD
+LIBCOMPRESSOBJS+=compress/zstd.o
+@endif
+@if USE_LZ4 || USE_ZLIB || USE_ZSTD
+LIBCOMPRESSOBJS+=compress/compress.o
+LIBCOMPRESS=	libcompress.a
+CLEANFILES+=	$(LIBCOMPRESS) $(LIBCOMPRESSOBJS)
+MUTTLIBS+=	$(LIBCOMPRESS)
+ALLOBJS+=	$(LIBCOMPRESSOBJS)
+@endif
+
+###############################################################################
+# libbcache
+LIBBCACHE=	libbcache.a
+LIBBCACHEOBJS=	bcache/bcache.o
+
+CLEANFILES+=	$(LIBBCACHE) $(LIBBCACHEOBJS)
+MUTTLIBS+=	$(LIBBCACHE)
+ALLOBJS+=	$(LIBBCACHEOBJS)
+
+###############################################################################
+# libhistory
+LIBHISTORY=	libhistory.a
+LIBHISTORYOBJS=	history/history.o
+
+CLEANFILES+=	$(LIBHISTORY) $(LIBHISTORYOBJS)
+MUTTLIBS+=	$(LIBHISTORY)
+ALLOBJS+=	$(LIBHISTORYOBJS)
 
 ###############################################################################
 # pgpewrap
@@ -335,7 +362,7 @@ ALLOBJS+=	$(LIBADDRESSOBJS)
 # libmutt
 LIBMUTT=	libmutt.a
 LIBMUTTOBJS=	mutt/base64.o mutt/buffer.o mutt/charset.o mutt/date.o \
-		mutt/envlist.o mutt/exit.o mutt/file.o mutt/filter.o mutt/hash.o mutt/history.o \
+		mutt/envlist.o mutt/exit.o mutt/file.o mutt/filter.o mutt/hash.o \
 		mutt/list.o mutt/logging.o mutt/mapping.o mutt/mbyte.o mutt/md5.o \
 		mutt/memory.o mutt/notify.o mutt/path.o mutt/pool.o mutt/regex.o \
 		mutt/signal.o mutt/slist.o mutt/string.o
@@ -404,6 +431,13 @@ $(LIBNNTP): $(PWD)/nntp $(LIBNNTPOBJS)
 	$(RANLIB) $@
 $(PWD)/nntp:
 	$(MKDIR_P) $(PWD)/nntp
+
+# libcompmbox
+$(LIBCOMPMBOX): $(PWD)/compmbox $(LIBCOMPMBOXOBJS)
+	$(AR) cr $@ $(LIBCOMPMBOXOBJS)
+	$(RANLIB) $@
+$(PWD)/compmbox:
+	$(MKDIR_P) $(PWD)/compmbox
 
 # libcompress
 $(LIBCOMPRESS): $(PWD)/compress $(LIBCOMPRESSOBJS)
@@ -490,6 +524,20 @@ $(LIBHCACHE): $(PWD)/hcache $(LIBHCACHEOBJS)
 $(PWD)/hcache:
 	$(MKDIR_P) $(PWD)/hcache
 
+# libbcache
+$(LIBBCACHE): $(PWD)/bcache $(LIBBCACHEOBJS)
+	$(AR) cr $@ $(LIBBCACHEOBJS)
+	$(RANLIB) $@
+$(PWD)/bcache:
+	$(MKDIR_P) $(PWD)/bcache
+
+# libhistory
+$(LIBHISTORY): $(PWD)/history $(LIBHISTORYOBJS)
+	$(AR) cr $@ $(LIBHISTORYOBJS)
+	$(RANLIB) $@
+$(PWD)/history:
+	$(MKDIR_P) $(PWD)/history
+
 # pgpewrap
 $(PGPEWRAP): $(PGPEWRAPOBJS)
 	$(CC) $(LDFLAGS) -o $@ $(PGPEWRAPOBJS)
@@ -559,6 +607,7 @@ coverage: all test
 	lcov --test-name "test" --output-file lcov.info --capture \
 	  --directory address \
 	  --directory config \
+	  --directory core \
 	  --directory email \
 	  --directory mutt
 	-genhtml --output-directory lcov --frames lcov.info

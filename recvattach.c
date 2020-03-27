@@ -334,7 +334,7 @@ const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols,
       else
       {
         mutt_debug(LL_DEBUG1, "ERROR: invalid content-disposition %d\n",
-                    aptr->content->disposition);
+                   aptr->content->disposition);
         ch = '!';
       }
       snprintf(buf, buflen, "%c", ch);
@@ -1550,7 +1550,7 @@ void mutt_view_attachments(struct Email *e)
         CHECK_READONLY;
 
 #ifdef USE_POP
-        if (m->magic == MUTT_POP)
+        if (m->type == MUTT_POP)
         {
           mutt_flushinp();
           mutt_error(_("Can't delete attachment from POP server"));
@@ -1559,7 +1559,7 @@ void mutt_view_attachments(struct Email *e)
 #endif
 
 #ifdef USE_NNTP
-        if (m->magic == MUTT_NNTP)
+        if (m->type == MUTT_NNTP)
         {
           mutt_flushinp();
           mutt_error(_("Can't delete attachment from news server"));
