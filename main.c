@@ -313,7 +313,7 @@ int main(int argc, char *argv[], char *envp[])
   char *subject = NULL;
   char *include_file = NULL;
   char *draft_file = NULL;
-  char *new_magic = NULL;
+  char *new_type = NULL;
   char *dlevel = NULL;
   char *dfile = NULL;
 #ifdef USE_NNTP
@@ -444,7 +444,7 @@ int main(int argc, char *argv[], char *envp[])
           dfile = optarg;
           break;
         case 'm':
-          new_magic = optarg;
+          new_type = optarg;
           break;
         case 'n':
           flags |= MUTT_CLI_NOSYSRC;
@@ -648,10 +648,10 @@ int main(int argc, char *argv[], char *envp[])
   /* Initialize crypto backends.  */
   crypt_init();
 
-  if (new_magic)
+  if (new_type)
   {
     struct Buffer err = mutt_buffer_make(0);
-    int r = cs_str_initial_set(cs, "mbox_type", new_magic, &err);
+    int r = cs_str_initial_set(cs, "mbox_type", new_type, &err);
     if (CSR_RESULT(r) != CSR_SUCCESS)
     {
       mutt_error(err.data);
@@ -949,8 +949,7 @@ int main(int argc, char *argv[], char *envp[])
        * Note that SEND_NO_FREE_HEADER is set above so it isn't unlinked.  */
       else if (edit_infile)
         bodyfile = mutt_b2s(&expanded_infile);
-      /* For bodytext and unedited include_file: use the tempfile.
-       */
+      // For bodytext and unedited include_file: use the tempfile.
       else
         bodyfile = mutt_b2s(&tempfile);
 
@@ -990,16 +989,9 @@ int main(int argc, char *argv[], char *envp[])
       mutt_list_free(&attach);
     }
 
-    if (isatty(0))
-    {
-      rv = ci_send_message(sendflags, e, bodyfile, NULL, NULL);
-      /* We WANT the "Mail sent." and any possible, later error */
-      log_queue_empty();
-    }
-    else
-    {
-      mutt_error(_("Error initializing terminal"));
-    }
+    rv = ci_send_message(sendflags, e, bodyfile, NULL, NULL);
+    /* We WANT the "Mail sent." and any possible, later error */
+    log_queue_empty();
     if (ErrorBufMessage)
       mutt_message("%s", ErrorBuf);
 

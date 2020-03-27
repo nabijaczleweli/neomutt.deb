@@ -102,7 +102,7 @@ struct Mailbox
   int vcount;                         ///< The number of virtual messages
 
   bool notified;                      ///< User has been notified
-  enum MailboxType magic;             ///< Mailbox type
+  enum MailboxType type;              ///< Mailbox type
   bool newly_created;                 ///< Mbox or mmdf just popped into existence
   struct timespec mtime;              ///< Time Mailbox was last changed
   struct timespec last_visited;       ///< Time of last exit from this mailbox
@@ -120,7 +120,7 @@ struct Mailbox
 
   AclFlags rights;                    ///< ACL bits, see #AclFlags
 
-#ifdef USE_COMPRESSED
+#ifdef USE_COMP_MBOX
   void *compress_info;                ///< Compressed mbox module private data
 #endif
 

@@ -211,7 +211,8 @@ int mutt_display_message(struct MuttWindow *win_index, struct MuttWindow *win_ib
   mutt_message_hook(m, e, MUTT_MESSAGE_HOOK);
 
   char columns[16];
-  snprintf(columns, sizeof(columns), "%d", win_pager->state.cols);
+  // win_pager might not be visible and have a size yet, so use win_index
+  snprintf(columns, sizeof(columns), "%d", win_index->state.cols);
   mutt_envlist_set("COLUMNS", columns, true);
 
   /* see if crypto is needed for this message.  if so, we should exit curses */
@@ -295,7 +296,7 @@ int mutt_display_message(struct MuttWindow *win_index, struct MuttWindow *win_ib
 
   chflags = (C_Weed ? (CH_WEED | CH_REORDER) : CH_NO_FLAGS) | CH_DECODE | CH_FROM | CH_DISPLAY;
 #ifdef USE_NOTMUCH
-  if (m->magic == MUTT_NOTMUCH)
+  if (m->type == MUTT_NOTMUCH)
     chflags |= CH_VIRTUAL;
 #endif
   res = mutt_copy_message(fp_out, m, e, cmflags, chflags, win_pager->state.cols);
@@ -1099,7 +1100,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
   mutt_message(_("Copying to %s..."), mutt_b2s(buf));
 
 #ifdef USE_IMAP
-  if ((m->magic == MUTT_IMAP) && !(decode || decrypt) &&
+  if ((m->type == MUTT_IMAP) && !(decode || decrypt) &&
       (imap_path_probe(mutt_b2s(buf), NULL) == MUTT_IMAP))
   {
     switch (imap_copy_messages(m, el, mutt_b2s(buf), delete_original))
@@ -1119,6 +1120,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
   }
 #endif
 
+  mutt_file_resolve_symlink(buf);
   struct Mailbox *m_save = mx_path_resolve(mutt_b2s(buf));
   bool old_append = m_save->append;
   struct Context *ctx_save = mx_mbox_open(m_save, MUTT_NEWFOLDER);
@@ -1129,7 +1131,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
   }
   m_save->append = true;
 
-#ifdef USE_COMPRESSED
+#ifdef USE_COMP_MBOX
   /* If we're saving to a compressed mailbox, the stats won't be updated
    * until the next open.  Until then, improvise. */
   struct Mailbox *m_comp = NULL;
@@ -1150,7 +1152,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
       m_save->append = old_append;
       goto cleanup;
     }
-#ifdef USE_COMPRESSED
+#ifdef USE_COMP_MBOX
     if (m_comp)
     {
       m_comp->msg_count++;
@@ -1170,7 +1172,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
     rc = 0;
 
 #ifdef USE_NOTMUCH
-    if (m->magic == MUTT_NOTMUCH)
+    if (m->type == MUTT_NOTMUCH)
       nm_db_longrun_init(m, true);
 #endif
     STAILQ_FOREACH(en, el, entries)
@@ -1180,7 +1182,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
                                  ctx_save->mailbox);
       if (rc != 0)
         break;
-#ifdef USE_COMPRESSED
+#ifdef USE_COMP_MBOX
       if (m_comp)
       {
         struct Email *e2 = en->email;
@@ -1197,7 +1199,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
 #endif
     }
 #ifdef USE_NOTMUCH
-    if (m->magic == MUTT_NOTMUCH)
+    if (m->type == MUTT_NOTMUCH)
       nm_db_longrun_done(m);
 #endif
     if (rc != 0)
@@ -1208,8 +1210,8 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
     }
   }
 
-  const bool need_mailbox_cleanup = ((ctx_save->mailbox->magic == MUTT_MBOX) ||
-                                     (ctx_save->mailbox->magic == MUTT_MMDF));
+  const bool need_mailbox_cleanup = ((ctx_save->mailbox->type == MUTT_MBOX) ||
+                                     (ctx_save->mailbox->type == MUTT_MMDF));
 
   mx_mbox_close(&ctx_save);
   m_save->append = old_append;

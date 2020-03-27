@@ -547,14 +547,12 @@ static int inline_forward_attachments(struct Mailbox *m, struct Email *e,
       if (*forwardq == -1)
       {
         *forwardq = query_quadoption(C_ForwardAttachments,
-                                     /* L10N:
-                                        This is the prompt for $forward_attachments.
+                                     /* L10N: This is the prompt for $forward_attachments.
                                         When inline forwarding ($mime_forward answered "no"), this prompts
                                         whether to add non-decodable attachments from the original email.
                                         Text/plain parts and the like will already be included in the
                                         message contents, but other attachment, such as PDF files, will also
-                                        be added as attachments to the new mail, if this is answered yes.
-                                      */
+                                        be added as attachments to the new mail, if this is answered yes.  */
                                      _("Forward attachments?"));
         if (*forwardq != MUTT_YES)
         {
@@ -2107,7 +2105,7 @@ int ci_send_message(SendFlags flags, struct Email *e_templ, const char *tempfile
       mutt_fix_reply_recipients(e_templ->env);
 
 #ifdef USE_NNTP
-    if ((flags & SEND_NEWS) && ctx && (ctx->mailbox->magic == MUTT_NNTP) &&
+    if ((flags & SEND_NEWS) && ctx && (ctx->mailbox->type == MUTT_NNTP) &&
         !e_templ->env->newsgroups)
     {
       e_templ->env->newsgroups =
@@ -2166,7 +2164,10 @@ int ci_send_message(SendFlags flags, struct Email *e_templ, const char *tempfile
       process_user_header(e_templ->env);
 
     if (flags & SEND_BATCH)
-      mutt_file_copy_stream(stdin, fp_tmp);
+    {
+      if (mutt_file_copy_stream(stdin, fp_tmp) < 1)
+        goto cleanup;
+    }
 
     if (C_SigOnTop && !(flags & (SEND_MAILX | SEND_KEY | SEND_BATCH)) &&
         C_Editor && (mutt_str_strcmp(C_Editor, "builtin") != 0))
@@ -2394,7 +2395,7 @@ int ci_send_message(SendFlags flags, struct Email *e_templ, const char *tempfile
   }
 
   /* Deal with the corner case where the crypto module backend is not available.
-   * This can happen if configured without pgp/smime and with gpgme, but
+   * This can happen if configured without PGP/SMIME and with GPGME, but
    * $crypt_use_gpgme is unset.  */
   if (e_templ->security && !crypt_has_module_backend(e_templ->security))
   {
@@ -2559,8 +2560,7 @@ int ci_send_message(SendFlags flags, struct Email *e_templ, const char *tempfile
      * - multipart/signed.     In this case, clear_content is a child
      * - multipart/encrypted.  In this case, clear_content exists independently
      * - application/pgp.      In this case, clear_content exists independently
-     * - something else.       In this case, it's the same as clear_content
-     */
+     * - something else.       In this case, it's the same as clear_content */
 
     /* This is ugly -- lack of "reporting back" from mutt_protect(). */
 

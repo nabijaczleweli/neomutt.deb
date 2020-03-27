@@ -1,10 +1,9 @@
 /**
  * @file
- * Compressed mbox local mailbox type
+ * API for the header cache compression
  *
  * @authors
- * Copyright (C) 1997 Alain Penders <Alain@Finale-Dev.com>
- * Copyright (C) 2016 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019 Tino Reichardt <milky-neomutt@mcmilk.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -22,44 +21,78 @@
  */
 
 /**
- * @page comp COMPRESS: Compressed Mailbox
+ * @page compress COMPRESS: Compression
  *
- * Compressed mbox local mailbox type
+ * Compression Backends:
  *
- * | File                | Description                |
- * | :------------------ | :------------------------- |
- * | compress/compress.c | @subpage comp_compress     |
+ * | File                | Description            |
+ * | :------------------ | :--------------------- |
+ * | compress/lz4.c      | @subpage compress_lz4  |
+ * | compress/zlib.c     | @subpage compress_zlib |
+ * | compress/zstd.c     | @subpage compress_zstd |
  */
 
 #ifndef MUTT_COMPRESS_LIB_H
 #define MUTT_COMPRESS_LIB_H
 
-#include <stdbool.h>
-#include <stdio.h>
-#include "mx.h"
-
-struct Mailbox;
+#include <stdlib.h>
 
 /**
- * struct CompressInfo - Private data for compress
- *
- * This object gets attached to the Mailbox.
+ * struct ComprOps - Header Cache Compression API
  */
-struct CompressInfo
+struct ComprOps
 {
-  const char *cmd_append;        ///< append-hook command
-  const char *cmd_close;         ///< close-hook  command
-  const char *cmd_open;          ///< open-hook   command
-  long size;                     ///< size of the compressed file
-  const struct MxOps *child_ops; ///< callbacks of de-compressed file
-  bool locked;                   ///< if realpath is locked
-  FILE *fp_lock;                 ///< fp used for locking
+  const char *name; ///< Compression name
+
+  /**
+   * open - Open a compression context
+   * @retval ptr  Success, backend-specific context
+   * @retval NULL Otherwise
+   */
+  void *(*open)(void);
+
+  /**
+   * compress - Compress header cache data
+   * @param[in]  cctx Compression context
+   * @param[in]  data Data to be compressed
+   * @param[in]  dlen Length of the uncompressed data
+   * @param[out] clen Length of returned compressed data
+   * @retval ptr  Success, pointer to compressed data
+   * @retval NULL Otherwise
+   *
+   * @note This function returns a pointer to data, which will be freed by the
+   *       close() function.
+   */
+  void *(*compress)(void *cctx, const char *data, size_t dlen, size_t *clen);
+
+  /**
+   * decompress - Decompress header cache data
+   * @param[in] cctx Compression context
+   * @param[in] cbuf Data to be decompressed
+   * @param[in] clen Length of the compressed input data
+   * @retval ptr  Success, pointer to decompressed data
+   * @retval NULL Otherwise
+   *
+   * @note This function returns a pointer to data, which will be freed by the
+   *       close() function.
+   */
+  void *(*decompress)(void *cctx, const char *cbuf, size_t clen);
+
+  /**
+   * close - Close a compression context
+   * @param[out] cctx Backend-specific context retrieved via open()
+   *
+   * @note This function will free all allocated resources, which were
+   *       allocated by open(), compress() or decompress()
+   */
+  void (*close)(void **cctx);
 };
 
-bool mutt_comp_can_append(struct Mailbox *m);
-bool mutt_comp_can_read(const char *path);
-int mutt_comp_valid_command(const char *cmd);
+extern const struct ComprOps compr_lz4_ops;
+extern const struct ComprOps compr_zlib_ops;
+extern const struct ComprOps compr_zstd_ops;
 
-extern struct MxOps MxCompOps;
+const struct ComprOps *compress_get_ops(const char *compr);
+const char *           compress_list   (void);
 
 #endif /* MUTT_COMPRESS_LIB_H */

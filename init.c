@@ -62,6 +62,7 @@
 #include "options.h"
 #include "protos.h"
 #include "sort.h"
+#include "history/lib.h"
 #ifdef USE_HCACHE
 #include "hcache/lib.h"
 #endif
@@ -1629,7 +1630,7 @@ int compress_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
 
   const char *str = (const char *) value;
 
-  if (mutt_hcache_is_valid_compression(str))
+  if (compress_get_ops(str))
     return CSR_SUCCESS;
 
   mutt_buffer_printf(err, _("Invalid value for option %s: %s"), cdef->name, str);

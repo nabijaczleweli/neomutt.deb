@@ -60,9 +60,6 @@
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
-#ifdef USE_ZLIB
-#include "mutt_zstrm.h"
-#endif
 
 struct stat;
 
@@ -696,7 +693,7 @@ void imap_logout_all(void)
   struct Account *np = NULL;
   TAILQ_FOREACH(np, &NeoMutt->accounts, entries)
   {
-    if (np->magic != MUTT_IMAP)
+    if (np->type != MUTT_IMAP)
       continue;
 
     struct ImapAccountData *adata = np->adata;
@@ -836,8 +833,7 @@ void imap_expunge_mailbox(struct Mailbox *m)
        * pointers in the msn_index and uid_hash.
        *
        * So this is another hack to work around the hacks.  We don't want to
-       * remove the messages, so make sure active is on.
-       */
+       * remove the messages, so make sure active is on.  */
       e->active = true;
     }
   }
@@ -1268,7 +1264,7 @@ int imap_check_mailbox(struct Mailbox *m, bool force)
  */
 static int imap_status(struct ImapAccountData *adata, struct ImapMboxData *mdata, bool queue)
 {
-  char *uid_validity_flag = NULL;
+  char *uidvalidity_flag = NULL;
   char cmd[2048];
 
   if (!adata || !mdata)
@@ -1285,9 +1281,9 @@ static int imap_status(struct ImapAccountData *adata, struct ImapMboxData *mdata
   }
 
   if (adata->capabilities & IMAP_CAP_IMAP4REV1)
-    uid_validity_flag = "UIDVALIDITY";
+    uidvalidity_flag = "UIDVALIDITY";
   else if (adata->capabilities & IMAP_CAP_STATUS)
-    uid_validity_flag = "UID-VALIDITY";
+    uidvalidity_flag = "UID-VALIDITY";
   else
   {
     mutt_debug(LL_DEBUG2, "Server doesn't support STATUS\n");
@@ -1295,7 +1291,7 @@ static int imap_status(struct ImapAccountData *adata, struct ImapMboxData *mdata
   }
 
   snprintf(cmd, sizeof(cmd), "STATUS %s (UIDNEXT %s UNSEEN RECENT MESSAGES)",
-           mdata->munge_name, uid_validity_flag);
+           mdata->munge_name, uidvalidity_flag);
 
   int rc = imap_exec(adata, cmd, queue ? IMAP_CMD_QUEUE : IMAP_CMD_NO_FLAGS | IMAP_CMD_POLL);
   if (rc < 0)
@@ -1853,7 +1849,7 @@ int imap_sync_mailbox(struct Mailbox *m, bool expunge, bool close)
  */
 static struct Account *imap_ac_find(struct Account *a, const char *path)
 {
-  if (!a || (a->magic != MUTT_IMAP) || !path)
+  if (!a || (a->type != MUTT_IMAP) || !path)
     return NULL;
 
   struct Url *url = url_parse(path);
@@ -1875,7 +1871,7 @@ static struct Account *imap_ac_find(struct Account *a, const char *path)
  */
 static int imap_ac_add(struct Account *a, struct Mailbox *m)
 {
-  if (!a || !m || (m->magic != MUTT_IMAP))
+  if (!a || !m || (m->type != MUTT_IMAP))
     return -1;
 
   struct ImapAccountData *adata = a->adata;
@@ -1934,6 +1930,9 @@ static void imap_mbox_select(struct Mailbox *m)
 {
   struct ImapAccountData *adata = imap_adata_get(m);
   struct ImapMboxData *mdata = imap_mdata_get(m);
+  if (!adata || !mdata)
+    return;
+
   const char *condstore = NULL;
 #ifdef USE_HCACHE
   if ((adata->capabilities & IMAP_CAP_CONDSTORE) && C_ImapCondstore)
@@ -2048,6 +2047,9 @@ static int imap_mbox_open(struct Mailbox *m)
   struct ImapAccountData *adata = imap_adata_get(m);
   struct ImapMboxData *mdata = imap_mdata_get(m);
 
+  mutt_debug(LL_DEBUG3, "opening %s, saving %s\n", m->pathbuf.data,
+             (adata->mailbox ? adata->mailbox->pathbuf.data : "(none)"));
+  adata->prev_mailbox = adata->mailbox;
   adata->mailbox = m;
 
   /* clear mailbox status */
@@ -2125,7 +2127,7 @@ static int imap_mbox_open(struct Mailbox *m)
       mutt_debug(LL_DEBUG3, "Getting mailbox UIDVALIDITY\n");
       pc += 3;
       pc = imap_next_word(pc);
-      if (mutt_str_atoui(pc, &mdata->uid_validity) < 0)
+      if (mutt_str_atoui(pc, &mdata->uidvalidity) < 0)
         goto fail;
     }
     else if (mutt_str_startswith(pc, "OK [UIDNEXT", CASE_IGNORE))
@@ -2317,7 +2319,10 @@ static int imap_mbox_close(struct Mailbox *m)
       adata->state = IMAP_AUTHENTICATED;
     }
 
-    adata->mailbox = NULL;
+    mutt_debug(LL_DEBUG3, "closing %s, restoring %s\n", m->pathbuf.data,
+               (adata->prev_mailbox ? adata->prev_mailbox->pathbuf.data : "(none)"));
+    adata->mailbox = adata->prev_mailbox;
+    imap_mbox_select(adata->prev_mailbox);
     imap_mdata_cache_reset(m->mdata);
   }
 
@@ -2589,7 +2594,7 @@ static int imap_path_parent(char *buf, size_t buflen)
  * MxImapOps - IMAP Mailbox - Implements ::MxOps
  */
 struct MxOps MxImapOps = {
-  .magic            = MUTT_IMAP,
+  .type            = MUTT_IMAP,
   .name             = "imap",
   .is_local         = false,
   .ac_find          = imap_ac_find,
