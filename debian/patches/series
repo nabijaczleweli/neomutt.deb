@@ -2,4 +2,6 @@ debian-specific/neomuttrc.patch
 debian-specific/use_usr_bin_editor.patch
 debian-specific/document_debian_defaults.patch
 misc/smime.rc.patch
-upstream/fix-sidebar-indent.patch
+upstream/50ae74a-build-minor-fixes.patch
+upstream/b497f70-Handle-variables-inside-backticks-in-sidebar_whitelist.patch
+upstream/5ca9c15-fix-mailboxes-with-tildes.patch

@@ -1,0 +1,85 @@
+From 50ae74a97c197d8c5fbd881c034787e1330d5b44 Mon Sep 17 00:00:00 2001
+From: Richard Russon <rich@flatcap.org>
+Date: Tue, 24 Mar 2020 14:13:14 +0000
+Subject: [PATCH] build: minor fixes
+
+- doxygen: add missing link
+- build: fix creation of wrong dir
+- travis: add compress libraries
+- cirrus: limit builds to master/PRs
+---
+ .cirrus.yml             | 2 ++
+ .travis.yml             | 5 +++++
+ compress/lib.h          | 2 ++
+ test/Makefile.autosetup | 2 +-
+ 4 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/.cirrus.yml b/.cirrus.yml
+index ed73cd6d82..4da1f7d3c5 100644
+--- a/.cirrus.yml
++++ b/.cirrus.yml
+@@ -2,6 +2,8 @@ freebsd_instance:
+   image_family: freebsd-13-0-snap
+ 
+ task:
++  only_if: $CIRRUS_BRANCH == "master" || $CIRRUS_PR != ""
++  skip: $CIRRUS_PR_DRAFT == "true"
+   env:
+     PKG_COMMON:
+       cyrus-sasl db5 docbook-xsl gdbm gettext-tools gpgme iconv jimtcl
+diff --git a/.travis.yml b/.travis.yml
+index 0002b59fd6..fdc281469e 100644
+--- a/.travis.yml
++++ b/.travis.yml
+@@ -14,6 +14,8 @@ addons:
+       - docbook-simple
+       - docbook-xsl
+       - gettext
++      - gpgsm
++      - jimsh
+       - libdb-dev
+       - libgdbm-dev
+       - libgnutls28-dev
+@@ -23,6 +25,8 @@ addons:
+       - libkyotocabinet-dev
+       - liblmdb-dev
+       - liblua5.2-dev
++      - liblz4-dev
++      - libncursesw5-dev
+       - libnotmuch-dev
+       - libqdbm-dev
+       - libsasl2-dev
+@@ -30,6 +34,7 @@ addons:
+       - libssl-dev
+       - libtokyocabinet-dev
+       - libxml2-utils
++      - libzstd-dev
+       - lua5.2
+       - lynx
+       - xsltproc
+diff --git a/compress/lib.h b/compress/lib.h
+index d8b3b81f7a..82c4213685 100644
+--- a/compress/lib.h
++++ b/compress/lib.h
+@@ -23,6 +23,8 @@
+ /**
+  * @page compress COMPRESS: Compression
+  *
++ * @subpage compress_compress
++ *
+  * Compression Backends:
+  *
+  * | File                | Description            |
+diff --git a/test/Makefile.autosetup b/test/Makefile.autosetup
+index 9c18b2076a..e639466098 100644
+--- a/test/Makefile.autosetup
++++ b/test/Makefile.autosetup
+@@ -498,7 +498,7 @@ BUILD_DIRS	= $(PWD)/test/account $(PWD)/test/address $(PWD)/test/attach \
+ 		  $(PWD)/test/history $(PWD)/test/idna $(PWD)/test/list \
+ 		  $(PWD)/test/logging $(PWD)/test/mailbox $(PWD)/test/mapping \
+ 		  $(PWD)/test/mbyte $(PWD)/test/md5 $(PWD)/test/memory \
+-		  $(PWD)/test/neomutt $(PWD)/test/notify $(PWD)/test/parameter \
++		  $(PWD)/test/neo $(PWD)/test/notify $(PWD)/test/parameter \
+ 		  $(PWD)/test/parse $(PWD)/test/path $(PWD)/test/pattern \
+ 		  $(PWD)/test/regex $(PWD)/test/rfc2047 $(PWD)/test/rfc2231 \
+ 		  $(PWD)/test/signal $(PWD)/test/slist $(PWD)/test/string \

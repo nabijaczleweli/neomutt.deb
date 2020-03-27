@@ -1,0 +1,32 @@
+From b497f7091dd9b4a082bfea8b69a2e812e1261231 Mon Sep 17 00:00:00 2001
+From: Pietro Cerutti <gahr@gahr.ch>
+Date: Wed, 25 Mar 2020 20:32:39 +0000
+Subject: [PATCH] Handle variables inside backticks in sidebar_whitelist
+
+Fixes #2208
+---
+ command_parse.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/command_parse.c b/command_parse.c
+index 1ece4a9a5..626e00d0d 100644
+--- a/command_parse.c
++++ b/command_parse.c
+@@ -1114,7 +1114,7 @@ enum CommandResult parse_path_list(struct Buffer *buf, struct Buffer *s,
+ 
+   do
+   {
+-    mutt_extract_token(path, s, MUTT_TOKEN_NO_FLAGS);
++    mutt_extract_token(path, s, MUTT_TOKEN_BACKTICK_VARS);
+     mutt_buffer_expand_path(path);
+     add_to_stailq((struct ListHead *) data, mutt_b2s(path));
+   } while (MoreArgs(s));
+@@ -1135,7 +1135,7 @@ enum CommandResult parse_path_unlist(struct Buffer *buf, struct Buffer *s,
+ 
+   do
+   {
+-    mutt_extract_token(path, s, MUTT_TOKEN_NO_FLAGS);
++    mutt_extract_token(path, s, MUTT_TOKEN_BACKTICK_VARS);
+     /* Check for deletion of entire list */
+     if (mutt_str_strcmp(mutt_b2s(path), "*") == 0)
+     {
