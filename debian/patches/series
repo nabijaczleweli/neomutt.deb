@@ -5,3 +5,4 @@ misc/smime.rc.patch
 upstream/50ae74a-build-minor-fixes.patch
 upstream/b497f70-Handle-variables-inside-backticks-in-sidebar_whitelist.patch
 upstream/5ca9c15-fix-mailboxes-with-tildes.patch
+upstream/19a6dbf-fix-mutt_date_add_timeout.patch
