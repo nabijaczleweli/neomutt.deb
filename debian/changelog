@@ -1,3 +1,15 @@
+neomutt (20200501+dfsg.1-0.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Separate upstream patches by folder, previous set was from PR 2014
+  * Add patches from upstream PR 2316,
+    fixing threading when Message-ID headers are RFC2047-encoded:
+    [d7a52ea] Move TEST_CHECK_STR_EQ in a really common header
+    [fbf371e] Decode references according to RFC2047
+    [f4d490b] More tests for mutt_extract_message_id
+
+ -- наб <nabijaczleweli@gmail.com>  Wed, 06 May 2020 17:53:56 +0200
+
 neomutt (20200501+dfsg.1-0.1) unstable; urgency=medium
 
   [ наб ]
