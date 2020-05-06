@@ -1,3 +1,23 @@
+neomutt (20200501+dfsg.1-0.1) unstable; urgency=medium
+
+  [ наб ]
+  * Non-maintainer upload.
+  * New upstream version 20200501+dfsg.1
+  * Drop obsolete upstream patches:
+    [50ae74a] build: minor fixes
+    [b497f70] Handle variables inside backticks in sidebar_whitelist
+    [5ca9c15] fix mailboxes with tildes
+    [19a6dbf] fix: mutt_date_add_timeout()
+  * Update neomuttrc.patch and d/rules to reflect the doc/ -> docs/ move
+  * Add https://github.com/neomutt/neomutt-test-files,
+    required for tests now, as debian/neomutt-test-files subtree at 8175dcf
+  * Add upstream patches:
+    [36b4ef3] Update to latest acutest.h
+    [0fb9af9] test: use acutest init function
+    [b35765b] test: use C.UTF-8 locale
+
+ -- наб <nabijaczleweli@gmail.com>  Wed, 06 May 2020 03:09:34 +0200
+
 neomutt (20200320+dfsg.1-0.2) unstable; urgency=medium
 
   * Non-maintainer upload.
