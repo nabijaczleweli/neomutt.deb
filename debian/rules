@@ -37,7 +37,11 @@ override_dh_auto_configure:
 		--sasl \
 		--tokyocabinet \
 		--zlib \
-		--zstd
+		--zstd \
+		--testing
+
+override_dh_auto_test:
+	NEOMUTT_TEST_DIR="debian/neomutt-test-files" dh_auto_install
 
 override_dh_auto_install:
 	dh_auto_install --destdir=debian/tmp

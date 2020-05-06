@@ -3,3 +3,13 @@ file, which is a generated bootstrap of jimtcl; this was reported in
 https://bugs.debian.org/882717.
 
 A build dependency on jimsh was put in place to replace the file.
+
+neomutt.git/debian/neomutt-test-files is maintained using git subtree merges.
+To update it to a given commit, first ensure that you have the relevant
+upstream remote, e.g.:
+
+    git remote add -f neomutt-test-files https://github.com/neomutt/neomutt-test-files.git
+
+And then:
+
+    git subtree merge -P debian/neomutt-test-files <commit>
