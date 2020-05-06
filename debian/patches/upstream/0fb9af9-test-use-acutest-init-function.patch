@@ -1,0 +1,147 @@
+From 0fb9af9a37074861f3040d06435d6c7e513edd91 Mon Sep 17 00:00:00 2001
+From: Richard Russon <rich@flatcap.org>
+Date: Mon, 4 May 2020 15:18:18 +0100
+Subject: [PATCH] test: use acutest init function
+
+---
+ test/common.c                 | 13 ++++++++++++-
+ test/main.c                   |  4 ++--
+ test/rfc2047/rfc2047_decode.c |  6 ------
+ test/rfc2047/rfc2047_encode.c |  6 ------
+ test/test_common.h            |  2 +-
+ test/url/url_parse.c          |  4 ----
+ 6 files changed, 15 insertions(+), 20 deletions(-)
+
+diff --git a/test/common.c b/test/common.c
+index 55f5fa6a56..2c75658e85 100644
+--- a/test/common.c
++++ b/test/common.c
+@@ -23,6 +23,7 @@
+ #define TEST_NO_MAIN
+ #include "config.h"
+ #include "acutest.h"
++#include <locale.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ #include <unistd.h>
+@@ -40,7 +41,7 @@ void test_gen_path(char *buf, size_t buflen, const char *fmt)
+   snprintf(buf, buflen, NONULL(fmt), NONULL(get_test_dir()));
+ }
+ 
+-void test_common(void)
++void test_init(void)
+ {
+   const char *path = get_test_dir();
+   bool success = false;
+@@ -71,8 +72,18 @@ void test_common(void)
+     TEST_MSG("Test dir '%s' isn't a directory\n", path);
+     goto done;
+   }
++
++  if (!TEST_CHECK((setlocale(LC_ALL, "en_US.UTF-8") != NULL) ||
++                  (setlocale(LC_ALL, "C.UTF-8") != NULL)))
++  {
++    TEST_MSG("Can't set locale to (en_US|C).UTF-8");
++    goto done;
++  }
++
+   success = true;
+ done:
+   if (!success)
+     TEST_MSG("See: https://github.com/neomutt/neomutt-test-files#test-files\n");
+ }
++
++
+diff --git a/test/main.c b/test/main.c
+index 2e13645f4a..078288fdea 100644
+--- a/test/main.c
++++ b/test/main.c
+@@ -22,14 +22,14 @@
+  */
+ 
+ #include "config.h"
++#include "test_common.h"
++#define TEST_INIT test_init()
+ #include "acutest.h"
+ 
+ /******************************************************************************
+  * Add your test cases to this list.
+  *****************************************************************************/
+ #define NEOMUTT_TEST_LIST                                                      \
+-  NEOMUTT_TEST_ITEM(test_common)                                               \
+-                                                                               \
+   /* account */                                                                \
+   NEOMUTT_TEST_ITEM(test_account_free)                                         \
+   NEOMUTT_TEST_ITEM(test_account_mailbox_add)                                  \
+diff --git a/test/rfc2047/rfc2047_decode.c b/test/rfc2047/rfc2047_decode.c
+index 8f4a317cd2..0f9133e489 100644
+--- a/test/rfc2047/rfc2047_decode.c
++++ b/test/rfc2047/rfc2047_decode.c
+@@ -32,12 +32,6 @@ void test_rfc2047_decode(void)
+ {
+   // void rfc2047_decode(char **pd);
+ 
+-  if (!TEST_CHECK((setlocale(LC_ALL, "en_US.UTF-8") != NULL) ||
+-                  (setlocale(LC_ALL, "C.UTF-8") != NULL)))
+-  {
+-    TEST_MSG("Cannot set locale to (en_US|C).UTF-8");
+-    return;
+-  }
+   char *previous_charset = C_Charset;
+   C_Charset = "utf-8";
+ 
+diff --git a/test/rfc2047/rfc2047_encode.c b/test/rfc2047/rfc2047_encode.c
+index ffb5966456..a6e12d8ee4 100644
+--- a/test/rfc2047/rfc2047_encode.c
++++ b/test/rfc2047/rfc2047_encode.c
+@@ -32,12 +32,6 @@ void test_rfc2047_encode(void)
+ {
+   // void rfc2047_encode(char **pd, const char *specials, int col, const char *charsets);
+ 
+-  if (!TEST_CHECK((setlocale(LC_ALL, "en_US.UTF-8") != NULL) ||
+-                  (setlocale(LC_ALL, "C.UTF-8") != NULL)))
+-  {
+-    TEST_MSG("Cannot set locale to (en_US|C).UTF-8");
+-    return;
+-  }
+   char *previous_charset = C_Charset;
+   C_Charset = "utf-8";
+ 
+diff --git a/test/test_common.h b/test/test_common.h
+index f657d7be59..7cc0015a91 100644
+--- a/test/test_common.h
++++ b/test/test_common.h
+@@ -23,10 +23,10 @@
+ #ifndef TEST_TEST_COMMON_H
+ #define TEST_TEST_COMMON_H
+ 
+-#include "acutest.h"
+ #include <stdio.h>
+ #include "mutt/lib.h"
+ 
+ void test_gen_path(char *buf, size_t buflen, const char *fmt);
++void test_init(void);
+ 
+ #endif /* TEST_TEST_COMMON_H */
+diff --git a/test/url/url_parse.c b/test/url/url_parse.c
+index 9bf1a4d70f..a1ad63debf 100644
+--- a/test/url/url_parse.c
++++ b/test/url/url_parse.c
+@@ -23,7 +23,6 @@
+ #define TEST_NO_MAIN
+ #include "config.h"
+ #include "acutest.h"
+-#include <locale.h>
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+ #include "email/lib.h"
+@@ -228,9 +227,6 @@ void check_query_string(const char *exp, const struct UrlQueryList *act)
+ 
+ void test_url_parse(void)
+ {
+-  // let's pick a utf-8 locale, since we're also parsing utf-8 text */
+-  setlocale(LC_ALL, "en_US.UTF-8");
+-
+   // struct Url *url_parse(const char *src);
+ 
+   {

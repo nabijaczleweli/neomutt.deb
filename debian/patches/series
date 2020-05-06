@@ -2,3 +2,6 @@ debian-specific/neomuttrc.patch
 debian-specific/use_usr_bin_editor.patch
 debian-specific/document_debian_defaults.patch
 misc/smime.rc.patch
+upstream/36b4ef3-Update-to-latest-acutest.h.patch
+upstream/0fb9af9-test-use-acutest-init-function.patch
+upstream/b35765b-test-use-C.UTF-8-locale.patch
