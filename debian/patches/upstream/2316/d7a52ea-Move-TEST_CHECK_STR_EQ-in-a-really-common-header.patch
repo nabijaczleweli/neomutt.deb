@@ -1,0 +1,274 @@
+From d7a52eaf19990236f85f2b515847111123c2a47d Mon Sep 17 00:00:00 2001
+From: Pietro Cerutti <gahr@gahr.ch>
+Date: Wed, 6 May 2020 08:28:37 +0000
+Subject: [PATCH 1/3] Move TEST_CHECK_STR_EQ in a really common header
+
+---
+ test/address/common.h                     | 42 -----------------------
+ test/address/mutt_addr_cat.c              |  2 +-
+ test/address/mutt_addr_copy.c             |  2 +-
+ test/address/mutt_addr_for_display.c      |  2 +-
+ test/address/mutt_addr_write.c            |  2 +-
+ test/address/mutt_addrlist_append.c       |  2 +-
+ test/address/mutt_addrlist_copy.c         |  2 +-
+ test/address/mutt_addrlist_dedupe.c       |  2 +-
+ test/address/mutt_addrlist_parse.c        |  2 +-
+ test/address/mutt_addrlist_parse2.c       |  2 +-
+ test/address/mutt_addrlist_prepend.c      |  2 +-
+ test/address/mutt_addrlist_qualify.c      |  2 +-
+ test/address/mutt_addrlist_remove_xrefs.c |  2 +-
+ test/address/mutt_addrlist_to_intl.c      |  2 +-
+ test/address/mutt_addrlist_write.c        |  2 +-
+ test/test_common.h                        | 10 ++++++
+ 16 files changed, 24 insertions(+), 56 deletions(-)
+ delete mode 100644 test/address/common.h
+
+diff --git a/test/address/common.h b/test/address/common.h
+deleted file mode 100644
+index 78ae7416dc..0000000000
+--- a/test/address/common.h
++++ /dev/null
+@@ -1,42 +0,0 @@
+-/**
+- * @file
+- * Test code for the Address object
+- *
+- * @authors
+- * Copyright (C) 2018 Simon Symeonidis <lethaljellybean@gmail.com>
+- *
+- * @copyright
+- * This program is free software: you can redistribute it and/or modify it under
+- * the terms of the GNU General Public License as published by the Free Software
+- * Foundation, either version 2 of the License, or (at your option) any later
+- * version.
+- *
+- * This program is distributed in the hope that it will be useful, but WITHOUT
+- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+- * FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
+- * details.
+- *
+- * You should have received a copy of the GNU General Public License along with
+- * this program.  If not, see <http://www.gnu.org/licenses/>.
+- */
+-
+-#ifndef TEST_ADDRESS_COMMON_H
+-#define TEST_ADDRESS_COMMON_H
+-
+-#define TEST_NO_MAIN
+-#include "acutest.h"
+-#include <string.h>
+-#include "mutt/memory.h"
+-#include "address/lib.h"
+-
+-#define TEST_CHECK_STR_EQ(expected, actual)                                    \
+-  do                                                                           \
+-  {                                                                            \
+-    if (!TEST_CHECK(strcmp(expected, actual) == 0))                            \
+-    {                                                                          \
+-      TEST_MSG("Expected: %s", expected);                                      \
+-      TEST_MSG("Actual  : %s", actual);                                        \
+-    }                                                                          \
+-  } while (false)
+-
+-#endif /* TEST_ADDRESS_COMMON_H */
+diff --git a/test/address/mutt_addr_cat.c b/test/address/mutt_addr_cat.c
+index de65573dd1..bfc46680bc 100644
+--- a/test/address/mutt_addr_cat.c
++++ b/test/address/mutt_addr_cat.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addr_cat(void)
+ {
+diff --git a/test/address/mutt_addr_copy.c b/test/address/mutt_addr_copy.c
+index a1ffbf0916..f3d40fbdc3 100644
+--- a/test/address/mutt_addr_copy.c
++++ b/test/address/mutt_addr_copy.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addr_copy(void)
+ {
+diff --git a/test/address/mutt_addr_for_display.c b/test/address/mutt_addr_for_display.c
+index c4fba17cd3..ffea3ee592 100644
+--- a/test/address/mutt_addr_for_display.c
++++ b/test/address/mutt_addr_for_display.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addr_for_display(void)
+ {
+diff --git a/test/address/mutt_addr_write.c b/test/address/mutt_addr_write.c
+index 06592e733d..45c3c51371 100644
+--- a/test/address/mutt_addr_write.c
++++ b/test/address/mutt_addr_write.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addr_write(void)
+ {
+diff --git a/test/address/mutt_addrlist_append.c b/test/address/mutt_addrlist_append.c
+index 0c1bc5a168..5ea7b42fe5 100644
+--- a/test/address/mutt_addrlist_append.c
++++ b/test/address/mutt_addrlist_append.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addrlist_append(void)
+ {
+diff --git a/test/address/mutt_addrlist_copy.c b/test/address/mutt_addrlist_copy.c
+index f2202cd2aa..b7ad2d19b3 100644
+--- a/test/address/mutt_addrlist_copy.c
++++ b/test/address/mutt_addrlist_copy.c
+@@ -27,7 +27,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addrlist_copy(void)
+ {
+diff --git a/test/address/mutt_addrlist_dedupe.c b/test/address/mutt_addrlist_dedupe.c
+index 643f93e6bd..31f32d4c05 100644
+--- a/test/address/mutt_addrlist_dedupe.c
++++ b/test/address/mutt_addrlist_dedupe.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addrlist_dedupe(void)
+ {
+diff --git a/test/address/mutt_addrlist_parse.c b/test/address/mutt_addrlist_parse.c
+index f24817eded..2aec357d53 100644
+--- a/test/address/mutt_addrlist_parse.c
++++ b/test/address/mutt_addrlist_parse.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addrlist_parse(void)
+ {
+diff --git a/test/address/mutt_addrlist_parse2.c b/test/address/mutt_addrlist_parse2.c
+index 9e5ecf79e3..9c36956e8f 100644
+--- a/test/address/mutt_addrlist_parse2.c
++++ b/test/address/mutt_addrlist_parse2.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addrlist_parse2(void)
+ {
+diff --git a/test/address/mutt_addrlist_prepend.c b/test/address/mutt_addrlist_prepend.c
+index 53b41a199e..ff54b4f74d 100644
+--- a/test/address/mutt_addrlist_prepend.c
++++ b/test/address/mutt_addrlist_prepend.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addrlist_prepend(void)
+ {
+diff --git a/test/address/mutt_addrlist_qualify.c b/test/address/mutt_addrlist_qualify.c
+index 56a5f9277f..a51d695a3d 100644
+--- a/test/address/mutt_addrlist_qualify.c
++++ b/test/address/mutt_addrlist_qualify.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addrlist_qualify(void)
+ {
+diff --git a/test/address/mutt_addrlist_remove_xrefs.c b/test/address/mutt_addrlist_remove_xrefs.c
+index a72d39a20c..c5449e74b0 100644
+--- a/test/address/mutt_addrlist_remove_xrefs.c
++++ b/test/address/mutt_addrlist_remove_xrefs.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addrlist_remove_xrefs(void)
+ {
+diff --git a/test/address/mutt_addrlist_to_intl.c b/test/address/mutt_addrlist_to_intl.c
+index f630c22c9e..43156aa718 100644
+--- a/test/address/mutt_addrlist_to_intl.c
++++ b/test/address/mutt_addrlist_to_intl.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addrlist_to_intl(void)
+ {
+diff --git a/test/address/mutt_addrlist_write.c b/test/address/mutt_addrlist_write.c
+index 3ca7d85055..aae57cd23f 100644
+--- a/test/address/mutt_addrlist_write.c
++++ b/test/address/mutt_addrlist_write.c
+@@ -26,7 +26,7 @@
+ #include "acutest.h"
+ #include "mutt/lib.h"
+ #include "address/lib.h"
+-#include "common.h"
++#include "test_common.h"
+ 
+ void test_mutt_addrlist_write(void)
+ {
+diff --git a/test/test_common.h b/test/test_common.h
+index 7cc0015a91..5159e33150 100644
+--- a/test/test_common.h
++++ b/test/test_common.h
+@@ -29,4 +29,14 @@
+ void test_gen_path(char *buf, size_t buflen, const char *fmt);
+ void test_init(void);
+ 
++#define TEST_CHECK_STR_EQ(expected, actual)                                    \
++  do                                                                           \
++  {                                                                            \
++    if (!TEST_CHECK(strcmp(expected, actual) == 0))                            \
++    {                                                                          \
++      TEST_MSG("Expected: %s", expected);                                      \
++      TEST_MSG("Actual  : %s", actual);                                        \
++    }                                                                          \
++  } while (false)
++
+ #endif /* TEST_TEST_COMMON_H */

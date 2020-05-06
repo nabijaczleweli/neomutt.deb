@@ -1,0 +1,68 @@
+From f4d490ba48fa14af765273775be9fe232836b7ad Mon Sep 17 00:00:00 2001
+From: Pietro Cerutti <gahr@gahr.ch>
+Date: Wed, 6 May 2020 09:15:16 +0000
+Subject: [PATCH 3/3] More tests for mutt_extract_message_id
+
+---
+ test/parse/mutt_extract_message_id.c | 31 +++++++++++++++++++++-------
+ test/test_common.h                   |  2 +-
+ 2 files changed, 24 insertions(+), 9 deletions(-)
+
+diff --git a/test/parse/mutt_extract_message_id.c b/test/parse/mutt_extract_message_id.c
+index aaedc42e51..e0b038a4ed 100644
+--- a/test/parse/mutt_extract_message_id.c
++++ b/test/parse/mutt_extract_message_id.c
+@@ -34,17 +34,32 @@ int cmp(const void *a, const void *b)
+   return strcmp(a, *(char **) b);
+ }
+ 
+-void test_mutt_extract_message_id(void)
++struct TestData
+ {
+-  // char *mutt_extract_message_id(const char *s, const char **saveptr);
+-
+-  {
+-    size_t len;
+-    TEST_CHECK(!mutt_extract_message_id(NULL, &len));
+-  }
++  const char *in; // string to parse
++  char *out;      // expected result
++  size_t len;     // expected parsed len
++} test[] = {
++  { NULL, NULL, 0 },
++  { "apple", NULL, 0 },
++  { "foo bar <baz", NULL, 0 },
++  { "foo bar > baz", NULL, 0 },
++  { "foo bar <foo.bar> boo bar", "<foo.bar>", 17 },
++};
+ 
++void test_mutt_extract_message_id(void)
++{
++  for (size_t i = 0; i < mutt_array_size(test); i++)
+   {
+-    TEST_CHECK(!mutt_extract_message_id("apple", NULL));
++    size_t len = 0;
++    char *out = mutt_extract_message_id(test[i].in, &len);
++    TEST_CHECK_STR_EQ(test[i].out, out);
++    if (!TEST_CHECK(test[i].len == len))
++    {
++      TEST_MSG("Expected: %zu", test[i].len);
++      TEST_MSG("Actual  : %zu", len);
++    }
++    FREE(&out);
+   }
+ 
+   {
+diff --git a/test/test_common.h b/test/test_common.h
+index 5159e33150..34f31050fe 100644
+--- a/test/test_common.h
++++ b/test/test_common.h
+@@ -32,7 +32,7 @@ void test_init(void);
+ #define TEST_CHECK_STR_EQ(expected, actual)                                    \
+   do                                                                           \
+   {                                                                            \
+-    if (!TEST_CHECK(strcmp(expected, actual) == 0))                            \
++    if (!TEST_CHECK(mutt_str_strcmp(expected, actual) == 0))                   \
+     {                                                                          \
+       TEST_MSG("Expected: %s", expected);                                      \
+       TEST_MSG("Actual  : %s", actual);                                        \
