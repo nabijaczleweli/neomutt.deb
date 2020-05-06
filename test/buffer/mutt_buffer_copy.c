@@ -21,11 +21,15 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_mutt_buffer_copy(void)
 {
   // size_t mutt_buffer_copy(struct Buffer *dst, const struct Buffer *src);
+
+  {
+    TEST_CHECK(mutt_buffer_copy(NULL, NULL) == 0);
+  }
 }

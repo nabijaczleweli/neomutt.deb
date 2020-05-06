@@ -21,11 +21,15 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_mutt_str_strnlower(void)
 {
   // char *mutt_str_strnlower(char *str, size_t num);
+
+  {
+    TEST_CHECK(mutt_str_strnlower(NULL, 0) == NULL);
+  }
 }

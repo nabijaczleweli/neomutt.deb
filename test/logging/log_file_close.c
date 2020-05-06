@@ -21,11 +21,16 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_log_file_close(void)
 {
   // void log_file_close(bool verbose);
+
+  {
+    log_file_close(false);
+    TEST_CHECK_(1, "log_file_close(false)");
+  }
 }

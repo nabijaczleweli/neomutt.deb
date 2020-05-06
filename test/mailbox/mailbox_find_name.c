@@ -21,12 +21,16 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 #include "core/lib.h"
 
 void test_mailbox_find_name(void)
 {
   // struct Mailbox *mailbox_find_name(const char *name);
+
+  {
+    TEST_CHECK(mailbox_find_name(NULL) == NULL);
+  }
 }

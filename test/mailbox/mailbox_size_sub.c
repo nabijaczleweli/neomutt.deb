@@ -21,12 +21,18 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 #include "core/lib.h"
 
 void test_mailbox_size_sub(void)
 {
   // void mailbox_size_sub(struct Mailbox *m, const struct Email *e);
+
+  {
+    struct Mailbox m = { 0 };
+    mailbox_size_sub(&m, NULL);
+    TEST_CHECK_(1, "mailbox_size_sub(&m, NULL)");
+  }
 }

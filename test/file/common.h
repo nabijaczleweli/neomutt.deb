@@ -24,7 +24,6 @@
 #define TEST_FILE_COMMON_H
 
 #include "acutest.h"
-#include "config.h"
 #include <stdio.h>
 #include "mutt/lib.h"
 
@@ -36,5 +35,12 @@ size_t file_num_test_lines(void);
 
 #define SET_UP() (file_set_up(__func__))
 #define TEAR_DOWN(fp) (file_tear_down((fp), __func__))
+
+struct TestValue
+{
+  char *first;
+  char *second;
+  int retval;
+};
 
 #endif /* TEST_FILE_COMMON_H */

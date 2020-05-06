@@ -7,6 +7,9 @@ language: c
 compiler: gcc
 cache: ccache
 
+git:
+  depth: 3
+
 addons:
   apt:
     packages:
@@ -14,6 +17,9 @@ addons:
       - docbook-simple
       - docbook-xsl
       - gettext
+      - gpgsm
+      - graphviz
+      - jimsh
       - libdb-dev
       - libgdbm-dev
       - libgnutls28-dev
@@ -23,22 +29,25 @@ addons:
       - libkyotocabinet-dev
       - liblmdb-dev
       - liblua5.2-dev
+      - liblz4-dev
+      - libncursesw5-dev
       - libnotmuch-dev
       - libqdbm-dev
+      - librocksdb-dev
       - libsasl2-dev
       - libslang2-dev
       - libssl-dev
+      - libtdb-dev
       - libtokyocabinet-dev
       - libxml2-utils
+      - libzstd-dev
       - lua5.2
       - lynx
       - xsltproc
 
-git:
-  depth: 3
-
 install:
   - git clone --depth 1 https://github.com/neomutt/travis-build.git ~/config
+  - git clone --depth 1 https://github.com/neomutt/neomutt-test-files.git ~/test-files
 
 before_script:
   - ccache --zero-stats
@@ -47,6 +56,8 @@ before_script:
   - export -f travis_nanoseconds
   - export -f travis_time_finish
   - export -f travis_time_start
+  - export NEOMUTT_TEST_DIR="$HOME/test-files"
+  - (cd ~/test-files && ./setup.sh)
 
 script:
   - ~/config/build

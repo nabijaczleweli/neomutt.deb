@@ -1376,6 +1376,7 @@ static int run_decode_and_handler(struct Body *b, struct State *s,
       if (!s->fp_in)
       {
         mutt_perror(_("failed to re-open 'memory stream'"));
+        FREE(&temp);
         return -1;
       }
 #else
@@ -1407,13 +1408,13 @@ static int run_decode_and_handler(struct Body *b, struct State *s,
 
       /* restore the original source stream */
       mutt_file_fclose(&s->fp_in);
-#ifdef USE_FMEMOPEN
-      FREE(&temp);
-#endif
       s->fp_in = fp;
     }
   }
   s->flags |= MUTT_FIRSTDONE;
+#ifdef USE_FMEMOPEN
+  FREE(&temp);
+#endif
 
   return rc;
 }
@@ -1555,8 +1556,16 @@ int mutt_body_handler(struct Body *b, struct State *s)
   handler_t handler = NULL;
   handler_t encrypted_handler = NULL;
   int rc = 0;
+  static unsigned short recurse_level = 0;
 
   int oflags = s->flags;
+
+  if (recurse_level >= 100)
+  {
+    mutt_debug(LL_DEBUG1, "recurse level too deep. giving up.\n");
+    return -1;
+  }
+  recurse_level++;
 
   /* first determine which handler to use to process this part */
 
@@ -1734,6 +1743,7 @@ int mutt_body_handler(struct Body *b, struct State *s)
   }
 
 cleanup:
+  recurse_level--;
   s->flags = oflags | (s->flags & MUTT_FIRSTDONE);
   if (rc != 0)
   {

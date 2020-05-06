@@ -21,11 +21,15 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_mutt_mb_is_shell_char(void)
 {
   // bool mutt_mb_is_shell_char(wchar_t ch);
+
+  {
+    TEST_CHECK(mutt_mb_is_shell_char('?') == true);
+  }
 }

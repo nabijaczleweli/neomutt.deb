@@ -294,10 +294,13 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
 static void make_sidebar_entry(char *buf, size_t buflen, int width,
                                const char *box, struct SbEntry *sbe)
 {
-  if (!buf || !box || !sbe)
+  if (!buf)
     return;
 
-  mutt_str_strfcpy(sbe->box, box, sizeof(sbe->box));
+  if (box && sbe)
+    mutt_str_strfcpy(sbe->box, box, sizeof(sbe->box));
+  else
+    buf[0] = '\0';
 
   mutt_expando_format(buf, buflen, 0, width, NONULL(C_SidebarFormat),
                       sidebar_format_str, (unsigned long) sbe, MUTT_FORMAT_NO_FLAGS);
@@ -639,6 +642,45 @@ static int select_page_up(void)
 }
 
 /**
+ * select_first - Selects the first unhidden mailbox
+ * @retval true  Success
+ * @retval false Failure
+ */
+static int select_first(void)
+{
+  int orig_hil_index = HilIndex;
+
+  if (!EntryCount || (HilIndex < 0))
+    return false;
+
+  HilIndex = 0;
+  if (Entries[HilIndex]->is_hidden)
+    if (!select_next())
+      HilIndex = orig_hil_index;
+
+  return (orig_hil_index != HilIndex);
+}
+
+/**
+ * select_last - Selects the last unhidden mailbox
+ * @retval true  Success
+ * @retval false Failure
+ */
+static int select_last(void)
+{
+  int orig_hil_index = HilIndex;
+
+  if (!EntryCount || (HilIndex < 0))
+    return false;
+
+  HilIndex = EntryCount;
+  if (!select_prev())
+    HilIndex = orig_hil_index;
+
+  return (orig_hil_index != HilIndex);
+}
+
+/**
  * prepare_sidebar - Prepare the list of SbEntry's for the sidebar display
  * @param page_size  The number of lines on a page
  * @retval false No, don't draw the sidebar
@@ -838,18 +880,16 @@ static void fill_empty_space(struct MuttWindow *win, int first_row,
  * imap_is_prefix - Check if folder matches the beginning of mbox
  * @param folder Folder
  * @param mbox   Mailbox path
- * @param plen   Prefix length
- * @retval true If folder is the prefix of mbox
+ * @retval num Length of the prefix
  */
-static bool imap_is_prefix(const char *folder, const char *mbox, size_t *plen)
+static int imap_is_prefix(const char *folder, const char *mbox)
 {
+  int plen = 0;
+
   struct Url *url_m = url_parse(mbox);
   struct Url *url_f = url_parse(folder);
-
   if (!url_m || !url_f)
-    return false;
-
-  bool rc = false;
+    goto done;
 
   if (mutt_str_strcasecmp(url_m->host, url_f->host) != 0)
     goto done;
@@ -865,15 +905,113 @@ static bool imap_is_prefix(const char *folder, const char *mbox, size_t *plen)
   if (mutt_str_strncmp(url_m->path, url_f->path, flen) != 0)
     goto done;
 
-  if (url_m->user && !url_f->user)
-    *plen += mutt_str_strlen(url_m->user) + 1;
-  rc = true;
+  plen = strlen(mbox) - mlen + flen;
 
 done:
   url_free(&url_m);
   url_free(&url_f);
 
-  return rc;
+  return plen;
+}
+
+/**
+ * abbrev_folder - Abbreviate a Mailbox path using a folder
+ * @param mbox   Mailbox path to shorten
+ * @param folder Folder path to use
+ * @param type   Mailbox type
+ * @retval ptr Pointer into the mbox param
+ */
+static const char *abbrev_folder(const char *mbox, const char *folder, enum MailboxType type)
+{
+  if (!mbox || !folder)
+    return NULL;
+
+  if (type == MUTT_IMAP)
+  {
+    int prefix = imap_is_prefix(folder, mbox);
+    if (prefix == 0)
+      return NULL;
+    return mbox + prefix;
+  }
+
+  if (!C_SidebarDelimChars)
+    return NULL;
+
+  size_t flen = mutt_str_strlen(folder);
+  if (flen == 0)
+    return NULL;
+  if (strchr(C_SidebarDelimChars, folder[flen - 1])) // folder ends with a delimiter
+    flen--;
+
+  size_t mlen = mutt_str_strlen(mbox);
+  if (mlen <= flen)
+    return NULL;
+
+  if (mutt_str_strncmp(folder, mbox, flen) != 0)
+    return NULL;
+
+  // After the match, check that mbox has a delimiter
+  if (!strchr(C_SidebarDelimChars, mbox[flen]))
+    return NULL;
+
+  return mbox + flen + 1;
+}
+
+/**
+ * abbrev_url - Abbreviate a url-style Mailbox path
+ * @param mbox Mailbox path to shorten
+ * @param type Mailbox type
+ *
+ * Use heuristics to shorten a non-local Mailbox path.
+ * Strip the host part (or database part for Notmuch).
+ *
+ * e.g.
+ * - `imap://user@host.com/apple/banana` becomes `apple/banana`
+ * - `notmuch:///home/user/db?query=hello` becomes `query=hello`
+ */
+static const char *abbrev_url(const char *mbox, enum MailboxType type)
+{
+  /* This is large enough to skip `notmuch://`,
+   * but not so large that it will go past the host part. */
+  const int scheme_len = 10;
+
+  size_t len = mutt_str_strlen(mbox);
+  if ((len < scheme_len) || ((type != MUTT_NNTP) && (type != MUTT_IMAP) &&
+                             (type != MUTT_NOTMUCH) && (type != MUTT_POP)))
+  {
+    return mbox;
+  }
+
+  const char split = (type == MUTT_NOTMUCH) ? '?' : '/';
+
+  // Skip over the scheme, e.g. `imaps://`, `notmuch://`
+  const char *last = strchr(mbox + scheme_len, split);
+  if (last)
+    mbox = last + 1;
+  return mbox;
+}
+
+/**
+ * calc_path_depth - Calculate the depth of a Mailbox path
+ * @param[in]  mbox      Mailbox path to examine
+ * @param[in]  delims    Delimiter characters
+ * @param[out] last_part Last path component
+ */
+static int calc_path_depth(const char *mbox, const char *delims, const char **last_part)
+{
+  if (!mbox || !delims || !last_part)
+    return 0;
+
+  int depth = 0;
+  const char *match = NULL;
+  while ((match = strpbrk(mbox, delims)))
+  {
+    depth++;
+    mbox = match + 1;
+  }
+
+  *last_part = mbox;
+  return depth;
 }
 
 /**
@@ -906,6 +1044,8 @@ static void draw_sidebar(struct MuttWindow *win, int num_rows, int num_cols, int
 
   int w = MIN(num_cols, (C_SidebarWidth - div_width));
   int row = 0;
+  const char *display = NULL;
+  struct Buffer result = mutt_buffer_make(256);
   for (int entryidx = TopIndex; (entryidx < EntryCount) && (row < num_rows); entryidx++)
   {
     entry = Entries[entryidx];
@@ -954,96 +1094,53 @@ static void draw_sidebar(struct MuttWindow *win, int num_rows, int num_cols, int
       m->msg_flagged = Context->mailbox->msg_flagged;
     }
 
-    /* compute length of C_Folder without trailing separator */
-    size_t maildirlen = mutt_str_strlen(C_Folder);
-    if (maildirlen && C_SidebarDelimChars &&
-        strchr(C_SidebarDelimChars, C_Folder[maildirlen - 1]))
-    {
-      maildirlen--;
-    }
+    const char *full_path = mailbox_path(m);
+    display = m->name;
+    if (!display)
+      display = full_path;
 
-    /* check whether C_Folder is a prefix of the current folder's path */
-    bool maildir_is_prefix = false;
-    if (m->type == MUTT_IMAP)
-    {
-      maildir_is_prefix = imap_is_prefix(C_Folder, mailbox_path(m), &maildirlen);
-    }
-    else
-    {
-      if ((mutt_buffer_len(&m->pathbuf) > maildirlen) &&
-          (mutt_str_strncmp(C_Folder, mailbox_path(m), maildirlen) == 0) && C_SidebarDelimChars &&
-          strchr(C_SidebarDelimChars, mailbox_path(m)[maildirlen]))
-      {
-        maildir_is_prefix = true;
-      }
-    }
+    const char *abbr = m->name;
+    if (!abbr)
+      abbr = abbrev_folder(display, C_Folder, m->type);
+    if (!abbr)
+      abbr = abbrev_url(display, m->type);
 
-    /* calculate depth of current folder and generate its display name with indented spaces */
-    int sidebar_folder_depth = 0;
-    const char *sidebar_folder_name = NULL;
-    struct Buffer *short_folder_name = NULL;
+    // Use the abbreviation if we have one. The full path is not preferable.
+    if (abbr)
+      display = abbr;
+
+    const char *last_part = abbr;
+    int depth = calc_path_depth(abbr, C_SidebarDelimChars, &last_part);
+
+    // At this point, we don't have an abbreviation so let's keep track
+    // before using short path.
+    bool no_abbr = mutt_str_strncmp(display, full_path, sizeof(display));
     if (C_SidebarShortPath)
     {
-      /* disregard a trailing separator, so strlen() - 2 */
-      sidebar_folder_name = mailbox_path(m);
-      for (int i = mutt_str_strlen(sidebar_folder_name) - 2; i >= 0; i--)
-      {
-        if (C_SidebarDelimChars && strchr(C_SidebarDelimChars, sidebar_folder_name[i]))
-        {
-          sidebar_folder_name += (i + 1);
-          break;
-        }
-      }
+      display = last_part;
     }
-    else if ((C_SidebarComponentDepth > 0) && C_SidebarDelimChars)
-    {
-      sidebar_folder_name = mailbox_path(m) + maildir_is_prefix * (maildirlen + 1);
-      for (int i = 0; i < C_SidebarComponentDepth; i++)
-      {
-        char *chars_after_delim = strpbrk(sidebar_folder_name, C_SidebarDelimChars);
-        if (!chars_after_delim)
-          break;
 
-        sidebar_folder_name = chars_after_delim + 1;
-      }
-    }
-    else
-      sidebar_folder_name = mailbox_path(m) + maildir_is_prefix * (maildirlen + 1);
+    mutt_buffer_reset(&result);
 
-    if (m->name)
+    // Don't indent if we were unable to create an abbreviation.
+    // Otherwise, the full path will be indent, and it looks unusual.
+    if (C_SidebarFolderIndent && no_abbr)
     {
-      sidebar_folder_name = m->name;
+      if (C_SidebarComponentDepth > 0)
+        depth -= C_SidebarComponentDepth;
+
+      for (int i = 0; i < depth; i++)
+        mutt_buffer_addstr(&result, C_SidebarIndentString);
     }
-    else if (maildir_is_prefix && C_SidebarFolderIndent)
-    {
-      int lastsep = 0;
-      const char *tmp_folder_name = mailbox_path(m) + maildirlen + 1;
-      int tmplen = (int) mutt_str_strlen(tmp_folder_name) - 1;
-      for (int i = 0; i < tmplen; i++)
-      {
-        if (C_SidebarDelimChars && strchr(C_SidebarDelimChars, tmp_folder_name[i]))
-        {
-          sidebar_folder_depth++;
-          lastsep = i + 1;
-        }
-      }
-      if (sidebar_folder_depth > 0)
-      {
-        if (C_SidebarShortPath)
-          tmp_folder_name += lastsep; /* basename */
-        short_folder_name = mutt_buffer_pool_get();
-        for (int i = 0; i < sidebar_folder_depth; i++)
-          mutt_buffer_addstr(short_folder_name, NONULL(C_SidebarIndentString));
-        mutt_buffer_addstr(short_folder_name, tmp_folder_name);
-        sidebar_folder_name = mutt_b2s(short_folder_name);
-      }
-    }
+
+    mutt_buffer_addstr(&result, display);
+
     char str[256];
-    make_sidebar_entry(str, sizeof(str), w, sidebar_folder_name, entry);
+    make_sidebar_entry(str, sizeof(str), w, mutt_b2s(&result), entry);
     mutt_window_printf("%s", str);
-    mutt_buffer_pool_release(&short_folder_name);
     row++;
   }
+  mutt_buffer_dealloc(&result);
 
   fill_empty_space(win, row, num_rows - row, div_width, w);
 }
@@ -1102,7 +1199,8 @@ void mutt_sb_draw(struct MuttWindow *win)
  * If the operation is successful, HilMailbox will be set to the new mailbox.
  * This function only *selects* the mailbox, doesn't *open* it.
  *
- * Allowed values are: OP_SIDEBAR_NEXT, OP_SIDEBAR_NEXT_NEW,
+ * Allowed values are: OP_SIDEBAR_FIRST, OP_SIDEBAR_LAST,
+ * OP_SIDEBAR_NEXT, OP_SIDEBAR_NEXT_NEW,
  * OP_SIDEBAR_PAGE_DOWN, OP_SIDEBAR_PAGE_UP, OP_SIDEBAR_PREV,
  * OP_SIDEBAR_PREV_NEW.
  */
@@ -1116,6 +1214,14 @@ void mutt_sb_change_mailbox(int op)
 
   switch (op)
   {
+    case OP_SIDEBAR_FIRST:
+      if (!select_first())
+        return;
+      break;
+    case OP_SIDEBAR_LAST:
+      if (!select_last())
+        return;
+      break;
     case OP_SIDEBAR_NEXT:
       if (!select_next())
         return;

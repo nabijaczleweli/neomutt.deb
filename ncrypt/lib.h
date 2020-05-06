@@ -73,8 +73,10 @@ extern bool          C_PgpStrictEnc;
 extern unsigned char C_SmimeEncryptSelf; ///< Deprecated, see #C_SmimeSelfEncrypt
 extern bool          C_SmimeSelfEncrypt;
 
+#ifdef CRYPT_BACKEND_GPGME
 /* These Config Variables are only used in ncrypt/cryptglue.c */
 extern bool C_CryptUseGpgme;
+#endif
 
 /* These Config Variables are only used in ncrypt/pgp.c */
 extern bool          C_PgpCheckExit;
@@ -129,8 +131,8 @@ typedef uint16_t SecurityFlags;           ///< Flags, e.g. #SEC_ENCRYPT
 #define SEC_KEYBLOCK            (1 << 6)  ///< Email has a key attached
 #define SEC_INLINE              (1 << 7)  ///< Email has an inline signature
 #define SEC_OPPENCRYPT          (1 << 8)  ///< Opportunistic encrypt mode
-#define SEC_AUTOCRYPT           (1 << 9)  ///< Message will be, or was Autocrypt encrypt+signed
-#define SEC_AUTOCRYPT_OVERRIDE  (1 << 10) ///< Indicates manual set/unset of encryption
+#define SEC_AUTOCRYPT           (1 << 9)  ///< (Autocrypt) Message will be, or was Autocrypt encrypt+signed
+#define SEC_AUTOCRYPT_OVERRIDE  (1 << 10) ///< (Autocrypt) Indicates manual set/unset of encryption
 
 #define APPLICATION_PGP         (1 << 11) ///< Use PGP to encrypt/sign
 #define APPLICATION_SMIME       (1 << 12) ///< Use SMIME to encrypt/sign
@@ -205,6 +207,7 @@ bool         mutt_should_hide_protected_subject(struct Email *e);
 int          mutt_signed_handler(struct Body *a, struct State *s);
 
 /* cryptglue.c */
+void         crypt_cleanup(void);
 bool         crypt_has_module_backend(SecurityFlags type);
 void         crypt_init(void);
 void         crypt_invoke_message(SecurityFlags type);
@@ -225,10 +228,13 @@ int          crypt_smime_verify_sender(struct Mailbox *m, struct Email *e);
 /* crypt_mod.c */
 void crypto_module_free(void);
 
+#ifdef CRYPT_BACKEND_GPGME
 /* crypt_gpgme.c */
 void         pgp_gpgme_init(void);
+#ifdef USE_AUTOCRYPT
 int          mutt_gpgme_select_secret_key (struct Buffer *keyid);
+#endif
 const char  *mutt_gpgme_print_version(void);
-
+#endif
 
 #endif /* MUTT_NCRYPT_LIB_H */

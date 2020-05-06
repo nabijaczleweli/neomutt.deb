@@ -21,11 +21,15 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_mutt_file_unlock(void)
 {
   // int mutt_file_unlock(int fd);
+
+  {
+    TEST_CHECK(mutt_file_unlock(0) == 0);
+  }
 }

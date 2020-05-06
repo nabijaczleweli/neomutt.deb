@@ -24,8 +24,6 @@
  *
  * You should have received a copy of the GNU General Public License along with
  * this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- * crypt_gpgme.c - GPGME based crypto operations
  */
 
 /**
@@ -566,7 +564,7 @@ static const char *crypt_fpr_or_lkeyid(struct CryptKeyInfo *k)
  * @param flags Flags, see #KeyFlags
  * @retval ptr Flag string
  *
- * Note: The string is statically allocated.
+ * @note The string is statically allocated.
  */
 static char *crypt_key_abilities(KeyFlags flags)
 {
@@ -2275,10 +2273,12 @@ restart:
   ciphertext = NULL;
   if (err != 0)
   {
+#ifdef USE_AUTOCRYPT
     /* Abort right away and silently.
      * Autocrypt will retry on the normal keyring. */
     if (OptAutocryptGpgme)
       goto cleanup;
+#endif
     if (is_smime && !maybe_signed && (gpg_err_code(err) == GPG_ERR_NO_DATA))
     {
       /* Check whether this might be a signed message despite what the mime
@@ -3304,7 +3304,9 @@ int pgp_gpgme_encrypted_handler(struct Body *a, struct State *s)
   }
   else
   {
+#ifdef USE_AUTOCRYPT
     if (!OptAutocryptGpgme)
+#endif
     {
       mutt_error(_("Could not decrypt PGP message"));
     }
@@ -3629,12 +3631,12 @@ static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int co
 
   if (optional)
   {
-    mutt_expando_format(buf, buflen, col, cols, if_str, attach_format_str, data,
+    mutt_expando_format(buf, buflen, col, cols, if_str, crypt_format_str, data,
                         MUTT_FORMAT_NO_FLAGS);
   }
   else if (flags & MUTT_FORMAT_OPTIONAL)
   {
-    mutt_expando_format(buf, buflen, col, cols, else_str, attach_format_str,
+    mutt_expando_format(buf, buflen, col, cols, else_str, crypt_format_str,
                         data, MUTT_FORMAT_NO_FLAGS);
   }
   return src;
@@ -5371,6 +5373,7 @@ char *smime_gpgme_find_keys(struct AddressList *addrlist, bool oppenc_mode)
   return find_keys(addrlist, APPLICATION_SMIME, oppenc_mode);
 }
 
+#ifdef USE_AUTOCRYPT
 /**
  * mutt_gpgme_select_secret_key - Select a private Autocrypt key for a new account
  * @param keyid Autocrypt Key id
@@ -5459,6 +5462,7 @@ cleanup:
   gpgme_release(ctx);
   return rc;
 }
+#endif
 
 /**
  * pgp_gpgme_make_key_attachment - Implements CryptModuleSpecs::pgp_make_key_attachment()

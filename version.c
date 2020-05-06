@@ -53,12 +53,16 @@
 #ifdef USE_SSL_GNUTLS
 #include <gnutls/gnutls.h>
 #endif
+#ifdef HAVE_PCRE2
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
+#endif
 
 /* #include "muttlib.h" */
 const char *mutt_make_version(void);
-/* #include "hcache/lib.h" */
-const char *mutt_hcache_backend_list(void);
-const char *mutt_hcache_compress_list(void);
+/* #include "store/lib.h" */
+const char *store_backend_list(void);
+const char *store_compress_list(void);
 
 const int SCREEN_WIDTH = 80;
 
@@ -289,10 +293,16 @@ static struct CompileOptions comp_opts[] = {
 #ifdef USE_DEBUG_PARSE_TEST
   { "parse-test", 2 },
 #endif
+#ifdef HAVE_PCRE2
+  { "pcre2", 1 },
+#endif
 #ifdef CRYPT_BACKEND_CLASSIC_PGP
   { "pgp", 1 },
 #else
   { "pgp", 0 },
+#endif
+#ifndef HAVE_PCRE2
+  { "regex", 1 },
 #endif
 #ifdef USE_SASL
   { "sasl", 1 },
@@ -355,8 +365,11 @@ static struct CompileOptions comp_opts[] = {
  */
 static void print_compile_options(struct CompileOptions *co, FILE *fp)
 {
+  if (!co || !fp)
+    return;
+
   size_t used = 2;
-  bool tty = fp ? isatty(fileno(fp)) : false;
+  bool tty = isatty(fileno(fp));
 
   fprintf(fp, "  ");
   for (int i = 0; co[i].name; i++)
@@ -425,8 +438,11 @@ static char *rstrip_in_place(char *s)
  */
 void print_version(FILE *fp)
 {
+  if (!fp)
+    return;
+
   struct utsname uts;
-  bool tty = fp ? isatty(fileno(fp)) : false;
+  bool tty = isatty(fileno(fp));
   const char *fmt = "%s\n";
 
   if (tty)
@@ -482,13 +498,21 @@ void print_version(FILE *fp)
           LIBNOTMUCH_MINOR_VERSION, LIBNOTMUCH_MICRO_VERSION);
 #endif
 
+#ifdef HAVE_PCRE2
+  {
+    char version[24];
+    pcre2_config(PCRE2_CONFIG_VERSION, version);
+    fprintf(fp, "\nPCRE2: %s", version);
+  }
+#endif
+
 #ifdef USE_HCACHE
-  const char *backends = mutt_hcache_backend_list();
-  fprintf(fp, "\nhcache backends: %s", backends);
+  const char *backends = store_backend_list();
+  fprintf(fp, "\nstorage: %s", backends);
   FREE(&backends);
 #ifdef USE_HCACHE_COMPRESSION
   backends = compress_list();
-  fprintf(fp, "\nhcache compression: %s", backends);
+  fprintf(fp, "\ncompression: %s", backends);
   FREE(&backends);
 #endif
 #endif

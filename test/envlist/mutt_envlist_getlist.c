@@ -21,11 +21,16 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_mutt_envlist_getlist(void)
 {
   // char **mutt_envlist_getlist(void);
+
+  {
+    char **env = mutt_envlist_getlist();
+    TEST_CHECK(env == NULL);
+  }
 }

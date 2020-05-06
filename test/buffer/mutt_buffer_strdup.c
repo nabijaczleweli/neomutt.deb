@@ -21,11 +21,16 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_mutt_buffer_strdup(void)
 {
   // char *mutt_buffer_strdup(struct Buffer *buf);
+
+  {
+    char *str = mutt_buffer_strdup(NULL);
+    TEST_CHECK(str == NULL);
+  }
 }

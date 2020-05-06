@@ -6,7 +6,7 @@ PACKAGE_VERSION=@PACKAGE_VERSION@
 PACKAGE_DATE=	@PACKAGE_DATE@
 
 # Build-time compiler and flags. These are used for building executables that
-# are only used at build-time, e.g., doc/makedoc. These are different from CC /
+# are only used at build-time, e.g., docs/makedoc. These are different from CC /
 # CFLAGS / LDFLAGS because the host and target systems might be different.
 CC_FOR_BUILD=		@CC_FOR_BUILD@
 CFLAGS_FOR_BUILD=	@CFLAGS_FOR_BUILD@ $(EXTRA_CFLAGS_FOR_BUILD)
@@ -124,6 +124,40 @@ LIBCOMPMBOXOBJS=compmbox/compress.o
 CLEANFILES+=	$(LIBCOMPMBOX) $(LIBCOMPMBOXOBJS)
 MUTTLIBS+=	$(LIBCOMPMBOX)
 ALLOBJS+=	$(LIBCOMPMBOXOBJS)
+
+###############################################################################
+# libstore
+@if HAVE_BDB
+LIBSTOREOBJS+=	store/bdb.o
+@endif
+@if HAVE_GDBM
+LIBSTOREOBJS+=	store/gdbm.o
+@endif
+@if HAVE_KC
+LIBSTOREOBJS+=	store/kc.o
+@endif
+@if HAVE_LMDB
+LIBSTOREOBJS+=	store/lmdb.o
+@endif
+@if HAVE_QDBM
+LIBSTOREOBJS+=	store/qdbm.o
+@endif
+@if HAVE_ROCKSDB
+LIBSTOREOBJS+=	store/rocksdb.o
+@endif
+@if HAVE_TDB
+LIBSTOREOBJS+=	store/tdb.o
+@endif
+@if HAVE_TC
+LIBSTOREOBJS+=	store/tc.o
+@endif
+@if HAVE_BDB || HAVE_GDBM || HAVE_KC || HAVE_LMDB || HAVE_QDBM || HAVE_ROCKSDB || HAVE_TDB || HAVE_TC
+LIBSTORE=	libstore.a
+LIBSTOREOBJS+=	store/store.o
+CLEANFILES+=	$(LIBSTORE) $(LIBSTOREOBJS)
+MUTTLIBS+=	$(LIBSTORE)
+ALLOBJS+=	$(LIBSTOREOBJS)
+@endif
 
 ###############################################################################
 # libgui
@@ -253,24 +287,6 @@ LIBHCACHEOBJS=	hcache/hcache.o hcache/serialize.o
 CLEANFILES+=	$(LIBHCACHE) $(LIBHCACHEOBJS)
 MUTTLIBS+=	$(LIBHCACHE)
 ALLOBJS+=	$(LIBHCACHEOBJS)
-@if HAVE_BDB
-LIBHCACHEOBJS+=	hcache/bdb.o
-@endif
-@if HAVE_GDBM
-LIBHCACHEOBJS+=	hcache/gdbm.o
-@endif
-@if HAVE_KC
-LIBHCACHEOBJS+=	hcache/kc.o
-@endif
-@if HAVE_LMDB
-LIBHCACHEOBJS+=	hcache/lmdb.o
-@endif
-@if HAVE_QDBM
-LIBHCACHEOBJS+=	hcache/qdbm.o
-@endif
-@if HAVE_TC
-LIBHCACHEOBJS+=	hcache/tc.o
-@endif
 @endif # USE_HCACHE
 
 ###############################################################################
@@ -362,9 +378,10 @@ ALLOBJS+=	$(LIBADDRESSOBJS)
 # libmutt
 LIBMUTT=	libmutt.a
 LIBMUTTOBJS=	mutt/base64.o mutt/buffer.o mutt/charset.o mutt/date.o \
-		mutt/envlist.o mutt/exit.o mutt/file.o mutt/filter.o mutt/hash.o \
-		mutt/list.o mutt/logging.o mutt/mapping.o mutt/mbyte.o mutt/md5.o \
-		mutt/memory.o mutt/notify.o mutt/path.o mutt/pool.o mutt/regex.o \
+		mutt/envlist.o mutt/exit.o mutt/file.o mutt/filter.o \
+		mutt/hash.o mutt/list.o mutt/logging.o mutt/mapping.o \
+		mutt/mbyte.o mutt/md5.o mutt/memory.o mutt/notify.o \
+		mutt/path.o mutt/pool.o mutt/prex.o mutt/regex.o \
 		mutt/signal.o mutt/slist.o mutt/string.o
 CLEANFILES+=	$(LIBMUTT) $(LIBMUTTOBJS)
 MUTTLIBS+=	$(LIBMUTT)
@@ -381,8 +398,8 @@ all: $(BINFILES) $(LIBBINFILES) $(ALL_TARGETS)
 
 # compile + dependencies
 .c.o:
-	$(CC) $(CFLAGS) -MT $@ -MD -MP -MF $*.Tpo -c -o $@ $<
-	@mv $*.Tpo $*.Po
+	$(CC) $(CFLAGS) -MT $@ -MD -MP -MF $(@:.o=.Tpo) -c -o $@ $<
+	@mv $(@:.o=.Tpo) $(@:.o=.Po)
 
 $(ALLOBJS):
 
@@ -438,6 +455,13 @@ $(LIBCOMPMBOX): $(PWD)/compmbox $(LIBCOMPMBOXOBJS)
 	$(RANLIB) $@
 $(PWD)/compmbox:
 	$(MKDIR_P) $(PWD)/compmbox
+
+# libstore
+$(LIBSTORE): $(PWD)/store $(LIBSTOREOBJS)
+	$(AR) cr $@ $(LIBSTOREOBJS)
+	$(RANLIB) $@
+$(PWD)/store:
+	$(MKDIR_P) $(PWD)/store
 
 # libcompress
 $(LIBCOMPRESS): $(PWD)/compress $(LIBCOMPRESSOBJS)
@@ -594,7 +618,7 @@ uninstall: $(UNINSTALL_TARGETS)
 # distclean
 distclean: clean
 	$(RM) $(DEPFILES) autosetup/jimsh0 config.h config.log conststrings.c \
-		contrib/Makefile doc/Makefile doc/neomutt.1 html Makefile po/Makefile \
+		contrib/Makefile docs/Makefile docs/neomutt.1 html Makefile po/Makefile \
 		test/Makefile .clang_complete
 	$(RM) *.gc?? */*.gc?? test/*/*.gc??
 	$(RM) lcov.info lcov
@@ -623,7 +647,7 @@ coverage: all test
 # dedicated all-, clean-, install-, and uninstall- targets.
 @include @srcdir@/po/Makefile.autosetup
 @include @srcdir@/contrib/Makefile.autosetup
-@include @srcdir@/doc/Makefile.autosetup
+@include @srcdir@/docs/Makefile.autosetup
 @if ENABLE_UNIT_TESTS
 @include @srcdir@/test/Makefile.autosetup
 @endif

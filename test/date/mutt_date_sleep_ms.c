@@ -21,11 +21,16 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_mutt_date_sleep_ms(void)
 {
   // void mutt_date_sleep_ms(size_t ms);
+
+  {
+    mutt_date_sleep_ms(1);
+    TEST_CHECK_(1, "mutt_date_sleep_ms(1)");
+  }
 }

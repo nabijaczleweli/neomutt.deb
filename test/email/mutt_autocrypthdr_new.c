@@ -1,6 +1,6 @@
 /**
  * @file
- * Test code for url_new()
+ * Test code for mutt_autocrypthdr_new()
  *
  * @authors
  * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
@@ -21,11 +21,20 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
+#include "email/lib.h"
 
-void test_url_new(void)
+void test_mutt_autocrypthdr_new(void)
 {
-  // struct Url *url_new(void);
+  // struct AutocryptHeader *mutt_autocrypthdr_new(void);
+
+#ifdef USE_AUTOCRYPT
+  {
+    struct AutocryptHeader *ah = mutt_autocrypthdr_new();
+    TEST_CHECK(ah != NULL);
+    mutt_autocrypthdr_free(&ah);
+  }
+#endif
 }

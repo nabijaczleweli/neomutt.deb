@@ -21,12 +21,16 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 #include "core/lib.h"
 
 void test_neomutt_account_add(void)
 {
   // bool neomutt_account_add(struct NeoMutt *n, struct Account *a);
+
+  {
+    TEST_CHECK(neomutt_account_add(NULL, NULL) == false);
+  }
 }

@@ -7,6 +7,7 @@
  * Copyright (C) 2004 Tobias Werth <sitowert@stud.uni-erlangen.de>
  * Copyright (C) 2004 Brian Fundakowski Feldman <green@FreeBSD.org>
  * Copyright (C) 2016 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2020 Tino Reichardt <milky-neomutt@mcmilk.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -26,25 +27,40 @@
 /**
  * @page hcache HCACHE: Header cache API
  *
- * Header cache API
+ * The Header Cache saves data from email headers to a local store in order to
+ * speed up network mailboxes.
  *
- * This module defines the user-visible header cache API, which is used within
- * neomutt to cache and restore mail header data.
+ * @sa \ref store
+ * @sa \ref compress
  *
- * @subpage hc_serial
+ * ## Operation
  *
- * @subpage hc_hcache
+ * When NeoMutt parses an email, it stores the results in a number of structures
+ * (listed below).  To save time and network traffic, NeoMutt can save the
+ * results into a \ref store (optionally using \ref compress).
  *
- * Backends:
+ * @sa Address Body Buffer Email Envelope ListNode Parameter
  *
- * | File          | Description      |
- * | :------------ | :--------------- |
- * | hcache/bdb.c  | @subpage hc_bdb  |
- * | hcache/gdbm.c | @subpage hc_gdbm |
- * | hcache/kc.c   | @subpage hc_kc   |
- * | hcache/lmdb.c | @subpage hc_lmdb |
- * | hcache/qdbm.c | @subpage hc_qdbm |
- * | hcache/tc.c   | @subpage hc_tc   |
+ * To save the data, the Header Cache uses a set of 'dump' functions
+ * (\ref hc_serial) to 'serialise' the structures.  The cache also stores a CRC
+ * checksum of the C structs that were used.  When retrieving the data, the
+ * Header Cache uses a set of 'restore' functions to turn the data back into
+ * structs.
+ *
+ * The CRC checksum is created by `hcache/hcachever.sh` during the build
+ * process.  Whenever the definition of any of the structs changes, the CRC will
+ * change, invalidating any existing cached data.
+ *
+ * @note Adding or removing a field from the set of serialised fields will
+ * **not** affect the CRC.  In this case, it is vital that you bump the
+ * **`BASEVERSION`** variable in `hcache/hcachever.sh`
+ *
+ * ## Source
+ *
+ * | File                | Description        |
+ * | :------------------ | :----------------- |
+ * | hcache/hcache.c     | @subpage hc_hcache |
+ * | hcache/serialize.c  | @subpage hc_serial |
  */
 
 #ifndef MUTT_HCACHE_LIB_H
@@ -52,7 +68,6 @@
 
 #include <stddef.h>
 #include <stdbool.h>
-#include "compress/lib.h"
 
 struct Buffer;
 struct Email;
@@ -71,7 +86,6 @@ struct EmailCache
   unsigned int crc;
   void *ctx;
   void *cctx;
-  void *ondisk;
 };
 
 typedef struct EmailCache header_cache_t;
@@ -81,9 +95,9 @@ typedef struct EmailCache header_cache_t;
  */
 struct HCacheEntry
 {
-  size_t uidvalidity;  ///< IMAP-specific UIDVALIDITY
-  unsigned int crc;    ///< CRC of Email/Body/etc structs
-  struct Email *email; ///< Retrieved email
+  uint32_t uidvalidity; ///< IMAP-specific UIDVALIDITY
+  unsigned int crc;     ///< CRC of Email/Body/etc structs
+  struct Email *email;  ///< Retrieved email
 };
 
 /**
@@ -95,7 +109,6 @@ typedef void (*hcache_namer_t)(const char *path, struct Buffer *dest);
 
 /* These Config Variables are only used in hcache/hcache.c */
 extern char *C_HeaderCacheBackend;
-extern char *C_HeaderCacheCompressDictionary;
 extern short C_HeaderCacheCompressLevel;
 extern char *C_HeaderCacheCompressMethod;
 
@@ -127,7 +140,7 @@ void mutt_hcache_close(header_cache_t *hc);
  * @retval num Generic or backend-specific error code otherwise
  */
 int mutt_hcache_store(header_cache_t *hc, const char *key, size_t keylen,
-                      struct Email *e, unsigned int uidvalidity);
+                      struct Email *e, uint32_t uidvalidity);
 
 /**
  * mutt_hcache_fetch - fetch and validate a  message's header from the cache
@@ -141,7 +154,7 @@ int mutt_hcache_store(header_cache_t *hc, const char *key, size_t keylen,
  * @note This function performs a check on the validity of the data found by
  *       comparing it with the crc value of the header_cache_t structure.
  */
-struct HCacheEntry mutt_hcache_fetch(header_cache_t *hc, const char *key, size_t keylen, unsigned int uidvalidity);
+struct HCacheEntry mutt_hcache_fetch(header_cache_t *hc, const char *key, size_t keylen, uint32_t uidvalidity);
 
 int mutt_hcache_store_raw(header_cache_t *hc, const char *key, size_t keylen,
                           void *data, size_t dlen);
@@ -164,18 +177,5 @@ void mutt_hcache_free_raw(header_cache_t *hc, void **data);
  * @retval num Generic or backend-specific error code otherwise
  */
 int mutt_hcache_delete_header(header_cache_t *hc, const char *key, size_t keylen);
-
-/**
- * mutt_hcache_backend_list - get a list of backend identification strings
- * @retval ptr Comma separated string describing the compiled-in backends
- *
- * @note The returned string must be free'd by the caller
- */
-const char *mutt_hcache_backend_list(void);
-#ifdef USE_HCACHE_COMPRESSION
-const char *mutt_hcache_compress_list(void);
-#endif
-
-bool mutt_hcache_is_valid_backend(const char *s);
 
 #endif /* MUTT_HCACHE_LIB_H */

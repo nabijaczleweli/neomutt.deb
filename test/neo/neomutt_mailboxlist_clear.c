@@ -21,12 +21,17 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 #include "core/lib.h"
 
 void test_neomutt_mailboxlist_clear(void)
 {
   // void neomutt_mailboxlist_clear(struct MailboxList *ml);
+
+  {
+    neomutt_mailboxlist_clear(NULL);
+    TEST_CHECK_(1, "neomutt_mailboxlist_clear(NULL)");
+  }
 }

@@ -30,7 +30,6 @@
 #include "config.h"
 #include <stddef.h>
 #include <ctype.h>
-#include <regex.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -1142,11 +1141,11 @@ static bool msg_search(struct Mailbox *m, struct Pattern *pat, int msgno)
   }
 
   FILE *fp = NULL;
-  long lng = 0;
+  long len = 0;
   struct Email *e = m->emails[msgno];
 #ifdef USE_FMEMOPEN
   char *temp = NULL;
-  size_t tempsize;
+  size_t tempsize = 0;
 #else
   struct stat st;
 #endif
@@ -1200,14 +1199,15 @@ static bool msg_search(struct Mailbox *m, struct Pattern *pat, int msgno)
 
 #ifdef USE_FMEMOPEN
     mutt_file_fclose(&s.fp_out);
-    lng = tempsize;
+    len = tempsize;
 
-    if (tempsize)
+    if (tempsize != 0)
     {
       fp = fmemopen(temp, tempsize, "r");
       if (!fp)
       {
         mutt_perror(_("Error re-opening 'memory stream'"));
+        FREE(&temp);
         return false;
       }
     }
@@ -1225,7 +1225,7 @@ static bool msg_search(struct Mailbox *m, struct Pattern *pat, int msgno)
     fflush(fp);
     fseek(fp, 0, SEEK_SET);
     fstat(fileno(fp), &st);
-    lng = (long) st.st_size;
+    len = (long) st.st_size;
 #endif
   }
   else
@@ -1235,13 +1235,13 @@ static bool msg_search(struct Mailbox *m, struct Pattern *pat, int msgno)
     if (pat->op != MUTT_PAT_BODY)
     {
       fseeko(fp, e->offset, SEEK_SET);
-      lng = e->content->offset - e->offset;
+      len = e->content->offset - e->offset;
     }
     if (pat->op != MUTT_PAT_HEADER)
     {
       if (pat->op == MUTT_PAT_BODY)
         fseeko(fp, e->content->offset, SEEK_SET);
-      lng += e->content->length;
+      len += e->content->length;
     }
   }
 
@@ -1249,7 +1249,7 @@ static bool msg_search(struct Mailbox *m, struct Pattern *pat, int msgno)
   char *buf = mutt_mem_malloc(blen);
 
   /* search the file "fp" */
-  while (lng > 0)
+  while (len > 0)
   {
     if (pat->op == MUTT_PAT_HEADER)
     {
@@ -1264,7 +1264,7 @@ static bool msg_search(struct Mailbox *m, struct Pattern *pat, int msgno)
       match = true;
       break;
     }
-    lng -= mutt_str_strlen(buf);
+    len -= mutt_str_strlen(buf);
   }
 
   FREE(&buf);
@@ -1272,14 +1272,11 @@ static bool msg_search(struct Mailbox *m, struct Pattern *pat, int msgno)
   mx_msg_close(m, &msg);
 
   if (C_ThoroughSearch)
-  {
     mutt_file_fclose(&fp);
-#ifdef USE_FMEMOPEN
-    if (tempsize)
-      FREE(&temp);
-#endif
-  }
 
+#ifdef USE_FMEMOPEN
+  FREE(&temp);
+#endif
   return match;
 }
 

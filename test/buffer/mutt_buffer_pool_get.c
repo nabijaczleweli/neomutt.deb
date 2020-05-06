@@ -21,11 +21,17 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_mutt_buffer_pool_get(void)
 {
   // struct Buffer *mutt_buffer_pool_get(void);
+
+  {
+    struct Buffer *buf = mutt_buffer_pool_get();
+    TEST_CHECK(buf != NULL);
+    mutt_buffer_pool_free();
+  }
 }

@@ -21,11 +21,15 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_mutt_mb_wcwidth(void)
 {
   // int mutt_mb_wcwidth(wchar_t wc);
+
+  {
+    TEST_CHECK(mutt_mb_wcwidth('A') == 1);
+  }
 }

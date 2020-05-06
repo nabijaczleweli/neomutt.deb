@@ -21,12 +21,15 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "config.h"
 #include "acutest.h"
 
 /******************************************************************************
  * Add your test cases to this list.
  *****************************************************************************/
 #define NEOMUTT_TEST_LIST                                                      \
+  NEOMUTT_TEST_ITEM(test_common)                                               \
+                                                                               \
   /* account */                                                                \
   NEOMUTT_TEST_ITEM(test_account_free)                                         \
   NEOMUTT_TEST_ITEM(test_account_mailbox_add)                                  \
@@ -174,6 +177,7 @@
   NEOMUTT_TEST_ITEM(test_email_size)                                           \
   NEOMUTT_TEST_ITEM(test_emaillist_add_email)                                  \
   NEOMUTT_TEST_ITEM(test_emaillist_clear)                                      \
+  NEOMUTT_TEST_ITEM(test_mutt_autocrypthdr_new)                                \
                                                                                \
   /* envelope */                                                               \
   NEOMUTT_TEST_ITEM(test_mutt_autocrypthdr_free)                               \
@@ -219,6 +223,7 @@
   NEOMUTT_TEST_ITEM(test_mutt_file_read_keyword)                               \
   NEOMUTT_TEST_ITEM(test_mutt_file_read_line)                                  \
   NEOMUTT_TEST_ITEM(test_mutt_file_rename)                                     \
+  NEOMUTT_TEST_ITEM(test_mutt_file_resolve_symlink)                            \
   NEOMUTT_TEST_ITEM(test_mutt_file_rmtree)                                     \
   NEOMUTT_TEST_ITEM(test_mutt_file_safe_rename)                                \
   NEOMUTT_TEST_ITEM(test_mutt_file_sanitize_filename)                          \
@@ -544,7 +549,6 @@
   /* url */                                                                    \
   NEOMUTT_TEST_ITEM(test_url_check_scheme)                                     \
   NEOMUTT_TEST_ITEM(test_url_free)                                             \
-  NEOMUTT_TEST_ITEM(test_url_new)                                              \
   NEOMUTT_TEST_ITEM(test_url_parse)                                            \
   NEOMUTT_TEST_ITEM(test_url_pct_decode)                                       \
   NEOMUTT_TEST_ITEM(test_url_pct_encode)                                       \

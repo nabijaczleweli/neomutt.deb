@@ -33,7 +33,6 @@
 #include <limits.h>
 #include <locale.h>
 #include <pwd.h>
-#include <regex.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -634,7 +633,7 @@ static void add_folder(struct Menu *menu, struct BrowserState *state,
                        const char *name, const char *desc, const struct stat *s,
                        struct Mailbox *m, void *data)
 {
-  if (m && (m->flags & MB_HIDDEN))
+  if ((!menu || menu->is_mailbox_list) && m && (m->flags & MB_HIDDEN))
   {
     return;
   }
@@ -1371,19 +1370,6 @@ void mutt_buffer_select_file(struct Buffer *file, SelectFileFlags flags,
 
   mutt_buffer_reset(file);
 
-  if (mailbox)
-  {
-    examine_mailboxes(NULL, &state);
-  }
-  else
-#ifdef USE_IMAP
-      if (!state.imap_browse)
-#endif
-  {
-    if (examine_directory(NULL, &state, mutt_b2s(&LastDir), mutt_b2s(prefix)) == -1)
-      goto bail;
-  }
-
   struct MuttWindow *dlg =
       mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
@@ -1422,7 +1408,6 @@ void mutt_buffer_select_file(struct Buffer *file, SelectFileFlags flags,
   menu->make_entry = folder_make_entry;
   menu->search = select_file_search;
   menu->title = title;
-  menu->data = state.entry;
   if (multiple)
     menu->tag = file_tag;
 
@@ -1433,7 +1418,23 @@ void mutt_buffer_select_file(struct Buffer *file, SelectFileFlags flags,
                                            FolderHelp);
   mutt_menu_push_current(menu);
 
+  if (mailbox)
+  {
+    examine_mailboxes(NULL, &state);
+  }
+  else
+#ifdef USE_IMAP
+      if (!state.imap_browse)
+#endif
+  {
+    // examine_directory() calls add_folder() which needs the menu
+    if (examine_directory(menu, &state, mutt_b2s(&LastDir), mutt_b2s(prefix)) == -1)
+      goto bail;
+  }
+
   init_menu(&state, menu, title, sizeof(title), mailbox);
+  // only now do we have a valid state to attach
+  menu->data = state.entry;
 
   int op;
   while (true)
@@ -1846,14 +1847,14 @@ void mutt_buffer_select_file(struct Buffer *file, SelectFileFlags flags,
         if (mutt_buffer_is_empty(buf))
           mutt_buffer_strcpy(buf, ".");
 
-        struct Buffer errmsg = { 0 };
-        int rc = cs_subset_str_string_set(NeoMutt->sub, "mask", mutt_b2s(buf), NULL);
+        struct Buffer errmsg = mutt_buffer_make(256);
+        int rc = cs_subset_str_string_set(NeoMutt->sub, "mask", mutt_b2s(buf), &errmsg);
         if (CSR_RESULT(rc) != CSR_SUCCESS)
         {
           if (!mutt_buffer_is_empty(&errmsg))
           {
-            mutt_error("%s", errmsg.data);
-            FREE(&errmsg.data);
+            mutt_error("%s", mutt_b2s(&errmsg));
+            mutt_buffer_dealloc(&errmsg);
           }
           break;
         }
@@ -1958,7 +1959,10 @@ void mutt_buffer_select_file(struct Buffer *file, SelectFileFlags flags,
       case OP_BROWSER_GOTO_FOLDER:
       case OP_CHECK_NEW:
         if (op == OP_TOGGLE_MAILBOXES)
+        {
           mailbox = !mailbox;
+          menu->is_mailbox_list = mailbox;
+        }
 
         if (op == OP_BROWSER_GOTO_FOLDER)
         {
