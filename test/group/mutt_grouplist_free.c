@@ -21,12 +21,17 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 #include "address/lib.h"
 
 void test_mutt_grouplist_free(void)
 {
   // void mutt_grouplist_free(void);
+
+  {
+    mutt_grouplist_free();
+    TEST_CHECK_(1, "mutt_grouplist_free()");
+  }
 }

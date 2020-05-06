@@ -38,6 +38,9 @@
 #include "date.h"
 #include "logging.h"
 #include "memory.h"
+#include "message.h"
+#include "prex.h"
+#include "regex3.h"
 #include "string2.h"
 
 // clang-format off
@@ -62,54 +65,55 @@ static const char *const Months[] = {
  * @note Keep in alphabetical order
  */
 static const struct Tz TimeZones[] = {
-  { "aat",   1,  0, true  }, /* Atlantic Africa Time */
-  { "adt",   4,  0, false }, /* Arabia DST */
-  { "ast",   3,  0, false }, /* Arabia */
-//{ "ast",   4,  0, true  }, /* Atlantic */
-  { "bst",   1,  0, false }, /* British DST */
-  { "cat",   1,  0, false }, /* Central Africa */
-  { "cdt",   5,  0, true  },
-  { "cest",  2,  0, false }, /* Central Europe DST */
-  { "cet",   1,  0, false }, /* Central Europe */
-  { "cst",   6,  0, true  },
-//{ "cst",   8,  0, false }, /* China */
-//{ "cst",   9, 30, false }, /* Australian Central Standard Time */
-  { "eat",   3,  0, false }, /* East Africa */
-  { "edt",   4,  0, true  },
-  { "eest",  3,  0, false }, /* Eastern Europe DST */
-  { "eet",   2,  0, false }, /* Eastern Europe */
-  { "egst",  0,  0, false }, /* Eastern Greenland DST */
-  { "egt",   1,  0, true  }, /* Eastern Greenland */
-  { "est",   5,  0, true  },
-  { "gmt",   0,  0, false },
-  { "gst",   4,  0, false }, /* Presian Gulf */
-  { "hkt",   8,  0, false }, /* Hong Kong */
-  { "ict",   7,  0, false }, /* Indochina */
-  { "idt",   3,  0, false }, /* Israel DST */
-  { "ist",   2,  0, false }, /* Israel */
-//{ "ist",   5, 30, false }, /* India */
-  { "jst",   9,  0, false }, /* Japan */
-  { "kst",   9,  0, false }, /* Korea */
-  { "mdt",   6,  0, true  },
-  { "met",   1,  0, false }, /* This is now officially CET */
-  { "msd",   4,  0, false }, /* Moscow DST */
-  { "msk",   3,  0, false }, /* Moscow */
-  { "mst",   7,  0, true  },
-  { "nzdt", 13,  0, false }, /* New Zealand DST */
-  { "nzst", 12,  0, false }, /* New Zealand */
-  { "pdt",   7,  0, true  },
-  { "pst",   8,  0, true  },
-  { "sat",   2,  0, false }, /* South Africa */
-  { "smt",   4,  0, false }, /* Seychelles */
-  { "sst",  11,  0, true  }, /* Samoa */
-//{ "sst",   8,  0, false }, /* Singapore */
-  { "utc",   0,  0, false },
-  { "wat",   0,  0, false }, /* West Africa */
-  { "west",  1,  0, false }, /* Western Europe DST */
-  { "wet",   0,  0, false }, /* Western Europe */
-  { "wgst",  2,  0, true  }, /* Western Greenland DST */
-  { "wgt",   3,  0, true  }, /* Western Greenland */
-  { "wst",   8,  0, false }, /* Western Australia */
+  { "aat",     1,  0, true  }, /* Atlantic Africa Time */
+  { "adt",     4,  0, false }, /* Arabia DST */
+  { "ast",     3,  0, false }, /* Arabia */
+//{ "ast",     4,  0, true  }, /* Atlantic */
+  { "bst",     1,  0, false }, /* British DST */
+  { "cat",     1,  0, false }, /* Central Africa */
+  { "cdt",     5,  0, true  },
+  { "cest",    2,  0, false }, /* Central Europe DST */
+  { "cet",     1,  0, false }, /* Central Europe */
+  { "cst",     6,  0, true  },
+//{ "cst",     8,  0, false }, /* China */
+//{ "cst",     9, 30, false }, /* Australian Central Standard Time */
+  { "eat",     3,  0, false }, /* East Africa */
+  { "edt",     4,  0, true  },
+  { "eest",    3,  0, false }, /* Eastern Europe DST */
+  { "eet",     2,  0, false }, /* Eastern Europe */
+  { "egst",    0,  0, false }, /* Eastern Greenland DST */
+  { "egt",     1,  0, true  }, /* Eastern Greenland */
+  { "est",     5,  0, true  },
+  { "gmt",     0,  0, false },
+  { "gst",     4,  0, false }, /* Presian Gulf */
+  { "hkt",     8,  0, false }, /* Hong Kong */
+  { "ict",     7,  0, false }, /* Indochina */
+  { "idt",     3,  0, false }, /* Israel DST */
+  { "ist",     2,  0, false }, /* Israel */
+//{ "ist",     5, 30, false }, /* India */
+  { "jst",     9,  0, false }, /* Japan */
+  { "kst",     9,  0, false }, /* Korea */
+  { "mdt",     6,  0, true  },
+  { "met",     1,  0, false }, /* This is now officially CET */
+  { "met dst", 2,  0, false }, /* MET in Daylight Saving Time */
+  { "msd",     4,  0, false }, /* Moscow DST */
+  { "msk",     3,  0, false }, /* Moscow */
+  { "mst",     7,  0, true  },
+  { "nzdt",   13,  0, false }, /* New Zealand DST */
+  { "nzst",   12,  0, false }, /* New Zealand */
+  { "pdt",     7,  0, true  },
+  { "pst",     8,  0, true  },
+  { "sat",     2,  0, false }, /* South Africa */
+  { "smt",     4,  0, false }, /* Seychelles */
+  { "sst",    11,  0, true  }, /* Samoa */
+//{ "sst",     8,  0, false }, /* Singapore */
+  { "utc",     0,  0, false },
+  { "wat",     0,  0, false }, /* West Africa */
+  { "west",    1,  0, false }, /* Western Europe DST */
+  { "wet",     0,  0, false }, /* Western Europe */
+  { "wgst",    2,  0, true  }, /* Western Greenland DST */
+  { "wgt",     3,  0, true  }, /* Western Greenland */
+  { "wst",     8,  0, false }, /* Western Australia */
 };
 // clang-format on
 
@@ -147,6 +151,39 @@ static time_t compute_tz(time_t g, struct tm *utc)
 }
 
 /**
+ * add_tz_offset - Compute and add a timezone offset to an UTC time
+ * @param t UTC time
+ * @param w True if west of UTC, false if east
+ * @param h Number of hours in the timezone
+ * @param m Number of minutes in the timezone
+ * @retval Timezone offset in seconds
+ */
+static time_t add_tz_offset(time_t t, bool w, time_t h, time_t m)
+{
+  if ((t != TIME_T_MAX) && (t != TIME_T_MIN))
+    return t + (w ? 1 : -1) * (((time_t) h * 3600) + ((time_t) m * 60));
+  else
+    return t;
+}
+
+/**
+ * find_tz - Look up a timezone
+ * @param s Timezone to lookup
+ * @param len Length of the s string
+ * @retval ptr Pointer to the Tz struct
+ * @retval NULL Not found
+ */
+static const struct Tz *find_tz(const char *s, size_t len)
+{
+  for (size_t i = 0; i < mutt_array_size(TimeZones); i++)
+  {
+    if (mutt_str_strncasecmp(TimeZones[i].tzname, s, len) == 0)
+      return &TimeZones[i];
+  }
+  return NULL;
+}
+
+/**
  * is_leap_year_feb - Is a given February in a leap year
  * @param tm Date to be tested
  * @retval true if it's a leap year
@@ -158,37 +195,6 @@ static int is_leap_year_feb(struct tm *tm)
 
   int y = tm->tm_year + 1900;
   return ((y & 3) == 0) && (((y % 100) != 0) || ((y % 400) == 0));
-}
-
-/**
- * uncomment_timezone - Strip ()s from a timezone string
- * @param buf    Buffer to store the results
- * @param buflen Length of buffer
- * @param tz     Timezone string to copy
- * @retval ptr Results buffer
- *
- * Some time formats have the timezone in ()s, e.g. (MST) or (-0700)
- *
- * @note If the timezone doesn't have any ()s the function will return a
- *       pointer to the original string.
- */
-static const char *uncomment_timezone(char *buf, size_t buflen, const char *tz)
-{
-  char *p = NULL;
-  size_t len;
-
-  if (*tz != '(')
-    return tz; /* no need to do anything */
-  tz = mutt_str_skip_email_wsp(tz + 1);
-  p = strpbrk(tz, " )");
-  if (!p)
-    return tz;
-  len = p - tz;
-  if (len > (buflen - 1))
-    len = buflen - 1; /* LCOV_EXCL_LINE */
-  memcpy(buf, tz, len);
-  buf[len] = '\0';
-  return buf;
 }
 
 /**
@@ -462,133 +468,78 @@ time_t mutt_date_parse_date(const char *s, struct Tz *tz_out)
   if (!s)
     return -1;
 
-  int count = 0;
-  int hour, min, sec;
+  bool obsolete = false;
+
+  regmatch_t *match = mutt_prex_capture(PREX_RFC5322_DATE, s);
+  if (!match)
+  {
+    match = mutt_prex_capture(PREX_RFC5322_DATE_CFWS, s);
+    if (!match)
+      return -1;
+    obsolete = true;
+    mutt_debug(LL_DEBUG2, "Fallback to obsolete RFC5322 dates regex\n");
+  }
+
   struct tm tm = { 0 };
-  int i;
-  int tz_offset = 0;
+
+  // clang-format off
+  const regmatch_t *mday    = &match[obsolete ? PREX_RFC5322_DATE_CFWS_MATCH_DAY    : PREX_RFC5322_DATE_MATCH_DAY];
+  const regmatch_t *mmonth  = &match[obsolete ? PREX_RFC5322_DATE_CFWS_MATCH_MONTH  : PREX_RFC5322_DATE_MATCH_MONTH];
+  const regmatch_t *myear   = &match[obsolete ? PREX_RFC5322_DATE_CFWS_MATCH_YEAR   : PREX_RFC5322_DATE_MATCH_YEAR];
+  const regmatch_t *mhour   = &match[obsolete ? PREX_RFC5322_DATE_CFWS_MATCH_HOUR   : PREX_RFC5322_DATE_MATCH_HOUR];
+  const regmatch_t *mminute = &match[obsolete ? PREX_RFC5322_DATE_CFWS_MATCH_MINUTE : PREX_RFC5322_DATE_MATCH_MINUTE];
+  const regmatch_t *msecond = &match[obsolete ? PREX_RFC5322_DATE_CFWS_MATCH_SECOND : PREX_RFC5322_DATE_MATCH_SECOND];
+  const regmatch_t *mtz     = &match[obsolete ? PREX_RFC5322_DATE_CFWS_MATCH_TZ     : PREX_RFC5322_DATE_MATCH_TZ];
+  const regmatch_t *mtzobs  = &match[obsolete ? PREX_RFC5322_DATE_CFWS_MATCH_TZ_OBS : PREX_RFC5322_DATE_MATCH_TZ_OBS];
+  // clang-format on
+
+  /* Day */
+  sscanf(s + mutt_regmatch_start(mday), "%d", &tm.tm_mday);
+  if (tm.tm_mday > 31)
+    return -1;
+
+  /* Month */
+  tm.tm_mon = mutt_date_check_month(s + mutt_regmatch_start(mmonth));
+
+  /* Year */
+  sscanf(s + mutt_regmatch_start(myear), "%d", &tm.tm_year);
+  if (tm.tm_year < 50)
+    tm.tm_year += 100;
+  else if (tm.tm_year >= 1900)
+    tm.tm_year -= 1900;
+
+  /* Time */
+  int hour, min, sec = 0;
+  sscanf(s + mutt_regmatch_start(mhour), "%d", &hour);
+  sscanf(s + mutt_regmatch_start(mminute), "%d", &min);
+  if (mutt_regmatch_start(msecond) != -1)
+    sscanf(s + mutt_regmatch_start(msecond), "%d", &sec);
+  if ((hour > 23) || (min > 59) || (sec > 60))
+    return -1;
+  tm.tm_hour = hour;
+  tm.tm_min = min;
+  tm.tm_sec = sec;
+
+  /* Time zone */
   int zhours = 0;
   int zminutes = 0;
   bool zoccident = false;
-  const char *ptz = NULL;
-  char tzstr[128];
-  char scratch[128];
-
-  /* Don't modify our argument. Fixed-size buffer is ok here since
-   * the date format imposes a natural limit.  */
-
-  mutt_str_strfcpy(scratch, s, sizeof(scratch));
-
-  /* kill the day of the week, if it exists. */
-  char *t = strchr(scratch, ',');
-  if (t)
-    t++;
-  else
-    t = scratch;
-  t = mutt_str_skip_email_wsp(t);
-
-  while ((t = strtok(t, " \t")))
+  if (mutt_regmatch_start(mtz) != -1)
   {
-    switch (count)
-    {
-      case 0: /* day of the month */
-        if ((mutt_str_atoi(t, &tm.tm_mday) < 0) || (tm.tm_mday < 0))
-          return -1;
-        if (tm.tm_mday > 31)
-          return -1;
-        break;
-
-      case 1: /* month of the year */
-        i = mutt_date_check_month(t);
-        if ((i < 0) || (i > 11))
-          return -1;
-        tm.tm_mon = i;
-        break;
-
-      case 2: /* year */
-        if ((mutt_str_atoi(t, &tm.tm_year) < 0) || (tm.tm_year < 0))
-          return -1;
-        if ((tm.tm_year < 0) || (tm.tm_year > 9999))
-          return -1;
-        if (tm.tm_year < 50)
-          tm.tm_year += 100;
-        else if (tm.tm_year >= 1900)
-          tm.tm_year -= 1900;
-        break;
-
-      case 3: /* time of day */
-        if (sscanf(t, "%d:%d:%d", &hour, &min, &sec) == 3)
-          ;
-        else if (sscanf(t, "%d:%d", &hour, &min) == 2)
-          sec = 0;
-        else
-        {
-          mutt_debug(LL_DEBUG1, "could not process time format: %s\n", t);
-          return -1;
-        }
-        if ((hour < 0) || (hour > 23) || (min < 0) || (min > 59) || (sec < 0) || (sec > 60))
-          return -1;
-        tm.tm_hour = hour;
-        tm.tm_min = min;
-        tm.tm_sec = sec;
-        break;
-
-      case 4: /* timezone */
-        /* sometimes we see things like (MST) or (-0700) so attempt to
-         * compensate by uncommenting the string if non-RFC822 compliant */
-        ptz = uncomment_timezone(tzstr, sizeof(tzstr), t);
-
-        if ((*ptz == '+') || (*ptz == '-'))
-        {
-          if ((ptz[1] != '\0') && (ptz[2] != '\0') && (ptz[3] != '\0') && (ptz[4] != '\0') &&
-              isdigit((unsigned char) ptz[1]) && isdigit((unsigned char) ptz[2]) &&
-              isdigit((unsigned char) ptz[3]) && isdigit((unsigned char) ptz[4]))
-          {
-            zhours = (ptz[1] - '0') * 10 + (ptz[2] - '0');
-            zminutes = (ptz[3] - '0') * 10 + (ptz[4] - '0');
-
-            if (ptz[0] == '-')
-              zoccident = true;
-          }
-        }
-        else
-        {
-          /* This is safe to do: A pointer to a struct equals a pointer to its first element */
-          struct Tz *tz =
-              bsearch(ptz, TimeZones, mutt_array_size(TimeZones), sizeof(struct Tz),
-                      (int (*)(const void *, const void *)) mutt_str_strcasecmp);
-
-          if (tz)
-          {
-            zhours = tz->zhours;
-            zminutes = tz->zminutes;
-            zoccident = tz->zoccident;
-          }
-
-          /* ad hoc support for the European MET (now officially CET) TZ */
-          if (mutt_str_strcasecmp(t, "MET") == 0)
-          {
-            t = strtok(NULL, " \t");
-            if (t)
-            {
-              if (mutt_str_strcasecmp(t, "DST") == 0)
-                zhours++;
-            }
-          }
-        }
-        tz_offset = (zhours * 3600) + (zminutes * 60);
-        if (!zoccident)
-          tz_offset = -tz_offset;
-        break;
-    }
-    count++;
-    t = 0;
+    char direction;
+    sscanf(s + mutt_regmatch_start(mtz), "%c%02d%02d", &direction, &zhours, &zminutes);
+    zoccident = (direction == '-');
   }
-
-  if (count < 4) /* don't check for missing timezone */
+  else if (mutt_regmatch_start(mtzobs) != -1)
   {
-    mutt_debug(LL_DEBUG1, "error parsing date format, using received time\n");
-    return -1;
+    const struct Tz *tz =
+        find_tz(s + mutt_regmatch_start(mtzobs), mutt_regmatch_len(mtzobs));
+    if (tz)
+    {
+      zhours = tz->zhours;
+      zminutes = tz->zminutes;
+      zoccident = tz->zoccident;
+    }
   }
 
   if (tz_out)
@@ -598,12 +549,7 @@ time_t mutt_date_parse_date(const char *s, struct Tz *tz_out)
     tz_out->zoccident = zoccident;
   }
 
-  time_t time = mutt_date_make_time(&tm, false);
-  /* Check we haven't overflowed the time (on 32-bit arches) */
-  if ((time != TIME_T_MAX) && (time != TIME_T_MIN))
-    time += tz_offset;
-
-  return time;
+  return add_tz_offset(mutt_date_make_time(&tm, false), zoccident, zhours, zminutes);
 }
 
 /**
@@ -660,52 +606,30 @@ int mutt_date_make_tls(char *buf, size_t buflen, time_t timestamp)
  */
 time_t mutt_date_parse_imap(const char *s)
 {
-  if (!s)
+  const regmatch_t *match = mutt_prex_capture(PREX_IMAP_DATE, s);
+  if (!match)
     return 0;
 
-  struct tm t;
-  time_t tz;
+  const regmatch_t *mday = &match[PREX_IMAP_DATE_MATCH_DAY];
+  const regmatch_t *mmonth = &match[PREX_IMAP_DATE_MATCH_MONTH];
+  const regmatch_t *myear = &match[PREX_IMAP_DATE_MATCH_YEAR];
+  const regmatch_t *mtime = &match[PREX_IMAP_DATE_MATCH_TIME];
+  const regmatch_t *mtz = &match[PREX_IMAP_DATE_MATCH_TZ];
 
-  t.tm_mday = ((s[0] == ' ') ? s[1] - '0' : (s[0] - '0') * 10 + (s[1] - '0'));
-  s += 2;
-  if (*s != '-')
-    return 0;
-  s++;
-  t.tm_mon = mutt_date_check_month(s);
-  s += 3;
-  if (*s != '-')
-    return 0;
-  s++;
-  t.tm_year = (s[0] - '0') * 1000 + (s[1] - '0') * 100 + (s[2] - '0') * 10 +
-              (s[3] - '0') - 1900;
-  s += 4;
-  if (*s != ' ')
-    return 0;
-  s++;
+  struct tm tm;
 
-  /* time */
-  t.tm_hour = (s[0] - '0') * 10 + (s[1] - '0');
-  s += 2;
-  if (*s != ':')
-    return 0;
-  s++;
-  t.tm_min = (s[0] - '0') * 10 + (s[1] - '0');
-  s += 2;
-  if (*s != ':')
-    return 0;
-  s++;
-  t.tm_sec = (s[0] - '0') * 10 + (s[1] - '0');
-  s += 2;
-  if (*s != ' ')
-    return 0;
-  s++;
+  sscanf(s + mutt_regmatch_start(mday), " %d", &tm.tm_mday);
+  tm.tm_mon = mutt_date_check_month(s + mutt_regmatch_start(mmonth));
+  sscanf(s + mutt_regmatch_start(myear), "%d", &tm.tm_year);
+  tm.tm_year -= 1900;
+  sscanf(s + mutt_regmatch_start(mtime), "%d:%d:%d", &tm.tm_hour, &tm.tm_min, &tm.tm_sec);
 
-  /* timezone */
-  tz = ((s[1] - '0') * 10 + (s[2] - '0')) * 3600 + ((s[3] - '0') * 10 + (s[4] - '0')) * 60;
-  if (s[0] == '+')
-    tz = -tz;
+  char direction;
+  int zhours, zminutes;
+  sscanf(s + mutt_regmatch_start(mtz), "%c%02d%02d", &direction, &zhours, &zminutes);
+  bool zoccident = (direction == '-');
 
-  return mutt_date_make_time(&t, false) + tz;
+  return add_tz_offset(mutt_date_make_time(&tm, false), zoccident, zhours, zminutes);
 }
 
 /**
@@ -716,7 +640,7 @@ time_t mutt_date_parse_imap(const char *s)
  *
  * This will truncate instead of overflowing.
  */
-time_t mutt_date_add_timeout(time_t now, long timeout)
+time_t mutt_date_add_timeout(time_t now, time_t timeout)
 {
   if (timeout < 0)
     return now;

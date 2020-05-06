@@ -560,6 +560,12 @@ int mutt_addrlist_parse(struct AddressList *al, const char *s)
       default:
         if ((phraselen != 0) && (phraselen < (sizeof(phrase) - 1)) && ws_pending)
           phrase[phraselen++] = ' ';
+        if (*s == '\\')
+        {
+          s++;
+          phrase[phraselen++] = *s;
+          s++;
+        }
         s = next_token(s, phrase, &phraselen, sizeof(phrase) - 1);
         if (!s)
         {
@@ -1015,7 +1021,7 @@ const char *mutt_addr_for_display(const struct Address *a)
  */
 size_t mutt_addr_write(char *buf, size_t buflen, struct Address *addr, bool display)
 {
-  if (!buf || buflen == 0 || !addr)
+  if (!buf || (buflen == 0) || !addr)
     return 0;
 
   size_t len;
@@ -1178,6 +1184,30 @@ size_t mutt_addrlist_write(const struct AddressList *al, char *buf, size_t bufle
 
   *pbuf = '\0';
   return pbuf - buf;
+}
+
+/**
+ * mutt_addrlist_write_list - Write Addresses to a List
+ * @param al   AddressList to write
+ * @param list List for the Addresses
+ * @retval num Number of addresses written
+ */
+size_t mutt_addrlist_write_list(const struct AddressList *al, struct ListHead *list)
+{
+  if (!al || !list)
+    return 0;
+
+  char addr[256];
+  size_t count = 0;
+  struct Address *a = NULL;
+  TAILQ_FOREACH(a, al, entries)
+  {
+    mutt_addr_write(addr, sizeof(addr), a, true);
+    mutt_list_insert_tail(list, strdup(addr));
+    count++;
+  }
+
+  return count;
 }
 
 /**

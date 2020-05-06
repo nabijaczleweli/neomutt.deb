@@ -21,11 +21,17 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
+#include "email/lib.h"
 
 void test_emaillist_clear(void)
 {
   // void emaillist_clear(struct EmailList *el);
+
+  {
+    emaillist_clear(NULL);
+    TEST_CHECK_(1, "emaillist_clear(NULL);");
+  }
 }

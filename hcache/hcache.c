@@ -7,7 +7,7 @@
  * Copyright (C) 2004 Tobias Werth <sitowert@stud.uni-erlangen.de>
  * Copyright (C) 2004 Brian Fundakowski Feldman <green@FreeBSD.org>
  * Copyright (C) 2016 Pietro Cerutti <gahr@gahr.ch>
- * Copyright (C) 2019 Tino Reichardt <milky-neomutt@mcmilk.de>
+ * Copyright (C) 2019-2020 Tino Reichardt <milky-neomutt@mcmilk.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -33,14 +33,6 @@
  */
 
 #include "config.h"
-#include "muttlib.h"
-#include "serialize.h"
-
-#if !(defined(HAVE_BDB) || defined(HAVE_GDBM) || defined(HAVE_KC) ||           \
-      defined(HAVE_LMDB) || defined(HAVE_QDBM) || defined(HAVE_TC))
-#error "No hcache backend defined"
-#endif
-
 #include <assert.h>
 #include <errno.h>
 #include <limits.h>
@@ -53,74 +45,26 @@
 #include "mutt/lib.h"
 #include "email/lib.h"
 #include "lib.h"
-#include "backend.h"
 #include "hcache/hcversion.h"
+#include "muttlib.h"
+#include "serialize.h"
 #include "compress/lib.h"
+#include "store/lib.h"
+
+#if !(defined(HAVE_BDB) || defined(HAVE_GDBM) || defined(HAVE_KC) ||           \
+      defined(HAVE_LMDB) || defined(HAVE_QDBM) || defined(HAVE_ROCKSDB) ||     \
+      defined(HAVE_TC) || defined(HAVE_TDB))
+#error "No hcache backend defined"
+#endif
 
 /* These Config Variables are only used in hcache/hcache.c */
 char *C_HeaderCacheBackend; ///< Config: (hcache) Header cache backend to use
 
 static unsigned int hcachever = 0x0;
 
-#define HCACHE_BACKEND(name) extern const struct HcacheOps hcache_##name##_ops;
-HCACHE_BACKEND(bdb)
-HCACHE_BACKEND(gdbm)
-HCACHE_BACKEND(kyotocabinet)
-HCACHE_BACKEND(lmdb)
-HCACHE_BACKEND(qdbm)
-HCACHE_BACKEND(tokyocabinet)
-#undef HCACHE_BACKEND
-
-#define hcache_get_ops() hcache_get_backend_ops(C_HeaderCacheBackend)
-
-/**
- * hcache_ops - Backend implementations
- */
-const struct HcacheOps *hcache_ops[] = {
-#ifdef HAVE_TC
-  &hcache_tokyocabinet_ops,
-#endif
-#ifdef HAVE_KC
-  &hcache_kyotocabinet_ops,
-#endif
-#ifdef HAVE_QDBM
-  &hcache_qdbm_ops,
-#endif
-#ifdef HAVE_GDBM
-  &hcache_gdbm_ops,
-#endif
-#ifdef HAVE_BDB
-  &hcache_bdb_ops,
-#endif
-#ifdef HAVE_LMDB
-  &hcache_lmdb_ops,
-#endif
-  NULL,
-};
-
-/**
- * hcache_get_backend_ops - Get the API functions for an hcache backend
- * @param backend Name of the backend
- * @retval ptr Set of function pointers
- */
-static const struct HcacheOps *hcache_get_backend_ops(const char *backend)
-{
-  const struct HcacheOps **ops = hcache_ops;
-
-  if (!backend || !*backend)
-  {
-    return *ops;
-  }
-
-  for (; *ops; ops++)
-    if (strcmp(backend, (*ops)->name) == 0)
-      break;
-
-  return *ops;
-}
+#define hcache_get_ops() store_get_backend_ops(C_HeaderCacheBackend)
 
 #ifdef USE_HCACHE_COMPRESSION
-char *C_HeaderCacheCompressDictionary; ///< Config: (hcache) Filepath to dictionary for zstd compression
 short C_HeaderCacheCompressLevel; ///< Config: (hcache) Level of compression for method
 char *C_HeaderCacheCompressMethod; ///< Config: (hcache) Enable generic hcache database compression
 
@@ -133,7 +77,7 @@ char *C_HeaderCacheCompressMethod; ///< Config: (hcache) Enable generic hcache d
  */
 size_t header_size(void)
 {
-  return sizeof(int) + sizeof(size_t);
+  return sizeof(int) + sizeof(uint32_t);
 }
 
 /**
@@ -147,7 +91,7 @@ size_t header_size(void)
  * This function transforms an Email into a binary string so that it can be
  * saved to a database.
  */
-static void *dump(header_cache_t *hc, const struct Email *e, int *off, size_t uidvalidity)
+static void *dump(header_cache_t *hc, const struct Email *e, int *off, uint32_t uidvalidity)
 {
   struct Email e_dump;
   bool convert = !CharsetIsUtf8;
@@ -155,7 +99,7 @@ static void *dump(header_cache_t *hc, const struct Email *e, int *off, size_t ui
   *off = 0;
   unsigned char *d = mutt_mem_malloc(4096);
 
-  d = serial_dump_size_t((uidvalidity != 0) ? uidvalidity : mutt_date_epoch_ms(), d, off);
+  d = serial_dump_uint32_t((uidvalidity != 0) ? uidvalidity : mutt_date_epoch(), d, off);
   d = serial_dump_int(hc->crc, d, off);
 
   assert(*off == header_size());
@@ -210,7 +154,7 @@ static struct Email *restore(const unsigned char *d)
   bool convert = !CharsetIsUtf8;
 
   /* skip validate */
-  off += sizeof(size_t);
+  off += sizeof(uint32_t);
 
   /* skip crc */
   off += sizeof(unsigned int);
@@ -377,11 +321,11 @@ static char *get_foldername(const char *folder)
 }
 
 /**
- * mutt_hcache_open - Multiplexor for HcacheOps::open
+ * mutt_hcache_open - Multiplexor for StoreOps::open
  */
 header_cache_t *mutt_hcache_open(const char *path, const char *folder, hcache_namer_t namer)
 {
-  const struct HcacheOps *ops = hcache_get_ops();
+  const struct StoreOps *ops = hcache_get_ops();
   if (!ops)
     return NULL;
 
@@ -428,7 +372,7 @@ header_cache_t *mutt_hcache_open(const char *path, const char *folder, hcache_na
   {
     const struct ComprOps *cops = compr_get_ops();
 
-    hc->cctx = cops->open();
+    hc->cctx = cops->open(C_HeaderCacheCompressLevel);
     if (!hc->cctx)
     {
       FREE(&hc);
@@ -436,7 +380,6 @@ header_cache_t *mutt_hcache_open(const char *path, const char *folder, hcache_na
     }
 
     /* remember the buffer of database backend */
-    hc->ondisk = NULL;
     mutt_debug(LL_DEBUG3, "Header cache will use %s compression\n", cops->name);
   }
 #endif
@@ -474,11 +417,11 @@ header_cache_t *mutt_hcache_open(const char *path, const char *folder, hcache_na
 }
 
 /**
- * mutt_hcache_close - Multiplexor for HcacheOps::close
+ * mutt_hcache_close - Multiplexor for StoreOps::close
  */
 void mutt_hcache_close(header_cache_t *hc)
 {
-  const struct HcacheOps *ops = hcache_get_ops();
+  const struct StoreOps *ops = hcache_get_ops();
   if (!hc || !ops)
     return;
 
@@ -493,10 +436,10 @@ void mutt_hcache_close(header_cache_t *hc)
 }
 
 /**
- * mutt_hcache_fetch - Multiplexor for HcacheOps::fetch
+ * mutt_hcache_fetch - Multiplexor for StoreOps::fetch
  */
 struct HCacheEntry mutt_hcache_fetch(header_cache_t *hc, const char *key,
-                                     size_t keylen, unsigned int uidvalidity)
+                                     size_t keylen, uint32_t uidvalidity)
 {
   struct RealKey *rk = realkey(key, keylen);
   struct HCacheEntry entry = { 0 };
@@ -512,7 +455,7 @@ struct HCacheEntry mutt_hcache_fetch(header_cache_t *hc, const char *key,
   /* restore uidvalidity and crc */
   size_t hlen = header_size();
   int off = 0;
-  serial_restore_size_t(&entry.uidvalidity, data, &off);
+  serial_restore_uint32_t(&entry.uidvalidity, data, &off);
   serial_restore_int(&entry.crc, data, &off);
   assert(off == hlen);
   if (entry.crc != hc->crc || ((uidvalidity != 0) && uidvalidity != entry.uidvalidity))
@@ -524,6 +467,7 @@ struct HCacheEntry mutt_hcache_fetch(header_cache_t *hc, const char *key,
   if (C_HeaderCacheCompressMethod)
   {
     const struct ComprOps *cops = compr_get_ops();
+
     void *dblob = cops->decompress(hc->cctx, (char *) data + hlen, dlen - hlen);
     if (!dblob)
     {
@@ -554,7 +498,7 @@ end:
  */
 void *mutt_hcache_fetch_raw(header_cache_t *hc, const char *key, size_t keylen, size_t *dlen)
 {
-  const struct HcacheOps *ops = hcache_get_ops();
+  const struct StoreOps *ops = hcache_get_ops();
 
   if (!hc || !ops)
     return NULL;
@@ -567,11 +511,11 @@ void *mutt_hcache_fetch_raw(header_cache_t *hc, const char *key, size_t keylen, 
 }
 
 /**
- * mutt_hcache_free - Multiplexor for HcacheOps::free
+ * mutt_hcache_free - Multiplexor for StoreOps::free
  */
 void mutt_hcache_free_raw(header_cache_t *hc, void **data)
 {
-  const struct HcacheOps *ops = hcache_get_ops();
+  const struct StoreOps *ops = hcache_get_ops();
 
   if (!hc || !ops || !data || !*data)
     return;
@@ -580,10 +524,10 @@ void mutt_hcache_free_raw(header_cache_t *hc, void **data)
 }
 
 /**
- * mutt_hcache_store - Multiplexor for HcacheOps::store
+ * mutt_hcache_store - Multiplexor for StoreOps::store
  */
 int mutt_hcache_store(header_cache_t *hc, const char *key, size_t keylen,
-                      struct Email *e, unsigned int uidvalidity)
+                      struct Email *e, uint32_t uidvalidity)
 {
   if (!hc)
     return -1;
@@ -598,8 +542,9 @@ int mutt_hcache_store(header_cache_t *hc, const char *key, size_t keylen,
      * decompressing on fetch().  */
     size_t hlen = header_size();
 
-    /* data/dlen gets ptr to compressed data here */
     const struct ComprOps *cops = compr_get_ops();
+
+    /* data / dlen gets ptr to compressed data here */
     size_t clen = dlen;
     void *cdata = cops->compress(hc->cctx, data + hlen, dlen - hlen, &clen);
     if (!cdata)
@@ -641,7 +586,7 @@ int mutt_hcache_store(header_cache_t *hc, const char *key, size_t keylen,
 int mutt_hcache_store_raw(header_cache_t *hc, const char *key, size_t keylen,
                           void *data, size_t dlen)
 {
-  const struct HcacheOps *ops = hcache_get_ops();
+  const struct StoreOps *ops = hcache_get_ops();
 
   if (!hc || !ops)
     return -1;
@@ -656,11 +601,11 @@ int mutt_hcache_store_raw(header_cache_t *hc, const char *key, size_t keylen,
 }
 
 /**
- * mutt_hcache_delete_header - Multiplexor for HcacheOps::delete_header
+ * mutt_hcache_delete_header - Multiplexor for StoreOps::delete_header
  */
 int mutt_hcache_delete_header(header_cache_t *hc, const char *key, size_t keylen)
 {
-  const struct HcacheOps *ops = hcache_get_ops();
+  const struct StoreOps *ops = hcache_get_ops();
   if (!hc)
     return -1;
 
@@ -668,42 +613,7 @@ int mutt_hcache_delete_header(header_cache_t *hc, const char *key, size_t keylen
 
   keylen = mutt_buffer_printf(&path, "%s%s", hc->folder, key);
 
-  int rc = ops->delete_header(hc->ctx, mutt_b2s(&path), keylen);
+  int rc = ops->delete_record(hc->ctx, mutt_b2s(&path), keylen);
   mutt_buffer_dealloc(&path);
   return rc;
-}
-
-/**
- * mutt_hcache_backend_list - Get a list of backend names
- * @retval ptr Comma-space-separated list of names
- *
- * The caller should free the string.
- */
-const char *mutt_hcache_backend_list(void)
-{
-  char tmp[256] = { 0 };
-  const struct HcacheOps **ops = hcache_ops;
-  size_t len = 0;
-
-  for (; *ops; ops++)
-  {
-    if (len != 0)
-    {
-      len += snprintf(tmp + len, sizeof(tmp) - len, ", ");
-    }
-    len += snprintf(tmp + len, sizeof(tmp) - len, "%s", (*ops)->name);
-  }
-
-  return mutt_str_strdup(tmp);
-}
-
-/**
- * mutt_hcache_is_valid_backend - Is the string a valid hcache backend
- * @param s String identifying a backend
- * @retval true  s is recognized as a valid backend
- * @retval false otherwise
- */
-bool mutt_hcache_is_valid_backend(const char *s)
-{
-  return hcache_get_backend_ops(s);
 }

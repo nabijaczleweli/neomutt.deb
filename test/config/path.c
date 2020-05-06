@@ -21,8 +21,8 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -140,6 +140,15 @@ static bool test_initial_values(struct ConfigSet *cs, struct Buffer *err)
   }
   TEST_MSG("Banana = '%s'\n", VarBanana);
   TEST_MSG("Banana's initial value is '%s'\n", NONULL(value.data));
+
+  mutt_buffer_reset(&value);
+  rc = cs_str_initial_set(cs, "Cherry", (const char *) Vars[2].initial, &value);
+  if (!TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS))
+  {
+    TEST_MSG("%s\n", value.data);
+    FREE(&value.data);
+    return false;
+  }
 
   mutt_buffer_reset(&value);
   rc = cs_str_initial_set(cs, "Cherry", "train", &value);

@@ -136,7 +136,8 @@ EMAIL_OBJS	= test/email/common.o \
 		  test/email/email_new.o \
 		  test/email/email_size.o \
 		  test/email/emaillist_add_email.o \
-		  test/email/emaillist_clear.o
+		  test/email/emaillist_clear.o \
+		  test/email/mutt_autocrypthdr_new.o
 
 ENVELOPE_OBJS	= test/envelope/mutt_autocrypthdr_free.o \
 		  test/envelope/mutt_env_cmp_strict.o \
@@ -180,6 +181,7 @@ FILE_OBJS	= test/file/common.o \
 		  test/file/mutt_file_read_keyword.o \
 		  test/file/mutt_file_read_line.o \
 		  test/file/mutt_file_rename.o \
+		  test/file/mutt_file_resolve_symlink.o \
 		  test/file/mutt_file_rmtree.o \
 		  test/file/mutt_file_safe_rename.o \
 		  test/file/mutt_file_sanitize_filename.o \
@@ -482,7 +484,6 @@ THREAD_OBJS	= test/thread/clean_references.o \
 
 URL_OBJS	= test/url/url_check_scheme.o \
 		  test/url/url_free.o \
-		  test/url/url_new.o \
 		  test/url/url_parse.o \
 		  test/url/url_pct_decode.o \
 		  test/url/url_pct_encode.o \
@@ -498,13 +499,13 @@ BUILD_DIRS	= $(PWD)/test/account $(PWD)/test/address $(PWD)/test/attach \
 		  $(PWD)/test/history $(PWD)/test/idna $(PWD)/test/list \
 		  $(PWD)/test/logging $(PWD)/test/mailbox $(PWD)/test/mapping \
 		  $(PWD)/test/mbyte $(PWD)/test/md5 $(PWD)/test/memory \
-		  $(PWD)/test/neomutt $(PWD)/test/notify $(PWD)/test/parameter \
+		  $(PWD)/test/neo $(PWD)/test/notify $(PWD)/test/parameter \
 		  $(PWD)/test/parse $(PWD)/test/path $(PWD)/test/pattern \
 		  $(PWD)/test/regex $(PWD)/test/rfc2047 $(PWD)/test/rfc2231 \
 		  $(PWD)/test/signal $(PWD)/test/slist $(PWD)/test/string \
 		  $(PWD)/test/tags $(PWD)/test/thread $(PWD)/test/url
 
-TEST_OBJS	= test/main.o \
+TEST_OBJS	= test/main.o test/common.o \
 		  $(ACCOUNT_OBJS) \
 		  $(ADDRESS_OBJS) \
 		  $(ATTACH_OBJS) \

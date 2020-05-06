@@ -16,11 +16,11 @@ use system cc cc-lib mutt-gettext mutt-iconv pkg-config
 ###############################################################################
 # Names and versions
 define PACKAGE          "neomutt"
-define PACKAGE_VERSION  "20200320"
+define PACKAGE_VERSION  "20200501"
 define BUGS_ADDRESS     "neomutt-devel@neomutt.org"
 
 # Subdirectories that contain additional Makefile.autosetup files
-set subdirs {po doc contrib}
+set subdirs {po docs contrib}
 ###############################################################################
 
 ###############################################################################
@@ -77,6 +77,9 @@ options {
   with-idn:path             => "Location of GNU libidn"
   idn2=0                    => "Enable GNU libidn2 for internationalized domain names"
   with-idn2:path            => "Location of GNU libidn2"
+# PCRE2
+  pcre2=0                   => "Enable PCRE2 regular expressions"
+  with-pcre2:path           => "Location of PCRE2"
 # Header cache
   bdb=0                     => "Use BerkeleyDB for the header cache"
   with-bdb:path             => "Location of BerkeleyDB"
@@ -89,6 +92,10 @@ options {
   with-lmdb:path            => "Location of LMDB"
   qdbm=0                    => "Use QDBM for the header cache"
   with-qdbm:path            => "Location of QDBM"
+  tdb=0                     => "Use TDB for the header cache"
+  rocksdb=0                 => "Use RocksDB for the header cache"
+  with-rocksdb:path         => "Location of RocksDB"
+  with-tdb:path             => "Location of TDB"
   tokyocabinet=0            => "Use TokyoCabinet for the header cache"
   with-tokyocabinet:path    => "Location of TokyoCabinet"
 # sqlite
@@ -130,8 +137,8 @@ if {1} {
     autocrypt bdb coverage debug-backtrace debug-graphviz debug-notify
     debug-parse-test debug-window doc everything fmemopen full-doc gdbm gnutls
     gpgme gss homespool idn idn2 inotify kyotocabinet lmdb locales-fix lua lz4
-    mixmaster nls notmuch pgp pkgconf qdbm sasl smime sqlite ssl testing
-    tokyocabinet zlib zstd
+    mixmaster nls notmuch pcre2 pgp pkgconf qdbm rocksdb sasl smime sqlite ssl
+    testing tdb tokyocabinet zlib zstd
   } {
     define want-$opt [opt-bool $opt]
   }
@@ -140,8 +147,9 @@ if {1} {
   # relative --enable-opt to true. This allows "--with-opt=/usr" to be used as
   # a shortcut for "--opt --with-opt=/usr".
   foreach opt {
-    bdb gdbm gnutls gpgme gss homespool idn idn2 kyotocabinet lmdb lua lz4 mixmaster
-    ncurses nls notmuch qdbm sasl slang sqlite ssl tokyocabinet zlib zstd
+    bdb gdbm gnutls gpgme gss homespool idn idn2 kyotocabinet lmdb lua lz4
+    mixmaster ncurses nls notmuch pcre2 qdbm rocksdb sasl slang sqlite ssl tdb
+    tokyocabinet zlib zstd
   } {
     if {[opt-val with-$opt] ne {}} {
       define want-$opt 1
@@ -349,6 +357,7 @@ define USE_SIDEBAR
 define USE_SMTP
 define USE_SOCKET
 define SUN_ATTACHMENT
+define TEST_CASE_MAXSIZE 1024
 ###############################################################################
 
 set prefix [opt-val with-sysroot][get-define prefix]
@@ -356,8 +365,8 @@ set prefix [opt-val with-sysroot][get-define prefix]
 ###############################################################################
 # Everything
 if {[get-define want-everything]} {
-  foreach opt {bdb gdbm gpgme kyotocabinet lmdb lua lz4 notmuch pgp qdbm smime
-               tokyocabinet zlib zstd} {
+  foreach opt {bdb gdbm gpgme kyotocabinet lmdb lua lz4 notmuch pgp rocksdb
+               qdbm smime tokyocabinet tdb zlib zstd} {
     define want-$opt
     append conf_options "--$opt "
   }
@@ -898,6 +907,22 @@ if {[get-define want-idn]} {
 }
 
 ###############################################################################
+# PCRE2
+if {[get-define want-pcre2]} {
+  if {[get-define want-pkgconf]} {
+    pkgconf true libpcre2-8
+  } else {
+    cc-with {-cflags -DPCRE2_CODE_UNIT_WIDTH=8} {
+      if {![check-inc-and-lib pcre2 [opt-val with-pcre2 $prefix] \
+                              pcre2.h pcre2_compile_8 pcre2-8]} {
+        user-error "Unable to find PCRE2"
+      }
+    }
+  }
+  define-feature pcre2
+}
+
+###############################################################################
 # Header cache - bdb
 if {[get-define want-bdb]} {
   set bdb_versions [opt-val with-bdb-version { 5.3 6.2 4.8 }] ;# Will be checked in order
@@ -1014,6 +1039,35 @@ if {[get-define want-qdbm]} {
     }
   }
   define-append HCACHE_BACKENDS "qdbm"
+  define USE_HCACHE
+}
+
+###############################################################################
+# Header cache - RocksDB
+if {[get-define want-rocksdb]} {
+  if {![check-inc-and-lib rocksdb [opt-val with-rocksdb $prefix] \
+                          rocksdb/c.h rocksdb_open rocksdb]} {
+    user-error "Unable to find RocksDB"
+  }
+  define-append HCACHE_BACKENDS "rocksdb"
+  define USE_HCACHE
+}
+
+###############################################################################
+# Header Cache - TDB
+if {[get-define want-tdb]} {
+  if {[get-define want-pkgconf]} {
+    pkgconf true tdb
+    define-feature tdb
+  } else {
+    cc-with {-includes {sys/stat.h stddef.h} } {
+      if {![check-inc-and-lib tdb [opt-val with-tdb $prefix] \
+                              tdb.h tdb_close tdb]} {
+        user-error "Unable to find TDB"
+      }
+    }
+  }
+  define-append HCACHE_BACKENDS "tdb"
   define USE_HCACHE
 }
 
@@ -1189,6 +1243,7 @@ set auto_rep {
   SENDMAIL
   SUN_ATTACHMENT
   SYSCONFDIR
+  TEST_CASE_MAXSIZE
   USE_*
   VPATH
   WORDS_BIGENDIAN
@@ -1225,7 +1280,7 @@ define VPATH $vpath
 
 ###############################################################################
 # Define package timestamp (UTC) based on PACKAGE_VERSION for:
-# doc/neomuttrc.5, doc/neomutt.1
+# docs/neomuttrc.5, docs/neomutt.1
 define PACKAGE_DATE \
   [regsub {(....)(..)(..)} [get-define PACKAGE_VERSION] {\1-\2-\3}]
 

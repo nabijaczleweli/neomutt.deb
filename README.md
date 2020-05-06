@@ -4,10 +4,10 @@
 [![Twitter](https://img.shields.io/twitter/follow/NeoMutt_Org.svg?style=social&label=Follow)](https://twitter.com/NeoMutt_Org "Follow us on Twitter")
 [![Contributors](https://img.shields.io/badge/Contributors-181-orange.svg)](https://github.com/neomutt/neomutt/blob/master/AUTHORS.md "All of NeoMutt's Contributors")
 [![Release](https://img.shields.io/github/release/neomutt/neomutt.svg)](https://github.com/neomutt/neomutt/releases/latest "Latest Release Notes")
-[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://github.com/neomutt/neomutt/blob/master/COPYRIGHT.md "Copyright Statement")
-[![Code build](https://img.shields.io/travis/neomutt/neomutt.svg?label=code)](https://travis-ci.org/neomutt/neomutt "Latest Automatic Code Build")
+[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://github.com/neomutt/neomutt/blob/master/LICENCE.md "Copyright Statement")
+[![Code build](https://img.shields.io/travis/neomutt/neomutt.svg?label=code)](https://travis-ci.com/neomutt/neomutt "Latest Automatic Code Build")
 [![Coverity Scan](https://img.shields.io/coverity/scan/8495.svg)](https://scan.coverity.com/projects/neomutt-neomutt "Latest Code Static Analysis")
-[![Website build](https://img.shields.io/travis/neomutt/neomutt.github.io.svg?label=website)](https://travis-ci.org/neomutt/neomutt.github.io "Latest Website Test")
+[![Website build](https://img.shields.io/travis/neomutt/neomutt.github.io.svg?label=website)](https://travis-ci.com/neomutt/neomutt.github.io "Latest Website Test")
 
 ## What is NeoMutt?
 
@@ -84,17 +84,22 @@ source. Please refer to the instructions on the
 - Development:     https://neomutt.org/dev.html
 - Contributors:    [Everyone who has helped NeoMutt](AUTHORS.md)
 
-### Mutt
+## Copyright
 
-While NeoMutt is technically a fork of Mutt, the intention of the project is not to
-diverge from Mutt, but rather to act as a common ground for developers to improve Mutt.
+NeoMutt is released under version 2 of the GPL, the GNU General Public License.
+See [LICENSE.md](LICENSE.md).
 
-Collecting, sorting out and polishing patches to be incorporated upstream (into Mutt),
-as well as being a place to gather and encourage further collaboration while reducing
-redundant work, are among the main goals of NeoMutt. NeoMutt merges all changes from Mutt.
+The principal authors of NeoMutt are:
 
-More information is available on the [About](https://neomutt.org/about.html) page on
-the NeoMutt website.
-
-https://neomutt.org/guide/miscellany.html#acknowledgements
+- Copyright (C) 1996-2016 Michael R. Elkins `<me@.s.hmc.edu>`
+- Copyright (C) 1996-2002 Brandon Long `<blong@fiction.net>`
+- Copyright (C) 1997-2009 Thomas Roessler `<roessler@does-not-exist.org>`
+- Copyright (C) 1998-2005 Werner Koch `<wk@isil.d.shuttle.de>`
+- Copyright (C) 1999-2017 Brendan Cully `<brendan@kublai.com>`
+- Copyright (C) 1999-2002 Tommi Komulainen `<Tommi.Komulainen@iki.fi>`
+- Copyright (C) 2000-2004 Edmund Grimley Evans `<edmundo@rano.org>`
+- Copyright (C) 2000-2019 David Champion `<dgc.mutt@c13.us>`
+- Copyright (C) 2006-2009 Rocco Rutte `<pdmef@gmx.net>`
+- Copyright (C) 2014-2019 Kevin J. McCarthy `<kevin@8t8.us>`
+- Copyright (C) 2015-2019 Richard Russon `<rich@flatcap.org>`
 

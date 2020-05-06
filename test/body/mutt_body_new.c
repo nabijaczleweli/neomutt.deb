@@ -21,8 +21,8 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "email/lib.h"
@@ -30,4 +30,11 @@
 void test_mutt_body_new(void)
 {
   // struct Body *mutt_body_new(void);
+
+  {
+    struct Body *body = mutt_body_new();
+    TEST_CHECK(body != NULL);
+    mutt_body_free(&body);
+    TEST_CHECK(body == NULL);
+  }
 }

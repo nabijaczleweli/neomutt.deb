@@ -1,4 +1,74 @@
-2020-03-20  Richard Russon  <rich@flatcap.org>
+2020-05-01  Richard Russon  <rich@flatcap.org>
+* Bug Fixes
+  - Make sure buffers are initialized on error
+  - fix(sidebar): use abbreviated path if possible
+* Translations
+  - 100% Lithuanian
+* Docs
+  - make header cache config more explicit
+
+2020-04-24  Richard Russon  <rich@flatcap.org>
+* Bug Fixes
+  -Fix history corruption
+  -Handle pretty much anything in a URL query part
+  -Correctly parse escaped characters in header phrases
+  -Fix crash reading received header
+  -Fix sidebar indentation
+  -Avoid crashing on failure to parse an IMAP mailbox
+  -Maildir: handle deleted emails correctly
+  -Ensure OP_NULL is always first
+* Translations
+  -100% Czech
+* Build
+  -cirrus: enable pcre2, make pkgconf a special case
+  -Fix finding pcre2 w/o pkgconf
+  -build: tdb.h needs size_t, bring it in with stddef.h
+
+2020-04-17  Richard Russon  <rich@flatcap.org>
+* Features
+  - Fluid layout for Compose Screen, see: https://vimeo.com/407231157
+  - Trivial Database (TDB) header cache backend
+  - RocksDB header cache backend
+  - Add \<sidebar-first\> and \<sidebar-last\> functions
+* Bug Fixes
+  - add error for CLI empty emails
+  - Allow spaces and square brackets in paths
+  - browser: fix hidden mailboxes
+  - fix initial email display
+  - notmuch: fix time window search.
+  - fix resize bugs
+  - notmuch: fix entire-thread: update current email pointer
+  - sidebar: support indenting and shortening of names
+  - Handle variables inside backticks in sidebar_whitelist
+  - browser: fix mask regex error reporting
+* Translations
+  - 100.00% Lithuanian
+  - 98.88% Chinese (simplified)
+* Build
+  - Use regexes for common parsing tasks: urls, dates
+  - Add configure option `--pcre2` -- Enable PCRE2 regular expressions
+  - Add configure option `--tdb` -- Use TDB for the header cache
+  - Add configure option `--rocksdb` -- Use RocksDB for the header cache
+  - Create libstore (key/value backends)
+  - Update to latest autosetup
+  - Update to latest acutest.h
+  - Rename `doc/` directory to `docs/`
+  - make: fix location of .Po dependency files
+  - Change libcompress to be more universal
+  - Fix test fails on х32
+  - fix uidvalidity to unsigned 32-bit int
+* Code
+  - Increase test coverage
+  - Fix memory leaks
+  - Fix null checks
+* Upstream
+  - Buffer refactoring
+  - Fix use-after-free in mutt_str_replace()
+  - Clarify PGP Pseudo-header S\<id\> duration
+  - Try to respect MUTT_QUIET for IMAP contexts too
+  - Limit recurse depth when parsing mime messages
+
+2020-03-20  Richard Russon  \<rich@flatcap.org\>
 * Bug Fixes
   - Fix COLUMNS env var
   - Fix sync after delete
@@ -25,7 +95,7 @@
   - Use mutt_file_fopen() on config variables
   - Change commands to use intptr_t for data
 
-2020-03-13  Richard Russon  <rich@flatcap.org>
+2020-03-13  Richard Russon  \<rich@flatcap.org\>
 * Features
   - UI: add number of old messages to sidebar_format
   - UI: support ISO 8601 calendar date
@@ -103,7 +173,7 @@
   - Fix rendering of replacement_char when Charset_is_utf8
   - Update to latest acutest.h
 
-2019-12-07  Richard Russon  <rich@flatcap.org>
+2019-12-07  Richard Russon  \<rich@flatcap.org\>
 * Features
   - compose: draw status bar with highlights
 * Bug Fixes
@@ -124,14 +194,14 @@
   - refactor virtual email lookups
   - factor out global Context
 
-2019-11-29  Richard Russon  <rich@flatcap.org>
+2019-11-29  Richard Russon  \<rich@flatcap.org\>
 * Features
   - Add raw mailsize expando (%cr)
 * Bug Fixes
   - Avoid double question marks in bounce confirmation msg
   - Fix bounce confirmation
   - fix new-mail flags and behaviour
-  - fix: browser <descend-directory>
+  - fix: browser \<descend-directory\>
   - fix ssl crash
   - fix move to trash
   - fix flickering

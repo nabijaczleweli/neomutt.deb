@@ -21,11 +21,15 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_filter_create(void)
 {
   // pid_t filter_create(const char *cmd, FILE **fp_in, FILE **fp_out, FILE **fp_err);
+
+  {
+    TEST_CHECK(filter_create("false", NULL, NULL, NULL) > 0);
+  }
 }

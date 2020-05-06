@@ -1402,8 +1402,7 @@ int imap_subscribe(char *path, bool subscribe)
   struct ImapAccountData *adata = NULL;
   struct ImapMboxData *mdata = NULL;
   char buf[2048];
-  char errstr[256];
-  struct Buffer err, token;
+  struct Buffer err;
 
   if (imap_adata_find(path, &adata, &mdata) < 0)
     return -1;
@@ -1411,15 +1410,14 @@ int imap_subscribe(char *path, bool subscribe)
   if (C_ImapCheckSubscribed)
   {
     char mbox[1024];
-    mutt_buffer_init(&token);
     mutt_buffer_init(&err);
-    err.data = errstr;
-    err.dsize = sizeof(errstr);
+    err.dsize = 256;
+    err.data = mutt_mem_malloc(err.dsize);
     size_t len = snprintf(mbox, sizeof(mbox), "%smailboxes ", subscribe ? "" : "un");
     imap_quote_string(mbox + len, sizeof(mbox) - len, path, true);
-    if (mutt_parse_rc_line(mbox, &token, &err))
-      mutt_debug(LL_DEBUG1, "Error adding subscribed mailbox: %s\n", errstr);
-    FREE(&token.data);
+    if (mutt_parse_rc_line(mbox, &err))
+      mutt_debug(LL_DEBUG1, "Error adding subscribed mailbox: %s\n", err.data);
+    FREE(&err.data);
   }
 
   if (subscribe)
@@ -1586,7 +1584,7 @@ int imap_fast_trash(struct Mailbox *m, char *dest)
       mutt_debug(LL_DEBUG1, "could not queue copy\n");
       goto out;
     }
-    else
+    else if (!m->quiet)
     {
       mutt_message(ngettext("Copying %d message to %s...", "Copying %d messages to %s...", rc),
                    rc, dest_mdata->name);
@@ -1694,9 +1692,12 @@ int imap_sync_mailbox(struct Mailbox *m, bool expunge, bool close)
         if (e->deleted && e->changed)
           e->active = false;
       }
-      mutt_message(ngettext("Marking %d message deleted...",
-                            "Marking %d messages deleted...", rc),
-                   rc);
+      if (!m->quiet)
+      {
+        mutt_message(ngettext("Marking %d message deleted...",
+                              "Marking %d messages deleted...", rc),
+                     rc);
+      }
     }
   }
 
@@ -1731,9 +1732,12 @@ int imap_sync_mailbox(struct Mailbox *m, bool expunge, bool close)
       if ((e->env && e->env->changed) || e->attach_del)
       {
         /* L10N: The plural is chosen by the last %d, i.e. the total number */
-        mutt_message(ngettext("Saving changed message... [%d/%d]",
-                              "Saving changed messages... [%d/%d]", m->msg_count),
-                     i + 1, m->msg_count);
+        if (!m->quiet)
+        {
+          mutt_message(ngettext("Saving changed message... [%d/%d]",
+                                "Saving changed messages... [%d/%d]", m->msg_count),
+                       i + 1, m->msg_count);
+        }
         bool save_append = m->append;
         m->append = true;
         mutt_save_message_ctx(e, true, false, false, m);
@@ -1819,7 +1823,8 @@ int imap_sync_mailbox(struct Mailbox *m, bool expunge, bool close)
   /* We must send an EXPUNGE command if we're not closing. */
   if (expunge && !close && (m->rights & MUTT_ACL_DELETE))
   {
-    mutt_message(_("Expunging messages from server..."));
+    if (!m->quiet)
+      mutt_message(_("Expunging messages from server..."));
     /* Set expunge bit so we don't get spurious reopened messages */
     mdata->reopen |= IMAP_EXPUNGE_EXPECTED;
     if (imap_exec(adata, "EXPUNGE", IMAP_CMD_NO_FLAGS) != IMAP_EXEC_SUCCESS)
@@ -1853,6 +1858,8 @@ static struct Account *imap_ac_find(struct Account *a, const char *path)
     return NULL;
 
   struct Url *url = url_parse(path);
+  if (!url)
+    return NULL;
 
   struct ImapAccountData *adata = a->adata;
   struct ConnAccount *cac = &adata->conn->account;
@@ -2057,7 +2064,8 @@ static int imap_mbox_open(struct Mailbox *m)
   m->rights = 0;
   mdata->new_mail_count = 0;
 
-  mutt_message(_("Selecting %s..."), mdata->name);
+  if (!m->quiet)
+    mutt_message(_("Selecting %s..."), mdata->name);
 
   /* pipeline ACL test */
   if (adata->capabilities & IMAP_CAP_ACL)

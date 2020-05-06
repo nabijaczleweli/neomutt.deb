@@ -28,7 +28,6 @@
  */
 
 #include "config.h"
-#include <regex.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -582,7 +581,7 @@ static void query_menu(char *buf, size_t buflen, struct Query *results, bool ret
             }
           }
         }
-        ci_send_message(SEND_NO_FLAGS, e, NULL, Context, NULL);
+        mutt_send_message(SEND_NO_FLAGS, e, NULL, Context, NULL);
         menu->redraw = REDRAW_FULL;
         break;
       }

@@ -24,11 +24,11 @@
 #define MUTT_MENU_H
 
 #include "config.h"
-#include <regex.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include "keymap.h"
+#include "mutt/regex3.h"
 
 struct NotifyCallback;
 
@@ -88,7 +88,6 @@ struct Menu
   int max;                ///< Number of entries in the menu
   MuttRedrawFlags redraw; ///< When to redraw the screen
   enum MenuType type;     ///< Menu definition for keymap entries
-  int offset;             ///< Row offset within the window to start the index
   int pagelen;            ///< Number of entries per screen
   bool tagprefix : 1;
   bool is_mailbox_list : 1;

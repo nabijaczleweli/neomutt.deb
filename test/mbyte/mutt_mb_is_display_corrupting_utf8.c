@@ -21,11 +21,15 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_mutt_mb_is_display_corrupting_utf8(void)
 {
   // bool mutt_mb_is_display_corrupting_utf8(wchar_t wc);
+
+  {
+    TEST_CHECK(mutt_mb_is_display_corrupting_utf8(0) == false);
+  }
 }

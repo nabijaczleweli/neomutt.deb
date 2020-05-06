@@ -21,8 +21,9 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
+#include <locale.h>
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "email/lib.h"
@@ -38,6 +39,32 @@ struct UrlTest
 
 // clang-format off
 static struct UrlTest test[] = {
+  {
+    "mailto:mail@example.com",
+    true,
+    {
+      U_MAILTO,
+      NULL,
+      NULL,
+      NULL,
+      0,
+      "mail@example.com"
+    },
+    NULL
+  },
+  {
+    "mailto:mail@example.com?subject=see%20this&cc=me%40example.com",
+    true,
+    {
+      U_MAILTO,
+      NULL,
+      NULL,
+      NULL,
+      0,
+      "mail@example.com"
+    },
+    "subject|see this|cc|me@example.com|"
+  },
   {
     "foobar foobar",
     false,
@@ -69,7 +96,8 @@ static struct UrlTest test[] = {
     NULL
   },
   {
-    "pop://user@example.com@pop.example.com:234/some/where?encoding=binary",
+    "pop://user@example.com@pop.example.com:234/some/where?encoding=binary"
+    "&second=third&some%20space=%22quoted%20content%22",
     true,
     {
       U_POP,
@@ -79,7 +107,86 @@ static struct UrlTest test[] = {
       234,
       "some/where",
     },
-    "encoding|binary|"
+    "encoding|binary|second|third|some space|\"quoted content\"|"
+  },
+  {
+    "snews://user@[2000:4860:0:2001::68]:563",
+    true,
+    {
+      U_NNTPS,
+      "user",
+      NULL,
+      "2000:4860:0:2001::68",
+      563
+    }
+  },
+  {
+    "notmuch:///Users/bob/.mail/gmail?type=messages&query=tag%3Ainbox",
+    true,
+    {
+      U_NOTMUCH,
+      NULL,
+      NULL,
+      NULL,
+      0,
+      "/Users/bob/.mail/gmail"
+    },
+    "type|messages|query|tag:inbox|",
+  },
+  {
+    "imaps://gmail.com/[GMail]/Sent messages",
+    true,
+    {
+      U_IMAPS,
+      NULL,
+      NULL,
+      "gmail.com",
+      0,
+      "[GMail]/Sent messages"
+    }
+  },
+  {
+    /* Invalid fragment (#) character, see also
+     * https://github.com/neomutt/neomutt/issues/2276 */
+    "mailto:a@b?subject=#",
+    false,
+  },
+  {
+    /* Correctly escaped fragment (#) chracter, see also
+     * https://github.com/neomutt/neomutt/issues/2276 */
+    "mailto:a@b?subject=%23",
+    true,
+    {
+      U_MAILTO,
+      NULL,
+      NULL,
+      NULL,
+      0,
+      "a@b"
+    },
+    "subject|#|"
+  },
+  {
+    /* UTF-8 mailbox name */
+    "imaps://foobar@gmail.com@imap.gmail.com/Отправленные письма",
+    true,
+    {
+      U_IMAPS,
+      "foobar@gmail.com",
+      NULL,
+      "imap.gmail.com",
+      0,
+      "Отправленные письма"
+    }
+  },
+  {
+    /* Notmuch queries */
+    "notmuch://?query=folder:\"[Gmail]/Sent Mail\"",
+    true,
+    {
+      U_NOTMUCH
+    },
+    "query|folder:\"[Gmail]/Sent Mail\"|"
   }
 };
 // clang-format on
@@ -121,6 +228,9 @@ void check_query_string(const char *exp, const struct UrlQueryList *act)
 
 void test_url_parse(void)
 {
+  // let's pick a utf-8 locale, since we're also parsing utf-8 text */
+  setlocale(LC_ALL, "en_US.UTF-8");
+
   // struct Url *url_parse(const char *src);
 
   {
@@ -128,8 +238,9 @@ void test_url_parse(void)
   }
 
   {
-    for (size_t i = 0; i < mutt_array_size(test); ++i)
+    for (size_t i = 0; i < mutt_array_size(test); i++)
     {
+      TEST_CASE(test[i].source);
       struct Url *url = url_parse(test[i].source);
       if (!TEST_CHECK(!((!!url) ^ (!!test[i].valid))))
       {
@@ -173,6 +284,40 @@ void test_url_parse(void)
       check_query_string(test[i].qs_elem, &url->query_strings);
 
       url_free(&url);
+    }
+  }
+
+  {
+    /* Test automatically generated URLs */
+    const char *const al[] = { "imap", "imaps" };
+    const char *const bl[] = { "", "user@", "user@host.com@", "user:pass@" };
+    const char *const cl[] = { "host.com", "[12AB::EF89]", "127.0.0.1" };
+    const char *const dl[] = { "", ":123" };
+    const char *const el[] = { "", "/", "/path", "/path/one/two", "/path.one.two" };
+    for (size_t a = 0; a < mutt_array_size(al); a++)
+    {
+      for (size_t b = 0; b < mutt_array_size(bl); b++)
+      {
+        for (size_t c = 0; c < mutt_array_size(cl); c++)
+        {
+          for (size_t d = 0; d < mutt_array_size(dl); d++)
+          {
+            for (size_t e = 0; e < mutt_array_size(el); e++)
+            {
+              char s[1024];
+              snprintf(s, sizeof(s), "%s://%s%s%s%s", al[a], bl[b], cl[c], dl[d], el[e]);
+              TEST_CASE(s);
+              struct Url *u = url_parse(s);
+              if (!TEST_CHECK(u != NULL))
+              {
+                TEST_MSG("Expected: parsed <%s>", s);
+                TEST_MSG("Actual:   NULL");
+              }
+              url_free(&u);
+            }
+          }
+        }
+      }
     }
   }
 }

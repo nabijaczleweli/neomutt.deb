@@ -21,11 +21,16 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_mutt_sig_block_system(void)
 {
   // void mutt_sig_block_system(void);
+
+  {
+    mutt_sig_block_system();
+    TEST_CHECK_(1, "mutt_sig_block_system()");
+  }
 }

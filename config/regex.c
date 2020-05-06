@@ -29,7 +29,6 @@
 #include "config.h"
 #include <stddef.h>
 #include <limits.h>
-#include <regex.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include "mutt/lib.h"
@@ -102,9 +101,10 @@ struct Regex *regex_new(const char *str, int flags, struct Buffer *err)
   }
 
   int rc = REG_COMP(reg->regex, str, rflags);
-  if ((rc != 0) && err)
+  if (rc != 0)
   {
-    regerror(rc, reg->regex, err->data, err->dsize);
+    if (err)
+      regerror(rc, reg->regex, err->data, err->dsize);
     regex_free(&reg);
     return NULL;
   }

@@ -34,7 +34,6 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <pwd.h>
-#include <regex.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -1299,6 +1298,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
         }
 
         /* use callback function to handle this case */
+        *tmp = '\0';
         src = callback(tmp, sizeof(tmp), col, cols, ch, src, prefix, if_str,
                        else_str, data, flags);
 
@@ -1581,12 +1581,11 @@ void mutt_encode_path(struct Buffer *buf, const char *src)
  * mutt_set_xdg_path - Find an XDG path or its fallback
  * @param type    Type of XDG variable, e.g. #XDG_CONFIG_HOME
  * @param buf     Buffer to save path
- * @param bufsize Buffer length
  * @retval 1 if an entry was found that actually exists on disk and 0 otherwise
  *
  * Process an XDG environment variable or its fallback.
  */
-int mutt_set_xdg_path(enum XdgType type, char *buf, size_t bufsize)
+int mutt_set_xdg_path(enum XdgType type, struct Buffer *buf)
 {
   const char *xdg_env = mutt_str_getenv(xdg_env_vars[type]);
   char *xdg = xdg_env ? mutt_str_strdup(xdg_env) : mutt_str_strdup(xdg_defaults[type]);
@@ -1596,19 +1595,19 @@ int mutt_set_xdg_path(enum XdgType type, char *buf, size_t bufsize)
 
   while ((token = strsep(&xdg, ":")))
   {
-    if (snprintf(buf, bufsize, "%s/%s/neomuttrc", token, PACKAGE) < 0)
+    if (mutt_buffer_printf(buf, "%s/%s/neomuttrc", token, PACKAGE) < 0)
       continue;
-    mutt_expand_path(buf, bufsize);
-    if (access(buf, F_OK) == 0)
+    mutt_buffer_expand_path(buf);
+    if (access(mutt_b2s(buf), F_OK) == 0)
     {
       rc = 1;
       break;
     }
 
-    if (snprintf(buf, bufsize, "%s/%s/Muttrc", token, PACKAGE) < 0)
+    if (mutt_buffer_printf(buf, "%s/%s/Muttrc", token, PACKAGE) < 0)
       continue;
-    mutt_expand_path(buf, bufsize);
-    if (access(buf, F_OK) == 0)
+    mutt_buffer_expand_path(buf);
+    if (access(mutt_b2s(buf), F_OK) == 0)
     {
       rc = 1;
       break;

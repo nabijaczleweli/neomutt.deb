@@ -21,12 +21,17 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 #include "core/lib.h"
 
 void test_neomutt_mailboxlist_get_all(void)
 {
   // struct MailboxList neomutt_mailboxlist_get_all(struct NeoMutt *n, enum MailboxType magic);
+
+  {
+    struct MailboxList ml = neomutt_mailboxlist_get_all(NULL, MUTT_MAILDIR);
+    TEST_CHECK(STAILQ_EMPTY(&ml) == true);
+  }
 }

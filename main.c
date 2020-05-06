@@ -55,6 +55,7 @@
 #include "debug/lib.h"
 #include "alias.h"
 #include "browser.h"
+#include "commands.h"
 #include "context.h"
 #include "globals.h"
 #include "hook.h"
@@ -106,6 +107,29 @@ typedef uint8_t CliFlags;         ///< Flags for command line options, e.g. #MUT
 #define MUTT_CLI_NEWS    (1 << 5) ///< -g/-G Start with a list of all newsgroups
 #endif
 // clang-format on
+
+/**
+ * reset_tilde - Temporary measure
+ * @param cs Config Set
+ */
+static void reset_tilde(struct ConfigSet *cs)
+{
+  static const char *names[] = { "folder", "mbox", "postponed", "record" };
+
+  struct Buffer value = mutt_buffer_make(256);
+  for (size_t i = 0; i < mutt_array_size(names); i++)
+  {
+    struct HashElem *he = cs_get_elem(cs, names[i]);
+    if (!he)
+      continue;
+    mutt_buffer_reset(&value);
+    cs_he_initial_get(cs, he, &value);
+    mutt_buffer_expand_path_regex(&value, false);
+    cs_he_initial_set(cs, he, value.data, NULL);
+    cs_he_reset(cs, he, NULL);
+  }
+  mutt_buffer_dealloc(&value);
+}
 
 /**
  * mutt_exit - Leave NeoMutt NOW
@@ -535,6 +559,8 @@ int main(int argc, char *argv[], char *envp[])
   }
 #endif
 
+  reset_tilde(cs);
+
   if (dfile)
   {
     cs_str_initial_set(cs, "debug_file", dfile, NULL);
@@ -707,9 +733,9 @@ int main(int argc, char *argv[], char *envp[])
     log_queue_set_max_size(100);
   }
 
+#ifdef USE_AUTOCRYPT
   /* Initialize autocrypt after curses messages are working,
    * because of the initial account setup screens. */
-#ifdef USE_AUTOCRYPT
   if (C_Autocrypt)
     mutt_autocrypt_init(!(sendflags & SEND_BATCH));
 #endif
@@ -760,7 +786,7 @@ int main(int argc, char *argv[], char *envp[])
   {
     if (!OptNoCurses)
       mutt_flushinp();
-    if (ci_send_message(SEND_POSTPONED, NULL, NULL, NULL, NULL) == 0)
+    if (mutt_send_message(SEND_POSTPONED, NULL, NULL, NULL, NULL) == 0)
       rc = 0;
     // TEST23: neomutt -p (postponed message, cancel)
     // TEST24: neomutt -p (no postponed message)
@@ -790,11 +816,11 @@ int main(int argc, char *argv[], char *envp[])
     {
       if (url_check_scheme(argv[i]) == U_MAILTO)
       {
-        if (mutt_parse_mailto(e->env, &bodytext, argv[i]) < 0)
+        if (!mutt_parse_mailto(e->env, &bodytext, argv[i]))
         {
           mutt_error(_("Failed to parse mailto: link"));
           email_free(&e);
-          goto main_curses; // TEST25: neomutt mailto:
+          goto main_curses; // TEST25: neomutt mailto:?
         }
       }
       else
@@ -890,7 +916,7 @@ int main(int argc, char *argv[], char *envp[])
         sendflags |= SEND_NO_FREE_HEADER;
 
       /* Parse the draft_file into the full Email/Body structure.
-       * Set SEND_DRAFT_FILE so ci_send_message doesn't overwrite
+       * Set SEND_DRAFT_FILE so mutt_send_message doesn't overwrite
        * our e->content.  */
       if (draft_file)
       {
@@ -989,7 +1015,7 @@ int main(int argc, char *argv[], char *envp[])
       mutt_list_free(&attach);
     }
 
-    rv = ci_send_message(sendflags, e, bodyfile, NULL, NULL);
+    rv = mutt_send_message(sendflags, e, bodyfile, NULL, NULL);
     /* We WANT the "Mail sent." and any possible, later error */
     log_queue_empty();
     if (ErrorBufMessage)
@@ -1155,6 +1181,8 @@ int main(int argc, char *argv[], char *envp[])
         account_mailbox_remove(m->account, m);
 
       mailbox_free(&m);
+      mutt_error(_("Unable to open mailbox %s"), mutt_b2s(&folder));
+      repeat_error = false;
     }
     if (Context || !explicit_folder)
     {
@@ -1205,9 +1233,12 @@ main_exit:
   mutt_buffer_pool_free();
   mutt_envlist_free();
   mutt_browser_cleanup();
+  mutt_commands_cleanup();
+  crypt_cleanup();
   mutt_opts_free();
   mutt_keys_free();
   myvarlist_free(&MyVars);
+  mutt_prex_free();
   neomutt_free(&NeoMutt);
   cs_free(&cs);
   log_queue_flush(log_disp_terminal);

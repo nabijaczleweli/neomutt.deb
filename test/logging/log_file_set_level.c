@@ -21,11 +21,15 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_log_file_set_level(void)
 {
   // int log_file_set_level(int level, bool verbose);
+
+  {
+    TEST_CHECK(log_file_set_level(-1, false) == -1);
+  }
 }

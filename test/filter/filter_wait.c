@@ -21,11 +21,15 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 
 void test_filter_wait(void)
 {
   // int filter_wait(pid_t pid);
+
+  {
+    TEST_CHECK(filter_wait(-1) == 0);
+  }
 }

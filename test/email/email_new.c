@@ -21,8 +21,8 @@
  */
 
 #define TEST_NO_MAIN
-#include "acutest.h"
 #include "config.h"
+#include "acutest.h"
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "email/lib.h"
@@ -30,4 +30,11 @@
 void test_email_new(void)
 {
   // struct Email *email_new(void);
+
+  {
+    struct Email *e = email_new();
+    TEST_CHECK(e != NULL);
+    email_free(&e);
+    TEST_CHECK(e == NULL);
+  }
 }
