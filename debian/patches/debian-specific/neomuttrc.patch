@@ -1,6 +1,6 @@
 Some changes to the official documentation for neomutt.rc.
---- a/doc/neomuttrc.head
-+++ b/doc/neomuttrc.head
+--- a/docs/neomuttrc.head
++++ b/docs/neomuttrc.head
 @@ -12,6 +12,34 @@ unignore from: subject to cc date x-mailer x-url user-agent
  # Display the fields in this order
  hdr_order date from to cc subject

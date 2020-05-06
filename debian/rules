@@ -4,7 +4,7 @@ include /usr/share/dpkg/buildflags.mk
 
 export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 
-# To correctly build doc/ with autosetup.
+# To correctly build docs/ with autosetup.
 # See https://github.com/neomutt/neomutt/issues/980.
 EXTRA_CFLAGS_FOR_BUILD:=$(shell dpkg-buildflags --get CFLAGS)
 EXTRA_LDFLAGS_FOR_BUILD:=$(shell dpkg-buildflags --get LDFLAGS)
