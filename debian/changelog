@@ -1,3 +1,14 @@
+neomutt (20200501+dfsg.1-0.3) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Fix header name in changelog entry
+  * Fix notmuch platform detection
+  * Add patches from upstream PR 2326:
+    [c946e73] build: fix out-of-tree git builds
+  * Actually run tests
+
+ -- наб <nabijaczleweli@gmail.com>  Sat, 09 May 2020 18:00:33 +0200
+
 neomutt (20200501+dfsg.1-0.2) unstable; urgency=medium
 
   * Non-maintainer upload.
