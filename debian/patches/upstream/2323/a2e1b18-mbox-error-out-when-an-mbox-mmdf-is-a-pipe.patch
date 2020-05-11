@@ -1,0 +1,29 @@
+From a2e1b189a1c872dc51db2bf8fe5d1d4246c96610 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=D0=BD=D0=B0=D0=B1?= <nabijaczleweli@gmail.com>
+Date: Sat, 9 May 2020 01:03:39 +0200
+Subject: [PATCH] mbox: error out when an mbox/mmdf is a pipe
+
+Otherwise hangs indefinitely
+
+Fixes #2318
+---
+ mx.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/mx.c b/mx.c
+index 7de5dffe66..14708429cb 100644
+--- a/mx.c
++++ b/mx.c
+@@ -1339,6 +1339,12 @@ enum MailboxType mx_path_probe(const char *path)
+     return MUTT_UNKNOWN;
+   }
+ 
++  if (S_ISFIFO(st.st_mode))
++  {
++    mutt_error(_("Can't open %s: it is a pipe"), path);
++    return MUTT_UNKNOWN;
++  }
++
+   // Next, search the local Mailbox types (is_local == true)
+   for (const struct MxOps **ops = mx_ops; *ops; ops++)
+   {
