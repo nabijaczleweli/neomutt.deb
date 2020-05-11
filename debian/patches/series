@@ -9,3 +9,4 @@ upstream/2314/b35765b-test-use-C.UTF-8-locale.patch
 upstream/2316/d7a52ea-Move-TEST_CHECK_STR_EQ-in-a-really-common-header.patch
 upstream/2316/fbf371e-Decode-references-according-to-RFC2047.patch
 upstream/2316/f4d490b-More-tests-for-mutt_extract_message_id.patch
+upstream/2328/6b9c7c6-mh-fix-creating-new-mailbox.patch
