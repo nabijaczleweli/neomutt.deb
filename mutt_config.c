@@ -38,9 +38,9 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "alias/lib.h"
 #include "conn/lib.h"
 #include "gui/lib.h"
-#include "addrbook.h"
 #include "browser.h"
 #include "commands.h"
 #include "compose.h"
@@ -62,7 +62,6 @@
 #include "pager.h"
 #include "pattern.h"
 #include "progress.h"
-#include "query.h"
 #include "recvattach.h"
 #include "recvcmd.h"
 #include "remailer.h"
@@ -92,6 +91,9 @@
 /* These options are deprecated */
 bool C_IgnoreLinearWhiteSpace = false;
 bool C_HeaderCacheCompress = false;
+#if defined(HAVE_GDBM) || defined(HAVE_BDB)
+long C_HeaderCachePagesize = 0;
+#endif
 
 // clang-format off
 struct ConfigDef MuttVars[] = {
@@ -99,10 +101,10 @@ struct ConfigDef MuttVars[] = {
 
   { "abort_backspace", DT_BOOL, &C_AbortBackspace, true },
   /*
-   ** .pp
-   ** If \fIset\fP, hitting backspace against an empty prompt aborts the
-   ** prompt.
-   */
+  ** .pp
+  ** If \fIset\fP, hitting backspace against an empty prompt aborts the
+  ** prompt.
+  */
   { "abort_key", DT_STRING|DT_NOT_EMPTY, &C_AbortKey, IP "\007" },
   /*
   ** .pp
@@ -179,13 +181,14 @@ struct ConfigDef MuttVars[] = {
   ** The default for this option is the currently used neomuttrc file, or
   ** "~/.neomuttrc" if no user neomuttrc was found.
   */
-  { "alias_format", DT_STRING|DT_NOT_EMPTY, &C_AliasFormat, IP "%4n %2f %t %-10a   %r" },
+  { "alias_format", DT_STRING|DT_NOT_EMPTY, &C_AliasFormat, IP "%3n %f%t %-15a %-56r | %c" },
   /*
   ** .pp
   ** Specifies the format of the data displayed for the "$alias" menu.  The
   ** following \fCprintf(3)\fP-style sequences are available:
   ** .dl
   ** .dt %a  .dd Alias name
+  ** .dt %c  .dd Comment
   ** .dt %f  .dd Flags - currently, a "d" for an alias marked for deletion
   ** .dt %n  .dd Index number
   ** .dt %r  .dd Address which alias expands to
@@ -752,7 +755,7 @@ struct ConfigDef MuttVars[] = {
   ** .pp
   ** When set, NeoMutt will display protected headers ("Memory Hole") in the pager,
   ** and will update the index and header cache with revised headers.
-  **
+  ** .pp
   ** Protected headers are stored inside the encrypted or signed part of an
   ** an email, to prevent disclosure or tampering.
   ** For more information see https://github.com/autocrypt/memoryhole.
@@ -796,7 +799,7 @@ struct ConfigDef MuttVars[] = {
   ** When $$crypt_protected_headers_write is set, and the message is marked
   ** for encryption, this will be substituted into the Subject field in the
   ** message headers.
-  **
+  ** .pp
   ** To prevent a subject from being substituted, unset this variable, or set it
   ** to the empty string.
   ** (Crypto only)
@@ -806,11 +809,11 @@ struct ConfigDef MuttVars[] = {
   ** .pp
   ** When set, NeoMutt will generate protected headers ("Memory Hole") for
   ** signed and encrypted emails.
-  **
+  ** .pp
   ** Protected headers are stored inside the encrypted or signed part of an
   ** an email, to prevent disclosure or tampering.
   ** For more information see https://github.com/autocrypt/memoryhole.
-  **
+  ** .pp
   ** Currently NeoMutt only supports the Subject header.
   ** (Crypto only)
   */
@@ -1446,13 +1449,13 @@ struct ConfigDef MuttVars[] = {
   ** \fIunset\fP so no header caching will be used.
   */
 #if defined(USE_HCACHE_COMPRESSION)
-  { "header_cache_compress_level", DT_NUMBER|DT_NOT_NEGATIVE, &C_HeaderCacheCompressLevel, 1 },
+  { "header_cache_compress_level", DT_NUMBER|DT_NOT_NEGATIVE, &C_HeaderCacheCompressLevel, 1, 0, compress_level_validator },
   /*
   ** .pp
   ** When NeoMutt is compiled with lz4, zstd or zlib, this option can be used
   ** to setup the compression level.
   */
-  { "header_cache_compress_method", DT_STRING, &C_HeaderCacheCompressMethod, 0, 0, compress_validator },
+  { "header_cache_compress_method", DT_STRING, &C_HeaderCacheCompressMethod, 0, 0, compress_method_validator },
   /*
   ** .pp
   ** When NeoMutt is compiled with lz4, zstd or zlib, the header cache backend
@@ -1667,9 +1670,9 @@ struct ConfigDef MuttVars[] = {
   { "imap_delim_chars", DT_STRING, &C_ImapDelimChars, IP "/." },
   /*
   ** .pp
-  ** This contains the list of characters which you would like to treat
-  ** as folder separators for displaying IMAP paths. In particular it
-  ** helps in using the "=" shortcut for your \fIfolder\fP variable.
+  ** This contains the list of characters that NeoMutt will use as folder
+  ** separators for IMAP paths, when no separator is provided on the IMAP
+  ** connection.
   */
   { "imap_fetch_chunk_size", DT_LONG|DT_NOT_NEGATIVE, &C_ImapFetchChunkSize, 0 },
   /*
@@ -2757,8 +2760,9 @@ struct ConfigDef MuttVars[] = {
   /*
   ** .pp
   ** This variable allows you to customize the PGP key selection menu to
-  ** your personal taste. This string is similar to $$index_format, but
-  ** has its own set of \fCprintf(3)\fP-like sequences:
+  ** your personal taste. If $$crypt_use_gpgme is \fIset\fP, then it applies
+  ** to S/MIME key selection menu also. This string is similar to $$index_format,
+  ** but has its own set of \fCprintf(3)\fP-like sequences:
   ** .dl
   ** .dt %a     .dd Algorithm
   ** .dt %c     .dd Capabilities
@@ -2772,7 +2776,7 @@ struct ConfigDef MuttVars[] = {
   ** .dt %[<s>] .dd Date of the key where <s> is an \fCstrftime(3)\fP expression
   ** .de
   ** .pp
-  ** (PGP only)
+  ** (Crypto only) or (PGP only when GPGME disabled)
   */
 #ifdef CRYPT_BACKEND_CLASSIC_PGP
   { "pgp_export_command", DT_STRING|DT_COMMAND, &C_PgpExportCommand, 0 },
@@ -3266,7 +3270,7 @@ struct ConfigDef MuttVars[] = {
   ** the string, NeoMutt will append the user's query to the end of the string.
   ** See "$query" for more information.
   */
-  { "query_format", DT_STRING|DT_NOT_EMPTY, &C_QueryFormat, IP "%4c %t %-25.25a %-25.25n %?e?(%e)?" },
+  { "query_format", DT_STRING|DT_NOT_EMPTY, &C_QueryFormat, IP "%3c %t %-25.25n %-25.25a | %e" },
   /*
   ** .pp
   ** This variable describes the format of the "query" menu. The
@@ -4851,7 +4855,7 @@ struct ConfigDef MuttVars[] = {
   ** .pp
   ** When \fIset\fP, NeoMutt will use the first defined virtual mailbox (see
   ** virtual-mailboxes) as a spool file.
-  **
+  ** .pp
   ** This command is now unnecessary. $$spoolfile has been extended to support
   ** mailbox descriptions as a value.
   */

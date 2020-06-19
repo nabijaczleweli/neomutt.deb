@@ -21,6 +21,12 @@
  *
  * You should have received a copy of the GNU General Public License along with
  * this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+/**
+ * @page nm_notmuch Notmuch virtual mailbox type
+ *
+ * Notmuch virtual mailbox type
  *
  * ## Notes
  *
@@ -35,12 +41,6 @@
  *   (or parse URL from another resource)
  */
 
-/**
- * @page nm_notmuch Notmuch virtual mailbox type
- *
- * Notmuch virtual mailbox type
- */
-
 #include "config.h"
 #include <ctype.h>
 #include <errno.h>
@@ -51,7 +51,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include "notmuch_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
@@ -298,7 +298,7 @@ static struct NmMboxData *nm_get_default_data(void)
  *
  * Create a new NmMboxData struct and add it Mailbox::data.
  * Notmuch-specific data will be stored in this struct.
- * This struct can be freed using nm_edata_free().
+ * This struct can be freed using nm_mdata_free().
  */
 static int init_mailbox(struct Mailbox *m)
 {
@@ -312,7 +312,7 @@ static int init_mailbox(struct Mailbox *m)
   if (!m->mdata)
     return -1;
 
-  m->free_mdata = nm_mdata_free;
+  m->mdata_free = nm_mdata_free;
   return 0;
 }
 
@@ -640,7 +640,7 @@ static int update_email_tags(struct Email *e, notmuch_message_t *msg)
        tags && notmuch_tags_valid(tags); notmuch_tags_move_to_next(tags))
   {
     const char *t = notmuch_tags_get(tags);
-    if (!t || !*t)
+    if (!t || (*t == '\0'))
       continue;
 
     mutt_str_append_item(&new_tags, t, ' ');
@@ -698,7 +698,7 @@ static int update_message_path(struct Email *e, const char *path)
     e->path = mutt_str_strdup(p);
 
     for (; (p > path) && (*(p - 1) == '/'); p--)
-      ;
+      ; // do nothing
 
     edata->folder = mutt_str_substr_dup(path, p);
 
@@ -725,7 +725,7 @@ static char *get_folder_from_path(const char *path)
   {
     p -= 3;
     for (; (p > path) && (*(p - 1) == '/'); p--)
-      ;
+      ; // do nothing
 
     return mutt_str_substr_dup(path, p);
   }
@@ -769,7 +769,7 @@ static int init_email(struct Email *e, const char *path, notmuch_message_t *msg)
 
   struct NmEmailData *edata = nm_edata_new();
   e->edata = edata;
-  e->free_edata = nm_edata_free;
+  e->edata_free = nm_edata_free;
 
   /* Notmuch ensures that message Id exists (if not notmuch Notmuch will
    * generate an ID), so it's more safe than use neomutt Email->env->id */
@@ -826,7 +826,7 @@ static const char *get_message_last_filename(notmuch_message_t *msg)
  */
 static void progress_reset(struct Mailbox *m)
 {
-  if (m->quiet)
+  if (!m->verbose)
     return;
 
   struct NmMboxData *mdata = nm_mdata_get(m);
@@ -849,7 +849,7 @@ static void progress_update(struct Mailbox *m, notmuch_query_t *q)
 {
   struct NmMboxData *mdata = nm_mdata_get(m);
 
-  if (m->quiet || !mdata || mdata->noprogress)
+  if (!m->verbose || !mdata || mdata->noprogress)
     return;
 
   if (!mdata->progress_ready && q)
@@ -2138,7 +2138,7 @@ static int nm_ac_add(struct Account *a, struct Mailbox *m)
 
   struct NmAccountData *adata = nm_adata_new();
   a->adata = adata;
-  a->free_adata = nm_adata_free;
+  a->adata_free = nm_adata_free;
 
   return 0;
 }
@@ -2348,7 +2348,7 @@ static int nm_mbox_sync(struct Mailbox *m, int *index_hint)
 
   mutt_debug(LL_DEBUG1, "nm: sync start\n");
 
-  if (!m->quiet)
+  if (m->verbose)
   {
     /* all is in this function so we don't use data->progress here */
     char msg[PATH_MAX];
@@ -2367,7 +2367,7 @@ static int nm_mbox_sync(struct Mailbox *m, int *index_hint)
 
     struct NmEmailData *edata = e->edata;
 
-    if (!m->quiet)
+    if (m->verbose)
       mutt_progress_update(&progress, i, -1);
 
     *old_file = '\0';

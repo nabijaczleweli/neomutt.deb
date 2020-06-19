@@ -22,14 +22,14 @@
  */
 
 #include "config.h"
+#include "test_common.h"
+#define TEST_INIT test_init()
 #include "acutest.h"
 
 /******************************************************************************
  * Add your test cases to this list.
  *****************************************************************************/
 #define NEOMUTT_TEST_LIST                                                      \
-  NEOMUTT_TEST_ITEM(test_common)                                               \
-                                                                               \
   /* account */                                                                \
   NEOMUTT_TEST_ITEM(test_account_free)                                         \
   NEOMUTT_TEST_ITEM(test_account_mailbox_add)                                  \
@@ -64,6 +64,7 @@
   NEOMUTT_TEST_ITEM(test_mutt_addrlist_to_intl)                                \
   NEOMUTT_TEST_ITEM(test_mutt_addrlist_to_local)                               \
   NEOMUTT_TEST_ITEM(test_mutt_addrlist_write)                                  \
+  NEOMUTT_TEST_ITEM(test_mutt_addrlist_write_list)                             \
                                                                                \
   /* attach */                                                                 \
   NEOMUTT_TEST_ITEM(test_mutt_actx_add_attach)                                 \
@@ -157,7 +158,6 @@
   NEOMUTT_TEST_ITEM(test_mutt_date_epoch)                                      \
   NEOMUTT_TEST_ITEM(test_mutt_date_epoch_ms)                                   \
   NEOMUTT_TEST_ITEM(test_mutt_date_gmtime)                                     \
-  NEOMUTT_TEST_ITEM(test_mutt_date_is_day_name)                                \
   NEOMUTT_TEST_ITEM(test_mutt_date_local_tz)                                   \
   NEOMUTT_TEST_ITEM(test_mutt_date_localtime)                                  \
   NEOMUTT_TEST_ITEM(test_mutt_date_localtime_format)                           \
@@ -177,10 +177,10 @@
   NEOMUTT_TEST_ITEM(test_email_size)                                           \
   NEOMUTT_TEST_ITEM(test_emaillist_add_email)                                  \
   NEOMUTT_TEST_ITEM(test_emaillist_clear)                                      \
+  NEOMUTT_TEST_ITEM(test_mutt_autocrypthdr_free)                               \
   NEOMUTT_TEST_ITEM(test_mutt_autocrypthdr_new)                                \
                                                                                \
   /* envelope */                                                               \
-  NEOMUTT_TEST_ITEM(test_mutt_autocrypthdr_free)                               \
   NEOMUTT_TEST_ITEM(test_mutt_env_cmp_strict)                                  \
   NEOMUTT_TEST_ITEM(test_mutt_env_free)                                        \
   NEOMUTT_TEST_ITEM(test_mutt_env_merge)                                       \
@@ -339,6 +339,7 @@
   /* mapping */                                                                \
   NEOMUTT_TEST_ITEM(test_mutt_map_get_name)                                    \
   NEOMUTT_TEST_ITEM(test_mutt_map_get_value)                                   \
+  NEOMUTT_TEST_ITEM(test_mutt_map_get_value_n)                                 \
                                                                                \
   /* mbyte */                                                                  \
   NEOMUTT_TEST_ITEM(test_mutt_mb_charlen)                                      \
@@ -430,6 +431,10 @@
                                                                                \
   /* pattern */                                                                \
   NEOMUTT_TEST_ITEM(test_mutt_pattern_comp)                                    \
+                                                                               \
+  /* prex */                                                                   \
+  NEOMUTT_TEST_ITEM(test_mutt_prex_capture)                                    \
+  NEOMUTT_TEST_ITEM(test_mutt_prex_free)                                       \
                                                                                \
   /* regex */                                                                  \
   NEOMUTT_TEST_ITEM(test_mutt_regex_capture)                                   \
@@ -558,13 +563,93 @@
 /******************************************************************************
  * You probably don't need to touch what follows.
  *****************************************************************************/
+// clang-format off
 #define NEOMUTT_TEST_ITEM(x) void x(void);
 NEOMUTT_TEST_LIST
+#if defined(USE_LZ4) || defined(USE_ZLIB) || defined(USE_ZSTD)
+  NEOMUTT_TEST_ITEM(test_compress_common)
+#endif
+#ifdef USE_LZ4
+  NEOMUTT_TEST_ITEM(test_compress_lz4)
+#endif
+#ifdef USE_ZLIB
+  NEOMUTT_TEST_ITEM(test_compress_zlib)
+#endif
+#ifdef USE_ZSTD
+  NEOMUTT_TEST_ITEM(test_compress_zstd)
+#endif
+#if defined(HAVE_BDB) || defined(HAVE_GDBM) || defined(HAVE_KC) || defined(HAVE_LMDB) || defined(HAVE_QDBM) || defined(HAVE_ROCKSDB) || defined(HAVE_TC) || defined(HAVE_TDB)
+  NEOMUTT_TEST_ITEM(test_store_store)
+#endif
+#ifdef HAVE_BDB
+  NEOMUTT_TEST_ITEM(test_store_bdb)
+#endif
+#ifdef HAVE_GDBM
+  NEOMUTT_TEST_ITEM(test_store_gdbm)
+#endif
+#ifdef HAVE_KC
+  NEOMUTT_TEST_ITEM(test_store_kc)
+#endif
+#ifdef HAVE_LMDB
+  NEOMUTT_TEST_ITEM(test_store_lmdb)
+#endif
+#ifdef HAVE_QDBM
+  NEOMUTT_TEST_ITEM(test_store_qdbm)
+#endif
+#ifdef HAVE_ROCKSDB
+  NEOMUTT_TEST_ITEM(test_store_rocksdb)
+#endif
+#ifdef HAVE_TDB
+  NEOMUTT_TEST_ITEM(test_store_tdb)
+#endif
+#ifdef HAVE_TC
+  NEOMUTT_TEST_ITEM(test_store_tc)
+#endif
 #undef NEOMUTT_TEST_ITEM
 
 TEST_LIST = {
 #define NEOMUTT_TEST_ITEM(x) { #x, x },
   NEOMUTT_TEST_LIST
+#if defined(USE_LZ4) || defined(USE_ZLIB) || defined(USE_ZSTD)
+NEOMUTT_TEST_ITEM(test_compress_common)
+#endif
+#ifdef USE_LZ4
+  NEOMUTT_TEST_ITEM(test_compress_lz4)
+#endif
+#ifdef USE_ZLIB
+  NEOMUTT_TEST_ITEM(test_compress_zlib)
+#endif
+#ifdef USE_ZSTD
+  NEOMUTT_TEST_ITEM(test_compress_zstd)
+#endif
+#if defined(HAVE_BDB) || defined(HAVE_GDBM) || defined(HAVE_KC) || defined(HAVE_LMDB) || defined(HAVE_QDBM) || defined(HAVE_ROCKSDB) || defined(HAVE_TC) || defined(HAVE_TDB)
+  NEOMUTT_TEST_ITEM(test_store_store)
+#endif
+#ifdef HAVE_BDB
+  NEOMUTT_TEST_ITEM(test_store_bdb)
+#endif
+#ifdef HAVE_GDBM
+  NEOMUTT_TEST_ITEM(test_store_gdbm)
+#endif
+#ifdef HAVE_KC
+  NEOMUTT_TEST_ITEM(test_store_kc)
+#endif
+#ifdef HAVE_LMDB
+  NEOMUTT_TEST_ITEM(test_store_lmdb)
+#endif
+#ifdef HAVE_QDBM
+  NEOMUTT_TEST_ITEM(test_store_qdbm)
+#endif
+#ifdef HAVE_ROCKSDB
+  NEOMUTT_TEST_ITEM(test_store_rocksdb)
+#endif
+#ifdef HAVE_TDB
+  NEOMUTT_TEST_ITEM(test_store_tdb)
+#endif
+#ifdef HAVE_TC
+  NEOMUTT_TEST_ITEM(test_store_tc)
+#endif
 #undef NEOMUTT_TEST_ITEM
   { 0 }
 };
+// clang-format on

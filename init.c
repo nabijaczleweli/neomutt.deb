@@ -43,11 +43,11 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "alias/lib.h"
 #include "conn/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
 #include "init.h"
-#include "alias.h"
 #include "command_parse.h"
 #include "context.h"
 #include "functions.h"
@@ -130,7 +130,8 @@ static void candidate(char *user, const char *src, char *dest, size_t dlen)
   {
     int l;
     for (l = 0; src[l] && src[l] == dest[l]; l++)
-      ;
+      ; // do nothing
+
     dest[l] = '\0';
   }
 }
@@ -429,6 +430,8 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
     {
       if ((IS_SPACE(ch) && !(flags & MUTT_TOKEN_SPACE)) ||
           ((ch == '#') && !(flags & MUTT_TOKEN_COMMENT)) ||
+          ((ch == '+') && (flags & MUTT_TOKEN_PLUS)) ||
+          ((ch == '-') && (flags & MUTT_TOKEN_MINUS)) ||
           ((ch == '=') && (flags & MUTT_TOKEN_EQUAL)) ||
           ((ch == '?') && (flags & MUTT_TOKEN_QUESTION)) ||
           ((ch == ';') && !(flags & MUTT_TOKEN_SEMICOLON)) ||
@@ -504,7 +507,6 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
     {
       FILE *fp = NULL;
       pid_t pid;
-      int line = 0;
 
       pc = tok->dptr;
       do
@@ -550,7 +552,7 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
 
       /* read line */
       struct Buffer expn = mutt_buffer_make(0);
-      expn.data = mutt_file_read_line(NULL, &expn.dsize, fp, &line, 0);
+      expn.data = mutt_file_read_line(NULL, &expn.dsize, fp, NULL, 0);
       mutt_file_fclose(&fp);
       filter_wait(pid);
 
@@ -604,7 +606,8 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
       else
       {
         for (pc = tok->dptr; isalnum((unsigned char) *pc) || (pc[0] == '_'); pc++)
-          ;
+          ; // do nothing
+
         var = mutt_str_substr_dup(tok->dptr, pc);
         tok->dptr = pc;
       }
@@ -650,7 +653,7 @@ void mutt_opts_free(void)
 {
   clear_source_stack();
 
-  mutt_aliaslist_free(&Aliases);
+  alias_shutdown();
 
   mutt_regexlist_free(&Alternates);
   mutt_regexlist_free(&MailLists);
@@ -661,7 +664,6 @@ void mutt_opts_free(void)
   mutt_regexlist_free(&UnSubscribedLists);
 
   mutt_grouplist_free();
-  mutt_hash_free(&ReverseAliases);
   mutt_hash_free(&TagFormats);
   mutt_hash_free(&TagTransforms);
 
@@ -739,9 +741,7 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
   struct Buffer buf = mutt_buffer_make(256);
 
   mutt_grouplist_init();
-  /* reverse alias keys need to be strdup'ed because of idna conversions */
-  ReverseAliases = mutt_hash_new(1031, MUTT_HASH_STRCASECMP | MUTT_HASH_STRDUP_KEYS |
-                                           MUTT_HASH_ALLOW_DUPS);
+  alias_init();
   TagTransforms = mutt_hash_new(64, MUTT_HASH_STRCASECMP);
   TagFormats = mutt_hash_new(64, MUTT_HASH_NO_FLAGS);
 
@@ -954,7 +954,8 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
   if (C_VirtualSpoolfile)
   {
     /* Find the first virtual folder and open it */
-    struct MailboxList ml = neomutt_mailboxlist_get_all(NeoMutt, MUTT_NOTMUCH);
+    struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
+    neomutt_mailboxlist_get_all(&ml, NeoMutt, MUTT_NOTMUCH);
     struct MailboxNode *mp = STAILQ_FIRST(&ml);
     if (mp)
       cs_str_string_set(cs, "spoolfile", mailbox_path(mp->mailbox), NULL);
@@ -1037,7 +1038,7 @@ finish:
  */
 enum CommandResult mutt_parse_rc_line(const char *line, struct Buffer *err)
 {
-  if (!line || !*line)
+  if (!line || (*line == '\0'))
     return MUTT_CMD_ERROR;
 
   struct Buffer *line_buffer = mutt_buffer_pool_get();
@@ -1600,7 +1601,7 @@ int charset_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
 
   for (char *p = strtok_r(s, ":", &q); p; p = strtok_r(NULL, ":", &q))
   {
-    if (!*p)
+    if (*p == '\0')
       continue;
     if (!mutt_ch_check_charset(p, strict))
     {
@@ -1635,10 +1636,10 @@ int hcache_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
 
 #ifdef USE_HCACHE_COMPRESSION
 /**
- * compress_validator - Validate the "header_cache_compress_method" config variable - Implements ConfigDef::validator()
+ * compress_method_validator - Validate the "header_cache_compress_method" config variable - Implements ConfigDef::validator()
  */
-int compress_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
-                       intptr_t value, struct Buffer *err)
+int compress_method_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
+                              intptr_t value, struct Buffer *err)
 {
   if (value == 0)
     return CSR_SUCCESS;
@@ -1650,6 +1651,38 @@ int compress_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
 
   mutt_buffer_printf(err, _("Invalid value for option %s: %s"), cdef->name, str);
   return CSR_ERR_INVALID;
+}
+/**
+ * compress_level_validator - Validate the "header_cache_compress_level" config variable - Implements ConfigDef::validator()
+ */
+int compress_level_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
+                             intptr_t value, struct Buffer *err)
+{
+  if (!C_HeaderCacheCompressMethod)
+  {
+    mutt_buffer_printf(err, _("Set option %s before setting %s"),
+                       "header_cache_compress_method", cdef->name);
+    return CSR_ERR_INVALID;
+  }
+
+  const struct ComprOps *cops = compress_get_ops(C_HeaderCacheCompressMethod);
+  if (!cops)
+  {
+    mutt_buffer_printf(err, _("Invalid value for option %s: %s"),
+                       "header_cache_compress_method", C_HeaderCacheCompressMethod);
+    return CSR_ERR_INVALID;
+  }
+
+  if ((value < cops->min_level) || (value > cops->max_level))
+  {
+    // L10N: This applies to the "$header_cache_compress_level" config variable.
+    //       It shows the minimum and maximum values, e.g. 'between 1 and 22'
+    mutt_buffer_printf(err, _("Option %s must be between %d and %d inclusive"),
+                       cdef->name, cops->min_level, cops->max_level);
+    return CSR_ERR_INVALID;
+  }
+
+  return CSR_SUCCESS;
 }
 #endif /* USE_HCACHE_COMPRESSION */
 #endif /* USE_HCACHE */
@@ -1711,10 +1744,14 @@ int reply_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
 int wrapheaders_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
                           intptr_t value, struct Buffer *err)
 {
-  if ((value >= 78) && (value <= 998)) // Recommendation from RFC5233
+  const int min_length = 78; // Recommendations from RFC5233
+  const int max_length = 998;
+
+  if ((value >= min_length) && (value <= max_length))
     return CSR_SUCCESS;
 
-  // L10N: This applies to the "$wrap_headers" config variable
-  mutt_buffer_printf(err, _("Option %s must between 78 and 998 inclusive"), cdef->name);
+  // L10N: This applies to the "$wrap_headers" config variable.
+  mutt_buffer_printf(err, _("Option %s must be between %d and %d inclusive"),
+                     cdef->name, min_length, max_length);
   return CSR_ERR_INVALID;
 }

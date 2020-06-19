@@ -355,7 +355,7 @@ char *mutt_path_concat(char *d, const char *dir, const char *fname, size_t l)
 
   const char *fmt = "%s/%s";
 
-  if (!*fname || (*dir && (dir[strlen(dir) - 1] == '/')))
+  if ((fname[0] == '\0') || ((dir[0] != '\0') && (dir[strlen(dir) - 1] == '/')))
     fmt = "%s%s";
 
   snprintf(d, l, fmt, dir, fname);
@@ -470,7 +470,7 @@ bool mutt_path_parent(char *buf, size_t buflen)
 
   // Find the previous '/'
   for (n--; ((n >= 0) && (buf[n] != '/')); n--)
-    ;
+    ; // do nothing
 
   if (n == 0) // Always keep at least one '/'
     n++;

@@ -33,7 +33,7 @@
 
 extern struct MuttWindow *RootWindow;
 
-static const char *win_size(struct MuttWindow *win)
+static const char *win_size(const struct MuttWindow *win)
 {
   if (!win)
     return "???";
@@ -51,47 +51,14 @@ static const char *win_size(struct MuttWindow *win)
   return "???";
 }
 
-static const char *win_type(struct MuttWindow *win)
-{
-  if (!win)
-    return "UNKNOWN";
-
-  switch (win->type)
-  {
-    case WT_ROOT:
-      return "root";
-    case WT_ALL_DIALOGS:
-      return "all-dialogs";
-    case WT_DIALOG:
-      return "dialog";
-    case WT_CONTAINER:
-      return "container";
-    case WT_HELP_BAR:
-      return "help-bar";
-    case WT_MESSAGE:
-      return "message";
-    case WT_INDEX:
-      return "index";
-    case WT_INDEX_BAR:
-      return "index-bar";
-    case WT_PAGER:
-      return "pager";
-    case WT_PAGER_BAR:
-      return "pager-bar";
-    case WT_SIDEBAR:
-      return "sidebar";
-  }
-
-  return "UNKNOWN";
-}
-
 static void win_dump(struct MuttWindow *win, int indent)
 {
   bool visible = mutt_window_is_visible(win);
 
-  mutt_debug(LL_DEBUG1, "%*s%s[%d,%d] %s %s %s (%d,%d)%s\n", indent, "",
-             visible ? "" : "\033[1;30m", win->state.col_offset, win->state.row_offset,
-             win_size(win), win->name ? win->name : "", win_type(win),
+  mutt_debug(LL_DEBUG1, "%*s%s[%d,%d] %s-%c \033[1;33m%s\033[0m (%d,%d)%s\n",
+             indent, "", visible ? "" : "\033[1;30m", win->state.col_offset,
+             win->state.row_offset, win_size(win),
+             (win->orient == MUTT_WIN_ORIENT_VERTICAL) ? 'V' : 'H', win_name(win),
              win->state.cols, win->state.rows, visible ? "" : "\033[0m");
 
   struct MuttWindow *np = NULL;

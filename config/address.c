@@ -24,7 +24,19 @@
 /**
  * @page config_address Type: Email address
  *
- * Type representing an email address.
+ * Config type representing an email address.
+ *
+ * - Backed by `struct Address`
+ * - Empty address is stored as `NULL`
+ * - Validator is passed `struct Address *`, which may be `NULL`
+ * - Data is freed when `ConfigSet` is freed
+ *
+ * ## Functions supported
+ * - ConfigSetType::string_set()
+ * - ConfigSetType::string_get()
+ * - ConfigSetType::native_set()
+ * - ConfigSetType::native_get()
+ * - ConfigSetType::reset()
  */
 
 #include "config.h"
@@ -43,9 +55,6 @@
  */
 static void address_destroy(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef)
 {
-  if (!cs || !var || !cdef)
-    return; /* LCOV_EXCL_LINE */
-
   struct Address **a = var;
   if (!*a)
     return;
@@ -59,9 +68,6 @@ static void address_destroy(const struct ConfigSet *cs, void *var, const struct 
 static int address_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                               const char *value, struct Buffer *err)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   struct Address *addr = NULL;
 
   /* An empty address "" will be stored as NULL */
@@ -116,9 +122,6 @@ static int address_string_set(const struct ConfigSet *cs, void *var, struct Conf
 static int address_string_get(const struct ConfigSet *cs, void *var,
                               const struct ConfigDef *cdef, struct Buffer *result)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   char tmp[8192] = { 0 };
   const char *str = NULL;
 
@@ -166,9 +169,6 @@ static int address_native_set(const struct ConfigSet *cs, void *var,
                               const struct ConfigDef *cdef, intptr_t value,
                               struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   int rc;
 
   if (cdef->validator)
@@ -197,9 +197,6 @@ static int address_native_set(const struct ConfigSet *cs, void *var,
 static intptr_t address_native_get(const struct ConfigSet *cs, void *var,
                                    const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return INT_MIN; /* LCOV_EXCL_LINE */
-
   struct Address *addr = *(struct Address **) var;
 
   return (intptr_t) addr;
@@ -211,9 +208,6 @@ static intptr_t address_native_get(const struct ConfigSet *cs, void *var,
 static int address_reset(const struct ConfigSet *cs, void *var,
                          const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   struct Address *a = NULL;
   const char *initial = (const char *) cdef->initial;
 
@@ -249,8 +243,14 @@ static int address_reset(const struct ConfigSet *cs, void *var,
 void address_init(struct ConfigSet *cs)
 {
   const struct ConfigSetType cst_address = {
-    "address",          address_string_set, address_string_get,
-    address_native_set, address_native_get, address_reset,
+    "address",
+    address_string_set,
+    address_string_get,
+    address_native_set,
+    address_native_get,
+    NULL, // string_plus_equals
+    NULL, // string_minus_equals
+    address_reset,
     address_destroy,
   };
   cs_register_type(cs, DT_ADDRESS, &cst_address);

@@ -50,10 +50,10 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "alias/lib.h"
 #include "conn/lib.h"
 #include "gui/lib.h"
 #include "debug/lib.h"
-#include "alias.h"
 #include "browser.h"
 #include "commands.h"
 #include "context.h"
@@ -325,6 +325,35 @@ static bool get_user_info(struct ConfigSet *cs)
 }
 
 /**
+ * log_translation - Log the translation being used
+ *
+ * Read the header info from the translation file.
+ *
+ * @note Call bindtextdomain() first
+ */
+static void log_translation(void)
+{
+  const char *header = ""; // Do not merge these two lines
+  header = _(header);      // otherwise the .po files will end up badly ordered
+  const char *lang = strcasestr(header, "Language:");
+  int len = 64;
+  if (lang)
+  {
+    lang += 9; // skip label
+    SKIPWS(lang);
+    char *nl = strchr(lang, '\n');
+    if (nl)
+      len = (nl - lang);
+  }
+  else
+  {
+    lang = "NONE";
+  }
+
+  mutt_debug(LL_DEBUG1, "Translation: %.*s\n", len, lang);
+}
+
+/**
  * main - Start NeoMutt
  * @param argc Number of command line arguments
  * @param argv List of command line arguments
@@ -585,6 +614,8 @@ int main(int argc, char *argv[], char *envp[])
 
   MuttLogger = log_disp_queue;
 
+  log_translation();
+
   if (!STAILQ_EMPTY(&cc_list) || !STAILQ_EMPTY(&bcc_list))
   {
     e = email_new();
@@ -629,7 +660,7 @@ int main(int argc, char *argv[], char *envp[])
 
     /* check whether terminal status is supported (must follow curses init) */
     TsSupported = mutt_ts_capability();
-    mutt_window_set_root(LINES, COLS);
+    mutt_window_set_root(COLS, LINES);
   }
 
   /* set defaults and read init files */
@@ -707,7 +738,7 @@ int main(int argc, char *argv[], char *envp[])
     struct ListNode *np = NULL;
     STAILQ_FOREACH(np, &alias_queries, entries)
     {
-      struct AddressList *al = mutt_alias_lookup(np->data);
+      struct AddressList *al = alias_lookup(np->data);
       if (al)
       {
         /* output in machine-readable form */
@@ -1093,7 +1124,7 @@ int main(int argc, char *argv[], char *envp[])
         goto main_curses; // TEST37: neomutt -Z (no new mail)
       }
       mutt_buffer_reset(&folder);
-      mutt_mailbox_next_buffer(Context ? Context->mailbox : NULL, &folder);
+      mutt_mailbox_next(Context ? Context->mailbox : NULL, &folder);
 #ifdef USE_IMAP
       C_ImapPassive = passive;
 #endif
@@ -1187,14 +1218,14 @@ int main(int argc, char *argv[], char *envp[])
     if (Context || !explicit_folder)
     {
 #ifdef USE_SIDEBAR
-      mutt_sb_set_open_mailbox(Context ? Context->mailbox : NULL);
+      sb_set_open_mailbox(Context ? Context->mailbox : NULL);
 #endif
       struct MuttWindow *dlg = index_pager_init();
-      notify_observer_add(NeoMutt->notify, mutt_dlg_index_observer, dlg);
+      notify_observer_add(NeoMutt->notify, mutt_dlgindex_observer, dlg);
       dialog_push(dlg);
       mutt_index_menu(dlg);
       dialog_pop();
-      notify_observer_remove(NeoMutt->notify, mutt_dlg_index_observer, dlg);
+      notify_observer_remove(NeoMutt->notify, mutt_dlgindex_observer, dlg);
       index_pager_shutdown(dlg);
       mutt_window_free(&dlg);
       ctx_free(&Context);

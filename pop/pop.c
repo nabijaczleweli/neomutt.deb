@@ -36,7 +36,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "pop_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
@@ -294,7 +294,7 @@ static int fetch_uidl(const char *line, void *data)
     m->emails[i] = email_new();
 
     m->emails[i]->edata = pop_edata_new(line);
-    m->emails[i]->free_edata = pop_edata_free;
+    m->emails[i]->edata_free = pop_edata_free;
   }
   else if (m->emails[i]->index != index - 1)
     adata->clear_cache = true;
@@ -422,7 +422,7 @@ static int pop_fetch_headers(struct Mailbox *m)
     }
   }
 
-  if (!m->quiet)
+  if (m->verbose)
   {
     mutt_progress_init(&progress, _("Fetching message headers..."),
                        MUTT_PROGRESS_READ, new_count - old_count);
@@ -451,7 +451,7 @@ static int pop_fetch_headers(struct Mailbox *m)
     bool hcached = false;
     for (i = old_count; i < new_count; i++)
     {
-      if (!m->quiet)
+      if (m->verbose)
         mutt_progress_update(&progress, i + 1 - old_count, -1);
       struct PopEmailData *edata = pop_edata_get(m->emails[i]);
 #ifdef USE_HCACHE
@@ -475,7 +475,7 @@ static int pop_fetch_headers(struct Mailbox *m)
 
         /* Reattach the private data */
         m->emails[i]->edata = edata;
-        m->emails[i]->free_edata = pop_edata_free;
+        m->emails[i]->edata_free = pop_edata_free;
         rc = 0;
         hcached = true;
       }
@@ -782,7 +782,7 @@ static int pop_ac_add(struct Account *a, struct Mailbox *m)
   struct ConnAccount cac = { { 0 } };
   struct PopAccountData *adata = pop_adata_new();
   a->adata = adata;
-  a->free_adata = pop_adata_free;
+  a->adata_free = pop_adata_free;
 
   if (pop_parse_path(mailbox_path(m), &cac))
   {
@@ -832,7 +832,7 @@ static int pop_mbox_open(struct Mailbox *m)
   {
     adata = pop_adata_new();
     m->account->adata = adata;
-    m->account->free_adata = pop_adata_free;
+    m->account->adata_free = pop_adata_free;
   }
 
   struct Connection *conn = adata->conn;
@@ -963,7 +963,7 @@ static int pop_mbox_sync(struct Mailbox *m, int *index_hint)
       if (m->emails[i]->deleted && (edata->refno != -1))
       {
         j++;
-        if (!m->quiet)
+        if (m->verbose)
           mutt_progress_update(&progress, j, -1);
         snprintf(buf, sizeof(buf), "DELE %d\r\n", edata->refno);
         rc = pop_query(adata, buf, sizeof(buf));
@@ -1172,7 +1172,7 @@ static int pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
 
   /* Reattach the private data */
   e->edata = edata;
-  e->free_edata = pop_edata_free;
+  e->edata_free = pop_edata_free;
 
   e->lines = 0;
   fgets(buf, sizeof(buf), msg->fp);

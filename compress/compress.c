@@ -29,15 +29,9 @@
 #include "config.h"
 #include <stdio.h>
 #include <string.h>
-#include "compress_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "lib.h"
-
-#define COMPRESS_EXPORT(name) extern const struct ComprOps compr_##name##_ops;
-COMPRESS_EXPORT(lz4)
-COMPRESS_EXPORT(zlib)
-COMPRESS_EXPORT(zstd)
-#undef COMPRESS_EXPORT
 
 /**
  * compr_ops - Backend implementations

@@ -23,7 +23,19 @@
 /**
  * @page config_long Type: Long
  *
- * Type representing a long.
+ * Config type representing a long.
+ *
+ * - Backed by `long`
+ * - Validator is passed `long`
+ *
+ * ## Functions supported
+ * - ConfigSetType::string_set()
+ * - ConfigSetType::string_get()
+ * - ConfigSetType::native_set()
+ * - ConfigSetType::native_get()
+ * - ConfigSetType::string_plus_equals()
+ * - ConfigSetType::string_minus_equals()
+ * - ConfigSetType::reset()
  */
 
 #include "config.h"
@@ -41,13 +53,16 @@
 static int long_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                            const char *value, struct Buffer *err)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
+  if (!value || (value[0] == '\0'))
+  {
+    mutt_buffer_printf(err, _("Option %s may not be empty"), cdef->name);
+    return CSR_ERR_INVALID | CSR_INV_TYPE;
+  }
 
   long num = 0;
-  if (!value || (value[0] == '\0') || (mutt_str_atol(value, &num) < 0))
+  if (mutt_str_atol(value, &num) < 0)
   {
-    mutt_buffer_printf(err, _("Invalid long: %s"), NONULL(value));
+    mutt_buffer_printf(err, _("Invalid long: %s"), value);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
@@ -86,9 +101,6 @@ static int long_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
 static int long_string_get(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, struct Buffer *result)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   int value;
 
   if (var)
@@ -101,14 +113,11 @@ static int long_string_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * long_native_set - Set a Long config item by int - Implements ConfigSetType::native_set()
+ * long_native_set - Set a Long config item by long - Implements ConfigSetType::native_set()
  */
 static int long_native_set(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, intptr_t value, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   if ((value < 0) && (cdef->type & DT_NOT_NEGATIVE))
   {
     mutt_buffer_printf(err, _("Option %s may not be negative"), cdef->name);
@@ -131,15 +140,84 @@ static int long_native_set(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * long_native_get - Get an int from a Long config item - Implements ConfigSetType::native_get()
+ * long_native_get - Get a long from a Long config item - Implements ConfigSetType::native_get()
  */
 static intptr_t long_native_get(const struct ConfigSet *cs, void *var,
                                 const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return INT_MIN; /* LCOV_EXCL_LINE */
-
   return *(long *) var;
+}
+
+/**
+ * long_string_plus_equals - Add to a Long by string - Implements ConfigSetType::string_plus_equals()
+ */
+static int long_string_plus_equals(const struct ConfigSet *cs, void *var,
+                                   const struct ConfigDef *cdef,
+                                   const char *value, struct Buffer *err)
+{
+  long num = 0;
+  if (!value || (value[0] == '\0') || (mutt_str_atol(value, &num) < 0))
+  {
+    mutt_buffer_printf(err, _("Invalid long: %s"), NONULL(value));
+    return CSR_ERR_INVALID | CSR_INV_TYPE;
+  }
+
+  long result = *((long *) var) + num;
+  if ((result < 0) && (cdef->type & DT_NOT_NEGATIVE))
+  {
+    mutt_buffer_printf(err, _("Option %s may not be negative"), cdef->name);
+    return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
+  }
+
+  if (result == (*(long *) var))
+    return CSR_SUCCESS | CSR_SUC_NO_CHANGE;
+
+  if (cdef->validator)
+  {
+    int rc = cdef->validator(cs, cdef, (intptr_t) result, err);
+
+    if (CSR_RESULT(rc) != CSR_SUCCESS)
+      return rc | CSR_INV_VALIDATOR;
+  }
+
+  *(long *) var = result;
+  return CSR_SUCCESS;
+}
+
+/**
+ * long_string_minus_equals - Subtract from a Long by string - Implements ConfigSetType::string_minus_equals()
+ */
+static int long_string_minus_equals(const struct ConfigSet *cs, void *var,
+                                    const struct ConfigDef *cdef,
+                                    const char *value, struct Buffer *err)
+{
+  long num = 0;
+  if (!value || (value[0] == '\0') || (mutt_str_atol(value, &num) < 0))
+  {
+    mutt_buffer_printf(err, _("Invalid long: %s"), value);
+    return CSR_ERR_INVALID | CSR_INV_TYPE;
+  }
+
+  long result = *((long *) var) - num;
+  if ((result < 0) && (cdef->type & DT_NOT_NEGATIVE))
+  {
+    mutt_buffer_printf(err, _("Option %s may not be negative"), cdef->name);
+    return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
+  }
+
+  if (result == (*(long *) var))
+    return CSR_SUCCESS | CSR_SUC_NO_CHANGE;
+
+  if (cdef->validator)
+  {
+    int rc = cdef->validator(cs, cdef, (intptr_t) result, err);
+
+    if (CSR_RESULT(rc) != CSR_SUCCESS)
+      return rc | CSR_INV_VALIDATOR;
+  }
+
+  *(long *) var = result;
+  return CSR_SUCCESS;
 }
 
 /**
@@ -148,9 +226,6 @@ static intptr_t long_native_get(const struct ConfigSet *cs, void *var,
 static int long_reset(const struct ConfigSet *cs, void *var,
                       const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   if (cdef->initial == (*(long *) var))
     return CSR_SUCCESS | CSR_SUC_NO_CHANGE;
 
@@ -178,8 +253,10 @@ void long_init(struct ConfigSet *cs)
     long_string_get,
     long_native_set,
     long_native_get,
+    long_string_plus_equals,
+    long_string_minus_equals,
     long_reset,
-    NULL,
+    NULL, // destroy
   };
   cs_register_type(cs, DT_LONG, &cst_long);
 }

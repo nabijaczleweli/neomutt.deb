@@ -41,7 +41,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "maildir_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
@@ -379,7 +379,7 @@ int maildir_mbox_check(struct Mailbox *m, int *index_hint)
   struct Maildir **last = NULL;
   struct Maildir *p = NULL;
   int count = 0;
-  struct Hash *fnames = NULL; /* hash table for quickly looking up the base filename
+  struct HashTable *fnames = NULL; /* hash table for quickly looking up the base filename
                                  for a maildir message */
   struct MaildirMboxData *mdata = maildir_mdata_get(m);
 
@@ -487,7 +487,7 @@ int maildir_mbox_check(struct Mailbox *m, int *index_hint)
       }
       e->trash = p->email->trash;
 
-      /* this is a duplicate of an existing header, so remove it */
+      /* this is a duplicate of an existing email, so remove it */
       email_free(&p->email);
     }
     /* This message was not in the list of messages we just scanned.

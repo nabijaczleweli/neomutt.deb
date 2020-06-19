@@ -33,4 +33,22 @@ void test_mutt_buffer_strdup(void)
     char *str = mutt_buffer_strdup(NULL);
     TEST_CHECK(str == NULL);
   }
+
+  {
+    char *src = "abcdefghij";
+    char *result = NULL;
+
+    struct Buffer buf = mutt_buffer_make(32);
+
+    mutt_buffer_strcpy(&buf, src);
+
+    result = mutt_buffer_strdup(&buf);
+
+    TEST_CHECK(result != NULL);
+    TEST_CHECK(strcmp(result, src) == 0);
+
+    FREE(&result);
+
+    mutt_buffer_dealloc(&buf);
+  }
 }

@@ -23,7 +23,19 @@
 /**
  * @page config_path Type: Path
  *
- * Type representing a path.
+ * Config type representing a path.
+ *
+ * - Backed by `char *`
+ * - Empty path is stored as `NULL`
+ * - Validator is passed `char *`, which may be `NULL`
+ * - Data is freed when `ConfigSet` is freed
+ *
+ * ## Functions supported
+ * - ConfigSetType::string_set()
+ * - ConfigSetType::string_get()
+ * - ConfigSetType::native_set()
+ * - ConfigSetType::native_get()
+ * - ConfigSetType::reset()
  */
 
 #include "config.h"
@@ -50,7 +62,7 @@ extern char *HomeDir;
  */
 static char *path_tidy(const char *path, bool is_dir)
 {
-  if (!path || !*path)
+  if (!path || (*path == '\0'))
     return NULL;
 
   char buf[PATH_MAX] = { 0 };
@@ -67,9 +79,6 @@ static char *path_tidy(const char *path, bool is_dir)
  */
 static void path_destroy(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef)
 {
-  if (!cs || !var || !cdef)
-    return; /* LCOV_EXCL_LINE */
-
   const char **str = (const char **) var;
   if (!*str)
     return;
@@ -78,14 +87,11 @@ static void path_destroy(const struct ConfigSet *cs, void *var, const struct Con
 }
 
 /**
- * path_string_set - Set a Path by path - Implements ConfigSetType::string_set()
+ * path_string_set - Set a Path by string - Implements ConfigSetType::string_set()
  */
 static int path_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                            const char *value, struct Buffer *err)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   /* Store empty paths as NULL */
   if (value && (value[0] == '\0'))
     value = NULL;
@@ -132,14 +138,11 @@ static int path_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
 }
 
 /**
- * path_string_get - Get a Path as a path - Implements ConfigSetType::string_get()
+ * path_string_get - Get a Path as a string - Implements ConfigSetType::string_get()
  */
 static int path_string_get(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, struct Buffer *result)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   const char *str = NULL;
 
   if (var)
@@ -155,14 +158,11 @@ static int path_string_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * path_native_set - Set a Path config item by path - Implements ConfigSetType::native_set()
+ * path_native_set - Set a Path config item by string - Implements ConfigSetType::native_set()
  */
 static int path_native_set(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, intptr_t value, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   char *str = (char *) value;
 
   /* Store empty paths as NULL */
@@ -200,14 +200,11 @@ static int path_native_set(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * path_native_get - Get a path from a Path config item - Implements ConfigSetType::native_get()
+ * path_native_get - Get a string from a Path config item - Implements ConfigSetType::native_get()
  */
 static intptr_t path_native_get(const struct ConfigSet *cs, void *var,
                                 const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return INT_MIN; /* LCOV_EXCL_LINE */
-
   const char *str = *(const char **) var;
 
   return (intptr_t) str;
@@ -219,9 +216,6 @@ static intptr_t path_native_get(const struct ConfigSet *cs, void *var,
 static int path_reset(const struct ConfigSet *cs, void *var,
                       const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   int rc = CSR_SUCCESS;
 
   const char *str = path_tidy((const char *) cdef->initial, cdef->type & DT_PATH_DIR);
@@ -261,8 +255,15 @@ static int path_reset(const struct ConfigSet *cs, void *var,
 void path_init(struct ConfigSet *cs)
 {
   const struct ConfigSetType cst_path = {
-    "path",          path_string_set, path_string_get, path_native_set,
-    path_native_get, path_reset,      path_destroy,
+    "path",
+    path_string_set,
+    path_string_get,
+    path_native_set,
+    path_native_get,
+    NULL, // string_plus_equals
+    NULL, // string_minus_equals
+    path_reset,
+    path_destroy,
   };
   cs_register_type(cs, DT_PATH, &cst_path);
 }

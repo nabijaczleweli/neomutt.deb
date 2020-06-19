@@ -41,10 +41,10 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
 #include "commands.h"
-#include "alias.h"
 #include "context.h"
 #include "copy.h"
 #include "format_flags.h"
@@ -442,7 +442,7 @@ void ci_bounce_message(struct Mailbox *m, struct EmailList *el)
     mutt_str_strfcpy(prompt, _("Bounce tagged messages to: "), sizeof(prompt));
 
   rc = mutt_get_field(prompt, buf, sizeof(buf), MUTT_ALIAS);
-  if (rc || !buf[0])
+  if (rc || (buf[0] == '\0'))
     return;
 
   mutt_addrlist_parse2(&al, buf);
@@ -775,12 +775,12 @@ int mutt_select_sort(bool reverse)
   switch (mutt_multi_choice(reverse ?
                                 /* L10N: The highlighted letters must match the "Sort" options */
                                 _("Rev-Sort "
-                                  "(d)ate/(f)rm/(r)ecv/(s)ubj/t(o)/(t)hread/"
-                                  "(u)nsort/si(z)e/s(c)ore/s(p)am/(l)abel?") :
+                                  "(d)ate,(f)rm,(r)ecv,(s)ubj,t(o),(t)hread,(u)"
+                                  "nsort,si(z)e,s(c)ore,s(p)am,(l)abel?") :
                                 /* L10N: The highlighted letters must match the "Rev-Sort" options */
                                 _("Sort "
-                                  "(d)ate/(f)rm/(r)ecv/(s)ubj/t(o)/(t)hread/"
-                                  "(u)nsort/si(z)e/s(c)ore/s(p)am/(l)abel?"),
+                                  "(d)ate,(f)rm,(r)ecv,(s)ubj,t(o),(t)hread,(u)"
+                                  "nsort,si(z)e,s(c)ore,s(p)am,(l)abel?"),
                             /* L10N: These must match the highlighted letters from "Sort" and "Rev-Sort" */
                             _("dfrsotuzcpl")))
   {
@@ -874,7 +874,7 @@ void mutt_enter_command(void)
   char buf[1024] = { 0 };
 
   /* if enter is pressed after : with no command, just return */
-  if ((mutt_get_field(":", buf, sizeof(buf), MUTT_COMMAND) != 0) || !buf[0])
+  if ((mutt_get_field(":", buf, sizeof(buf), MUTT_COMMAND) != 0) || (buf[0] == '\0'))
     return;
 
   struct Buffer err = mutt_buffer_make(256);

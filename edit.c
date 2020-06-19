@@ -41,10 +41,10 @@
 #include "address/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
 #include "edit.h"
-#include "alias.h"
 #include "context.h"
 #include "globals.h"
 #include "hdrline.h"
@@ -328,7 +328,7 @@ static void be_edit_header(struct Envelope *e, bool force)
       mutt_addrlist_to_intl(&e->to, NULL); /* XXX - IDNA error reporting? */
       tmp[0] = '\0';
       mutt_addrlist_write(&e->to, tmp, sizeof(tmp), true);
-      mutt_window_mvaddstr(MuttMessageWindow, 0, 4, tmp);
+      mutt_window_mvaddstr(MuttMessageWindow, 4, 0, tmp);
     }
   }
   else
@@ -361,7 +361,7 @@ static void be_edit_header(struct Envelope *e, bool force)
       tmp[0] = '\0';
       mutt_addrlist_to_intl(&e->cc, NULL);
       mutt_addrlist_write(&e->cc, tmp, sizeof(tmp), true);
-      mutt_window_mvaddstr(MuttMessageWindow, 0, 4, tmp);
+      mutt_window_mvaddstr(MuttMessageWindow, 4, 0, tmp);
     }
     else
       mutt_addrlist_to_intl(&e->cc, NULL);
@@ -382,7 +382,7 @@ static void be_edit_header(struct Envelope *e, bool force)
       mutt_addrlist_to_intl(&e->bcc, NULL);
       tmp[0] = '\0';
       mutt_addrlist_write(&e->bcc, tmp, sizeof(tmp), true);
-      mutt_window_mvaddstr(MuttMessageWindow, 0, 5, tmp);
+      mutt_window_mvaddstr(MuttMessageWindow, 5, 0, tmp);
     }
     else
       mutt_addrlist_to_intl(&e->bcc, NULL);
@@ -458,7 +458,7 @@ int mutt_builtin_editor(const char *path, struct Email *e_new, struct Email *e_c
         case 'M':
           if (Context)
           {
-            if (!*p && e_cur)
+            if ((*p == '\0') && e_cur)
             {
               /* include the current message */
               p = tmp + mutt_str_strlen(tmp) + 1;

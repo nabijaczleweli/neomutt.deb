@@ -32,6 +32,7 @@
 #include "config.h"
 #include <locale.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,13 +42,14 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "alias/lib.h"
 #include "gui/lib.h"
 #include "hdrline.h"
-#include "alias.h"
 #include "context.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "hook.h"
+#include "maillist.h"
 #include "mutt_menu.h"
 #include "mutt_parse.h"
 #include "mutt_thread.h"
@@ -105,106 +107,6 @@ enum FieldType
   DISP_PLAIN, ///< Empty string
   DISP_MAX,
 };
-
-/**
- * mutt_is_mail_list - Is this the email address of a mailing list? - Implements ::addr_predicate_t
- * @param addr Address to test
- * @retval true If it's a mailing list
- */
-bool mutt_is_mail_list(const struct Address *addr)
-{
-  if (!mutt_regexlist_match(&UnMailLists, addr->mailbox))
-    return mutt_regexlist_match(&MailLists, addr->mailbox);
-  return false;
-}
-
-/**
- * mutt_is_subscribed_list - Is this the email address of a user-subscribed mailing list? - Implements ::addr_predicate_t
- * @param addr Address to test
- * @retval true If it's a subscribed mailing list
- */
-bool mutt_is_subscribed_list(const struct Address *addr)
-{
-  if (!mutt_regexlist_match(&UnMailLists, addr->mailbox) &&
-      !mutt_regexlist_match(&UnSubscribedLists, addr->mailbox))
-  {
-    return mutt_regexlist_match(&SubscribedLists, addr->mailbox);
-  }
-  return false;
-}
-
-/**
- * check_for_mailing_list - Search list of addresses for a mailing list
- * @param al      AddressList to search
- * @param pfx     Prefix string
- * @param buf     Buffer to store results
- * @param buflen  Buffer length
- * @retval 1 Mailing list found
- * @retval 0 No list found
- *
- * Search for a mailing list in the list of addresses pointed to by addr.
- * If one is found, print pfx and the name of the list into buf.
- */
-static bool check_for_mailing_list(struct AddressList *al, const char *pfx,
-                                   char *buf, int buflen)
-{
-  struct Address *a = NULL;
-  TAILQ_FOREACH(a, al, entries)
-  {
-    if (mutt_is_subscribed_list(a))
-    {
-      if (pfx && buf && buflen)
-        snprintf(buf, buflen, "%s%s", pfx, mutt_get_name(a));
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * check_for_mailing_list_addr - Check an address list for a mailing list
- * @param al     AddressList
- * @param buf    Buffer for the result
- * @param buflen Length of buffer
- * @retval true Mailing list found
- *
- * If one is found, print the address of the list into buf.
- */
-static bool check_for_mailing_list_addr(struct AddressList *al, char *buf, int buflen)
-{
-  struct Address *a = NULL;
-  TAILQ_FOREACH(a, al, entries)
-  {
-    if (mutt_is_subscribed_list(a))
-    {
-      if (buf && buflen)
-        snprintf(buf, buflen, "%s", a->mailbox);
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * first_mailing_list - Get the first mailing list in the list of addresses
- * @param buf    Buffer for the result
- * @param buflen Length of buffer
- * @param al     AddressList
- * @retval true If a mailing list was found
- */
-static bool first_mailing_list(char *buf, size_t buflen, struct AddressList *al)
-{
-  struct Address *a = NULL;
-  TAILQ_FOREACH(a, al, entries)
-  {
-    if (mutt_is_subscribed_list(a))
-    {
-      mutt_save_path(buf, buflen, a);
-      return true;
-    }
-  }
-  return false;
-}
 
 /**
  * add_index_color - Insert a color marker into a string
@@ -500,11 +402,10 @@ static bool thread_is_old(struct Context *ctx, struct Email *e)
  *
  * | Expando | Description
  * |:--------|:-----------------------------------------------------------------
- * | \%(fmt) | Date/time when the message was received
  * | \%a     | Address of the author
  * | \%A     | Reply-to address (if present; otherwise: address of author)
  * | \%b     | Filename of the original message folder (think mailbox)
- * | \%B     | The list to which the letter was sent, or else the folder name (%b)
+ * | \%B     | The list to which the email was sent, or else the folder name (%b)
  * | \%C     | Current message number
  * | \%c     | Number of characters (bytes) in the body of the message
  * | \%cr    | Number of characters (bytes) in the message, including header
@@ -521,7 +422,7 @@ static bool thread_is_old(struct Context *ctx, struct Email *e)
  * | \%I     | Initials of author
  * | \%i     | Message-id of the current message
  * | \%J     | Message tags (if present, tree unfolded, and != parent's tags)
- * | \%K     | The list to which the letter was sent (if any; otherwise: empty)
+ * | \%K     | The list to which the email was sent (if any; otherwise: empty)
  * | \%L     | Like %F, except 'lists' are displayed first
  * | \%l     | Number of lines in the message
  * | \%M     | Number of hidden messages if the thread is collapsed
@@ -548,13 +449,14 @@ static bool thread_is_old(struct Context *ctx, struct Email *e)
  * | \%zs    | Message status flags
  * | \%zt    | Message tag flags
  * | \%Z     | Combined message flags
+ * | \%(fmt) | Date/time when the message was received
  * | \%[fmt] | Message date/time converted to the local time zone
  * | \%{fmt} | Message date/time converted to sender's time zone
  */
 static const char *index_format_str(char *buf, size_t buflen, size_t col, int cols,
                                     char op, const char *src, const char *prec,
                                     const char *if_str, const char *else_str,
-                                    unsigned long data, MuttFormatFlags flags)
+                                    intptr_t data, MuttFormatFlags flags)
 {
   struct HdrFormatInfo *hfi = (struct HdrFormatInfo *) data;
   char fmt[128], tmp[1024];
@@ -1480,12 +1382,12 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
   if (optional)
   {
     mutt_expando_format(buf, buflen, col, cols, if_str, index_format_str,
-                        (unsigned long) hfi, flags);
+                        (intptr_t) hfi, flags);
   }
   else if (flags & MUTT_FORMAT_OPTIONAL)
   {
     mutt_expando_format(buf, buflen, col, cols, else_str, index_format_str,
-                        (unsigned long) hfi, flags);
+                        (intptr_t) hfi, flags);
   }
 
   return src;
@@ -1513,7 +1415,7 @@ void mutt_make_string_flags(char *buf, size_t buflen, int cols, const char *s,
   hfi.mailbox = m;
   hfi.pager_progress = 0;
 
-  mutt_expando_format(buf, buflen, 0, cols, s, index_format_str, (unsigned long) &hfi, flags);
+  mutt_expando_format(buf, buflen, 0, cols, s, index_format_str, (intptr_t) &hfi, flags);
 }
 
 /**
@@ -1528,5 +1430,5 @@ void mutt_make_string_flags(char *buf, size_t buflen, int cols, const char *s,
 void mutt_make_string_info(char *buf, size_t buflen, int cols, const char *s,
                            struct HdrFormatInfo *hfi, MuttFormatFlags flags)
 {
-  mutt_expando_format(buf, buflen, 0, cols, s, index_format_str, (unsigned long) hfi, flags);
+  mutt_expando_format(buf, buflen, 0, cols, s, index_format_str, (intptr_t) hfi, flags);
 }

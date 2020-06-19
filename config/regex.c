@@ -23,7 +23,19 @@
 /**
  * @page config_regex Type: Regular expression
  *
- * Type representing a regular expression.
+ * Config type representing a regular expression.
+ *
+ * - Backed by `struct Regex`
+ * - Empty regular expression is stored as `NULL`
+ * - Validator is passed `struct Regex`, which may be `NULL`
+ * - Data is freed when `ConfigSet` is freed
+ *
+ * ## Functions supported
+ * - ConfigSetType::string_set()
+ * - ConfigSetType::string_get()
+ * - ConfigSetType::native_set()
+ * - ConfigSetType::native_get()
+ * - ConfigSetType::reset()
  */
 
 #include "config.h"
@@ -57,9 +69,6 @@ void regex_free(struct Regex **r)
  */
 static void regex_destroy(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef)
 {
-  if (!cs || !var || !cdef)
-    return; /* LCOV_EXCL_LINE */
-
   struct Regex **r = var;
   if (!*r)
     return;
@@ -118,10 +127,7 @@ struct Regex *regex_new(const char *str, int flags, struct Buffer *err)
 static int regex_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                             const char *value, struct Buffer *err)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
-  /* Store empty strings as NULL */
+  /* Store empty regexes as NULL */
   if (value && (value[0] == '\0'))
     value = NULL;
 
@@ -178,9 +184,6 @@ static int regex_string_set(const struct ConfigSet *cs, void *var, struct Config
 static int regex_string_get(const struct ConfigSet *cs, void *var,
                             const struct ConfigDef *cdef, struct Buffer *result)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   const char *str = NULL;
 
   if (var)
@@ -207,9 +210,6 @@ static int regex_string_get(const struct ConfigSet *cs, void *var,
 static int regex_native_set(const struct ConfigSet *cs, void *var,
                             const struct ConfigDef *cdef, intptr_t value, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   int rc;
 
   if (cdef->validator)
@@ -251,9 +251,6 @@ static int regex_native_set(const struct ConfigSet *cs, void *var,
 static intptr_t regex_native_get(const struct ConfigSet *cs, void *var,
                                  const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return INT_MIN; /* LCOV_EXCL_LINE */
-
   struct Regex *r = *(struct Regex **) var;
 
   return (intptr_t) r;
@@ -265,9 +262,6 @@ static intptr_t regex_native_get(const struct ConfigSet *cs, void *var,
 static int regex_reset(const struct ConfigSet *cs, void *var,
                        const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   struct Regex *r = NULL;
   const char *initial = (const char *) cdef->initial;
 
@@ -315,8 +309,15 @@ static int regex_reset(const struct ConfigSet *cs, void *var,
 void regex_init(struct ConfigSet *cs)
 {
   const struct ConfigSetType cst_regex = {
-    "regex",          regex_string_set, regex_string_get, regex_native_set,
-    regex_native_get, regex_reset,      regex_destroy,
+    "regex",
+    regex_string_set,
+    regex_string_get,
+    regex_native_set,
+    regex_native_get,
+    NULL, // string_plus_equals
+    NULL, // string_minus_equals
+    regex_reset,
+    regex_destroy,
   };
   cs_register_type(cs, DT_REGEX, &cst_regex);
 }

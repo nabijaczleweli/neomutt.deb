@@ -46,10 +46,10 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
 #include "muttlib.h"
-#include "alias.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "hook.h"
@@ -93,7 +93,7 @@ static const char *xdg_defaults[] = {
  */
 void mutt_adv_mktemp(struct Buffer *buf)
 {
-  if (!(buf->data && buf->data[0]))
+  if (!(buf->data && (buf->data[0] != '\0')))
   {
     mutt_buffer_mktemp(buf);
   }
@@ -222,7 +222,7 @@ void mutt_buffer_expand_path_regex(struct Buffer *buf, bool regex)
 
       case '@':
       {
-        struct AddressList *al = mutt_alias_lookup(s + 1);
+        struct AddressList *al = alias_lookup(s + 1);
         if (al && !TAILQ_EMPTY(al))
         {
           struct Email *e = email_new();
@@ -595,7 +595,7 @@ void mutt_mktemp_full(char *buf, size_t buflen, const char *prefix,
                src, line, buflen, n);
   }
   mutt_debug(LL_DEBUG3, "%s:%d: mutt_mktemp returns \"%s\"\n", src, line, buf);
-  if (unlink(buf) && (errno != ENOENT))
+  if ((unlink(buf) != 0) && (errno != ENOENT))
   {
     mutt_debug(LL_DEBUG1, "%s:%d: ERROR: unlink(\"%s\"): %s (errno %d)\n", src,
                line, buf, strerror(errno), errno);
@@ -860,7 +860,7 @@ void mutt_safe_path(struct Buffer *dest, const struct Address *a)
  * @param[in]  flags    Callback flags
  */
 void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const char *src,
-                         format_t *callback, unsigned long data, MuttFormatFlags flags)
+                         format_t *callback, intptr_t data, MuttFormatFlags flags)
 {
   char prefix[128], tmp[1024];
   char *cp = NULL, *wptr = buf;
@@ -928,7 +928,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
         mutt_buffer_addch(&cmd, '\'');
         mutt_expando_format(tmp, sizeof(tmp), 0, cols, word.data, callback,
                             data, flags | MUTT_FORMAT_NOFILTER);
-        for (char *p = tmp; p && *p; p++)
+        for (char *p = tmp; p && (*p != '\0'); p++)
         {
           if (*p == '\'')
           {
@@ -1031,13 +1031,14 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
         char *p = (char *) src;
         *p = '<';
         /* skip over "x" */
-        for (; *p && *p != '?'; p++)
-          ;
+        for (; *p && (*p != '?'); p++)
+          ; // do nothing
+
         /* nothing */
         if (*p == '?')
           p++;
         /* fix up the "y&z" section */
-        for (; *p && *p != '?'; p++)
+        for (; *p && (*p != '?'); p++)
         {
           /* escape '<' and '>' to work inside nested-if */
           if ((*p == '<') || (*p == '>'))
@@ -1080,7 +1081,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
         }
         *cp = '\0';
 
-        if (!*src)
+        if (*src == '\0')
           break; /* bad format */
 
         ch = *src++; /* save the character to switch on */
@@ -1136,7 +1137,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
           src++; /* skip the & */
         cp = else_str;
         count = 0;
-        while ((lrbalance > 0) && (count < sizeof(else_str)) && *src)
+        while ((lrbalance > 0) && (count < sizeof(else_str)) && (*src != '\0'))
         {
           if ((src[0] == '%') && (src[1] == '>'))
           {
@@ -1169,7 +1170,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
         }
         *cp = '\0';
 
-        if (!*src)
+        if ((*src == '\0'))
           break; /* bad format */
 
         src++; /* move past the trailing '>' (formerly '?') */
@@ -1210,7 +1211,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
             {
               /* Add pre-spacing to make multi-column pad characters and
                * the contents after padding line up */
-              while ((col + (pad * pw) + wid < cols) && (wlen + (pad * pl) + len < buflen))
+              while (((col + (pad * pw) + wid) < cols) && ((wlen + (pad * pl) + len) < buflen))
               {
                 *wptr++ = ' ';
                 wlen++;
@@ -1240,7 +1241,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
             wptr = buf + wlen;
             /* Multi-column characters may be truncated in the middle.
              * Add spacing so the right hand side lines up. */
-            while ((col + wid < avail_cols) && (wlen + len < buflen))
+            while (((col + wid) < avail_cols) && ((wlen + len) < buflen))
             {
               *wptr++ = ' ';
               wlen++;
@@ -1269,7 +1270,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
         if ((col < cols) && (wlen < buflen))
         {
           int c = (cols - col) / pw;
-          if ((c > 0) && (wlen + (c * pl) > buflen))
+          if ((c > 0) && ((wlen + (c * pl)) > buflen))
             c = ((signed) (buflen - wlen)) / pl;
           while (c > 0)
           {
@@ -1449,7 +1450,7 @@ int mutt_save_confirm(const char *s, struct stat *st)
   }
 #endif
 
-  if ((type != MUTT_MAILBOX_ERROR) && (type != MUTT_UNKNOWN) && !mx_access(s, W_OK))
+  if ((type != MUTT_MAILBOX_ERROR) && (type != MUTT_UNKNOWN) && (mx_access(s, W_OK) == 0))
   {
     if (C_Confirmappend)
     {
@@ -1645,7 +1646,7 @@ void mutt_get_parent_path(const char *path, char *buf, size_t buflen)
 
     /* Remove everything until the next slash */
     for (n--; ((n >= 0) && (buf[n] != '/')); n--)
-      ;
+      ; // do nothing
 
     if (n > 0)
       buf[n] = '\0';

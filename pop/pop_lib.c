@@ -35,7 +35,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "pop_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
@@ -358,6 +358,8 @@ int pop_open_connection(struct PopAccountData *adata)
     {
       mutt_str_strfcpy(buf, "STLS\r\n", sizeof(buf));
       rc = pop_query(adata, buf, sizeof(buf));
+      // Clear any data after the STLS acknowledgement
+      mutt_socket_empty(adata->conn);
       if (rc == -1)
         goto err_conn;
       if (rc != 0)

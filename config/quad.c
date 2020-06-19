@@ -23,7 +23,18 @@
 /**
  * @page config_quad Type: Quad-option
  *
- * Type representing a quad-option.
+ * Config type representing a quad-option.
+ *
+ * - Backed by `unsigned char`
+ * - Validator is passed `unsigned char`
+ * - Valid user entry: #QuadValues
+ *
+ * ## Functions supported
+ * - ConfigSetType::string_set()
+ * - ConfigSetType::string_get()
+ * - ConfigSetType::native_set()
+ * - ConfigSetType::native_get()
+ * - ConfigSetType::reset()
  */
 
 #include "config.h"
@@ -51,7 +62,7 @@ const char *QuadValues[] = {
 static int quad_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                            const char *value, struct Buffer *err)
 {
-  if (!cs || !cdef || !value)
+  if (!value)
     return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
 
   int num = -1;
@@ -99,9 +110,6 @@ static int quad_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
 static int quad_string_get(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, struct Buffer *result)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   unsigned int value;
 
   if (var)
@@ -125,9 +133,6 @@ static int quad_string_get(const struct ConfigSet *cs, void *var,
 static int quad_native_set(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, intptr_t value, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   if ((value < 0) || (value >= (mutt_array_size(QuadValues) - 1)))
   {
     mutt_buffer_printf(err, _("Invalid quad value: %ld"), value);
@@ -155,9 +160,6 @@ static int quad_native_set(const struct ConfigSet *cs, void *var,
 static intptr_t quad_native_get(const struct ConfigSet *cs, void *var,
                                 const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return INT_MIN; /* LCOV_EXCL_LINE */
-
   return *(char *) var;
 }
 
@@ -167,9 +169,6 @@ static intptr_t quad_native_get(const struct ConfigSet *cs, void *var,
 static int quad_reset(const struct ConfigSet *cs, void *var,
                       const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   if (cdef->initial == (*(char *) var))
     return CSR_SUCCESS | CSR_SUC_NO_CHANGE;
 
@@ -197,8 +196,10 @@ void quad_init(struct ConfigSet *cs)
     quad_string_get,
     quad_native_set,
     quad_native_get,
+    NULL, // string_plus_equals
+    NULL, // string_minus_equals
     quad_reset,
-    NULL,
+    NULL, // destroy
   };
   cs_register_type(cs, DT_QUAD, &cst_quad);
 }

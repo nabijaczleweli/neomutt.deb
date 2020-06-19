@@ -35,12 +35,11 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
-#include "conn_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "conn_globals.h"
 #include "connaccount.h"
 #include "connection.h"
-#include "socket.h"
 
 /**
  * struct TunnelSockData - A network tunnel (pair of sockets)

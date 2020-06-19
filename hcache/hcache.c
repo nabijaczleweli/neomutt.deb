@@ -37,6 +37,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,7 +76,7 @@ char *C_HeaderCacheCompressMethod; ///< Config: (hcache) Enable generic hcache d
  * header_size - Compute the size of the header with uuid validity
  * and crc.
  */
-size_t header_size(void)
+static size_t header_size(void)
 {
   return sizeof(int) + sizeof(uint32_t);
 }
@@ -102,7 +103,7 @@ static void *dump(header_cache_t *hc, const struct Email *e, int *off, uint32_t 
   d = serial_dump_uint32_t((uidvalidity != 0) ? uidvalidity : mutt_date_epoch(), d, off);
   d = serial_dump_int(hc->crc, d, off);
 
-  assert(*off == header_size());
+  assert((size_t) *off == header_size());
 
   lazy_realloc(&d, *off + sizeof(struct Email));
   memcpy(&e_dump, e, sizeof(struct Email));
@@ -334,7 +335,8 @@ header_cache_t *mutt_hcache_open(const char *path, const char *folder, hcache_na
   /* Calculate the current hcache version from dynamic configuration */
   if (hcachever == 0x0)
   {
-    union {
+    union
+    {
       unsigned char charval[16];
       unsigned int intval;
     } digest;
@@ -457,7 +459,7 @@ struct HCacheEntry mutt_hcache_fetch(header_cache_t *hc, const char *key,
   int off = 0;
   serial_restore_uint32_t(&entry.uidvalidity, data, &off);
   serial_restore_int(&entry.crc, data, &off);
-  assert(off == hlen);
+  assert((size_t) off == hlen);
   if (entry.crc != hc->crc || ((uidvalidity != 0) && uidvalidity != entry.uidvalidity))
   {
     goto end;
@@ -504,7 +506,7 @@ void *mutt_hcache_fetch_raw(header_cache_t *hc, const char *key, size_t keylen, 
     return NULL;
 
   struct Buffer path = mutt_buffer_make(1024);
-  keylen = mutt_buffer_printf(&path, "%s%s", hc->folder, key);
+  keylen = mutt_buffer_printf(&path, "%s%.*s", hc->folder, (int) keylen, key);
   void *blob = ops->fetch(hc->ctx, mutt_b2s(&path), keylen, dlen);
   mutt_buffer_dealloc(&path);
   return blob;
@@ -593,7 +595,7 @@ int mutt_hcache_store_raw(header_cache_t *hc, const char *key, size_t keylen,
 
   struct Buffer path = mutt_buffer_make(1024);
 
-  keylen = mutt_buffer_printf(&path, "%s%s", hc->folder, key);
+  keylen = mutt_buffer_printf(&path, "%s%.*s", hc->folder, (int) keylen, key);
   int rc = ops->store(hc->ctx, mutt_b2s(&path), keylen, data, dlen);
   mutt_buffer_dealloc(&path);
 

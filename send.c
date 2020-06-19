@@ -41,10 +41,10 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
 #include "send.h"
-#include "alias.h"
 #include "compose.h"
 #include "context.h"
 #include "copy.h"
@@ -54,6 +54,7 @@
 #include "hdrline.h"
 #include "hook.h"
 #include "init.h"
+#include "maillist.h"
 #include "mutt_attach.h"
 #include "mutt_body.h"
 #include "mutt_header.h"
@@ -319,7 +320,7 @@ static int edit_envelope(struct Envelope *en, SendFlags flags)
   }
 
   if ((mutt_get_field(_("Subject: "), buf, sizeof(buf), MUTT_COMP_NO_FLAGS) != 0) ||
-      (!buf[0] &&
+      ((buf[0] == '\0') &&
        (query_quadoption(C_AbortNosubject, _("No subject, abort?")) != MUTT_NO)))
   {
     mutt_message(_("No subject, aborting"));
@@ -512,7 +513,7 @@ static int include_forward(struct Mailbox *m, struct Email *e, FILE *fp_out)
  * @retval -1 Error
  */
 static int inline_forward_attachments(struct Mailbox *m, struct Email *e,
-                                      struct Body ***plast, int *forwardq)
+                                      struct Body ***plast, enum QuadOption *forwardq)
 {
   struct Body **last = *plast;
   struct Body *body = NULL;
@@ -544,7 +545,7 @@ static int inline_forward_attachments(struct Mailbox *m, struct Email *e,
            (mutt_str_strcasecmp(body->subtype, "pkcs7-signature") == 0))))
     {
       /* Ask the quadoption only once */
-      if (*forwardq == -1)
+      if (*forwardq == MUTT_ABORT)
       {
         *forwardq = query_quadoption(C_ForwardAttachments,
                                      /* L10N: This is the prompt for $forward_attachments.
@@ -575,67 +576,6 @@ cleanup:
   mx_msg_close(m, &msg);
   mutt_actx_free(&actx);
   return rc;
-}
-
-/**
- * mutt_inline_forward - Forward attachments, inline
- * @param m      Mailbox
- * @param e_edit Email to alter
- * @param e_cur  Current Email
- * @param out    File
- * @retval  0 Success
- * @retval -1 Error
- */
-static int mutt_inline_forward(struct Mailbox *m, struct Email *e_edit,
-                               struct Email *e_cur, FILE *out)
-{
-  int forwardq = -1;
-  struct Body **last = NULL;
-
-  if (e_cur)
-    include_forward(m, e_cur, out);
-  else
-  {
-    for (int i = 0; i < m->vcount; i++)
-    {
-      struct Email *e = mutt_get_virt_email(m, i);
-      if (!e)
-        continue;
-      if (e->tagged)
-        include_forward(m, e, out);
-    }
-  }
-
-  if (C_ForwardDecode && (C_ForwardAttachments != MUTT_NO))
-  {
-    last = &e_edit->content;
-    while (*last)
-      last = &((*last)->next);
-
-    if (e_cur)
-    {
-      if (inline_forward_attachments(m, e_cur, &last, &forwardq) != 0)
-        return -1;
-    }
-    else
-    {
-      for (int i = 0; i < m->vcount; i++)
-      {
-        struct Email *e = mutt_get_virt_email(m, i);
-        if (!e)
-          continue;
-        if (e->tagged)
-        {
-          if (inline_forward_attachments(m, e, &last, &forwardq) != 0)
-            return -1;
-          if (forwardq == MUTT_NO)
-            break;
-        }
-      }
-    }
-  }
-
-  return 0;
 }
 
 /**
@@ -746,7 +686,6 @@ static const struct AddressList *choose_default_to(const struct Address *from,
  */
 static int default_to(struct AddressList *to, struct Envelope *env, SendFlags flags, int hmfupto)
 {
-  char prompt[256];
   const struct Address *from = TAILQ_FIRST(&env->from);
   const struct Address *reply_to = TAILQ_FIRST(&env->reply_to);
 
@@ -782,6 +721,7 @@ static int default_to(struct AddressList *to, struct Envelope *env, SendFlags fl
     }
     else if (!(from_is_reply_to && !multiple_reply_to) && (C_ReplyTo != MUTT_YES))
     {
+      char prompt[256];
       /* There are quite a few mailing lists which set the Reply-To:
        * header field to the list address, which makes it quite impossible
        * to send a message to only the sender of the message.  This
@@ -884,7 +824,7 @@ static void add_references(struct ListHead *head, struct Envelope *env)
 {
   struct ListNode *np = NULL;
 
-  struct ListHead *src = !STAILQ_EMPTY(&env->references) ? &env->references : &env->in_reply_to;
+  struct ListHead *src = STAILQ_EMPTY(&env->references) ? &env->in_reply_to : &env->references;
   STAILQ_FOREACH(np, src, entries)
   {
     mutt_list_insert_tail(head, mutt_str_strdup(np->data));
@@ -1101,15 +1041,6 @@ static int envelope_defaults(struct Envelope *env, struct Mailbox *m,
 static int generate_body(FILE *fp_tmp, struct Email *e, SendFlags flags,
                          struct Mailbox *m, struct EmailList *el)
 {
-  struct Body *tmp = NULL;
-  struct EmailNode *en = NULL;
-  bool single = true;
-
-  if (el)
-    en = STAILQ_FIRST(el);
-  if (en)
-    single = !STAILQ_NEXT(en, entries);
-
   /* An EmailList is required for replying and forwarding */
   if (!el && (flags & (SEND_REPLY | SEND_FORWARD)))
     return -1;
@@ -1124,17 +1055,16 @@ static int generate_body(FILE *fp_tmp, struct Email *e, SendFlags flags,
     if (ans == MUTT_YES)
     {
       mutt_message(_("Including quoted message..."));
-      if (single && en)
-        include_reply(m, en->email, fp_tmp);
-      else
+      struct EmailNode *en = NULL;
+      STAILQ_FOREACH(en, el, entries)
       {
-        STAILQ_FOREACH(en, el, entries)
+        if (include_reply(m, en->email, fp_tmp) == -1)
         {
-          if (include_reply(m, en->email, fp_tmp) == -1)
-          {
-            mutt_error(_("Could not include all requested messages"));
-            return -1;
-          }
+          mutt_error(_("Could not include all requested messages"));
+          return -1;
+        }
+        if (STAILQ_NEXT(en, entries) != NULL)
+        {
           fputc('\n', fp_tmp);
         }
       }
@@ -1153,36 +1083,45 @@ static int generate_body(FILE *fp_tmp, struct Email *e, SendFlags flags,
       while (last && last->next)
         last = last->next;
 
-      if (single && en)
+      struct EmailNode *en = NULL;
+      STAILQ_FOREACH(en, el, entries)
       {
-        tmp = mutt_make_message_attach(m, en->email, false);
+        struct Body *tmp = mutt_make_message_attach(m, en->email, false);
         if (last)
-          last->next = tmp;
-        else
-          e->content = tmp;
-      }
-      else
-      {
-        STAILQ_FOREACH(en, el, entries)
         {
-          tmp = mutt_make_message_attach(m, en->email, false);
-          if (last)
-          {
-            last->next = tmp;
-            last = tmp;
-          }
-          else
-          {
-            last = tmp;
-            e->content = tmp;
-          }
+          last->next = tmp;
+          last = tmp;
+        }
+        else
+        {
+          last = tmp;
+          e->content = tmp;
         }
       }
     }
-    else if ((ans != MUTT_ABORT) && en)
+    else if (ans != MUTT_ABORT)
     {
-      if (mutt_inline_forward(m, e, en->email, fp_tmp) != 0)
-        return -1;
+      enum QuadOption forwardq = MUTT_ABORT;
+      struct Body **last = NULL;
+      struct EmailNode *en = NULL;
+
+      if (C_ForwardDecode && (C_ForwardAttachments != MUTT_NO))
+      {
+        last = &e->content;
+        while (*last)
+          last = &((*last)->next);
+      }
+
+      STAILQ_FOREACH(en, el, entries)
+      {
+        struct Email *e_cur = en->email;
+        include_forward(m, e_cur, fp_tmp);
+        if (C_ForwardDecode && (C_ForwardAttachments != MUTT_NO))
+        {
+          if (inline_forward_attachments(m, e_cur, &last, &forwardq) != 0)
+            return -1;
+        }
+      }
     }
     else
       return -1;
@@ -2587,7 +2526,7 @@ int mutt_send_message(SendFlags flags, struct Email *e_templ, const char *tempfi
     if (!(flags & SEND_BATCH))
     {
       if (!WithCrypto)
-        ;
+        ; // do nothing
       else if ((e_templ->security & (SEC_ENCRYPT | SEC_AUTOCRYPT)) ||
                ((e_templ->security & SEC_SIGN) && (e_templ->content->type == TYPE_APPLICATION)))
       {

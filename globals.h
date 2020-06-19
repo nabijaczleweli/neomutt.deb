@@ -29,6 +29,7 @@
 #include "mutt/lib.h"
 #include "keymap.h"
 #include "where.h"
+#include "alias/lib.h"
 
 #ifdef MAIN_C
 /* so that global vars get included */
@@ -56,8 +57,7 @@ WHERE char *LastFolder;    ///< Previously selected mailbox
 
 extern const char *GitVer;
 
-WHERE struct Hash *ReverseAliases;     ///< Hash table of aliases (email address -> alias)
-WHERE struct Hash *TagFormats;         ///< Hash table of tag-formats (tag -> format string)
+WHERE struct HashTable *TagFormats; ///< Hash Table of tag-formats (tag -> format string)
 
 /* Lists of strings */
 WHERE struct ListHead AlternativeOrderList INITVAL(STAILQ_HEAD_INITIALIZER(AlternativeOrderList)); ///< List of preferred mime types to display
@@ -81,8 +81,6 @@ WHERE SIG_ATOMIC_VOLATILE_T SigWinch; ///< true after SIGWINCH is received
 
 WHERE enum MenuType CurrentMenu; ///< Current Menu, e.g. #MENU_PAGER
 
-WHERE struct AliasList Aliases INITVAL(TAILQ_HEAD_INITIALIZER(Aliases)); ///< List of all the user's email aliases
-
 #ifdef USE_AUTOCRYPT
 WHERE char *AutocryptSignAs;     ///< Autocrypt Key id to sign as
 WHERE char *AutocryptDefaultKey; ///< Autocrypt default key id (used for postponing messages)
@@ -94,7 +92,7 @@ WHERE struct Address *C_EnvelopeFromAddress; ///< Config: Manually set the sende
 WHERE struct Address *C_From;                ///< Config: Default 'From' address to use, if isn't otherwise set
 
 WHERE bool C_AbortBackspace;                 ///< Config: Hitting backspace against an empty prompt aborts the prompt
-WHERE char *C_AbortKey;                   ///< Config: String representation of key to abort prompts
+WHERE char *C_AbortKey;                      ///< Config: String representation of key to abort prompts
 WHERE char *C_AliasFile;                     ///< Config: Save new aliases to this file
 WHERE char *C_Attribution;                   ///< Config: Message to start a reply, "On DATE, PERSON wrote:"
 WHERE char *C_AttributionLocale;             ///< Config: Locale for dates in the attribution message
@@ -121,9 +119,6 @@ WHERE struct Slist *C_MailcapPath;           ///< Config: Colon-separated list o
 WHERE char *C_Folder;                        ///< Config: Base folder for a set of mailboxes
 #ifdef USE_HCACHE
 WHERE char *C_HeaderCache;                   ///< Config: (hcache) Directory/file for the header cache database
-#if defined(HAVE_GDBM) || defined(HAVE_BDB)
-WHERE long C_HeaderCachePagesize;            ///< Config: (hcache) Database page size (gdbm,bdb4)
-#endif /* HAVE_GDBM || HAVE_BDB */
 #endif /* USE_HCACHE */
 
 #ifdef USE_NNTP

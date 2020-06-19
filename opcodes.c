@@ -1,9 +1,9 @@
 /**
  * @file
- * Address book handling aliases
+ * All user-callable functions
  *
  * @authors
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -20,17 +20,13 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_ADDRBOOK_H
-#define MUTT_ADDRBOOK_H
+#include <stddef.h>
+#include "opcodes.h"
 
-#include <stdio.h>
+#define DEFINE_HELP_MESSAGE(opcode, op_string) { #opcode, op_string },
 
-struct AliasList;
+const char *OpStrings[][2] = {
+  OPS(DEFINE_HELP_MESSAGE){ NULL, NULL },
+};
 
-/* These Config Variables are only used in addrbook.c */
-extern char *C_AliasFormat;
-extern short C_SortAlias;
-
-void mutt_alias_menu(char *buf, size_t buflen, struct AliasList *aliases);
-
-#endif /* MUTT_ADDRBOOK_H */
+#undef DEFINE_HELP_MESSAGE

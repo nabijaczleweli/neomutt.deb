@@ -39,10 +39,10 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
 #include "command_parse.h"
-#include "alias.h"
 #include "context.h"
 #include "globals.h"
 #include "init.h"
@@ -83,10 +83,8 @@ enum GroupState
  * parse_unreplace_list - Remove a string replacement rule - Implements Command::parse()
  */
 static enum CommandResult parse_unreplace_list(struct Buffer *buf, struct Buffer *s,
-                                               intptr_t data, struct Buffer *err)
+                                               struct ReplaceList *list, struct Buffer *err)
 {
-  struct ReplaceList *list = (struct ReplaceList *) data;
-
   /* First token is a regex. */
   if (!MoreArgs(s))
   {
@@ -210,9 +208,8 @@ static void clear_subject_mods(void)
  * parse_replace_list - Parse a string replacement rule - Implements Command::parse()
  */
 static enum CommandResult parse_replace_list(struct Buffer *buf, struct Buffer *s,
-                                             intptr_t data, struct Buffer *err)
+                                             struct ReplaceList *list, struct Buffer *err)
 {
-  struct ReplaceList *list = (struct ReplaceList *) data;
   struct Buffer templ = mutt_buffer_make(0);
 
   /* First token is a regex. */
@@ -393,8 +390,8 @@ static void alternates_clean(void)
  * @retval  0 Success
  * @retval -1 Error
  */
-static int parse_grouplist(struct GroupList *gl, struct Buffer *buf,
-                           struct Buffer *s, struct Buffer *err)
+int parse_grouplist(struct GroupList *gl, struct Buffer *buf, struct Buffer *s,
+                    struct Buffer *err)
 {
   while (mutt_str_strcasecmp(buf->data, "-group") == 0)
   {
@@ -563,91 +560,6 @@ int source_rc(const char *rcfile_path, struct Buffer *err)
   mutt_buffer_pool_release(&token);
   mutt_buffer_pool_release(&linebuf);
   return rc;
-}
-
-/**
- * parse_alias - Parse the 'alias' command - Implements Command::parse()
- */
-enum CommandResult parse_alias(struct Buffer *buf, struct Buffer *s,
-                               intptr_t data, struct Buffer *err)
-{
-  struct Alias *tmp = NULL;
-  char *estr = NULL;
-  struct GroupList gl = STAILQ_HEAD_INITIALIZER(gl);
-
-  if (!MoreArgs(s))
-  {
-    mutt_buffer_strcpy(err, _("alias: no address"));
-    return MUTT_CMD_WARNING;
-  }
-
-  mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
-
-  if (parse_grouplist(&gl, buf, s, err) == -1)
-    return MUTT_CMD_ERROR;
-
-  /* check to see if an alias with this name already exists */
-  TAILQ_FOREACH(tmp, &Aliases, entries)
-  {
-    if (mutt_str_strcasecmp(tmp->name, buf->data) == 0)
-      break;
-  }
-
-  if (tmp)
-  {
-    mutt_alias_delete_reverse(tmp);
-    /* override the previous value */
-    mutt_addrlist_clear(&tmp->addr);
-    if (CurrentMenu == MENU_ALIAS)
-      mutt_menu_set_current_redraw_full();
-  }
-  else
-  {
-    /* create a new alias */
-    tmp = mutt_alias_new();
-    tmp->name = mutt_str_strdup(buf->data);
-    TAILQ_INSERT_TAIL(&Aliases, tmp, entries);
-    /* give the main addressbook code a chance */
-    if (CurrentMenu == MENU_ALIAS)
-      OptMenuCaller = true;
-  }
-
-  mutt_extract_token(buf, s, MUTT_TOKEN_QUOTE | MUTT_TOKEN_SPACE | MUTT_TOKEN_SEMICOLON);
-  mutt_debug(LL_DEBUG5, "Second token is '%s'\n", buf->data);
-
-  mutt_addrlist_parse2(&tmp->addr, buf->data);
-
-  if (mutt_addrlist_to_intl(&tmp->addr, &estr))
-  {
-    mutt_buffer_printf(err, _("Warning: Bad IDN '%s' in alias '%s'"), estr, tmp->name);
-    FREE(&estr);
-    goto bail;
-  }
-
-  mutt_grouplist_add_addrlist(&gl, &tmp->addr);
-  mutt_alias_add_reverse(tmp);
-
-  if (C_DebugLevel > LL_DEBUG4)
-  {
-    /* A group is terminated with an empty address, so check a->mailbox */
-    struct Address *a = NULL;
-    TAILQ_FOREACH(a, &tmp->addr, entries)
-    {
-      if (!a->mailbox)
-        break;
-
-      if (a->group)
-        mutt_debug(LL_DEBUG5, "  Group %s\n", a->mailbox);
-      else
-        mutt_debug(LL_DEBUG5, "  %s\n", a->mailbox);
-    }
-  }
-  mutt_grouplist_destroy(&gl);
-  return MUTT_CMD_SUCCESS;
-
-bail:
-  mutt_grouplist_destroy(&gl);
-  return MUTT_CMD_ERROR;
 }
 
 /**
@@ -1026,7 +938,7 @@ enum CommandResult parse_mailboxes(struct Buffer *buf, struct Buffer *s,
         if (m_old->flags == MB_HIDDEN)
         {
           m_old->flags = MB_NORMAL;
-          mutt_sb_notify_mailbox(m_old, true);
+          sb_notify_mailbox(m_old, true);
         }
         mailbox_free(&m);
         continue;
@@ -1052,7 +964,7 @@ enum CommandResult parse_mailboxes(struct Buffer *buf, struct Buffer *s,
     }
 
 #ifdef USE_SIDEBAR
-    mutt_sb_notify_mailbox(m, true);
+    sb_notify_mailbox(m, true);
 #endif
 #ifdef USE_INOTIFY
     mutt_monitor_add(m);
@@ -1207,10 +1119,12 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
     }
 
     /* get the variable name */
-    mutt_extract_token(buf, s, MUTT_TOKEN_EQUAL | MUTT_TOKEN_QUESTION);
+    mutt_extract_token(buf, s, MUTT_TOKEN_EQUAL | MUTT_TOKEN_QUESTION | MUTT_TOKEN_PLUS | MUTT_TOKEN_MINUS);
 
     bool bq = false;
     bool equals = false;
+    bool increment = false;
+    bool decrement = false;
 
     struct HashElem *he = NULL;
     bool my = mutt_str_startswith(buf->data, "my_", CASE_MATCH);
@@ -1259,6 +1173,33 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
 
       query = true;
       s->dptr++;
+    }
+    else if (*s->dptr == '+' || *s->dptr == '-')
+    {
+      if (prefix)
+      {
+        mutt_buffer_printf(err, "ERR04 can't use prefix when incrementing or "
+                                "decrementing a variable");
+        return MUTT_CMD_WARNING;
+      }
+
+      if (reset || unset || inv)
+      {
+        mutt_buffer_printf(err, "ERR05 can't set a variable with the '%s' command",
+                           set_commands[data]);
+        return MUTT_CMD_WARNING;
+      }
+      if (*s->dptr == '+')
+        increment = true;
+      else
+        decrement = true;
+
+      s->dptr++;
+      if (*s->dptr == '=')
+      {
+        equals = true;
+        s->dptr++;
+      }
     }
     else if (*s->dptr == '=')
     {
@@ -1388,8 +1329,18 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
             mutt_buffer_addstr(buf, mutt_b2s(&scratch));
             mutt_buffer_dealloc(&scratch);
           }
-
-          rc = cs_subset_he_string_set(NeoMutt->sub, he, buf->data, err);
+          if (increment)
+          {
+            rc = cs_subset_he_string_plus_equals(NeoMutt->sub, he, buf->data, err);
+          }
+          else if (decrement)
+          {
+            rc = cs_subset_he_string_minus_equals(NeoMutt->sub, he, buf->data, err);
+          }
+          else
+          {
+            rc = cs_subset_he_string_set(NeoMutt->sub, he, buf->data, err);
+          }
           if (CSR_RESULT(rc) != CSR_SUCCESS)
             return MUTT_CMD_ERROR;
         }
@@ -1690,7 +1641,7 @@ enum CommandResult parse_subjectrx_list(struct Buffer *buf, struct Buffer *s,
 {
   enum CommandResult rc;
 
-  rc = parse_replace_list(buf, s, data, err);
+  rc = parse_replace_list(buf, s, &SubjectRegexList, err);
   if (rc == MUTT_CMD_SUCCESS)
     clear_subject_mods();
   return rc;
@@ -1857,56 +1808,6 @@ enum CommandResult parse_tag_transforms(struct Buffer *buf, struct Buffer *s,
 }
 
 /**
- * parse_unalias - Parse the 'unalias' command - Implements Command::parse()
- */
-enum CommandResult parse_unalias(struct Buffer *buf, struct Buffer *s,
-                                 intptr_t data, struct Buffer *err)
-{
-  struct Alias *a = NULL;
-
-  do
-  {
-    mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
-
-    if (mutt_str_strcmp("*", buf->data) == 0)
-    {
-      if (CurrentMenu == MENU_ALIAS)
-      {
-        TAILQ_FOREACH(a, &Aliases, entries)
-        {
-          a->del = true;
-        }
-        mutt_menu_set_current_redraw_full();
-      }
-      else
-        mutt_aliaslist_free(&Aliases);
-      break;
-    }
-    else
-    {
-      TAILQ_FOREACH(a, &Aliases, entries)
-      {
-        if (mutt_str_strcasecmp(buf->data, a->name) == 0)
-        {
-          if (CurrentMenu == MENU_ALIAS)
-          {
-            a->del = true;
-            mutt_menu_set_current_redraw_full();
-          }
-          else
-          {
-            TAILQ_REMOVE(&Aliases, a, entries);
-            mutt_alias_free(&a);
-          }
-          break;
-        }
-      }
-    }
-  } while (MoreArgs(s));
-  return MUTT_CMD_SUCCESS;
-}
-
-/**
  * parse_unalternates - Parse the 'unalternates' command - Implements Command::parse()
  */
 enum CommandResult parse_unalternates(struct Buffer *buf, struct Buffer *s,
@@ -2056,7 +1957,8 @@ enum CommandResult parse_unmailboxes(struct Buffer *buf, struct Buffer *s,
       tmp_valid = true;
     }
 
-    struct MailboxList ml = neomutt_mailboxlist_get_all(NeoMutt, MUTT_MAILBOX_ANY);
+    struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
+    neomutt_mailboxlist_get_all(&ml, NeoMutt, MUTT_MAILBOX_ANY);
     struct MailboxNode *np = NULL;
     struct MailboxNode *nptmp = NULL;
     STAILQ_FOREACH_SAFE(np, &ml, entries, nptmp)
@@ -2070,7 +1972,7 @@ enum CommandResult parse_unmailboxes(struct Buffer *buf, struct Buffer *s,
       }
 
 #ifdef USE_SIDEBAR
-      mutt_sb_notify_mailbox(np->mailbox, false);
+      sb_notify_mailbox(np->mailbox, false);
 #endif
 #ifdef USE_INOTIFY
       mutt_monitor_remove(np->mailbox);
@@ -2156,7 +2058,7 @@ enum CommandResult parse_unsubjectrx_list(struct Buffer *buf, struct Buffer *s,
 {
   enum CommandResult rc;
 
-  rc = parse_unreplace_list(buf, s, data, err);
+  rc = parse_unreplace_list(buf, s, &SubjectRegexList, err);
   if (rc == MUTT_CMD_SUCCESS)
     clear_subject_mods();
   return rc;

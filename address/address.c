@@ -205,7 +205,7 @@ static const char *parse_mailboxdomain(const char *s, const char *nonspecial,
   while (*s)
   {
     s = mutt_str_skip_email_wsp(s);
-    if (!*s)
+    if ((*s == '\0'))
       return s;
 
     if (!strchr(nonspecial, *s) && is_special(*s))
@@ -563,8 +563,11 @@ int mutt_addrlist_parse(struct AddressList *al, const char *s)
         if (*s == '\\')
         {
           s++;
-          phrase[phraselen++] = *s;
-          s++;
+          if (*s && (phraselen < (sizeof(phrase) - 1)))
+          {
+            phrase[phraselen++] = *s;
+            s++;
+          }
         }
         s = next_token(s, phrase, &phraselen, sizeof(phrase) - 1);
         if (!s)
@@ -612,7 +615,7 @@ int mutt_addrlist_parse(struct AddressList *al, const char *s)
  */
 int mutt_addrlist_parse2(struct AddressList *al, const char *s)
 {
-  if (!s || !*s)
+  if (!s || (*s == '\0'))
     return 0;
 
   int parsed = 0;
@@ -646,7 +649,7 @@ int mutt_addrlist_parse2(struct AddressList *al, const char *s)
  */
 void mutt_addrlist_qualify(struct AddressList *al, const char *host)
 {
-  if (!al || !host || !*host)
+  if (!al || !host || (*host == '\0'))
     return;
 
   struct Address *a = NULL;
@@ -781,7 +784,7 @@ bool mutt_addr_valid_msgid(const char *msgid)
    * domain-literal = "[" *(dtext / quoted-pair) "]"
    */
 
-  if (!msgid || !*msgid)
+  if (!msgid || (*msgid == '\0'))
     return false;
 
   size_t l = mutt_str_strlen(msgid);
@@ -1342,7 +1345,6 @@ int mutt_addrlist_to_local(struct AddressList *al)
 /**
  * mutt_addrlist_dedupe - Remove duplicate addresses
  * @param al Address list to de-dupe
- * @retval ptr Updated Address list
  *
  * Given a list of addresses, return a list of unique addresses
  */

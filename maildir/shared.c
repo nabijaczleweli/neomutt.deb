@@ -42,7 +42,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utime.h>
-#include "maildir_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
@@ -56,7 +56,7 @@
 #include "protos.h"
 #include "sort.h"
 #include "hcache/lib.h"
-#include "maildir/lib.h" // IWYU pragma: keep
+#include "maildir/lib.h"
 #ifdef USE_NOTMUCH
 #include "notmuch/lib.h"
 #endif
@@ -197,7 +197,6 @@ static void mh_sequences_add_one(struct Mailbox *m, int n, bool unseen, bool fla
   char seq_flagged[256];
 
   char *buf = NULL;
-  int line = 0;
   size_t sz;
 
   FILE *fp_new = NULL;
@@ -212,7 +211,7 @@ static void mh_sequences_add_one(struct Mailbox *m, int n, bool unseen, bool fla
   FILE *fp_old = fopen(sequences, "r");
   if (fp_old)
   {
-    while ((buf = mutt_file_read_line(buf, &sz, fp_old, &line, 0)))
+    while ((buf = mutt_file_read_line(buf, &sz, fp_old, NULL, 0)))
     {
       if (unseen && (strncmp(buf, seq_unseen, mutt_str_strlen(seq_unseen)) == 0))
       {
@@ -381,7 +380,7 @@ int maildir_parse_dir(struct Mailbox *m, struct Maildir ***last,
     if (count)
     {
       (*count)++;
-      if (!m->quiet && progress)
+      if (m->verbose && progress)
         mutt_progress_update(progress, *count, -1);
     }
 
@@ -697,7 +696,7 @@ void maildir_delayed_parsing(struct Mailbox *m, struct Maildir **md, struct Prog
       continue;
     }
 
-    if (!m->quiet && progress)
+    if (m->verbose && progress)
       mutt_progress_update(progress, count, -1);
 
     if (!sort)
@@ -751,7 +750,7 @@ void maildir_delayed_parsing(struct Mailbox *m, struct Maildir **md, struct Prog
     {
       if (maildir_parse_message(m->type, fn, p->email->old, p->email))
       {
-        p->header_parsed = 1;
+        p->header_parsed = true;
 #ifdef USE_HCACHE
         if (m->type == MUTT_MH)
         {
@@ -796,7 +795,7 @@ int mh_read_dir(struct Mailbox *m, const char *subdir)
   struct Maildir **last = NULL;
   struct Progress progress;
 
-  if (!m->quiet)
+  if (m->verbose)
   {
     char msg[PATH_MAX];
     snprintf(msg, sizeof(msg), _("Scanning %s..."), mailbox_path(m));
@@ -808,7 +807,7 @@ int mh_read_dir(struct Mailbox *m, const char *subdir)
   {
     mdata = maildir_mdata_new();
     m->mdata = mdata;
-    m->free_mdata = maildir_mdata_free;
+    m->mdata_free = maildir_mdata_free;
   }
 
   maildir_update_mtime(m);
@@ -819,7 +818,7 @@ int mh_read_dir(struct Mailbox *m, const char *subdir)
   if (maildir_parse_dir(m, &last, subdir, &count, &progress) < 0)
     return -1;
 
-  if (!m->quiet)
+  if (m->verbose)
   {
     char msg[PATH_MAX];
     snprintf(msg, sizeof(msg), _("Reading %s..."), mailbox_path(m));
@@ -889,7 +888,7 @@ int mh_commit_msg(struct Mailbox *m, struct Message *msg, struct Email *e, bool 
         break;
       cp++;
     }
-    if (!*cp)
+    if (*cp == '\0')
     {
       if (mutt_str_atoui(dep, &n) < 0)
         mutt_debug(LL_DEBUG2, "Invalid MH message number '%s'\n", dep);
@@ -1722,7 +1721,7 @@ int mh_mbox_sync(struct Mailbox *m, int *index_hint)
     hc = mutt_hcache_open(C_HeaderCache, mailbox_path(m), NULL);
 #endif
 
-  if (!m->quiet)
+  if (m->verbose)
   {
     char msg[PATH_MAX];
     snprintf(msg, sizeof(msg), _("Writing %s..."), mailbox_path(m));
@@ -1731,7 +1730,7 @@ int mh_mbox_sync(struct Mailbox *m, int *index_hint)
 
   for (i = 0; i < m->msg_count; i++)
   {
-    if (!m->quiet)
+    if (m->verbose)
       mutt_progress_update(&progress, i, -1);
 
     if (mh_sync_mailbox_message(m, i, hc) == -1)

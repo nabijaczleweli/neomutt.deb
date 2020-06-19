@@ -5,7 +5,7 @@
  * @authors
  * Copyright (C) 2004 Justin Hibbits <jrh29@po.cwru.edu>
  * Copyright (C) 2004 Thomer M. Gil <mutt@thomer.com>
- * Copyright (C) 2015-2016 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2015-2020 Richard Russon <rich@flatcap.org>
  * Copyright (C) 2016-2017 Kevin J. McCarthy <kevin@8t8.us>
  *
  * @copyright
@@ -31,6 +31,7 @@
 
 #include "config.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,7 +72,7 @@ static short PreviousSort = SORT_ORDER; /* sidebar_sort_method */
  */
 struct SbEntry
 {
-  char box[256];           ///< formatted mailbox name
+  char box[256];           ///< Formatted Mailbox name
   struct Mailbox *mailbox; ///< Mailbox this represents
   bool is_hidden;          ///< Don't show, e.g. $sidebar_new_mail_only
 };
@@ -117,7 +118,7 @@ enum DivType
 static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int cols,
                                       char op, const char *src, const char *prec,
                                       const char *if_str, const char *else_str,
-                                      unsigned long data, MuttFormatFlags flags)
+                                      intptr_t data, MuttFormatFlags flags)
 {
   struct SbEntry *sbe = (struct SbEntry *) data;
   char fmt[256];
@@ -267,12 +268,12 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
   if (optional)
   {
     mutt_expando_format(buf, buflen, col, C_SidebarWidth, if_str,
-                        sidebar_format_str, (unsigned long) sbe, flags);
+                        sidebar_format_str, IP sbe, flags);
   }
   else if (flags & MUTT_FORMAT_OPTIONAL)
   {
     mutt_expando_format(buf, buflen, col, C_SidebarWidth, else_str,
-                        sidebar_format_str, (unsigned long) sbe, flags);
+                        sidebar_format_str, IP sbe, flags);
   }
 
   /* We return the format string, unchanged */
@@ -303,7 +304,7 @@ static void make_sidebar_entry(char *buf, size_t buflen, int width,
     buf[0] = '\0';
 
   mutt_expando_format(buf, buflen, 0, width, NONULL(C_SidebarFormat),
-                      sidebar_format_str, (unsigned long) sbe, MUTT_FORMAT_NO_FLAGS);
+                      sidebar_format_str, IP sbe, MUTT_FORMAT_NO_FLAGS);
 
   /* Force string to be exactly the right width */
   int w = mutt_strwidth(buf);
@@ -379,7 +380,7 @@ static int cb_qsort_sbe(const void *a, const void *b)
 }
 
 /**
- * update_entries_visibility - Should a sidebar_entry be displayed in the sidebar
+ * update_entries_visibility - Should a SbEntry be displayed in the sidebar?
  *
  * For each SbEntry in the Entries array, check whether we should display it.
  * This is determined by several criteria.  If the Mailbox:
@@ -445,7 +446,8 @@ static void unsort_entries(void)
 {
   int i = 0;
 
-  struct MailboxList ml = neomutt_mailboxlist_get_all(NeoMutt, MUTT_MAILBOX_ANY);
+  struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
+  neomutt_mailboxlist_get_all(&ml, NeoMutt, MUTT_MAILBOX_ANY);
   struct MailboxNode *np = NULL;
   STAILQ_FOREACH(np, &ml, entries)
   {
@@ -496,10 +498,10 @@ static void sort_entries(void)
  */
 static bool select_next(void)
 {
-  int entry = HilIndex;
-
-  if (!EntryCount || (HilIndex < 0))
+  if ((EntryCount == 0) || (HilIndex < 0))
     return false;
+
+  int entry = HilIndex;
 
   do
   {
@@ -519,12 +521,12 @@ static bool select_next(void)
  *
  * Search down the list of mail folders for one containing new mail.
  */
-static int select_next_new(void)
+static bool select_next_new(void)
 {
-  int entry = HilIndex;
-
-  if (!EntryCount || (HilIndex < 0))
+  if ((EntryCount == 0) || (HilIndex < 0))
     return false;
+
+  int entry = HilIndex;
 
   do
   {
@@ -551,10 +553,10 @@ static int select_next_new(void)
  */
 static bool select_prev(void)
 {
-  int entry = HilIndex;
-
-  if (!EntryCount || (HilIndex < 0))
+  if ((EntryCount == 0) || (HilIndex < 0))
     return false;
+
+  int entry = HilIndex;
 
   do
   {
@@ -576,10 +578,10 @@ static bool select_prev(void)
  */
 static bool select_prev_new(void)
 {
-  int entry = HilIndex;
-
-  if (!EntryCount || (HilIndex < 0))
+  if ((EntryCount == 0) || (HilIndex < 0))
     return false;
+
+  int entry = HilIndex;
 
   do
   {
@@ -604,12 +606,12 @@ static bool select_prev_new(void)
  * @retval true  Success
  * @retval false Failure
  */
-static int select_page_down(void)
+static bool select_page_down(void)
 {
-  int orig_hil_index = HilIndex;
+  if ((EntryCount == 0) || (BotIndex < 0))
+    return false;
 
-  if (!EntryCount || (BotIndex < 0))
-    return 0;
+  int orig_hil_index = HilIndex;
 
   HilIndex = BotIndex;
   select_next();
@@ -617,7 +619,7 @@ static int select_page_down(void)
   if (Entries[HilIndex]->is_hidden)
     select_prev();
 
-  return orig_hil_index != HilIndex;
+  return (orig_hil_index != HilIndex);
 }
 
 /**
@@ -625,12 +627,12 @@ static int select_page_down(void)
  * @retval true  Success
  * @retval false Failure
  */
-static int select_page_up(void)
+static bool select_page_up(void)
 {
-  int orig_hil_index = HilIndex;
+  if ((EntryCount == 0) || (TopIndex < 0))
+    return false;
 
-  if (!EntryCount || (TopIndex < 0))
-    return 0;
+  int orig_hil_index = HilIndex;
 
   HilIndex = TopIndex;
   select_prev();
@@ -638,7 +640,7 @@ static int select_page_up(void)
   if (Entries[HilIndex]->is_hidden)
     select_next();
 
-  return orig_hil_index != HilIndex;
+  return (orig_hil_index != HilIndex);
 }
 
 /**
@@ -646,12 +648,12 @@ static int select_page_up(void)
  * @retval true  Success
  * @retval false Failure
  */
-static int select_first(void)
+static bool select_first(void)
 {
-  int orig_hil_index = HilIndex;
-
-  if (!EntryCount || (HilIndex < 0))
+  if ((EntryCount == 0) || (HilIndex < 0))
     return false;
+
+  int orig_hil_index = HilIndex;
 
   HilIndex = 0;
   if (Entries[HilIndex]->is_hidden)
@@ -666,12 +668,12 @@ static int select_first(void)
  * @retval true  Success
  * @retval false Failure
  */
-static int select_last(void)
+static bool select_last(void)
 {
-  int orig_hil_index = HilIndex;
-
-  if (!EntryCount || (HilIndex < 0))
+  if ((EntryCount == 0) || (HilIndex < 0))
     return false;
+
+  int orig_hil_index = HilIndex;
 
   HilIndex = EntryCount;
   if (!select_prev())
@@ -694,7 +696,7 @@ static int select_last(void)
  */
 static bool prepare_sidebar(int page_size)
 {
-  if (!EntryCount || (page_size <= 0))
+  if ((EntryCount == 0) || (page_size <= 0))
     return false;
 
   const struct SbEntry *opn_entry = (OpnIndex >= 0) ? Entries[OpnIndex] : NULL;
@@ -830,7 +832,7 @@ static int draw_divider(struct MuttWindow *win, int num_rows, int num_cols)
 
   for (int i = 0; i < num_rows; i++)
   {
-    mutt_window_move(win, i, col);
+    mutt_window_move(win, col, i);
 
     switch (altchar)
     {
@@ -869,7 +871,7 @@ static void fill_empty_space(struct MuttWindow *win, int first_row,
     div_width = 0;
   for (int r = 0; r < num_rows; r++)
   {
-    mutt_window_move(win, first_row + r, div_width);
+    mutt_window_move(win, div_width, first_row + r);
 
     for (int i = 0; i < num_cols; i++)
       mutt_window_addch(' ');
@@ -1085,7 +1087,7 @@ static void draw_sidebar(struct MuttWindow *win, int num_rows, int num_cols, int
     if (C_SidebarOnRight)
       col = div_width;
 
-    mutt_window_move(win, row, col);
+    mutt_window_move(win, col, row);
     if (Context && Context->mailbox && (Context->mailbox->realpath[0] != '\0') &&
         (mutt_str_strcmp(m->realpath, Context->mailbox->realpath) == 0))
     {
@@ -1114,7 +1116,7 @@ static void draw_sidebar(struct MuttWindow *win, int num_rows, int num_cols, int
 
     // At this point, we don't have an abbreviation so let's keep track
     // before using short path.
-    bool no_abbr = mutt_str_strncmp(display, full_path, sizeof(display));
+    bool no_abbr = (mutt_str_strncmp(display, full_path, mutt_str_strlen(display)) != 0);
     if (C_SidebarShortPath)
     {
       display = last_part;
@@ -1146,13 +1148,13 @@ static void draw_sidebar(struct MuttWindow *win, int num_rows, int num_cols, int
 }
 
 /**
- * mutt_sb_draw - Completely redraw the sidebar
+ * sb_draw - Completely redraw the sidebar
  * @param win Window to draw on
  *
  * Completely refresh the sidebar region.  First draw the divider; then, for
  * each Mailbox, call make_sidebar_entry; finally blank out any remaining space.
  */
-void mutt_sb_draw(struct MuttWindow *win)
+void sb_draw(struct MuttWindow *win)
 {
   if (!C_SidebarVisible || !win)
     return;
@@ -1160,8 +1162,8 @@ void mutt_sb_draw(struct MuttWindow *win)
   if (!mutt_window_is_visible(win))
     return;
 
-  int row = 0, col = 0;
-  mutt_window_get_coords(win, &row, &col);
+  int col = 0, row = 0;
+  mutt_window_get_coords(win, &col, &row);
 
   int num_rows = win->state.rows;
   int num_cols = win->state.cols;
@@ -1170,11 +1172,12 @@ void mutt_sb_draw(struct MuttWindow *win)
 
   if (!Entries)
   {
-    struct MailboxList ml = neomutt_mailboxlist_get_all(NeoMutt, MUTT_MAILBOX_ANY);
+    struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
+    neomutt_mailboxlist_get_all(&ml, NeoMutt, MUTT_MAILBOX_ANY);
     struct MailboxNode *np = NULL;
     STAILQ_FOREACH(np, &ml, entries)
     {
-      mutt_sb_notify_mailbox(np->mailbox, true);
+      sb_notify_mailbox(np->mailbox, true);
     }
     neomutt_mailboxlist_clear(&ml);
   }
@@ -1186,11 +1189,11 @@ void mutt_sb_draw(struct MuttWindow *win)
   }
 
   draw_sidebar(win, num_rows, num_cols, div_width);
-  mutt_window_move(win, row, col);
+  mutt_window_move(win, col, row);
 }
 
 /**
- * mutt_sb_change_mailbox - Change the selected mailbox
+ * sb_change_mailbox - Change the selected mailbox
  * @param op Operation code
  *
  * Change the selected mailbox, e.g. "Next mailbox", "Previous Mailbox
@@ -1204,7 +1207,7 @@ void mutt_sb_draw(struct MuttWindow *win)
  * OP_SIDEBAR_PAGE_DOWN, OP_SIDEBAR_PAGE_UP, OP_SIDEBAR_PREV,
  * OP_SIDEBAR_PREV_NEW.
  */
-void mutt_sb_change_mailbox(int op)
+void sb_change_mailbox(int op)
 {
   if (!C_SidebarVisible)
     return;
@@ -1253,28 +1256,28 @@ void mutt_sb_change_mailbox(int op)
 }
 
 /**
- * mutt_sb_get_highlight - Get the Mailbox that's highlighted in the sidebar
+ * sb_get_highlight - Get the Mailbox that's highlighted in the sidebar
  * @retval ptr Mailbox
  */
-struct Mailbox *mutt_sb_get_highlight(void)
+struct Mailbox *sb_get_highlight(void)
 {
   if (!C_SidebarVisible)
     return NULL;
 
-  if (!EntryCount || (HilIndex < 0))
+  if ((EntryCount == 0) || (HilIndex < 0))
     return NULL;
 
   return Entries[HilIndex]->mailbox;
 }
 
 /**
- * mutt_sb_set_open_mailbox - Set the 'open' Mailbox
+ * sb_set_open_mailbox - Set the 'open' Mailbox
  * @param m Mailbox
  *
  * Search through the list of mailboxes.
  * If a Mailbox has a matching path, set OpnMailbox to it.
  */
-void mutt_sb_set_open_mailbox(struct Mailbox *m)
+void sb_set_open_mailbox(struct Mailbox *m)
 {
   OpnIndex = -1;
 
@@ -1293,7 +1296,7 @@ void mutt_sb_set_open_mailbox(struct Mailbox *m)
 }
 
 /**
- * mutt_sb_notify_mailbox - The state of a Mailbox is about to change
+ * sb_notify_mailbox - The state of a Mailbox is about to change
  * @param m       Folder
  * @param created True if folder created, false if deleted
  *
@@ -1303,7 +1306,7 @@ void mutt_sb_set_open_mailbox(struct Mailbox *m)
  *
  * Before a deletion, check that our pointers won't be invalidated.
  */
-void mutt_sb_notify_mailbox(struct Mailbox *m, bool created)
+void sb_notify_mailbox(struct Mailbox *m, bool created)
 {
   if (!m)
     return;
@@ -1327,7 +1330,9 @@ void mutt_sb_notify_mailbox(struct Mailbox *m, bool created)
       BotIndex = EntryCount;
     if ((OpnIndex < 0) && Context &&
         (mutt_str_strcmp(m->realpath, Context->mailbox->realpath) == 0))
+    {
       OpnIndex = EntryCount;
+    }
 
     EntryCount++;
   }
@@ -1361,11 +1366,11 @@ void mutt_sb_notify_mailbox(struct Mailbox *m, bool created)
 }
 
 /**
- * mutt_sb_observer - Listen for config changes affecting the sidebar - Implements ::observer_t
+ * sb_observer - Listen for config changes affecting the sidebar - Implements ::observer_t
  * @param nc Notification data
  * @retval bool True, if successful
  */
-int mutt_sb_observer(struct NotifyCallback *nc)
+int sb_observer(struct NotifyCallback *nc)
 {
   if (!nc->event_data || !nc->global_data)
     return -1;
@@ -1380,9 +1385,9 @@ int mutt_sb_observer(struct NotifyCallback *nc)
 
   bool repaint = false;
 
-  if (win->state.visible == !C_SidebarVisible)
+  if (win->state.visible != C_SidebarVisible)
   {
-    win->state.visible = C_SidebarVisible;
+    window_set_visible(win, C_SidebarVisible);
     repaint = true;
   }
 

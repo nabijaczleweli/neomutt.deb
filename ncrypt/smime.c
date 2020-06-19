@@ -32,6 +32,7 @@
 #include "config.h"
 #include <limits.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -41,9 +42,9 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
-#include "alias.h"
 #include "copy.h"
 #include "crypt.h"
 #include "cryptglue.h"
@@ -214,7 +215,7 @@ bool smime_class_valid_passphrase(void)
  */
 
 /**
- * fmt_smime_command - Format an SMIME command - Implements ::format_t
+ * smime_command_format_str - Format an SMIME command - Implements ::format_t
  *
  * | Expando | Description
  * |:--------|:-----------------------------------------------------------------
@@ -227,10 +228,11 @@ bool smime_class_valid_passphrase(void)
  * | \%k     | The key-pair specified with `$smime_default_key`
  * | \%s     | File containing the signature part of a multipart/signed attachment when verifying it
  */
-static const char *fmt_smime_command(char *buf, size_t buflen, size_t col, int cols,
-                                     char op, const char *src, const char *prec,
-                                     const char *if_str, const char *else_str,
-                                     unsigned long data, MuttFormatFlags flags)
+static const char *smime_command_format_str(char *buf, size_t buflen, size_t col,
+                                            int cols, char op, const char *src,
+                                            const char *prec, const char *if_str,
+                                            const char *else_str, intptr_t data,
+                                            MuttFormatFlags flags)
 {
   char fmt[128];
   struct SmimeCommandContext *cctx = (struct SmimeCommandContext *) data;
@@ -359,13 +361,13 @@ static const char *fmt_smime_command(char *buf, size_t buflen, size_t col, int c
 
   if (optional)
   {
-    mutt_expando_format(buf, buflen, col, cols, if_str, fmt_smime_command, data,
-                        MUTT_FORMAT_NO_FLAGS);
+    mutt_expando_format(buf, buflen, col, cols, if_str,
+                        smime_command_format_str, data, MUTT_FORMAT_NO_FLAGS);
   }
   else if (flags & MUTT_FORMAT_OPTIONAL)
   {
-    mutt_expando_format(buf, buflen, col, cols, else_str, fmt_smime_command,
-                        data, MUTT_FORMAT_NO_FLAGS);
+    mutt_expando_format(buf, buflen, col, cols, else_str,
+                        smime_command_format_str, data, MUTT_FORMAT_NO_FLAGS);
   }
 
   return src;
@@ -381,8 +383,8 @@ static const char *fmt_smime_command(char *buf, size_t buflen, size_t col, int c
 static void smime_command(char *buf, size_t buflen,
                           struct SmimeCommandContext *cctx, const char *fmt)
 {
-  mutt_expando_format(buf, buflen, 0, buflen, NONULL(fmt), fmt_smime_command,
-                      (unsigned long) cctx, MUTT_FORMAT_NO_FLAGS);
+  mutt_expando_format(buf, buflen, 0, buflen, NONULL(fmt), smime_command_format_str,
+                      (intptr_t) cctx, MUTT_FORMAT_NO_FLAGS);
   mutt_debug(LL_DEBUG2, "%s\n", buf);
 }
 
@@ -417,7 +419,7 @@ static pid_t smime_invoke(FILE **fp_smime_in, FILE **fp_smime_out, FILE **fp_smi
   struct SmimeCommandContext cctx = { 0 };
   char cmd[STR_COMMAND];
 
-  if (!format || !*format)
+  if (!format || (*format == '\0'))
     return (pid_t) -1;
 
   cctx.fname = fname;
@@ -469,7 +471,7 @@ static char *smime_key_flags(KeyFlags flags)
  */
 static void smime_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
-  struct SmimeKey **table = menu->data;
+  struct SmimeKey **table = menu->mdata;
   struct SmimeKey *key = table[line];
   char *truststate = NULL;
   switch (key->trust)
@@ -577,19 +579,21 @@ static struct SmimeKey *smime_select_key(struct SmimeKey *keys, char *query)
   strcat(helpstr, buf);
 
   struct MuttWindow *dlg =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_DLG_SMIME, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-#ifdef USE_DEBUG_WINDOW
-  dlg->name = "smime";
-#endif
-  dlg->type = WT_DIALOG;
+  dlg->notify = notify_new();
+
   struct MuttWindow *index =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  index->type = WT_INDEX;
-  struct MuttWindow *ibar = mutt_window_new(
-      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
-  ibar->type = WT_INDEX_BAR;
+  index->notify = notify_new();
+  notify_set_parent(index->notify, dlg->notify);
+
+  struct MuttWindow *ibar =
+      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
+                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
+  ibar->notify = notify_new();
+  notify_set_parent(ibar->notify, dlg->notify);
 
   if (C_StatusOnTop)
   {
@@ -614,7 +618,7 @@ static struct SmimeKey *smime_select_key(struct SmimeKey *keys, char *query)
   menu->max = table_index;
   menu->make_entry = smime_make_entry;
   menu->help = helpstr;
-  menu->data = table;
+  menu->mdata = table;
   menu->title = title;
   mutt_menu_push_current(menu);
   /* sorting keys might be done later - TODO */
@@ -696,7 +700,7 @@ static struct SmimeKey *smime_parse_key(char *buf)
 
     /* For backward compatibility, don't count consecutive delimiters
      * as an empty field.  */
-    if (!*p)
+    if (*p == '\0')
       continue;
 
     field++;
@@ -783,7 +787,7 @@ static struct SmimeKey *smime_get_candidates(char *search, bool only_public_key)
 
   while (fgets(buf, sizeof(buf), fp))
   {
-    if ((!*search) || mutt_str_stristr(buf, search))
+    if (((*search == '\0')) || mutt_str_stristr(buf, search))
     {
       key = smime_parse_key(buf);
       if (key)
@@ -972,7 +976,7 @@ static struct SmimeKey *smime_ask_for_key(char *prompt, KeyFlags abilities, bool
   while (true)
   {
     resp[0] = '\0';
-    if (mutt_get_field(prompt, resp, sizeof(resp), MUTT_CLEAR) != 0)
+    if (mutt_get_field(prompt, resp, sizeof(resp), MUTT_COMP_NO_FLAGS) != 0)
       return NULL;
 
     key = smime_get_key_by_str(resp, abilities, only_public_key);
@@ -1748,7 +1752,7 @@ struct Body *smime_class_sign_message(struct Body *a, const struct AddressList *
   char *intermediates = NULL;
 
   char *signas = C_SmimeSignAs ? C_SmimeSignAs : C_SmimeDefaultKey;
-  if (!signas || !*signas)
+  if (!signas || (*signas == '\0'))
   {
     mutt_error(_("Can't sign: No key specified. Use Sign As."));
     return NULL;
@@ -2007,13 +2011,12 @@ int smime_class_verify_one(struct Body *sigbdy, struct State *s, const char *tem
     else
     {
       char *line = NULL;
-      int lineno = 0;
       size_t linelen;
 
       fflush(fp_smime_err);
       rewind(fp_smime_err);
 
-      line = mutt_file_read_line(line, &linelen, fp_smime_err, &lineno, 0);
+      line = mutt_file_read_line(line, &linelen, fp_smime_err, NULL, 0);
       if (linelen && (mutt_str_strcasecmp(line, "verification successful") == 0))
         badsig = 0;
 
@@ -2255,12 +2258,11 @@ static struct Body *smime_handle_entity(struct Body *m, struct State *s, FILE *f
   if (type & SEC_SIGNOPAQUE)
   {
     char *line = NULL;
-    int lineno = 0;
     size_t linelen;
 
     rewind(fp_smime_err);
 
-    line = mutt_file_read_line(line, &linelen, fp_smime_err, &lineno, 0);
+    line = mutt_file_read_line(line, &linelen, fp_smime_err, NULL, 0);
     if (linelen && (mutt_str_strcasecmp(line, "verification successful") == 0))
       m->goodsig = true;
     FREE(&line);

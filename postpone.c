@@ -206,7 +206,7 @@ void mutt_update_num_postponed(void)
  */
 static void post_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
-  struct Context *ctx = menu->data;
+  struct Context *ctx = menu->mdata;
 
   mutt_make_string_flags(buf, buflen, menu->win_index->state.cols,
                          NONULL(C_IndexFormat), ctx, ctx->mailbox,
@@ -225,19 +225,21 @@ static struct Email *select_msg(struct Context *ctx)
   char helpstr[1024];
 
   struct MuttWindow *dlg =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_DLG_POSTPONE, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-#ifdef USE_DEBUG_WINDOW
-  dlg->name = "postpone";
-#endif
-  dlg->type = WT_DIALOG;
+  dlg->notify = notify_new();
+
   struct MuttWindow *index =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  index->type = WT_INDEX;
-  struct MuttWindow *ibar = mutt_window_new(
-      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
-  ibar->type = WT_INDEX_BAR;
+  index->notify = notify_new();
+  notify_set_parent(index->notify, dlg->notify);
+
+  struct MuttWindow *ibar =
+      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
+                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
+  ibar->notify = notify_new();
+  notify_set_parent(ibar->notify, dlg->notify);
 
   if (C_StatusOnTop)
   {
@@ -261,7 +263,7 @@ static struct Email *select_msg(struct Context *ctx)
   menu->make_entry = post_make_entry;
   menu->max = ctx->mailbox->msg_count;
   menu->title = _("Postponed Messages");
-  menu->data = ctx;
+  menu->mdata = ctx;
   menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_POSTPONE, PostponeHelp);
   mutt_menu_push_current(menu);
 
@@ -554,7 +556,8 @@ SecurityFlags mutt_parse_crypt_hdr(const char *p, bool set_empty_signas, Securit
           break;
 
         for (p += 2; (p[0] != '\0') && (p[0] != '>'); p++)
-          ;
+          ; // do nothing
+
         if (p[0] != '>')
         {
           mutt_error(_("Illegal crypto header"));

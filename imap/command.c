@@ -34,10 +34,11 @@
 #include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "imap_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
@@ -770,29 +771,6 @@ static void cmd_parse_myrights(struct ImapAccountData *adata, const char *s)
 }
 
 /**
- * cmd_parse_search - store SEARCH response for later use
- * @param adata Imap Account data
- * @param s     Command string with search results
- */
-static void cmd_parse_search(struct ImapAccountData *adata, const char *s)
-{
-  unsigned int uid;
-  struct Email *e = NULL;
-  struct ImapMboxData *mdata = adata->mailbox->mdata;
-
-  mutt_debug(LL_DEBUG2, "Handling SEARCH\n");
-
-  while ((s = imap_next_word((char *) s)) && (*s != '\0'))
-  {
-    if (mutt_str_atoui(s, &uid) < 0)
-      continue;
-    e = mutt_hash_int_find(mdata->uid_hash, uid);
-    if (e)
-      e->matched = true;
-  }
-}
-
-/**
  * find_mailbox - Find a Mailbox by its name
  * @param adata Imap Account data
  * @param name  Mailbox to find
@@ -1189,9 +1167,11 @@ int imap_cmd_step(struct ImapAccountData *adata)
           adata->lastcmd = (adata->lastcmd + 1) % adata->cmdslots;
         }
         cmd->state = cmd_status(adata->buf);
-        /* bogus - we don't know which command result to return here. Caller
-         * should provide a tag. */
         rc = cmd->state;
+        if (cmd->state == IMAP_RES_NO || cmd->state == IMAP_RES_BAD)
+        {
+          mutt_message(_("IMAP command failed: %s"), adata->buf);
+        }
       }
       else
         stillrunning++;
@@ -1270,6 +1250,13 @@ int imap_exec(struct ImapAccountData *adata, const char *cmdstr, ImapCmdFlags fl
 {
   int rc;
 
+  if (flags & IMAP_CMD_SINGLE)
+  {
+    // Process any existing commands
+    if (adata->nextcmd != adata->lastcmd)
+      imap_exec(adata, NULL, IMAP_CMD_POLL);
+  }
+
   rc = cmd_start(adata, cmdstr, flags);
   if (rc < 0)
   {
@@ -1293,6 +1280,9 @@ int imap_exec(struct ImapAccountData *adata, const char *cmdstr, ImapCmdFlags fl
   do
   {
     rc = imap_cmd_step(adata);
+    // The queue is empty, so the single command has been processed
+    if ((flags & IMAP_CMD_SINGLE) && (adata->nextcmd == adata->lastcmd))
+      break;
   } while (rc == IMAP_RES_CONTINUE);
   mutt_sig_allow_interrupt(false);
 

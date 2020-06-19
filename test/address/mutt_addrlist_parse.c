@@ -26,7 +26,7 @@
 #include "acutest.h"
 #include "mutt/lib.h"
 #include "address/lib.h"
-#include "common.h"
+#include "test_common.h"
 
 void test_mutt_addrlist_parse(void)
 {
@@ -102,5 +102,11 @@ void test_mutt_addrlist_parse(void)
     const struct Address *a = TAILQ_FIRST(&alist);
     TEST_CHECK_STR_EQ("Foo (Bar)", a->personal);
     TEST_CHECK_STR_EQ("foo@bar.baz", a->mailbox);
+  }
+
+  {
+    struct AddressList alist = TAILQ_HEAD_INITIALIZER(alist);
+    int parsed = mutt_addrlist_parse(&alist, "\\");
+    TEST_CHECK(parsed == 0);
   }
 }

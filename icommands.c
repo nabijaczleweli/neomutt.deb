@@ -70,13 +70,14 @@ const struct ICommand ICommandList[] = {
  * @param line Command to execute
  * @param err  Buffer for error messages
  * @retval #MUTT_CMD_SUCCESS Success
- * @retval #MUTT_CMD_ERROR   Error (no message): command not found
- * @retval #MUTT_CMD_ERROR   Error with message: command failed
  * @retval #MUTT_CMD_WARNING Warning with message: command failed
+ * @retval #MUTT_CMD_ERROR
+ * - Error (no message): command not found
+ * - Error with message: command failed
  */
 enum CommandResult mutt_parse_icommand(/* const */ char *line, struct Buffer *err)
 {
-  if (!line || !*line || !err)
+  if (!line || (*line == '\0') || !err)
     return MUTT_CMD_ERROR;
 
   enum CommandResult rc = MUTT_CMD_ERROR;
@@ -269,8 +270,8 @@ static enum CommandResult icmd_bind(struct Buffer *buf, struct Buffer *s,
 
   if (mutt_buffer_is_empty(&filebuf))
   {
-    // L10N: '%s' is the name of the menu, e.g. 'index' or 'pager', it might
-    // L10N: also be 'all' when all menus are affected.
+    // L10N: '%s' is the name of the menu, e.g. 'index' or 'pager',
+    //       it might also be 'all' when all menus are affected.
     mutt_buffer_printf(err, bind ? _("%s: no binds for this menu") : _("%s: no macros for this menu"),
                        dump_all ? "all" : buf->data);
     mutt_buffer_dealloc(&filebuf);

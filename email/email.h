@@ -28,8 +28,8 @@
 #include <stdbool.h>
 #include <time.h>
 #include "mutt/lib.h"
-#include "ncrypt/lib.h"
 #include "tags.h"
+#include "ncrypt/lib.h"
 
 /**
  * struct Email - The envelope/body of an email
@@ -104,7 +104,7 @@ struct Email
   char *maildir_flags;         ///< Unknown maildir flags
 
   void *edata;                    ///< Driver-specific data
-  void (*free_edata)(void **ptr); ///< Driver-specific data free function
+  void (*edata_free)(void **ptr); ///< Driver-specific data free function
   struct Notify *notify;          ///< Notifications handler
 };
 
@@ -119,22 +119,23 @@ struct EmailNode
 STAILQ_HEAD(EmailList, EmailNode);
 
 /**
+ * enum NotifyEmail - Types of Email Event
+ *
+ * Observers of #NT_EMAIL will be passed an #EventEmail.
+ */
+enum NotifyEmail
+{
+  NT_EMAIL_ADD = 1, ///< A new Email has just been created
+  NT_EMAIL_REMOVE,  ///< An Email is about to be destroyed
+};
+
+/**
  * struct EventEmail - An Event that happened to an Email
  */
 struct EventEmail
 {
   int num_emails;
   struct Email **emails;
-};
-
-/**
- * enum NotifyEmail - Types of Email Event
- */
-enum NotifyEmail
-{
-  NT_EMAIL_ADD = 1,
-  NT_EMAIL_REMOVE,
-  NT_EMAIL_NEW,
 };
 
 bool          email_cmp_strict(const struct Email *e1, const struct Email *e2);

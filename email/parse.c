@@ -274,13 +274,13 @@ static void parse_content_disposition(const char *s, struct Body *ct)
  */
 static void parse_references(struct ListHead *head, const char *s)
 {
-  char *m = NULL;
-  const char *sp = NULL;
+  if (!head)
+    return;
 
-  while ((m = mutt_extract_message_id(s, &sp)))
+  char *m = NULL;
+  for (size_t off = 0; (m = mutt_extract_message_id(s, &off)); s += off)
   {
     mutt_list_insert_head(head, m);
-    s = NULL;
   }
 }
 
@@ -348,75 +348,39 @@ enum ContentType mutt_check_mime_type(const char *s)
 /**
  * mutt_extract_message_id - Find a message-id
  * @param[in]  s String to parse
- * @param[out] saveptr Save result here
- * @retval ptr  First character after message-id
+ * @param[out] len Number of bytes of s parsed
+ * @retval ptr  Message id found
  * @retval NULL No more message ids
- *
- * Extract the first substring that looks like a message-id.
- * Call back with NULL for more (like strtok).
  */
-char *mutt_extract_message_id(const char *s, const char **saveptr)
+char *mutt_extract_message_id(const char *s, size_t *len)
 {
-  const char *o = NULL, *onull = NULL, *p = NULL;
-  char *ret = NULL;
-
-  if (s)
-    p = s;
-  else if (saveptr && *saveptr)
-    p = *saveptr;
-  else
+  if (!s || (*s == '\0'))
     return NULL;
 
-  for (s = NULL, o = NULL, onull = NULL; (p = strpbrk(p, "<> \t;")); p++)
+  char *decoded = mutt_str_strdup(s);
+  rfc2047_decode(&decoded);
+
+  char *res = NULL;
+
+  for (const char *p = decoded, *beg = NULL; *p; p++)
   {
     if (*p == '<')
     {
-      s = p;
-      o = NULL;
-      onull = NULL;
+      beg = p;
       continue;
     }
 
-    if (!s)
-      continue;
-
-    if (*p == '>')
+    if (beg && *p == '>')
     {
-      size_t olen = onull - o;
-      size_t slen = p - s + 1;
-      ret = mutt_mem_malloc(olen + slen + 1);
-      if (o)
-        memcpy(ret, o, olen);
-      memcpy(ret + olen, s, slen);
-      ret[olen + slen] = '\0';
-      if (saveptr)
-        *saveptr = p + 1; /* next call starts after '>' */
-      return ret;
-    }
-
-    /* some idiotic clients break their message-ids between lines */
-    if (s == p)
-    {
-      /* step past another whitespace */
-      s = p + 1;
-    }
-    else if (o)
-    {
-      /* more than two lines, give up */
-      s = NULL;
-      o = NULL;
-      onull = NULL;
-    }
-    else
-    {
-      /* remember the first line, start looking for the second */
-      o = s;
-      onull = p;
-      s = p + 1;
+      if (len)
+        *len = p - decoded + 1;
+      res = mutt_str_substr_dup(beg, p + 1);
+      break;
     }
   }
 
-  return NULL;
+  FREE(&decoded);
+  return res;
 }
 
 /**
@@ -490,7 +454,8 @@ void mutt_parse_content_type(const char *s, struct Body *ct)
   {
     *subtype++ = '\0';
     for (pc = subtype; *pc && !IS_SPACE(*pc) && (*pc != ';'); pc++)
-      ;
+      ; // do nothing
+
     *pc = '\0';
     ct->subtype = mutt_str_strdup(subtype);
   }
@@ -803,16 +768,18 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, char *line,
             if (!end)
               break;
 
+            char *mlist = mutt_str_substr_dup(beg, end);
             /* Take the first mailto URL */
-            if (url_check_scheme(beg) == U_MAILTO)
+            if (url_check_scheme(mlist) == U_MAILTO)
             {
               FREE(&env->list_post);
-              env->list_post = mutt_str_substr_dup(beg, end);
+              env->list_post = mlist;
               if (C_AutoSubscribe)
                 mutt_auto_subscribe(env->list_post);
 
               break;
             }
+            FREE(&mlist);
           }
         }
         matched = true;
@@ -1027,6 +994,7 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, char *line,
         mutt_addrlist_parse(&env->x_original_to, p);
         matched = true;
       }
+      break;
 
     default:
       break;
@@ -1102,7 +1070,8 @@ char *mutt_rfc822_read_line(FILE *fp, char *line, size_t *linelen)
 
       /* eat tabs and spaces from the beginning of the continuation line */
       while (((ch = fgetc(fp)) == ' ') || (ch == '\t'))
-        ;
+        ; // do nothing
+
       ungetc(ch, fp);
       *++buf = ' '; /* string is still terminated because we removed
                        at least one whitespace char above */
@@ -1230,7 +1199,7 @@ struct Envelope *mutt_rfc822_read_header(FILE *fp, struct Email *e, bool user_hd
 
     *p = '\0';
     p = mutt_str_skip_email_wsp(p + 1);
-    if (!*p)
+    if (*p == '\0')
       continue; /* skip empty header fields */
 
     mutt_rfc822_parse_line(env, e, line, p, user_hdrs, weed, true);
@@ -1315,7 +1284,7 @@ struct Body *mutt_read_mime_header(FILE *fp, bool digest)
     {
       *c = '\0';
       c = mutt_str_skip_email_wsp(c + 1);
-      if (!*c)
+      if (*c == '\0')
       {
         mutt_debug(LL_DEBUG1, "skipping empty header field: %s\n", line);
         continue;

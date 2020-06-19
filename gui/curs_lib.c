@@ -276,7 +276,7 @@ int mutt_buffer_get_field_full(const char *field, struct Buffer *buf, Completion
     mutt_window_addstr(field);
     mutt_curses_set_color(MT_COLOR_NORMAL);
     mutt_refresh();
-    mutt_window_get_coords(MuttMessageWindow, NULL, &col);
+    mutt_window_get_coords(MuttMessageWindow, &col, NULL);
     ret = mutt_enter_string_full(buf->data, buf->dsize, col, complete, multiple,
                                  files, numfiles, es);
   } while (ret == 1);
@@ -602,7 +602,7 @@ int mutt_any_key_to_continue(const char *s)
   char ch = '\0';
   // Wait for a character.  This might timeout, so loop.
   while (read(fd, &ch, 1) == 0)
-    ;
+    ; // do nothing
 
   // Change the tty settings to be non-blocking
   term.c_cc[VMIN] = 0;  // Returning with zero characters is acceptable
@@ -610,8 +610,8 @@ int mutt_any_key_to_continue(const char *s)
   tcsetattr(fd, TCSANOW, &term);
 
   char buf[64];
-  while (read(fd, buf, sizeof(buf)) > 0) // Mop up any remaining chars
-    ;
+  while (read(fd, buf, sizeof(buf)) > 0)
+    ; // Mop up any remaining chars
 
   tcsetattr(fd, TCSANOW, &old); // Restore the previous tty settings
   close(fd);
@@ -670,19 +670,21 @@ int mutt_do_pager(const char *banner, const char *tempfile, PagerFlags do_color,
     info = &info2;
 
   struct MuttWindow *dlg =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_DLG_DO_PAGER, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-#ifdef USE_DEBUG_WINDOW
-  dlg->name = "do-pager";
-#endif
-  dlg->type = WT_DIALOG;
+  dlg->notify = notify_new();
+
   struct MuttWindow *pager =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_PAGER, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  pager->type = WT_PAGER;
-  struct MuttWindow *pbar = mutt_window_new(
-      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
-  pbar->type = WT_PAGER_BAR;
+  pager->notify = notify_new();
+  notify_set_parent(pager->notify, dlg->notify);
+
+  struct MuttWindow *pbar =
+      mutt_window_new(WT_PAGER_BAR, MUTT_WIN_ORIENT_VERTICAL,
+                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
+  pbar->notify = notify_new();
+  notify_set_parent(pbar->notify, dlg->notify);
 
   if (C_StatusOnTop)
   {

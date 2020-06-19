@@ -46,18 +46,94 @@ struct MuttWindow *MuttHelpWindow = NULL;    ///< Help Window
 struct MuttWindow *MuttMessageWindow = NULL; ///< Message Window
 
 /**
+ * window_notify - Notify observers of changes to a Window
+ * @param win Window
+ */
+static void window_notify(struct MuttWindow *win)
+{
+  if (!win->notify)
+    return;
+
+  const struct WindowState *old = &win->old;
+  const struct WindowState *new = &win->state;
+  WindowNotifyFlags flags = WN_NO_FLAGS;
+
+  if (new->visible != old->visible)
+    flags |= new->visible ? WN_VISIBLE : WN_HIDDEN;
+
+  if ((new->row_offset != old->row_offset) || (new->col_offset != old->col_offset))
+    flags |= WN_MOVED;
+
+  if (new->rows > old->rows)
+    flags |= WN_TALLER;
+  else if (new->rows < old->rows)
+    flags |= WN_SHORTER;
+
+  if (new->cols > old->cols)
+    flags |= WN_WIDER;
+  else if (new->cols < old->cols)
+    flags |= WN_NARROWER;
+
+  if (flags == WN_NO_FLAGS)
+    return;
+
+  struct EventWindow ev_w = { win, flags };
+  notify_send(win->notify, NT_WINDOW, NT_WINDOW_STATE, &ev_w);
+  win->old = win->state;
+}
+
+/**
+ * window_notify_all - Notify observers of changes to a Window and its children
+ * @param win Window
+ */
+void window_notify_all(struct MuttWindow *win)
+{
+  if (!win)
+    win = RootWindow;
+
+  window_notify(win);
+
+  struct MuttWindow *np = NULL;
+  TAILQ_FOREACH(np, &win->children, entries)
+  {
+    window_notify_all(np);
+  }
+}
+
+/**
+ * window_set_visible - Set a Window (and its children) visible or hidden
+ * @param win     Window
+ * @param visible If true, make Window visible, otherwise hidden
+ */
+void window_set_visible(struct MuttWindow *win, bool visible)
+{
+  if (!win)
+    win = RootWindow;
+
+  win->state.visible = visible;
+
+  struct MuttWindow *np = NULL;
+  TAILQ_FOREACH(np, &win->children, entries)
+  {
+    window_set_visible(np, visible);
+  }
+}
+
+/**
  * mutt_window_new - Create a new Window
+ * @param type   Window type, e.g. #WT_ROOT
  * @param orient Window orientation, e.g. #MUTT_WIN_ORIENT_VERTICAL
  * @param size   Window size, e.g. #MUTT_WIN_SIZE_MAXIMISE
- * @param rows   Initial number of rows to allocate, can be #MUTT_WIN_SIZE_UNLIMITED
  * @param cols   Initial number of columns to allocate, can be #MUTT_WIN_SIZE_UNLIMITED
+ * @param rows   Initial number of rows to allocate, can be #MUTT_WIN_SIZE_UNLIMITED
  * @retval ptr New Window
  */
-struct MuttWindow *mutt_window_new(enum MuttWindowOrientation orient,
-                                   enum MuttWindowSize size, int rows, int cols)
+struct MuttWindow *mutt_window_new(enum WindowType type, enum MuttWindowOrientation orient,
+                                   enum MuttWindowSize size, int cols, int rows)
 {
   struct MuttWindow *win = mutt_mem_calloc(1, sizeof(struct MuttWindow));
 
+  win->type = type;
   win->orient = orient;
   win->size = size;
   win->req_rows = rows;
@@ -78,8 +154,10 @@ void mutt_window_free(struct MuttWindow **ptr)
 
   struct MuttWindow *win = *ptr;
 
-  if (win->wdata && win->free_wdata)
-    win->free_wdata(win, &win->wdata); // Custom function to free private data
+  notify_free(&win->notify);
+
+  if (win->wdata && win->wdata_free)
+    win->wdata_free(win, &win->wdata); // Custom function to free private data
 
   mutt_winlist_free(&win->children);
 
@@ -111,7 +189,7 @@ static int vw_printw(SLcurses_Window_Type *win, const char *fmt, va_list ap)
  */
 void mutt_window_clearline(struct MuttWindow *win, int row)
 {
-  mutt_window_move(win, row, 0);
+  mutt_window_move(win, 0, row);
   mutt_window_clrtoeol(win);
 }
 
@@ -211,13 +289,13 @@ void mutt_window_free_all(void)
 /**
  * mutt_window_get_coords - Get the cursor position in the Window
  * @param[in]  win Window
- * @param[out] row Row in Window
  * @param[out] col Column in Window
+ * @param[out] row Row in Window
  *
  * Assumes the current position is inside the window.  Otherwise it will
  * happily return negative or values outside the window boundaries
  */
-void mutt_window_get_coords(struct MuttWindow *win, int *row, int *col)
+void mutt_window_get_coords(struct MuttWindow *win, int *col, int *row)
 {
   int x = 0;
   int y = 0;
@@ -239,18 +317,27 @@ void mutt_window_init(void)
   if (RootWindow)
     return;
 
-  RootWindow = mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 0, 0);
-  RootWindow->type = WT_ROOT;
-  MuttHelpWindow = mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED,
-                                   1, MUTT_WIN_SIZE_UNLIMITED);
-  MuttHelpWindow->type = WT_HELP_BAR;
+  RootWindow =
+      mutt_window_new(WT_ROOT, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 0, 0);
+  RootWindow->notify = notify_new();
+  notify_set_parent(RootWindow->notify, NeoMutt->notify);
+
+  MuttHelpWindow = mutt_window_new(WT_HELP_BAR, MUTT_WIN_ORIENT_VERTICAL,
+                                   MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
   MuttHelpWindow->state.visible = C_Help;
-  MuttDialogWindow = mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                                     MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  MuttDialogWindow->type = WT_ALL_DIALOGS;
-  MuttMessageWindow = mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED,
-                                      1, MUTT_WIN_SIZE_UNLIMITED);
-  MuttMessageWindow->type = WT_MESSAGE;
+  MuttHelpWindow->notify = notify_new();
+  notify_set_parent(MuttHelpWindow->notify, RootWindow->notify);
+
+  MuttDialogWindow = mutt_window_new(WT_ALL_DIALOGS, MUTT_WIN_ORIENT_VERTICAL,
+                                     MUTT_WIN_SIZE_MAXIMISE, MUTT_WIN_SIZE_UNLIMITED,
+                                     MUTT_WIN_SIZE_UNLIMITED);
+  MuttDialogWindow->notify = notify_new();
+  notify_set_parent(MuttDialogWindow->notify, RootWindow->notify);
+
+  MuttMessageWindow = mutt_window_new(WT_MESSAGE, MUTT_WIN_ORIENT_VERTICAL,
+                                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
+  MuttMessageWindow->notify = notify_new();
+  notify_set_parent(MuttMessageWindow->notify, RootWindow->notify);
 
   if (C_StatusOnTop)
   {
@@ -270,12 +357,12 @@ void mutt_window_init(void)
 /**
  * mutt_window_move - Move the cursor in a Window
  * @param win Window
- * @param row Row to move to
  * @param col Column to move to
+ * @param row Row to move to
  * @retval OK  Success
  * @retval ERR Error
  */
-int mutt_window_move(struct MuttWindow *win, int row, int col)
+int mutt_window_move(struct MuttWindow *win, int col, int row)
 {
   return move(win->state.row_offset + row, win->state.col_offset + col);
 }
@@ -283,13 +370,13 @@ int mutt_window_move(struct MuttWindow *win, int row, int col)
 /**
  * mutt_window_mvaddstr - Move the cursor and write a fixed string to a Window
  * @param win Window to write to
- * @param row Row to move to
  * @param col Column to move to
+ * @param row Row to move to
  * @param str String to write
  * @retval OK  Success
  * @retval ERR Error
  */
-int mutt_window_mvaddstr(struct MuttWindow *win, int row, int col, const char *str)
+int mutt_window_mvaddstr(struct MuttWindow *win, int col, int row, const char *str)
 {
 #ifdef USE_SLANG_CURSES
   return mvaddstr(win->state.row_offset + row, win->state.col_offset + col, (char *) str);
@@ -301,16 +388,16 @@ int mutt_window_mvaddstr(struct MuttWindow *win, int row, int col, const char *s
 /**
  * mutt_window_mvprintw - Move the cursor and write a formatted string to a Window
  * @param win Window to write to
- * @param row Row to move to
  * @param col Column to move to
+ * @param row Row to move to
  * @param fmt printf format string
  * @param ... printf arguments
  * @retval num Success, characters written
  * @retval ERR Error, move failed
  */
-int mutt_window_mvprintw(struct MuttWindow *win, int row, int col, const char *fmt, ...)
+int mutt_window_mvprintw(struct MuttWindow *win, int col, int row, const char *fmt, ...)
 {
-  int rc = mutt_window_move(win, row, col);
+  int rc = mutt_window_move(win, col, row);
   if (rc == ERR)
     return rc;
 
@@ -347,8 +434,12 @@ void mutt_window_reflow(struct MuttWindow *win)
   if (OptNoCurses)
     return;
 
+  if (!win)
+    win = RootWindow;
+
   mutt_debug(LL_DEBUG2, "entering\n");
-  window_reflow(win ? win : RootWindow);
+  window_reflow(win);
+  window_notify_all(win);
 
   mutt_menu_set_current_redraw_full();
   /* the pager menu needs this flag set to recalc line_info */
@@ -441,10 +532,10 @@ int mutt_window_addstr(const char *str)
 
 /**
  * mutt_window_move_abs - Move the cursor to an absolute screen position
- * @param row Screen row (0-based)
  * @param col Screen column (0-based)
+ * @param row Screen row (0-based)
  */
-void mutt_window_move_abs(int row, int col)
+void mutt_window_move_abs(int col, int row)
 {
   move(row, col);
 }
@@ -494,7 +585,7 @@ void mutt_winlist_free(struct MuttWindowList *head)
   {
     TAILQ_REMOVE(head, np, entries);
     mutt_winlist_free(&np->children);
-    FREE(&np);
+    mutt_window_free(&np);
   }
 }
 
@@ -503,7 +594,7 @@ void mutt_winlist_free(struct MuttWindowList *head)
  * @param rows
  * @param cols
  */
-void mutt_window_set_root(int rows, int cols)
+void mutt_window_set_root(int cols, int rows)
 {
   if (!RootWindow)
     return;
@@ -555,16 +646,17 @@ bool mutt_window_is_visible(struct MuttWindow *win)
  * @param win Window
  * @retval ptr Dialog
  *
- * Windows may be nested under a MuttWindow of type #WT_DIALOG.
+ * Dialog Windows will be owned by a MuttWindow of type #WT_ALL_DIALOGS.
  */
 struct MuttWindow *mutt_window_dialog(struct MuttWindow *win)
 {
-  if (!win)
-    return NULL;
-  if (win->type == WT_DIALOG)
-    return win;
+  for (; win && win->parent; win = win->parent)
+  {
+    if (win->parent->type == WT_ALL_DIALOGS)
+      return win;
+  }
 
-  return mutt_window_dialog(win->parent);
+  return NULL;
 }
 
 /**
@@ -612,7 +704,9 @@ void dialog_push(struct MuttWindow *dlg)
     last->state.visible = false;
 
   TAILQ_INSERT_TAIL(&MuttDialogWindow->children, dlg, entries);
+  notify_set_parent(dlg->notify, MuttDialogWindow->notify);
   dlg->state.visible = true;
+  dlg->parent = MuttDialogWindow;
   mutt_window_reflow(MuttDialogWindow);
 #ifdef USE_DEBUG_WINDOW
   debug_win_dump();
@@ -635,6 +729,7 @@ void dialog_pop(void)
     return;
 
   last->state.visible = false;
+  last->parent = NULL;
   TAILQ_REMOVE(&MuttDialogWindow->children, last, entries);
 
   last = TAILQ_LAST(&MuttDialogWindow->children, MuttWindowList);
@@ -643,6 +738,7 @@ void dialog_pop(void)
     last->state.visible = true;
     mutt_window_reflow(MuttDialogWindow);
   }
+  mutt_menu_set_current_redraw(REDRAW_FULL);
 #ifdef USE_DEBUG_WINDOW
   debug_win_dump();
 #endif

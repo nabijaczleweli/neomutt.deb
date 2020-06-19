@@ -52,10 +52,10 @@
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
+#include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
 #include "crypt_gpgme.h"
-#include "alias.h"
 #include "crypt.h"
 #include "format_flags.h"
 #include "globals.h"
@@ -541,8 +541,7 @@ static const char *crypt_fpr(struct CryptKeyInfo *k)
 /**
  * crypt_fpr_or_lkeyid - Find the fingerprint of a key
  * @param k Key to examine
- * @retval ptr Fingerprint if available
- * @retval ptr Otherwise the long keyid
+ * @retval ptr Fingerprint if available, otherwise the long keyid
  */
 static const char *crypt_fpr_or_lkeyid(struct CryptKeyInfo *k)
 {
@@ -1695,7 +1694,7 @@ static int show_sig_summary(unsigned long sum, gpgme_ctx_t ctx, gpgme_key_t key,
     gpgme_verify_result_t result = gpgme_op_verify_result(ctx);
 
     for (sig2 = result->signatures, i = 0; sig2 && (i < idx); sig2 = sig2->next, i++)
-      ;
+      ; // do nothing
 
     state_puts(s, _("Warning: The signature expired at: "));
     print_time(sig2 ? sig2->exp_timestamp : 0, s);
@@ -1734,7 +1733,8 @@ static int show_sig_summary(unsigned long sum, gpgme_ctx_t ctx, gpgme_key_t key,
     /* Try to figure out some more detailed system error information. */
     result = gpgme_op_verify_result(ctx);
     for (sig2 = result->signatures, i = 0; sig2 && (i < idx); sig2 = sig2->next, i++)
-      ;
+      ; // do nothing
+
     if (sig2)
     {
       t0 = "";
@@ -1843,7 +1843,7 @@ static void show_one_sig_validity(gpgme_ctx_t ctx, int idx, struct State *s)
   gpgme_verify_result_t result = gpgme_op_verify_result(ctx);
   if (result)
     for (sig = result->signatures; sig && (idx > 0); sig = sig->next, idx--)
-      ;
+      ; // do nothing
 
   switch (sig ? sig->validity : 0)
   {
@@ -1967,7 +1967,8 @@ static int show_one_sig_status(gpgme_ctx_t ctx, int idx, struct State *s)
      * -moritz.  */
     int i;
     for (i = 0, sig = result->signatures; sig && (i < idx); i++, sig = sig->next)
-      ;
+      ; // do nothing
+
     if (!sig)
       return -1; /* Signature not found.  */
 
@@ -2069,7 +2070,7 @@ static int show_one_sig_status(gpgme_ctx_t ctx, int idx, struct State *s)
  * @retval  2 Warnings
  * @retval -1 Error
  *
- * With IS_SMIME set to true we assume S/MIME.
+ * With is_smime set to true we assume S/MIME.
  */
 static int verify_one(struct Body *sigbdy, struct State *s, const char *tempfile, bool is_smime)
 {
@@ -3440,7 +3441,7 @@ int smime_gpgme_application_handler(struct Body *a, struct State *s)
 static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int cols,
                                     char op, const char *src, const char *prec,
                                     const char *if_str, const char *else_str,
-                                    unsigned long data, MuttFormatFlags flags)
+                                    intptr_t data, MuttFormatFlags flags)
 {
   char fmt[128];
   bool optional = (flags & MUTT_FORMAT_OPTIONAL);
@@ -3647,7 +3648,7 @@ static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int co
  */
 static void crypt_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
-  struct CryptKeyInfo **key_table = menu->data;
+  struct CryptKeyInfo **key_table = menu->mdata;
   struct CryptEntry entry;
 
   entry.key = key_table[line];
@@ -3655,7 +3656,7 @@ static void crypt_make_entry(char *buf, size_t buflen, struct Menu *menu, int li
 
   mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
                       NONULL(C_PgpEntryFormat), crypt_format_str,
-                      (unsigned long) &entry, MUTT_FORMAT_ARROWCURSOR);
+                      (intptr_t) &entry, MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
@@ -3915,7 +3916,8 @@ static const char *parse_dn_part(struct DnArray *array, const char *str)
 
   /* parse attribute type */
   for (s = str + 1; (s[0] != '\0') && (s[0] != '='); s++)
-    ;
+    ; // do nothing
+
   if (s[0] == '\0')
     return NULL; /* error */
   n = s - str;
@@ -4787,19 +4789,21 @@ static struct CryptKeyInfo *crypt_select_key(struct CryptKeyInfo *keys,
   strcat(helpstr, buf);
 
   struct MuttWindow *dlg =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_DLG_CRYPT_GPGME, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-#ifdef USE_DEBUG_WINDOW
-  dlg->name = "crypt-gpgme";
-#endif
-  dlg->type = WT_DIALOG;
+  dlg->notify = notify_new();
+
   struct MuttWindow *index =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  index->type = WT_INDEX;
-  struct MuttWindow *ibar = mutt_window_new(
-      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
-  ibar->type = WT_INDEX_BAR;
+  index->notify = notify_new();
+  notify_set_parent(index->notify, dlg->notify);
+
+  struct MuttWindow *ibar =
+      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
+                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
+  ibar->notify = notify_new();
+  notify_set_parent(ibar->notify, dlg->notify);
 
   if (C_StatusOnTop)
   {
@@ -4823,7 +4827,7 @@ static struct CryptKeyInfo *crypt_select_key(struct CryptKeyInfo *keys,
   menu->max = i;
   menu->make_entry = crypt_make_entry;
   menu->help = helpstr;
-  menu->data = key_table;
+  menu->mdata = key_table;
   mutt_menu_push_current(menu);
 
   {
@@ -5129,7 +5133,7 @@ static struct CryptKeyInfo *crypt_getkeybystr(const char *p, KeyFlags abilities,
     mutt_debug(LL_DEBUG5, "matching \"%s\" against key %s, \"%s\": ", p,
                crypt_long_keyid(k), k->uid);
 
-    if (!*p || (pfcopy && (mutt_str_strcasecmp(pfcopy, crypt_fpr(k)) == 0)) ||
+    if ((*p == '\0') || (pfcopy && (mutt_str_strcasecmp(pfcopy, crypt_fpr(k)) == 0)) ||
         (pl && (mutt_str_strcasecmp(pl, crypt_long_keyid(k)) == 0)) ||
         (ps && (mutt_str_strcasecmp(ps, crypt_short_keyid(k)) == 0)) ||
         mutt_str_stristr(k->uid, p))
@@ -5201,7 +5205,7 @@ static struct CryptKeyInfo *crypt_ask_for_key(char *tag, char *whatfor, KeyFlags
   while (true)
   {
     resp[0] = '\0';
-    if (mutt_get_field(tag, resp, sizeof(resp), MUTT_CLEAR) != 0)
+    if (mutt_get_field(tag, resp, sizeof(resp), MUTT_COMP_NO_FLAGS) != 0)
       return NULL;
 
     if (whatfor)
@@ -5595,7 +5599,7 @@ void smime_gpgme_init(void)
  * @param is_smime True if an SMIME message
  * @retval num Flags, e.g. #APPLICATION_SMIME | #SEC_ENCRYPT
  */
-static int gpgme_send_menu(struct Email *e, int is_smime)
+static int gpgme_send_menu(struct Email *e, bool is_smime)
 {
   struct CryptKeyInfo *p = NULL;
   const char *prompt = NULL;
@@ -5758,7 +5762,7 @@ static int gpgme_send_menu(struct Email *e, int is_smime)
  */
 int pgp_gpgme_send_menu(struct Email *e)
 {
-  return gpgme_send_menu(e, 0);
+  return gpgme_send_menu(e, false);
 }
 
 /**
@@ -5766,7 +5770,7 @@ int pgp_gpgme_send_menu(struct Email *e)
  */
 int smime_gpgme_send_menu(struct Email *e)
 {
-  return gpgme_send_menu(e, 1);
+  return gpgme_send_menu(e, true);
 }
 
 /**

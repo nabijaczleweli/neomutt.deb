@@ -28,8 +28,9 @@
 
 #include "config.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
-#include "autocrypt_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
@@ -92,7 +93,7 @@ static const struct Mapping AutocryptAcctHelp[] = {
 static const char *account_format_str(char *dest, size_t destlen, size_t col, int cols,
                                       char op, const char *src, const char *fmt,
                                       const char *ifstring, const char *elsestring,
-                                      unsigned long data, MuttFormatFlags flags)
+                                      intptr_t data, MuttFormatFlags flags)
 {
   struct AccountEntry *entry = (struct AccountEntry *) data;
   char tmp[128];
@@ -152,11 +153,11 @@ static const char *account_format_str(char *dest, size_t destlen, size_t col, in
  */
 static void account_make_entry(char *buf, size_t buflen, struct Menu *menu, int num)
 {
-  struct AccountEntry *entry = &((struct AccountEntry *) menu->data)[num];
+  struct AccountEntry *entry = &((struct AccountEntry *) menu->mdata)[num];
 
   mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
                       NONULL(C_AutocryptAcctFormat), account_format_str,
-                      (unsigned long) entry, MUTT_FORMAT_ARROWCURSOR);
+                      IP entry, MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
@@ -181,7 +182,7 @@ static struct Menu *create_menu(void)
 
   struct AccountEntry *entries =
       mutt_mem_calloc(num_accounts, sizeof(struct AccountEntry));
-  menu->data = entries;
+  menu->mdata = entries;
   menu->max = num_accounts;
 
   for (int i = 0; i < num_accounts; i++)
@@ -209,14 +210,14 @@ static struct Menu *create_menu(void)
  */
 static void menu_free(struct Menu **menu)
 {
-  struct AccountEntry *entries = (struct AccountEntry *) (*menu)->data;
+  struct AccountEntry *entries = (struct AccountEntry *) (*menu)->mdata;
 
   for (int i = 0; i < (*menu)->max; i++)
   {
     mutt_autocrypt_db_account_free(&entries[i].account);
     mutt_addr_free(&entries[i].addr);
   }
-  FREE(&(*menu)->data);
+  FREE(&(*menu)->mdata);
 
   mutt_menu_pop_current(*menu);
   FREE(&(*menu)->help);
@@ -265,19 +266,20 @@ void mutt_autocrypt_account_menu(void)
     return;
 
   struct MuttWindow *dlg =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_DLG_AUTOCRYPT, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-#ifdef USE_DEBUG_WINDOW
-  dlg->name = "autocrypt";
-#endif
-  dlg->type = WT_DIALOG;
+
   struct MuttWindow *index =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  index->type = WT_INDEX;
-  struct MuttWindow *ibar = mutt_window_new(
-      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
-  ibar->type = WT_INDEX_BAR;
+  index->notify = notify_new();
+  notify_set_parent(index->notify, dlg->notify);
+
+  struct MuttWindow *ibar =
+      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
+                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
+  ibar->notify = notify_new();
+  notify_set_parent(ibar->notify, dlg->notify);
 
   if (C_StatusOnTop)
   {
@@ -322,10 +324,10 @@ void mutt_autocrypt_account_menu(void)
 
       case OP_AUTOCRYPT_DELETE_ACCT:
       {
-        if (!menu->data)
+        if (!menu->mdata)
           break;
 
-        struct AccountEntry *entry = (struct AccountEntry *) (menu->data) + menu->current;
+        struct AccountEntry *entry = (struct AccountEntry *) (menu->mdata) + menu->current;
         char msg[128];
         snprintf(msg, sizeof(msg),
                  // L10N: Confirmation message when deleting an autocrypt account
@@ -346,10 +348,10 @@ void mutt_autocrypt_account_menu(void)
 
       case OP_AUTOCRYPT_TOGGLE_ACTIVE:
       {
-        if (!menu->data)
+        if (!menu->mdata)
           break;
 
-        struct AccountEntry *entry = (struct AccountEntry *) (menu->data) + menu->current;
+        struct AccountEntry *entry = (struct AccountEntry *) (menu->mdata) + menu->current;
         toggle_active(entry);
         menu->redraw |= REDRAW_FULL;
         break;
@@ -357,10 +359,10 @@ void mutt_autocrypt_account_menu(void)
 
       case OP_AUTOCRYPT_TOGGLE_PREFER:
       {
-        if (!menu->data)
+        if (!menu->mdata)
           break;
 
-        struct AccountEntry *entry = (struct AccountEntry *) (menu->data) + menu->current;
+        struct AccountEntry *entry = (struct AccountEntry *) (menu->mdata) + menu->current;
         toggle_prefer_encrypt(entry);
         menu->redraw |= REDRAW_FULL;
         break;

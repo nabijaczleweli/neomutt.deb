@@ -35,7 +35,7 @@
 #include "group.h"
 #include "address.h"
 
-static struct Hash *Groups = NULL;
+static struct HashTable *Groups = NULL;
 
 /**
  * mutt_grouplist_init - Initialize the GroupList singleton
@@ -60,8 +60,7 @@ void mutt_grouplist_free(void)
 /**
  * mutt_pattern_group - Match a pattern to a Group
  * @param pat Pattern to match
- * @retval ptr Matching Group
- * @retval ptr Newly created Group (if no match)
+ * @retval ptr Matching Group, or new Group (if no match)
  */
 struct Group *mutt_pattern_group(const char *pat)
 {

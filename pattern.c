@@ -41,16 +41,17 @@
 #include "address/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
 #include "pattern.h"
-#include "alias.h"
 #include "context.h"
 #include "copy.h"
 #include "globals.h"
 #include "handler.h"
 #include "hdrline.h"
 #include "init.h"
+#include "maillist.h"
 #include "mutt_logging.h"
 #include "mutt_menu.h"
 #include "mutt_parse.h"
@@ -267,7 +268,7 @@ static bool add_query_msgid(char *line, int line_num, void *user_data)
 {
   struct ListHead *msgid_list = (struct ListHead *) (user_data);
   char *nows = mutt_str_skip_whitespace(line);
-  if (!*nows)
+  if (*nows == '\0')
     return true;
   mutt_str_remove_trailing_ws(nows);
   mutt_list_insert_tail(msgid_list, mutt_str_strdup(nows));
@@ -1355,8 +1356,9 @@ static const struct PatternFlags *lookup_tag(char tag)
 /**
  * find_matching_paren - Find the matching parenthesis
  * @param s string to search
- * @retval ptr Matching close parenthesis
- * @retval ptr End of string NUL, if not found
+ * @retval ptr
+ * - Matching close parenthesis
+ * - End of string NUL, if not found
  */
 static /* const */ char *find_matching_paren(/* const */ char *s)
 {
@@ -1733,8 +1735,9 @@ static int perform_or(struct PatternList *pat, PatternExecFlags flags,
  * @param match_personal If true, also match the pattern against the real name
  * @param n              Number of Addresses supplied
  * @param ...            Variable number of Addresses
- * @retval true One Address matches (all_addr is false)
- * @retval true All the Addresses match (all_addr is true)
+ * @retval true
+ * - One Address matches (all_addr is false)
+ * - All the Addresses match (all_addr is true)
  */
 static int match_addrlist(struct Pattern *pat, bool match_personal, int n, ...)
 {
@@ -1747,7 +1750,7 @@ static int match_addrlist(struct Pattern *pat, bool match_personal, int n, ...)
     struct Address *a = NULL;
     TAILQ_FOREACH(a, al, entries)
     {
-      if (pat->all_addr ^ ((!pat->is_alias || mutt_alias_reverse_lookup(a)) &&
+      if (pat->all_addr ^ ((!pat->is_alias || alias_reverse_lookup(a)) &&
                            ((a->mailbox && patmatch(pat, a->mailbox)) ||
                             (match_personal && a->personal && patmatch(pat, a->personal)))))
       {
@@ -1782,8 +1785,9 @@ static bool match_reference(struct Pattern *pat, struct ListHead *refs)
  * @param all_addr If true, ALL Addresses must match
  * @param e       Envelope
  * @param p       Predicate function, e.g. mutt_is_subscribed_list()
- * @retval true One Address matches (all_addr is false)
- * @retval true All the Addresses match (all_addr is true)
+ * @retval true
+ * - One Address matches (all_addr is false)
+ * - All the Addresses match (all_addr is true)
  *
  * Test the 'To' and 'Cc' fields of an Address using a test function (the predicate).
  */
@@ -1807,8 +1811,9 @@ static int mutt_is_predicate_recipient(bool all_addr, struct Envelope *e, addr_p
  * mutt_is_subscribed_list_recipient - Matches subscribed mailing lists
  * @param all_addr If true, ALL Addresses must be on the subscribed list
  * @param e       Envelope
- * @retval true One Address is subscribed (all_addr is false)
- * @retval true All the Addresses are subscribed (all_addr is true)
+ * @retval true
+ * - One Address is subscribed (all_addr is false)
+ * - All the Addresses are subscribed (all_addr is true)
  */
 int mutt_is_subscribed_list_recipient(bool all_addr, struct Envelope *e)
 {
@@ -1819,8 +1824,9 @@ int mutt_is_subscribed_list_recipient(bool all_addr, struct Envelope *e)
  * mutt_is_list_recipient - Matches known mailing lists
  * @param all_addr If true, ALL Addresses must be mailing lists
  * @param e       Envelope
- * @retval true One Address is a mailing list (all_addr is false)
- * @retval true All the Addresses are mailing lists (all_addr is true)
+ * @retval true
+ * - One Address is a mailing list (all_addr is false)
+ * - All the Addresses are mailing lists (all_addr is true)
  */
 int mutt_is_list_recipient(bool all_addr, struct Envelope *e)
 {
@@ -1832,8 +1838,9 @@ int mutt_is_list_recipient(bool all_addr, struct Envelope *e)
  * @param all_addr If true, ALL Addresses must refer to the user
  * @param al1     First AddressList
  * @param al2     Second AddressList
- * @retval true One Address refers to the user (all_addr is false)
- * @retval true All the Addresses refer to the user (all_addr is true)
+ * @retval true
+ * - One Address refers to the user (all_addr is false)
+ * - All the Addresses refer to the user (all_addr is true)
  */
 static int match_user(int all_addr, struct AddressList *al1, struct AddressList *al2)
 {
@@ -2582,7 +2589,7 @@ int mutt_pattern_func(int op, char *prompt)
   }
 
 #ifdef USE_IMAP
-  if ((m->type == MUTT_IMAP) && (imap_search(m, pat) < 0))
+  if ((m->type == MUTT_IMAP) && (!imap_search(m, pat)))
     goto bail;
 #endif
 
@@ -2691,7 +2698,7 @@ int mutt_search_command(int cur, int op)
 {
   struct Progress progress;
 
-  if (!*LastSearch || ((op != OP_SEARCH_NEXT) && (op != OP_SEARCH_OPPOSITE)))
+  if ((*LastSearch == '\0') || ((op != OP_SEARCH_NEXT) && (op != OP_SEARCH_OPPOSITE)))
   {
     char buf[256];
     mutt_str_strfcpy(buf, (LastSearch[0] != '\0') ? LastSearch : "", sizeof(buf));
@@ -2699,7 +2706,7 @@ int mutt_search_command(int cur, int op)
                             _("Search for: ") :
                             _("Reverse search for: "),
                         buf, sizeof(buf), MUTT_CLEAR | MUTT_PATTERN) != 0) ||
-        !buf[0])
+        (buf[0] == '\0'))
     {
       return -1;
     }
@@ -2749,7 +2756,7 @@ int mutt_search_command(int cur, int op)
       Context->mailbox->emails[i]->searched = false;
 #ifdef USE_IMAP
     if ((Context->mailbox->type == MUTT_IMAP) &&
-        (imap_search(Context->mailbox, SearchPattern) < 0))
+        (!imap_search(Context->mailbox, SearchPattern)))
       return -1;
 #endif
     OptSearchInvalid = false;

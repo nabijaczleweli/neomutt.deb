@@ -163,7 +163,7 @@ static struct PgpKeyInfo *pgp_principal_key(struct PgpKeyInfo *key)
 }
 
 /**
- * pgp_entry_fmt - Format an entry on the PGP key selection menu - Implements ::format_t
+ * pgp_entry_format_str - Format an entry on the PGP key selection menu - Implements ::format_t
  *
  * | Expando | Description
  * |:--------|:--------------------------------------------------------
@@ -184,10 +184,10 @@ static struct PgpKeyInfo *pgp_principal_key(struct PgpKeyInfo *key)
  * | \%K     | Key id of the principal key
  * | \%L     | Length of the principal key
  */
-static const char *pgp_entry_fmt(char *buf, size_t buflen, size_t col, int cols,
-                                 char op, const char *src, const char *prec,
-                                 const char *if_str, const char *else_str,
-                                 unsigned long data, MuttFormatFlags flags)
+static const char *pgp_entry_format_str(char *buf, size_t buflen, size_t col, int cols,
+                                        char op, const char *src, const char *prec,
+                                        const char *if_str, const char *else_str,
+                                        intptr_t data, MuttFormatFlags flags)
 {
   char fmt[128];
   bool optional = (flags & MUTT_FORMAT_OPTIONAL);
@@ -327,12 +327,13 @@ static const char *pgp_entry_fmt(char *buf, size_t buflen, size_t col, int cols,
 
   if (optional)
   {
-    mutt_expando_format(buf, buflen, col, cols, if_str, pgp_entry_fmt, data, MUTT_FORMAT_NO_FLAGS);
+    mutt_expando_format(buf, buflen, col, cols, if_str, pgp_entry_format_str,
+                        data, MUTT_FORMAT_NO_FLAGS);
   }
   else if (flags & MUTT_FORMAT_OPTIONAL)
   {
-    mutt_expando_format(buf, buflen, col, cols, else_str, pgp_entry_fmt, data,
-                        MUTT_FORMAT_NO_FLAGS);
+    mutt_expando_format(buf, buflen, col, cols, else_str, pgp_entry_format_str,
+                        data, MUTT_FORMAT_NO_FLAGS);
   }
   return src;
 }
@@ -342,15 +343,15 @@ static const char *pgp_entry_fmt(char *buf, size_t buflen, size_t col, int cols,
  */
 static void pgp_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
-  struct PgpUid **key_table = menu->data;
+  struct PgpUid **key_table = menu->mdata;
   struct PgpEntry entry;
 
   entry.uid = key_table[line];
   entry.num = line + 1;
 
   mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
-                      NONULL(C_PgpEntryFormat), pgp_entry_fmt,
-                      (unsigned long) &entry, MUTT_FORMAT_ARROWCURSOR);
+                      NONULL(C_PgpEntryFormat), pgp_entry_format_str,
+                      (intptr_t) &entry, MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
@@ -673,19 +674,21 @@ static struct PgpKeyInfo *pgp_select_key(struct PgpKeyInfo *keys,
   strcat(helpstr, buf);
 
   struct MuttWindow *dlg =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_DLG_PGP, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-#ifdef USE_DEBUG_WINDOW
-  dlg->name = "pgp";
-#endif
-  dlg->type = WT_DIALOG;
+  dlg->notify = notify_new();
+
   struct MuttWindow *index =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  index->type = WT_INDEX;
-  struct MuttWindow *ibar = mutt_window_new(
-      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
-  ibar->type = WT_INDEX_BAR;
+  index->notify = notify_new();
+  notify_set_parent(index->notify, dlg->notify);
+
+  struct MuttWindow *ibar =
+      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
+                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
+  ibar->notify = notify_new();
+  notify_set_parent(ibar->notify, dlg->notify);
 
   if (C_StatusOnTop)
   {
@@ -709,7 +712,7 @@ static struct PgpKeyInfo *pgp_select_key(struct PgpKeyInfo *keys,
   menu->max = i;
   menu->make_entry = pgp_make_entry;
   menu->help = helpstr;
-  menu->data = key_table;
+  menu->mdata = key_table;
   mutt_menu_push_current(menu);
 
   if (p)
@@ -883,7 +886,7 @@ struct PgpKeyInfo *pgp_ask_for_key(char *tag, char *whatfor, KeyFlags abilities,
   while (true)
   {
     resp[0] = '\0';
-    if (mutt_get_field(tag, resp, sizeof(resp), MUTT_CLEAR) != 0)
+    if (mutt_get_field(tag, resp, sizeof(resp), MUTT_COMP_NO_FLAGS) != 0)
       return NULL;
 
     if (whatfor)
@@ -1202,7 +1205,7 @@ struct PgpKeyInfo *pgp_getkeybystr(const char *cp, KeyFlags abilities, enum PgpR
 
     mutt_debug(LL_DEBUG5, "matching \"%s\" against key %s:\n", p, pgp_long_keyid(k));
 
-    if (!*p || (pfcopy && (mutt_str_strcasecmp(pfcopy, k->fingerprint) == 0)) ||
+    if ((*p == '\0') || (pfcopy && (mutt_str_strcasecmp(pfcopy, k->fingerprint) == 0)) ||
         (pl && (mutt_str_strcasecmp(pl, pgp_long_keyid(k)) == 0)) ||
         (ps && (mutt_str_strcasecmp(ps, pgp_short_keyid(k)) == 0)))
     {

@@ -31,7 +31,7 @@
 #include <stddef.h>
 #include <zconf.h>
 #include <zlib.h>
-#include "compress_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "lib.h"
 #include "hcache/lib.h"
@@ -59,8 +59,8 @@ static void *compr_zlib_open(short level)
 
   if ((level < MIN_COMP_LEVEL) || (level > MAX_COMP_LEVEL))
   {
-    mutt_warning(_("The compression level for %s should be between %d and %d"),
-                 compr_zlib_ops.name, MIN_COMP_LEVEL, MAX_COMP_LEVEL);
+    mutt_debug(LL_DEBUG1, "The compression level for %s should be between %d and %d",
+               compr_zlib_ops.name, MIN_COMP_LEVEL, MAX_COMP_LEVEL);
     level = MIN_COMP_LEVEL;
   }
 
@@ -85,7 +85,7 @@ static void *compr_zlib_compress(void *cctx, const char *data, size_t dlen, size
   const void *ubuf = data;
   int rc = compress2(cbuf, &len, ubuf, dlen, ctx->level);
   if (rc != Z_OK)
-    return NULL;
+    return NULL; // LCOV_EXCL_LINE
   *clen = len + 4;
 
   /* save ulen to first 4 bytes */
@@ -141,4 +141,4 @@ static void compr_zlib_close(void **cctx)
   FREE(cctx);
 }
 
-COMPRESS_OPS(zlib)
+COMPRESS_OPS(zlib, MIN_COMP_LEVEL, MAX_COMP_LEVEL)

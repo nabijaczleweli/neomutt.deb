@@ -40,7 +40,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "maildir_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
@@ -305,7 +305,6 @@ static int mh_read_token(char *t, int *first, int *last)
  */
 int mh_read_sequences(struct MhSequences *mhs, const char *path)
 {
-  int line = 1;
   char *buf = NULL;
   size_t sz = 0;
 
@@ -319,7 +318,7 @@ int mh_read_sequences(struct MhSequences *mhs, const char *path)
   if (!fp)
     return 0; /* yes, ask callers to silently ignore the error */
 
-  while ((buf = mutt_file_read_line(buf, &sz, fp, &line, 0)))
+  while ((buf = mutt_file_read_line(buf, &sz, fp, NULL, 0)))
   {
     char *t = strtok(buf, " \t:");
     if (!t)
@@ -559,12 +558,10 @@ static int mh_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
   if (!m)
     return -1;
 
-  if (!(flags & MUTT_APPENDNEW))
-  {
+  if (!(flags & (MUTT_APPENDNEW | MUTT_NEWFOLDER)))
     return 0;
-  }
 
-  if (mkdir(mailbox_path(m), S_IRWXU))
+  if (mutt_file_mkdir(mailbox_path(m), S_IRWXU))
   {
     mutt_perror(mailbox_path(m));
     return -1;
@@ -607,7 +604,7 @@ int mh_mbox_check(struct Mailbox *m, int *index_hint)
   struct Maildir **last = NULL;
   struct MhSequences mhs = { 0 };
   int count = 0;
-  struct Hash *fnames = NULL;
+  struct HashTable *fnames = NULL;
   struct MaildirMboxData *mdata = maildir_mdata_get(m);
 
   if (!C_CheckNew)

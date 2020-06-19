@@ -159,7 +159,7 @@ static struct PgpKeyInfo *parse_pub_line(char *buf, bool *is_subkey, struct PgpK
     if (pend)
       *pend++ = 0;
     field++;
-    if (!*p && (field != 1) && (field != 10))
+    if ((*p == '\0') && (field != 1) && (field != 10))
       continue;
 
     if (is_fpr && (field != 10))
@@ -176,7 +176,7 @@ static struct PgpKeyInfo *parse_pub_line(char *buf, bool *is_subkey, struct PgpK
         else if (mutt_str_strcmp(p, "sub") == 0)
           *is_subkey = true;
         else if (mutt_str_strcmp(p, "sec") == 0)
-          ;
+          ; // do nothing
         else if (mutt_str_strcmp(p, "ssb") == 0)
           *is_subkey = true;
         else if (mutt_str_strcmp(p, "uid") == 0)
@@ -452,7 +452,8 @@ struct PgpKeyInfo *pgp_get_candidates(enum PgpRing keyring, struct ListHead *hin
         k->flags |= KEYFLAG_SUBKEY;
         k->parent = mainkey;
         for (l = &k->address; *l; l = &(*l)->next)
-          ;
+          ; // do nothing
+
         *l = pgp_copy_uids(mainkey->address, k);
       }
       else

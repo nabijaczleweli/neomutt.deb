@@ -41,10 +41,21 @@ struct Account
   struct MailboxList mailboxes;   ///< List of Mailboxes
   struct Notify *notify;          ///< Notifications handler
   void *adata;                    ///< Private data (for Mailbox backends)
-  void (*free_adata)(void **ptr); ///< Callback function to free private data
+  void (*adata_free)(void **ptr); ///< Callback function to free private data
   TAILQ_ENTRY(Account) entries;   ///< Linked list of Accounts
 };
 TAILQ_HEAD(AccountList, Account);
+
+/**
+ * enum NotifyAccount - Types of Account Event
+ *
+ * Observers of #NT_ACCOUNT will be passed an #EventAccount.
+ */
+enum NotifyAccount
+{
+  NT_ACCOUNT_ADD = 1, ///< A new Account has been created
+  NT_ACCOUNT_REMOVE,  ///< An Account is about to be destroyed
+};
 
 /**
  * struct EventAccount - An Event that happened to an Account
@@ -52,15 +63,6 @@ TAILQ_HEAD(AccountList, Account);
 struct EventAccount
 {
   struct Account *account; ///< The Account this Event relates to
-};
-
-/**
- * enum NotifyAccount - Types of Account Event
- */
-enum NotifyAccount
-{
-  NT_ACCOUNT_ADD = 1, ///< A new Account has been created
-  NT_ACCOUNT_REMOVE,  ///< An Account is about to be destroyed
 };
 
 void            account_free          (struct Account **ptr);

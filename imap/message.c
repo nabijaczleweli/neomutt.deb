@@ -32,10 +32,11 @@
 #include <ctype.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include "imap_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
@@ -106,8 +107,7 @@ struct ImapEmailData *imap_edata_get(struct Email *e)
 /**
  * msg_cache_open - Open a message cache
  * @param m     Selected Imap Mailbox
- * @retval ptr  Success, using existing cache
- * @retval ptr  Success, opened new cache
+ * @retval ptr  Success, using existing cache (or opened new cache)
  * @retval NULL Failure
  */
 static struct BodyCache *msg_cache_open(struct Mailbox *m)
@@ -737,7 +737,7 @@ static int read_headers_normal_eval_cache(struct ImapAccountData *adata,
   struct ImapMboxData *mdata = imap_mdata_get(m);
   int idx = m->msg_count;
 
-  if (!m->quiet)
+  if (m->verbose)
   {
     /* L10N: Comparing the cached data with the IMAP server's data */
     mutt_progress_init(&progress, _("Evaluating cache..."), MUTT_PROGRESS_READ, msn_end);
@@ -759,7 +759,7 @@ static int read_headers_normal_eval_cache(struct ImapAccountData *adata,
     if (SigInt && query_abort_header_download(adata))
       return -1;
 
-    if (!m->quiet)
+    if (m->verbose)
       mutt_progress_update(&progress, msgno, -1);
 
     memset(&h, 0, sizeof(h));
@@ -827,7 +827,7 @@ static int read_headers_normal_eval_cache(struct ImapAccountData *adata,
 
         /*  mailbox->emails[msgno]->received is restored from mutt_hcache_restore */
         e->edata = h.edata;
-        e->free_edata = imap_edata_free;
+        e->edata_free = imap_edata_free;
         STAILQ_INIT(&e->tags);
 
         /* We take a copy of the tags so we can split the string */
@@ -901,7 +901,7 @@ static int read_headers_qresync_eval_cache(struct ImapAccountData *adata, char *
 
       struct ImapEmailData *edata = imap_edata_new();
       e->edata = edata;
-      e->free_edata = imap_edata_free;
+      e->edata_free = imap_edata_free;
 
       e->index = m->msg_count;
       e->active = true;
@@ -951,7 +951,7 @@ static int read_headers_condstore_qresync_updates(struct ImapAccountData *adata,
   struct Mailbox *m = adata->mailbox;
   struct ImapMboxData *mdata = imap_mdata_get(m);
 
-  if (!m->quiet)
+  if (m->verbose)
   {
     /* L10N: Fetching IMAP flag changes, using the CONDSTORE extension */
     mutt_progress_init(&progress, _("Fetching flag updates..."), MUTT_PROGRESS_READ, msn_end);
@@ -968,7 +968,7 @@ static int read_headers_condstore_qresync_updates(struct ImapAccountData *adata,
     if (SigInt && query_abort_header_download(adata))
       return -1;
 
-    if (!m->quiet)
+    if (m->verbose)
       mutt_progress_update(&progress, msgno, -1);
 
     /* cmd_parse_fetch will update the flags */
@@ -1104,7 +1104,7 @@ static int read_headers_fetch_new(struct Mailbox *m, unsigned int msn_begin,
   unlink(mutt_b2s(tempfile));
   mutt_buffer_pool_release(&tempfile);
 
-  if (!m->quiet)
+  if (m->verbose)
   {
     mutt_progress_init(&progress, _("Fetching message headers..."),
                        MUTT_PROGRESS_READ, msn_end);
@@ -1137,7 +1137,7 @@ static int read_headers_fetch_new(struct Mailbox *m, unsigned int msn_begin,
       if (initial_download && SigInt && query_abort_header_download(adata))
         goto bail;
 
-      if (!m->quiet)
+      if (m->verbose)
         mutt_progress_update(&progress, msgno, -1);
 
       rewind(fp);
@@ -1200,7 +1200,7 @@ static int read_headers_fetch_new(struct Mailbox *m, unsigned int msn_begin,
         e->replied = h.edata->replied;
         e->received = h.received;
         e->edata = (void *) (h.edata);
-        e->free_edata = imap_edata_free;
+        e->edata_free = imap_edata_free;
         STAILQ_INIT(&e->tags);
 
         /* We take a copy of the tags so we can split the string */
@@ -1510,7 +1510,7 @@ int imap_append_message(struct Mailbox *m, struct Message *msg)
   }
   rewind(fp);
 
-  if (!m->quiet)
+  if (m->verbose)
     mutt_progress_init(&progress, _("Uploading message..."), MUTT_PROGRESS_NET, len);
 
   mutt_date_make_imap(internaldate, sizeof(internaldate), msg->received);
@@ -1552,7 +1552,7 @@ int imap_append_message(struct Mailbox *m, struct Message *msg)
       sent += len;
       if (flush_buffer(buf, &len, adata->conn) < 0)
         goto fail;
-      if (!m->quiet)
+      if (m->verbose)
         mutt_progress_update(&progress, sent, -1);
     }
   }
@@ -1638,7 +1638,7 @@ int imap_copy_messages(struct Mailbox *m, struct EmailList *el, const char *dest
   }
 
   imap_fix_path(adata->delim, buf, mbox, sizeof(mbox));
-  if (!*mbox)
+  if (*mbox == '\0')
     mutt_str_strfcpy(mbox, "INBOX", sizeof(mbox));
   imap_munge_mbox_name(adata->unicode, mmbox, sizeof(mmbox), mbox);
 
@@ -1919,7 +1919,7 @@ int imap_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
 
   /* This function is called in a few places after endwin()
    * e.g. mutt_pipe_message(). */
-  output_progress = !isendwin() && !m->quiet;
+  output_progress = !isendwin() && m->verbose;
   if (output_progress)
     mutt_message(_("Fetching message..."));
 

@@ -23,6 +23,7 @@
 #ifndef MUTT_CORE_NEOMUTT_H
 #define MUTT_CORE_NEOMUTT_H
 
+#include <stddef.h>
 #include <stdbool.h>
 #include "account.h"
 #include "mailbox.h"
@@ -56,7 +57,7 @@ bool            neomutt_account_remove(struct NeoMutt *n, struct Account *a);
 void            neomutt_free          (struct NeoMutt **ptr);
 struct NeoMutt *neomutt_new           (struct ConfigSet *cs);
 
-void               neomutt_mailboxlist_clear  (struct MailboxList *ml);
-struct MailboxList neomutt_mailboxlist_get_all(struct NeoMutt *n, enum MailboxType type);
+void   neomutt_mailboxlist_clear  (struct MailboxList *ml);
+size_t neomutt_mailboxlist_get_all(struct MailboxList *head, struct NeoMutt *n, enum MailboxType type);
 
 #endif /* MUTT_CORE_NEOMUTT_H */
