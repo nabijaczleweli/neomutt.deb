@@ -1,3 +1,15 @@
+neomutt (20200619+dfsg.1-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version 20200619+dfsg.1
+  * Rebase misc/fix_ALL_FILES.patch
+  * Drop all upstream/ patches
+  * Update neomutt-test-files to 8629adab700a75c54e8e28bf05ad092503a98f75
+  * Enable notmuch on alpha, hppa, powerpcspe, and sh4
+  * Enable hardening options (which lintian still doesn't feel satistfied with)
+
+ -- наб <nabijaczleweli@gmail.com>  Sat, 20 Jun 2020 01:45:03 +0200
+
 neomutt (20200501+dfsg.1-0.4) unstable; urgency=medium
 
   * Non-maintainer upload.
