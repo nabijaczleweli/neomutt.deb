@@ -628,7 +628,7 @@ static enum CommandResult parse_color_name(const char *s, uint32_t *col, int *at
   {
     s += clen;
     *col = strtoul(s, &eptr, 10);
-    if (!*s || *eptr || ((*col >= COLORS) && !OptNoCurses && has_colors()))
+    if ((*s == '\0') || (*eptr != '\0') || ((*col >= COLORS) && !OptNoCurses && has_colors()))
     {
       mutt_buffer_printf(err, _("%s: color not supported by term"), s);
       return MUTT_CMD_ERROR;
@@ -639,7 +639,7 @@ static enum CommandResult parse_color_name(const char *s, uint32_t *col, int *at
   {
     s += 1;
     *col = strtoul(s, &eptr, 16);
-    if (!*s || *eptr || ((*col == COLOR_UNSET) && !OptNoCurses && has_colors()))
+    if ((*s == '\0') || (*eptr != '\0') || ((*col == COLOR_UNSET) && !OptNoCurses && has_colors()))
     {
       snprintf(err->data, err->dsize, _("%s: color not supported by term"), s);
       return MUTT_CMD_ERROR;
@@ -807,7 +807,7 @@ static bool do_uncolor(struct Colors *c, struct Buffer *buf, struct Buffer *s,
  * parse_uncolor - Parse an 'uncolor' command
  * @param buf     Temporary Buffer space
  * @param s       Buffer containing string to be parsed
- * @param data    Flags associated with the command
+ * @param c       Global colours to update
  * @param err     Buffer for error messages
  * @param uncolor If true, 'uncolor', else 'unmono'
  * @retval #CommandResult Result e.g. #MUTT_CMD_SUCCESS
@@ -817,10 +817,8 @@ static bool do_uncolor(struct Colors *c, struct Buffer *buf, struct Buffer *s,
  * * unmono  index pattern [pattern...]
  */
 static enum CommandResult parse_uncolor(struct Buffer *buf, struct Buffer *s,
-                                        unsigned long data, struct Buffer *err, bool uncolor)
+                                        struct Colors *c, struct Buffer *err, bool uncolor)
 {
-  struct Colors *c = *(struct Colors **) data;
-
   mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
 
   if (mutt_str_strcmp(buf->data, "*") == 0)
@@ -922,7 +920,7 @@ static enum CommandResult parse_uncolor(struct Buffer *buf, struct Buffer *s,
 enum CommandResult mutt_parse_uncolor(struct Buffer *buf, struct Buffer *s,
                                       intptr_t data, struct Buffer *err)
 {
-  return parse_uncolor(buf, s, data, err, true);
+  return parse_uncolor(buf, s, Colors, err, true);
 }
 #endif
 
@@ -932,7 +930,7 @@ enum CommandResult mutt_parse_uncolor(struct Buffer *buf, struct Buffer *s,
 enum CommandResult mutt_parse_unmono(struct Buffer *buf, struct Buffer *s,
                                      intptr_t data, struct Buffer *err)
 {
-  return parse_uncolor(buf, s, data, err, false);
+  return parse_uncolor(buf, s, Colors, err, false);
 }
 
 /**
@@ -1060,8 +1058,6 @@ static enum CommandResult parse_color_pair(struct Buffer *buf, struct Buffer *s,
                                            uint32_t *fg, uint32_t *bg,
                                            int *attr, struct Buffer *err)
 {
-  enum CommandResult rc = MUTT_CMD_SUCCESS;
-
   while (true)
   {
     if (!MoreArgs(s))
@@ -1086,7 +1082,7 @@ static enum CommandResult parse_color_pair(struct Buffer *buf, struct Buffer *s,
       *attr |= A_UNDERLINE;
     else
     {
-      rc = parse_color_name(buf->data, fg, attr, true, err);
+      enum CommandResult rc = parse_color_name(buf->data, fg, attr, true, err);
       if (rc != MUTT_CMD_SUCCESS)
         return rc;
       break;
@@ -1359,8 +1355,7 @@ enum CommandResult mutt_parse_color(struct Buffer *buf, struct Buffer *s,
   if (OptNoCurses || !has_colors())
     dry_run = true;
 
-  struct Colors *c = *(struct Colors **) data;
-  return parse_color(c, buf, s, err, parse_color_pair, dry_run, true);
+  return parse_color(Colors, buf, s, err, parse_color_pair, dry_run, true);
 }
 #endif
 
@@ -1380,6 +1375,5 @@ enum CommandResult mutt_parse_mono(struct Buffer *buf, struct Buffer *s,
     dry_run = true;
 #endif
 
-  struct Colors *c = *(struct Colors **) data;
-  return parse_color(c, buf, s, err, parse_attr_spec, dry_run, false);
+  return parse_color(Colors, buf, s, err, parse_attr_spec, dry_run, false);
 }

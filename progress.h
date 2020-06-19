@@ -25,6 +25,7 @@
 #define MUTT_PROGRESS_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 
 /* These Config Variables are only used in progress.c */
@@ -34,7 +35,7 @@ extern short C_WriteInc;
 extern short C_NetInc;
 
 /**
- * Enum ProgressType - What kind of operation is this progress tracking?
+ * enum ProgressType - What kind of operation is this progress tracking?
  */
 enum ProgressType
 {

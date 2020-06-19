@@ -23,7 +23,18 @@
 /**
  * @page config_string Type: String
  *
- * Type representing a string.
+ * Config type representing a string.
+ *
+ * - Backed by `char *`
+ * - Empty string is stored as `NULL`
+ * - Validator is passed `char *`, which may be `NULL`
+ *
+ * ## Functions supported
+ * - ConfigSetType::string_set()
+ * - ConfigSetType::string_get()
+ * - ConfigSetType::native_set()
+ * - ConfigSetType::native_get()
+ * - ConfigSetType::reset()
  */
 
 #include "config.h"
@@ -40,9 +51,6 @@
  */
 static void string_destroy(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef)
 {
-  if (!cs || !var || !cdef)
-    return; /* LCOV_EXCL_LINE */
-
   const char **str = (const char **) var;
   if (!*str)
     return;
@@ -63,9 +71,6 @@ static void string_destroy(const struct ConfigSet *cs, void *var, const struct C
 static int string_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                              const char *value, struct Buffer *err)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   /* Store empty strings as NULL */
   if (value && (value[0] == '\0'))
     value = NULL;
@@ -121,9 +126,6 @@ static int string_string_set(const struct ConfigSet *cs, void *var, struct Confi
 static int string_string_get(const struct ConfigSet *cs, void *var,
                              const struct ConfigDef *cdef, struct Buffer *result)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   const char *str = NULL;
 
   if (var)
@@ -145,9 +147,6 @@ static int string_native_set(const struct ConfigSet *cs, void *var,
                              const struct ConfigDef *cdef, intptr_t value,
                              struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   const char *str = (const char *) value;
 
   /* Store empty strings as NULL */
@@ -190,9 +189,6 @@ static int string_native_set(const struct ConfigSet *cs, void *var,
 static intptr_t string_native_get(const struct ConfigSet *cs, void *var,
                                   const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return INT_MIN; /* LCOV_EXCL_LINE */
-
   const char *str = *(const char **) var;
 
   return (intptr_t) str;
@@ -204,9 +200,6 @@ static intptr_t string_native_get(const struct ConfigSet *cs, void *var,
 static int string_reset(const struct ConfigSet *cs, void *var,
                         const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   int rc = CSR_SUCCESS;
 
   const char *str = (const char *) cdef->initial;
@@ -240,8 +233,15 @@ static int string_reset(const struct ConfigSet *cs, void *var,
 void string_init(struct ConfigSet *cs)
 {
   const struct ConfigSetType cst_string = {
-    "string",          string_string_set, string_string_get, string_native_set,
-    string_native_get, string_reset,      string_destroy,
+    "string",
+    string_string_set,
+    string_string_get,
+    string_native_set,
+    string_native_get,
+    NULL, // string_plus_equals
+    NULL, // string_minus_equals
+    string_reset,
+    string_destroy,
   };
   cs_register_type(cs, DT_STRING, &cst_string);
 }

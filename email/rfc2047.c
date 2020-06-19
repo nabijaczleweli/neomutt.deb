@@ -30,6 +30,7 @@
 
 #include "config.h"
 #include <assert.h>
+#include <ctype.h>
 #include <errno.h>
 #include <iconv.h>
 #include <stdbool.h>
@@ -558,7 +559,8 @@ static int encode(const char *d, size_t dlen, int col, const char *fromcode,
          * and try again. */
         assert(t1 < (u + ulen));
         for (t1++; (t1 < (u + ulen)) && !HSPACE(*t1); t1++)
-          ;
+          ; // do nothing
+
         continue;
       }
       n = choose_block(t, n, col, icode, tocode, &encoder, &wlen);

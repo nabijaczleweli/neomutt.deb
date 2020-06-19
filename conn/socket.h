@@ -24,7 +24,6 @@
 #ifndef MUTT_CONN_SOCKET_H
 #define MUTT_CONN_SOCKET_H
 
-#include <stddef.h>
 #include <time.h>
 
 struct Connection;
@@ -40,6 +39,7 @@ enum ConnectionType
 };
 
 int                mutt_socket_close   (struct Connection *conn);
+void               mutt_socket_empty   (struct Connection *conn);
 struct Connection *mutt_socket_new     (enum ConnectionType type);
 int                mutt_socket_open    (struct Connection *conn);
 int                mutt_socket_poll    (struct Connection *conn, time_t wait_secs);

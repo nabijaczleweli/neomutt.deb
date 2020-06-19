@@ -23,6 +23,7 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include <locale.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -40,11 +41,12 @@ void test_gen_path(char *buf, size_t buflen, const char *fmt)
   snprintf(buf, buflen, NONULL(fmt), NONULL(get_test_dir()));
 }
 
-void test_common(void)
+void test_init(void)
 {
   const char *path = get_test_dir();
   bool success = false;
 
+  TEST_CASE("Common setup");
   if (!TEST_CHECK(path != NULL))
   {
     TEST_MSG("Environment variable '%s' isn't set\n", TEST_DIR);
@@ -71,6 +73,14 @@ void test_common(void)
     TEST_MSG("Test dir '%s' isn't a directory\n", path);
     goto done;
   }
+
+  if (!TEST_CHECK((setlocale(LC_ALL, "C.UTF-8") != NULL) ||
+                  (setlocale(LC_ALL, "en_US.UTF-8") != NULL)))
+  {
+    TEST_MSG("Can't set locale to C.UTF-8 or en_US.UTF-8");
+    goto done;
+  }
+
   success = true;
 done:
   if (!success)

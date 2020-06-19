@@ -23,7 +23,19 @@
 /**
  * @page config_number Type: Number
  *
- * Type representing a number.
+ * Config type representing a number.
+ *
+ * - Backed by `short`
+ * - Validator is passed `short`
+ *
+ * ## Functions supported
+ * - ConfigSetType::string_set()
+ * - ConfigSetType::string_get()
+ * - ConfigSetType::native_set()
+ * - ConfigSetType::native_get()
+ * - ConfigSetType::string_plus_equals()
+ * - ConfigSetType::string_minus_equals()
+ * - ConfigSetType::reset()
  */
 
 #include "config.h"
@@ -41,10 +53,7 @@
 static int number_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                              const char *value, struct Buffer *err)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
-  if (!value || !value[0])
+  if (!value || (value[0] == '\0'))
   {
     mutt_buffer_printf(err, _("Option %s may not be empty"), cdef->name);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
@@ -98,9 +107,6 @@ static int number_string_set(const struct ConfigSet *cs, void *var, struct Confi
 static int number_string_get(const struct ConfigSet *cs, void *var,
                              const struct ConfigDef *cdef, struct Buffer *result)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   int value;
 
   if (var)
@@ -119,9 +125,6 @@ static int number_native_set(const struct ConfigSet *cs, void *var,
                              const struct ConfigDef *cdef, intptr_t value,
                              struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   if ((value < SHRT_MIN) || (value > SHRT_MAX))
   {
     mutt_buffer_printf(err, _("Invalid number: %ld"), value);
@@ -155,10 +158,85 @@ static int number_native_set(const struct ConfigSet *cs, void *var,
 static intptr_t number_native_get(const struct ConfigSet *cs, void *var,
                                   const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return INT_MIN; /* LCOV_EXCL_LINE */
-
   return *(short *) var;
+}
+
+/**
+ * number_string_plus_equals - Add to a Number by string - Implements ConfigSetType::string_plus_equals()
+ */
+static int number_string_plus_equals(const struct ConfigSet *cs, void *var,
+                                     const struct ConfigDef *cdef,
+                                     const char *value, struct Buffer *err)
+{
+  int num = 0;
+  if (!value || (value[0] == '\0') || (mutt_str_atoi(value, &num) < 0))
+  {
+    mutt_buffer_printf(err, _("Invalid number: %s"), NONULL(value));
+    return CSR_ERR_INVALID | CSR_INV_TYPE;
+  }
+
+  int result = *((short *) var) + num;
+  if ((result < SHRT_MIN) || (result > SHRT_MAX))
+  {
+    mutt_buffer_printf(err, _("Number is too big: %s"), value);
+    return CSR_ERR_INVALID | CSR_INV_TYPE;
+  }
+
+  if ((result < 0) && (cdef->type & DT_NOT_NEGATIVE))
+  {
+    mutt_buffer_printf(err, _("Option %s may not be negative"), cdef->name);
+    return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
+  }
+
+  if (cdef->validator)
+  {
+    int rc = cdef->validator(cs, cdef, (intptr_t) result, err);
+
+    if (CSR_RESULT(rc) != CSR_SUCCESS)
+      return rc | CSR_INV_VALIDATOR;
+  }
+
+  *(short *) var = result;
+  return CSR_SUCCESS;
+}
+
+/**
+ * number_string_minus_equals - Subtract from a Number by string - Implements ConfigSetType::string_minus_equals()
+ */
+static int number_string_minus_equals(const struct ConfigSet *cs, void *var,
+                                      const struct ConfigDef *cdef,
+                                      const char *value, struct Buffer *err)
+{
+  int num = 0;
+  if (!value || (value[0] == '\0') || (mutt_str_atoi(value, &num) < 0))
+  {
+    mutt_buffer_printf(err, _("Invalid number: %s"), value);
+    return CSR_ERR_INVALID | CSR_INV_TYPE;
+  }
+
+  int result = *((short *) var) - num;
+  if ((result < SHRT_MIN) || (result > SHRT_MAX))
+  {
+    mutt_buffer_printf(err, _("Number is too big: %s"), value);
+    return CSR_ERR_INVALID | CSR_INV_TYPE;
+  }
+
+  if ((result < 0) && (cdef->type & DT_NOT_NEGATIVE))
+  {
+    mutt_buffer_printf(err, _("Option %s may not be negative"), cdef->name);
+    return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
+  }
+
+  if (cdef->validator)
+  {
+    int rc = cdef->validator(cs, cdef, (intptr_t) result, err);
+
+    if (CSR_RESULT(rc) != CSR_SUCCESS)
+      return rc | CSR_INV_VALIDATOR;
+  }
+
+  *(short *) var = result;
+  return CSR_SUCCESS;
 }
 
 /**
@@ -167,9 +245,6 @@ static intptr_t number_native_get(const struct ConfigSet *cs, void *var,
 static int number_reset(const struct ConfigSet *cs, void *var,
                         const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   if (cdef->initial == (*(short *) var))
     return CSR_SUCCESS | CSR_SUC_NO_CHANGE;
 
@@ -197,8 +272,10 @@ void number_init(struct ConfigSet *cs)
     number_string_get,
     number_native_set,
     number_native_get,
+    number_string_plus_equals,
+    number_string_minus_equals,
     number_reset,
-    NULL,
+    NULL, // destroy
   };
   cs_register_type(cs, DT_NUMBER, &cst_number);
 }

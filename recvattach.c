@@ -205,10 +205,9 @@ void mutt_update_tree(struct AttachCtx *actx)
  * | \%u     | Unlink
  * | \%X     | Number of qualifying MIME parts in this part and its children
  */
-const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols,
-                              char op, const char *src, const char *prec,
-                              const char *if_str, const char *else_str,
-                              unsigned long data, MuttFormatFlags flags)
+const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols, char op,
+                              const char *src, const char *prec, const char *if_str,
+                              const char *else_str, intptr_t data, MuttFormatFlags flags)
 {
   char fmt[128];
   char charset[128];
@@ -437,11 +436,11 @@ const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols,
  */
 static void attach_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
-  struct AttachCtx *actx = menu->data;
+  struct AttachCtx *actx = menu->mdata;
 
   mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
                       NONULL(C_AttachFormat), attach_format_str,
-                      (unsigned long) (actx->idx[actx->v2r[line]]), MUTT_FORMAT_ARROWCURSOR);
+                      (intptr_t)(actx->idx[actx->v2r[line]]), MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
@@ -449,7 +448,7 @@ static void attach_make_entry(char *buf, size_t buflen, struct Menu *menu, int l
  */
 int attach_tag(struct Menu *menu, int sel, int act)
 {
-  struct AttachCtx *actx = menu->data;
+  struct AttachCtx *actx = menu->mdata;
   struct Body *cur = actx->idx[actx->v2r[sel]]->content;
   bool ot = cur->tagged;
 
@@ -1365,7 +1364,7 @@ static void mutt_update_recvattach_menu(struct AttachCtx *actx, struct Menu *men
     mutt_generate_recvattach_list(actx, actx->email, actx->email->content,
                                   actx->fp_root, -1, 0, 0);
     mutt_attach_init(actx);
-    menu->data = actx;
+    menu->mdata = actx;
   }
 
   mutt_update_tree(actx);
@@ -1431,19 +1430,21 @@ void mutt_view_attachments(struct Email *e)
     return;
 
   struct MuttWindow *dlg =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_DLG_ATTACH, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-#ifdef USE_DEBUG_WINDOW
-  dlg->name = "attach";
-#endif
-  dlg->type = WT_DIALOG;
+  dlg->notify = notify_new();
+
   struct MuttWindow *index =
-      mutt_window_new(MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  index->type = WT_INDEX;
-  struct MuttWindow *ibar = mutt_window_new(
-      MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 1, MUTT_WIN_SIZE_UNLIMITED);
-  ibar->type = WT_INDEX_BAR;
+  index->notify = notify_new();
+  notify_set_parent(index->notify, dlg->notify);
+
+  struct MuttWindow *ibar =
+      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
+                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
+  ibar->notify = notify_new();
+  notify_set_parent(ibar->notify, dlg->notify);
 
   if (C_StatusOnTop)
   {

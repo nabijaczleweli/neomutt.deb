@@ -27,7 +27,11 @@
 
 void test_mutt_hash_delete(void)
 {
-  // void mutt_hash_delete(struct Hash *table, const char *strkey, const void *data);
+  // void mutt_hash_delete(struct HashTable *table, const char *strkey, const void *data);
+
+  int dummy1 = 42;
+  int dummy2 = 13;
+  int dummy3 = 99;
 
   {
     mutt_hash_delete(NULL, "apple", "banana");
@@ -35,16 +39,25 @@ void test_mutt_hash_delete(void)
   }
 
   {
-    struct Hash *hash = mutt_hash_new(10, MUTT_HASH_NO_FLAGS);
-    mutt_hash_delete(hash, NULL, "banana");
-    TEST_CHECK_(1, "mutt_hash_delete(hash, NULL, \"banana\")");
-    mutt_hash_free(&hash);
+    struct HashTable *table = mutt_hash_new(10, MUTT_HASH_NO_FLAGS);
+    mutt_hash_delete(table, NULL, "banana");
+    TEST_CHECK_(1, "mutt_hash_delete(table, NULL, \"banana\")");
+    mutt_hash_free(&table);
   }
 
   {
-    struct Hash *hash = mutt_hash_new(10, MUTT_HASH_NO_FLAGS);
-    mutt_hash_delete(hash, "apple", NULL);
-    TEST_CHECK_(1, "mutt_hash_delete(hash, \"apple\", NULL)");
-    mutt_hash_free(&hash);
+    struct HashTable *table = mutt_hash_new(10, MUTT_HASH_NO_FLAGS);
+    mutt_hash_delete(table, "apple", NULL);
+    TEST_CHECK_(1, "mutt_hash_delete(table, \"apple\", NULL)");
+    mutt_hash_free(&table);
+  }
+
+  {
+    struct HashTable *table = mutt_hash_new(128, MUTT_HASH_STRDUP_KEYS);
+    mutt_hash_insert(table, "apple", &dummy1);
+    mutt_hash_insert(table, "banana", &dummy2);
+    mutt_hash_insert(table, "cherry", &dummy3);
+    mutt_hash_delete(table, "banana", NULL);
+    mutt_hash_free(&table);
   }
 }

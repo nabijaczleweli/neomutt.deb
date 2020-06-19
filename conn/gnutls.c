@@ -34,7 +34,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include "conn_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "lib.h"
@@ -108,37 +108,43 @@ static int tls_init(void)
 /**
  * tls_verify_peers - Wrapper for gnutls_certificate_verify_peers()
  * @param tlsstate TLS state
- * @retval  0 Success
- * @retval >0 Error, e.g. GNUTLS_CERT_INVALID
+ * @param certstat Certificate state, e.g. GNUTLS_CERT_INVALID
+ * @retval  0 Success If certstat was set. note: this does not mean success
+ * @retval >0 Error
  *
- * wrapper with sanity-checking
+ * Wrapper with sanity-checking.
+ *
+ * certstat is technically a bitwise-or of gnutls_certificate_status_t values.
  */
-static gnutls_certificate_status_t tls_verify_peers(gnutls_session_t tlsstate)
+static int tls_verify_peers(gnutls_session_t tlsstate, gnutls_certificate_status_t *certstat)
 {
-  unsigned int status = 0;
-  int verify_ret = gnutls_certificate_verify_peers2(tlsstate, &status);
-  if (verify_ret == 0)
-    return status;
+  /* gnutls_certificate_verify_peers2() chains to
+   * gnutls_x509_trust_list_verify_crt2().  That function's documentation says:
+   *
+   *   When a certificate chain of cert_list_size with more than one
+   *   certificates is provided, the verification status will apply to
+   *   the first certificate in the chain that failed
+   *   verification. The verification process starts from the end of
+   *   the chain(from CA to end certificate). The first certificate
+   *   in the chain must be the end-certificate while the rest of the
+   *   members may be sorted or not.
+   *
+   * This is why tls_check_certificate() loops from CA to host in that order,
+   * calling the menu, and recalling tls_verify_peers() for each approved
+   * cert in the chain.
+   */
+  int rc = gnutls_certificate_verify_peers2(tlsstate, certstat);
 
-  if (status == GNUTLS_E_NO_CERTIFICATE_FOUND)
-  {
+  /* certstat was set */
+  if (rc == 0)
+    return 0;
+
+  if (rc == GNUTLS_E_NO_CERTIFICATE_FOUND)
     mutt_error(_("Unable to get certificate from peer"));
-    return 0;
-  }
-  if (verify_ret < 0)
-  {
-    mutt_error(_("Certificate verification error (%s)"), gnutls_strerror(status));
-    return 0;
-  }
+  else
+    mutt_error(_("Certificate verification error (%s)"), gnutls_strerror(rc));
 
-  /* We only support X.509 certificates (not OpenPGP) at the moment */
-  if (gnutls_certificate_type_get(tlsstate) != GNUTLS_CRT_X509)
-  {
-    mutt_error(_("Certificate is not X.509"));
-    return 0;
-  }
-
-  return status;
+  return rc;
 }
 
 /**
@@ -183,7 +189,6 @@ static int tls_check_stored_hostname(const gnutls_datum_t *cert, const char *hos
 {
   char *linestr = NULL;
   size_t linestrsize = 0;
-  int linenum = 0;
 
   /* try checking against names stored in stored certs file */
   FILE *fp = mutt_file_fopen(C_CertificateFile, "r");
@@ -193,7 +198,7 @@ static int tls_check_stored_hostname(const gnutls_datum_t *cert, const char *hos
   char buf[80];
   buf[0] = '\0';
   tls_fingerprint(GNUTLS_DIG_MD5, buf, sizeof(buf), cert);
-  while ((linestr = mutt_file_read_line(linestr, &linestrsize, fp, &linenum, 0)))
+  while ((linestr = mutt_file_read_line(linestr, &linestrsize, fp, NULL, 0)))
   {
     regmatch_t *match = mutt_prex_capture(PREX_GNUTLS_CERT_HOST_HASH, linestr);
     if (match)
@@ -451,8 +456,8 @@ static void add_cert(const char *title, gnutls_x509_crt_t cert, bool issuer,
  * @param hostname Hostname
  * @param idx      Index into certificate list
  * @param len      Length of certificate list
- * @retval 0  Failure
- * @retval >0 Success
+ * @retval 1 Success
+ * @retval 0 Failure
  */
 static int tls_check_one_certificate(const gnutls_datum_t *certdata,
                                      gnutls_certificate_status_t certstat,
@@ -604,8 +609,8 @@ static int tls_check_one_certificate(const gnutls_datum_t *certdata,
 /**
  * tls_check_certificate - Check a connection's certificate
  * @param conn Connection to a server
- * @retval >0 Certificate is valid
- * @retval 0  Error, or certificate is invalid
+ * @retval 1 Certificate is valid
+ * @retval 0 Error, or certificate is invalid
  */
 static int tls_check_certificate(struct Connection *conn)
 {
@@ -615,15 +620,16 @@ static int tls_check_certificate(struct Connection *conn)
   unsigned int cert_list_size = 0;
   gnutls_certificate_status_t certstat;
   int certerr, savedcert, rc = 0;
-  int rcpeer = -1; /* the result of tls_check_preauth() on the peer's EE cert */
+  int max_preauth_pass = -1;
 
-  if (gnutls_auth_get_type(state) != GNUTLS_CRD_CERTIFICATE)
-  {
-    mutt_error(_("Unable to get certificate from peer"));
+  /* tls_verify_peers() calls gnutls_certificate_verify_peers2(),
+   * which verifies the auth_type is GNUTLS_CRD_CERTIFICATE
+   * and that get_certificate_type() for the server is GNUTLS_CRT_X509.
+   * If it returns 0, certstat will be set with failure codes for the first
+   * cert in the chain(from CA to host) with an error.
+   */
+  if (tls_verify_peers(state, &certstat) != 0)
     return 0;
-  }
-
-  certstat = tls_verify_peers(state);
 
   cert_list = gnutls_certificate_get_peers(state, &cert_list_size);
   if (!cert_list)
@@ -641,12 +647,8 @@ static int tls_check_certificate(struct Connection *conn)
     rc = tls_check_preauth(&cert_list[i], certstat, conn->account.host, i,
                            &certerr, &savedcert);
     preauthrc += rc;
-    if (i == 0)
-    {
-      /* This is the peer's end-entity X.509 certificate.  Stash the result
-       * to check later in this function.  */
-      rcpeer = rc;
-    }
+    if (!preauthrc)
+      max_preauth_pass = i;
 
     if (savedcert)
     {
@@ -662,17 +664,24 @@ static int tls_check_certificate(struct Connection *conn)
     rc = tls_check_one_certificate(&cert_list[i], certstat, conn->account.host,
                                    i, cert_list_size);
 
-    /* add signers to trust set, then reverify */
-    if (i && rc)
-    {
-      rc = gnutls_certificate_set_x509_trust_mem(data->xcred, &cert_list[i], GNUTLS_X509_FMT_DER);
-      if (rc != 1)
-        mutt_debug(LL_DEBUG1, "error trusting certificate %d: %d\n", i, rc);
+    /* Stop checking if the menu cert is aborted or rejected. */
+    if (rc == 0)
+      break;
 
-      certstat = tls_verify_peers(state);
-      /* If the cert chain now verifies, and the peer's cert was otherwise
-       * valid (rcpeer==0), we are done.  */
-      if (!certstat && !rcpeer)
+    /* add signers to trust set, then reverify */
+    if (i)
+    {
+      int rcsettrust = gnutls_certificate_set_x509_trust_mem(
+          data->xcred, &cert_list[i], GNUTLS_X509_FMT_DER);
+      if (rcsettrust != 1)
+        mutt_debug(LL_DEBUG1, "error trusting certificate %d: %d\n", i, rcsettrust);
+
+      if (tls_verify_peers(state, &certstat) != 0)
+        return 0;
+
+      /* If the cert chain now verifies, and all lower certs already
+       * passed preauth, we are done. */
+      if (!certstat && (max_preauth_pass >= (i - 1)))
         return 1;
     }
   }

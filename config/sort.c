@@ -23,7 +23,17 @@
 /**
  * @page config_sort Type: Sorting
  *
- * Type representing a sort option.
+ * Config type representing a sort option.
+ *
+ * - Backed by `short`
+ * - Validator is passed `short`
+ *
+ * ## Functions supported
+ * - ConfigSetType::string_set()
+ * - ConfigSetType::string_get()
+ * - ConfigSetType::native_set()
+ * - ConfigSetType::native_get()
+ * - ConfigSetType::reset()
  */
 
 #include "config.h"
@@ -134,13 +144,10 @@ const struct Mapping SortSidebarMethods[] = {
 static int sort_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                            const char *value, struct Buffer *err)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   intptr_t id = -1;
   int flags = 0;
 
-  if (!value || !value[0])
+  if (!value || (value[0] == '\0'))
   {
     mutt_buffer_printf(err, _("Option %s may not be empty"), cdef->name);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
@@ -224,9 +231,6 @@ static int sort_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
 static int sort_string_get(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, struct Buffer *result)
 {
-  if (!cs || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   int sort;
 
   if (var)
@@ -286,9 +290,6 @@ static int sort_string_get(const struct ConfigSet *cs, void *var,
 static int sort_native_set(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, intptr_t value, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   const char *str = NULL;
 
   switch (cdef->type & DT_SUBTYPE_MASK)
@@ -344,9 +345,6 @@ static int sort_native_set(const struct ConfigSet *cs, void *var,
 static intptr_t sort_native_get(const struct ConfigSet *cs, void *var,
                                 const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return INT_MIN; /* LCOV_EXCL_LINE */
-
   return *(short *) var;
 }
 
@@ -356,9 +354,6 @@ static intptr_t sort_native_get(const struct ConfigSet *cs, void *var,
 static int sort_reset(const struct ConfigSet *cs, void *var,
                       const struct ConfigDef *cdef, struct Buffer *err)
 {
-  if (!cs || !var || !cdef)
-    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
-
   if (cdef->initial == (*(short *) var))
     return CSR_SUCCESS | CSR_SUC_NO_CHANGE;
 
@@ -386,8 +381,10 @@ void sort_init(struct ConfigSet *cs)
     sort_string_get,
     sort_native_set,
     sort_native_get,
+    NULL, // string_plus_equals
+    NULL, // string_minus_equals
     sort_reset,
-    NULL,
+    NULL, // destroy
   };
   cs_register_type(cs, DT_SORT, &cst_sort);
 }

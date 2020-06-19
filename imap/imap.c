@@ -35,7 +35,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "imap_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
@@ -98,8 +98,8 @@ static int check_capabilities(struct ImapAccountData *adata)
  * get_flags - Make a simple list out of a FLAGS response
  * @param hflags List to store flags
  * @param s      String containing flags
- * @retval ptr End of the flags
- * @retval ptr NULL Failure
+ * @retval ptr  End of the flags
+ * @retval NULL Failure
  *
  * return stream following FLAGS response
  */
@@ -335,155 +335,6 @@ static int sync_helper(struct Mailbox *m, AclFlags right, int flag, const char *
 }
 
 /**
- * do_search - Perform a search of messages
- * @param search  List of pattern to match
- * @param allpats Must all patterns match?
- * @retval num Number of patterns search that should be done server-side
- *
- * Count the number of patterns that can be done by the server (are full-text).
- */
-static int do_search(const struct PatternList *search, bool allpats)
-{
-  int rc = 0;
-  const struct Pattern *pat = NULL;
-
-  SLIST_FOREACH(pat, search, entries)
-  {
-    switch (pat->op)
-    {
-      case MUTT_PAT_BODY:
-      case MUTT_PAT_HEADER:
-      case MUTT_PAT_WHOLE_MSG:
-        if (pat->string_match)
-          rc++;
-        break;
-      case MUTT_PAT_SERVERSEARCH:
-        rc++;
-        break;
-      default:
-        if (pat->child && do_search(pat->child, true))
-          rc++;
-    }
-
-    if (!allpats)
-      break;
-  }
-
-  return rc;
-}
-
-/**
- * compile_search - Convert NeoMutt pattern to IMAP search
- * @param m   Mailbox
- * @param pat Pattern to convert
- * @param buf Buffer for result
- * @retval  0 Success
- * @retval -1 Failure
- *
- * Convert neomutt Pattern to IMAP SEARCH command containing only elements
- * that require full-text search (neomutt already has what it needs for most
- * match types, and does a better job (eg server doesn't support regexes).
- */
-static int compile_search(struct Mailbox *m, const struct PatternList *pat, struct Buffer *buf)
-{
-  struct Pattern *firstpat = SLIST_FIRST(pat);
-
-  if (do_search(pat, false) == 0)
-    return 0;
-
-  if (firstpat->pat_not)
-    mutt_buffer_addstr(buf, "NOT ");
-
-  if (firstpat->child)
-  {
-    int clauses;
-
-    clauses = do_search(firstpat->child, true);
-    if (clauses > 0)
-    {
-      mutt_buffer_addch(buf, '(');
-
-      while (clauses)
-      {
-        if (do_search(firstpat->child, false))
-        {
-          if ((firstpat->op == MUTT_PAT_OR) && (clauses > 1))
-            mutt_buffer_addstr(buf, "OR ");
-          clauses--;
-
-          if (compile_search(m, firstpat->child, buf) < 0)
-            return -1;
-
-          if (clauses)
-            mutt_buffer_addch(buf, ' ');
-        }
-
-        SLIST_REMOVE_HEAD(firstpat->child, entries);
-      }
-
-      mutt_buffer_addch(buf, ')');
-    }
-  }
-  else
-  {
-    char term[256];
-    char *delim = NULL;
-
-    switch (firstpat->op)
-    {
-      case MUTT_PAT_HEADER:
-        mutt_buffer_addstr(buf, "HEADER ");
-
-        /* extract header name */
-        delim = strchr(firstpat->p.str, ':');
-        if (!delim)
-        {
-          mutt_error(_("Header search without header name: %s"), firstpat->p.str);
-          return -1;
-        }
-        *delim = '\0';
-        imap_quote_string(term, sizeof(term), firstpat->p.str, false);
-        mutt_buffer_addstr(buf, term);
-        mutt_buffer_addch(buf, ' ');
-
-        /* and field */
-        *delim = ':';
-        delim++;
-        SKIPWS(delim);
-        imap_quote_string(term, sizeof(term), delim, false);
-        mutt_buffer_addstr(buf, term);
-        break;
-      case MUTT_PAT_BODY:
-        mutt_buffer_addstr(buf, "BODY ");
-        imap_quote_string(term, sizeof(term), firstpat->p.str, false);
-        mutt_buffer_addstr(buf, term);
-        break;
-      case MUTT_PAT_WHOLE_MSG:
-        mutt_buffer_addstr(buf, "TEXT ");
-        imap_quote_string(term, sizeof(term), firstpat->p.str, false);
-        mutt_buffer_addstr(buf, term);
-        break;
-      case MUTT_PAT_SERVERSEARCH:
-      {
-        struct ImapAccountData *adata = imap_adata_get(m);
-        if (!(adata->capabilities & IMAP_CAP_X_GM_EXT_1))
-        {
-          mutt_error(_("Server-side custom search not supported: %s"),
-                     firstpat->p.str);
-          return -1;
-        }
-      }
-        mutt_buffer_addstr(buf, "X-GM-RAW ");
-        imap_quote_string(term, sizeof(term), firstpat->p.str, false);
-        mutt_buffer_addstr(buf, term);
-        break;
-    }
-  }
-
-  return 0;
-}
-
-/**
  * longest_common_prefix - Find longest prefix common to two strings
  * @param dest  Destination buffer
  * @param src   Source buffer
@@ -521,7 +372,8 @@ static int complete_hosts(char *buf, size_t buflen)
   size_t matchlen;
 
   matchlen = mutt_str_strlen(buf);
-  struct MailboxList ml = neomutt_mailboxlist_get_all(NeoMutt, MUTT_MAILBOX_ANY);
+  struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
+  neomutt_mailboxlist_get_all(&ml, NeoMutt, MUTT_MAILBOX_ANY);
   struct MailboxNode *np = NULL;
   STAILQ_FOREACH(np, &ml, entries)
   {
@@ -677,7 +529,7 @@ static void imap_logout(struct ImapAccountData *adata)
   if ((C_ImapPollTimeout <= 0) || (mutt_socket_poll(adata->conn, C_ImapPollTimeout) != 0))
   {
     while (imap_cmd_step(adata) == IMAP_RES_CONTINUE)
-      ;
+      ; // do nothing
   }
   mutt_socket_close(adata->conn);
   adata->state = IMAP_DISCONNECTED;
@@ -887,7 +739,10 @@ int imap_open_connection(struct ImapAccountData *adata)
       }
       if (ans == MUTT_YES)
       {
-        enum ImapExecResult rc = imap_exec(adata, "STARTTLS", IMAP_CMD_NO_FLAGS);
+        enum ImapExecResult rc = imap_exec(adata, "STARTTLS", IMAP_CMD_SINGLE);
+        // Clear any data after the STARTTLS acknowledgement
+        mutt_socket_empty(adata->conn);
+
         if (rc == IMAP_EXEC_FATAL)
           goto bail;
         if (rc != IMAP_EXEC_ERROR)
@@ -916,6 +771,29 @@ int imap_open_connection(struct ImapAccountData *adata)
   }
   else if (mutt_str_startswith(adata->buf, "* PREAUTH", CASE_IGNORE))
   {
+#ifdef USE_SSL
+    /* An unencrypted PREAUTH response is most likely a MITM attack.
+     * Require a confirmation. */
+    if (adata->conn->ssf == 0)
+    {
+      bool proceed = true;
+      if (C_SslForceTls)
+      {
+        proceed = false;
+      }
+      else if (C_SslStarttls != MUTT_NO)
+      {
+        proceed = mutt_yesorno(_("Abort unencrypted PREAUTH connection?"),
+                               C_SslStarttls) != MUTT_NO;
+      }
+      if (!proceed)
+      {
+        mutt_error(_("Encrypted connection unavailable"));
+        goto err_close_conn;
+      }
+    }
+#endif
+
     adata->state = IMAP_AUTHENTICATED;
     if (check_capabilities(adata) != 0)
       goto bail;
@@ -1144,7 +1022,7 @@ int imap_sync_message_for_copy(struct Mailbox *m, struct Email *e,
 
   /* UW-IMAP is OK with null flags, Cyrus isn't. The only solution is to
    * explicitly revoke all system flags (if we have permission) */
-  if (!*flags)
+  if (*flags == '\0')
   {
     set_flag(m, MUTT_ACL_SEEN, 1, "\\Seen ", flags, sizeof(flags));
     set_flag(m, MUTT_ACL_WRITE, 1, "Old ", flags, sizeof(flags));
@@ -1352,45 +1230,6 @@ int imap_mailbox_status(struct Mailbox *m, bool queue)
 }
 
 /**
- * imap_search - Find a matching mailbox
- * @param m   Mailbox
- * @param pat Pattern to match
- * @retval  0 Success
- * @retval -1 Failure
- */
-int imap_search(struct Mailbox *m, const struct PatternList *pat)
-{
-  struct Buffer buf;
-  struct ImapAccountData *adata = imap_adata_get(m);
-  for (int i = 0; i < m->msg_count; i++)
-  {
-    struct Email *e = m->emails[i];
-    if (!e)
-      break;
-    e->matched = false;
-  }
-
-  if (do_search(pat, true) == 0)
-    return 0;
-
-  mutt_buffer_init(&buf);
-  mutt_buffer_addstr(&buf, "UID SEARCH ");
-  if (compile_search(m, pat, &buf) < 0)
-  {
-    FREE(&buf.data);
-    return -1;
-  }
-  if (imap_exec(adata, buf.data, IMAP_CMD_NO_FLAGS) != IMAP_EXEC_SUCCESS)
-  {
-    FREE(&buf.data);
-    return -1;
-  }
-
-  FREE(&buf.data);
-  return 0;
-}
-
-/**
  * imap_subscribe - Subscribe to a mailbox
  * @param path      Mailbox path
  * @param subscribe True: subscribe, false: unsubscribe
@@ -1584,7 +1423,7 @@ int imap_fast_trash(struct Mailbox *m, char *dest)
       mutt_debug(LL_DEBUG1, "could not queue copy\n");
       goto out;
     }
-    else if (!m->quiet)
+    else if (m->verbose)
     {
       mutt_message(ngettext("Copying %d message to %s...", "Copying %d messages to %s...", rc),
                    rc, dest_mdata->name);
@@ -1692,7 +1531,7 @@ int imap_sync_mailbox(struct Mailbox *m, bool expunge, bool close)
         if (e->deleted && e->changed)
           e->active = false;
       }
-      if (!m->quiet)
+      if (m->verbose)
       {
         mutt_message(ngettext("Marking %d message deleted...",
                               "Marking %d messages deleted...", rc),
@@ -1732,7 +1571,7 @@ int imap_sync_mailbox(struct Mailbox *m, bool expunge, bool close)
       if ((e->env && e->env->changed) || e->attach_del)
       {
         /* L10N: The plural is chosen by the last %d, i.e. the total number */
-        if (!m->quiet)
+        if (m->verbose)
         {
           mutt_message(ngettext("Saving changed message... [%d/%d]",
                                 "Saving changed messages... [%d/%d]", m->msg_count),
@@ -1823,7 +1662,7 @@ int imap_sync_mailbox(struct Mailbox *m, bool expunge, bool close)
   /* We must send an EXPUNGE command if we're not closing. */
   if (expunge && !close && (m->rights & MUTT_ACL_DELETE))
   {
-    if (!m->quiet)
+    if (m->verbose)
       mutt_message(_("Expunging messages from server..."));
     /* Set expunge bit so we don't get spurious reopened messages */
     mdata->reopen |= IMAP_EXPUNGE_EXPECTED;
@@ -1908,7 +1747,7 @@ static int imap_ac_add(struct Account *a, struct Mailbox *m)
     }
 
     a->adata = adata;
-    a->free_adata = imap_adata_free;
+    a->adata_free = imap_adata_free;
   }
 
   if (!m->mdata)
@@ -1923,7 +1762,7 @@ static int imap_ac_add(struct Account *a, struct Mailbox *m)
     mutt_str_replace(&m->realpath, mailbox_path(m));
 
     m->mdata = mdata;
-    m->free_mdata = imap_mdata_free;
+    m->mdata_free = imap_mdata_free;
     url_free(&url);
   }
   return 0;
@@ -2064,7 +1903,7 @@ static int imap_mbox_open(struct Mailbox *m)
   m->rights = 0;
   mdata->new_mail_count = 0;
 
-  if (!m->quiet)
+  if (m->verbose)
     mutt_message(_("Selecting %s..."), mdata->name);
 
   /* pipeline ACL test */

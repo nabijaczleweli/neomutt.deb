@@ -41,7 +41,7 @@ struct Context
   struct PatternList *limit_pattern; ///< Compiled limit pattern
   struct Email *last_tag;            ///< Last tagged msg (used to link threads)
   struct MuttThread *tree;           ///< Top of thread tree
-  struct Hash *thread_hash;          ///< Hash table for threading
+  struct HashTable *thread_hash;     ///< Hash Table for threading
   int msg_not_read_yet;              ///< Which msg "new" in pager, -1 if none
 
   struct Menu *menu;                 ///< Needed for pattern compilation
@@ -53,20 +53,22 @@ struct Context
 };
 
 /**
- * struct EventContext - An Event that happened to an Context
- */
-struct EventContext
-{
-  struct Context *context; ///< The Context this Event relates to
-};
-
-/**
  * enum NotifyContext - Types of Context Event
+ *
+ * Observers of #NT_CONTEXT will be passed an #EventContext.
  */
 enum NotifyContext
 {
   NT_CONTEXT_OPEN = 1, ///< The Context has been opened
   NT_CONTEXT_CLOSE,    ///< The Context is about to be destroyed
+};
+
+/**
+ * struct EventContext - An Event that happened to an Context
+ */
+struct EventContext
+{
+  struct Context *context; ///< The Context this Event relates to
 };
 
 void            ctx_free            (struct Context **ptr);

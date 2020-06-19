@@ -35,7 +35,7 @@
 /* These Config Variables are only used in email/tags.c */
 struct Slist *C_HiddenTags; ///< Config: Tags that shouldn't be displayed on screen
 
-struct Hash *TagTransforms; ///< Lookup table of alternative tag names
+struct HashTable *TagTransforms; ///< Lookup table of alternative tag names
 
 /**
  * driver_tags_getter - Get transformed tags
@@ -189,7 +189,8 @@ bool driver_tags_replace(struct TagList *head, char *tags)
 
   if (tags)
   {
-    struct ListHead hsplit = mutt_list_str_split(tags, ' ');
+    struct ListHead hsplit = STAILQ_HEAD_INITIALIZER(hsplit);
+    mutt_list_str_split(&hsplit, tags, ' ');
     struct ListNode *np = NULL;
     STAILQ_FOREACH(np, &hsplit, entries)
     {

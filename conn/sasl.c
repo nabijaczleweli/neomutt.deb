@@ -38,6 +38,7 @@
  */
 
 #include "config.h"
+#include <stddef.h>
 #include <errno.h>
 #include <netdb.h>
 #include <sasl/sasl.h>
@@ -45,7 +46,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
-#include <time.h>
+#include <sys/types.h>
 #include "mutt/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"

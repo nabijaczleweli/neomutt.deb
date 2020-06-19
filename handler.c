@@ -1487,6 +1487,7 @@ void mutt_decode_base64(struct State *s, size_t len, bool istext, iconv_t cd)
 {
   char buf[5];
   int ch, i;
+  bool cr = false;
   char bufi[BUFI_SIZE];
   size_t l = 0;
 
@@ -1515,24 +1516,58 @@ void mutt_decode_base64(struct State *s, size_t len, bool istext, iconv_t cd)
 
     const int c1 = base64val(buf[0]);
     const int c2 = base64val(buf[1]);
-    ch = (c1 << 2) | (c2 >> 4);
-    bufi[l++] = ch;
 
+    /* first char */
+    ch = (c1 << 2) | (c2 >> 4);
+
+    if (cr && (ch != '\n'))
+      bufi[l++] = '\r';
+
+    cr = false;
+
+    if (istext && (ch == '\r'))
+      cr = true;
+    else
+      bufi[l++] = ch;
+
+    /* second char */
     if (buf[2] == '=')
       break;
     const int c3 = base64val(buf[2]);
     ch = ((c2 & 0xf) << 4) | (c3 >> 2);
-    bufi[l++] = ch;
 
+    if (cr && (ch != '\n'))
+      bufi[l++] = '\r';
+
+    cr = false;
+
+    if (istext && (ch == '\r'))
+      cr = true;
+    else
+      bufi[l++] = ch;
+
+    /* third char */
     if (buf[3] == '=')
       break;
     const int c4 = base64val(buf[3]);
     ch = ((c3 & 0x3) << 6) | c4;
-    bufi[l++] = ch;
+
+    if (cr && (ch != '\n'))
+      bufi[l++] = '\r';
+
+    cr = false;
+
+    if (istext && (ch == '\r'))
+      cr = true;
+    else
+      bufi[l++] = ch;
 
     if ((l + 8) >= sizeof(bufi))
       convert_to_state(cd, bufi, &l, s);
   }
+
+  if (cr)
+    bufi[l++] = '\r';
 
   convert_to_state(cd, bufi, &l, s);
   convert_to_state(cd, 0, 0, s);
@@ -1688,11 +1723,11 @@ int mutt_body_handler(struct Body *b, struct State *s)
    * if we're not already being called from there */
   else if (s->flags & MUTT_DISPLAY)
   {
-    char keystroke[128] = { 0 };
     struct Buffer msg = mutt_buffer_make(256);
 
     if (!OptViewAttach)
     {
+      char keystroke[128] = { 0 };
       if (km_expand_key(keystroke, sizeof(keystroke),
                         km_find_func(MENU_PAGER, OP_VIEW_ATTACHMENTS)))
       {
@@ -1802,19 +1837,21 @@ bool mutt_can_decode(struct Body *a)
  */
 void mutt_decode_attachment(struct Body *b, struct State *s)
 {
-  int istext = mutt_is_text_part(b);
+  int istext = mutt_is_text_part(b) && (b->disposition == DISP_INLINE);
   iconv_t cd = (iconv_t)(-1);
 
-  if (istext && s->flags & MUTT_CHARCONV)
+  if (istext && (b->charset || (s->flags & MUTT_CHARCONV)))
   {
-    char *charset = mutt_param_get(&b->parameter, "charset");
-    if (!charset && C_AssumedCharset)
-      charset = mutt_ch_get_default_charset();
+    const char *charset = b->charset;
+    if (!charset)
+    {
+      charset = mutt_param_get(&b->parameter, "charset");
+      if (!charset && C_AssumedCharset)
+        charset = mutt_ch_get_default_charset();
+    }
     if (charset && C_Charset)
       cd = mutt_ch_iconv_open(C_Charset, charset, MUTT_ICONV_HOOK_FROM);
   }
-  else if (istext && b->charset)
-    cd = mutt_ch_iconv_open(C_Charset, b->charset, MUTT_ICONV_HOOK_FROM);
 
   fseeko(s->fp_in, b->offset, SEEK_SET);
   switch (b->encoding)

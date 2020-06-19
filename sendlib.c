@@ -129,12 +129,18 @@ static const char *const userhdrs_override_headers[] = {
   "user-agent:",
 };
 
+/**
+ * enum UserHdrsOverrideIdx - Headers that the user may override
+ */
 enum UserHdrsOverrideIdx
 {
-  USERHDRS_OVERRIDE_CONTENT_TYPE,
-  USERHDRS_OVERRIDE_USER_AGENT,
+  USERHDRS_OVERRIDE_CONTENT_TYPE, ///< Override the "Content-Type"
+  USERHDRS_OVERRIDE_USER_AGENT,   ///< Override the "User-Agent"
 };
 
+/**
+ * struct UserHdrsOverride - Which headers have been overridden
+ */
 struct UserHdrsOverride
 {
   bool is_overridden[mutt_array_size(userhdrs_override_headers)];
@@ -413,7 +419,8 @@ int mutt_write_mime_header(struct Body *a, FILE *fp)
       if (!np->attribute || !np->value)
         continue;
 
-      struct ParameterList pl_conts = rfc2231_encode_string(np->attribute, np->value);
+      struct ParameterList pl_conts = TAILQ_HEAD_INITIALIZER(pl_conts);
+      rfc2231_encode_string(&pl_conts, np->attribute, np->value);
       struct Parameter *cont = NULL;
       TAILQ_FOREACH(cont, &pl_conts, entries)
       {
@@ -480,7 +487,8 @@ int mutt_write_mime_header(struct Body *a, FILE *fp)
           else
             t = fn;
 
-          struct ParameterList pl_conts = rfc2231_encode_string("filename", t);
+          struct ParameterList pl_conts = TAILQ_HEAD_INITIALIZER(pl_conts);
+          rfc2231_encode_string(&pl_conts, "filename", t);
           struct Parameter *cont = NULL;
           TAILQ_FOREACH(cont, &pl_conts, entries)
           {
@@ -1196,7 +1204,7 @@ enum ContentType mutt_lookup_mime_type(struct Body *att, const char *path)
             *p++ = 0;
 
             for (q = p; *q && !IS_SPACE(*q); q++)
-              ;
+              ; // do nothing
 
             mutt_str_substr_copy(p, q, subtype, sizeof(subtype));
 
@@ -1613,7 +1621,6 @@ static void run_mime_type_query(struct Body *att)
   FILE *fp = NULL, *fp_err = NULL;
   char *buf = NULL;
   size_t buflen;
-  int dummy = 0;
   pid_t pid;
   struct Buffer *cmd = mutt_buffer_pool_get();
 
@@ -1628,7 +1635,7 @@ static void run_mime_type_query(struct Body *att)
   }
   mutt_buffer_pool_release(&cmd);
 
-  buf = mutt_file_read_line(buf, &buflen, fp, &dummy, 0);
+  buf = mutt_file_read_line(buf, &buflen, fp, NULL, 0);
   if (buf)
   {
     if (strchr(buf, '/'))
@@ -1932,7 +1939,7 @@ static int print_val(FILE *fp, const char *pfx, const char *value,
 static int fold_one_header(FILE *fp, const char *tag, const char *value, size_t vlen,
                            const char *pfx, int wraplen, CopyHeaderFlags chflags)
 {
-  if (!value || !*value || !vlen)
+  if (!value || (*value == '\0') || !vlen)
     return 0;
 
   const char *p = value;
@@ -2822,7 +2829,7 @@ static char **add_option(char **args, size_t *argslen, size_t *argsmax, char *s)
  */
 int mutt_invoke_sendmail(struct AddressList *from, struct AddressList *to,
                          struct AddressList *cc, struct AddressList *bcc,
-                         const char *msg, int eightbit)
+                         const char *msg, bool eightbit)
 {
   char *ps = NULL, *path = NULL, *s = NULL, *childout = NULL;
   char **args = NULL;
@@ -2837,7 +2844,7 @@ int mutt_invoke_sendmail(struct AddressList *from, struct AddressList *to,
 
     mutt_expando_format(cmd, sizeof(cmd), 0, sizeof(cmd), NONULL(C_Inews),
                         nntp_format_str, 0, MUTT_FORMAT_NO_FLAGS);
-    if (!*cmd)
+    if (*cmd == '\0')
     {
       i = nntp_post(Context->mailbox, msg);
       unlink(msg);
@@ -3109,7 +3116,7 @@ static int bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
 #endif
     {
       rc = mutt_invoke_sendmail(env_from, to, NULL, NULL, mutt_b2s(tempfile),
-                                e->content->encoding == ENC_8BIT);
+                                (e->content->encoding == ENC_8BIT));
     }
   }
 
@@ -3228,7 +3235,7 @@ int mutt_write_multiple_fcc(const char *path, struct Email *e, const char *msgid
 
   while ((tok = strtok(NULL, ",")))
   {
-    if (!*tok)
+    if (*tok == '\0')
       continue;
 
     /* Only call mutt_expand_path if tok has some data */

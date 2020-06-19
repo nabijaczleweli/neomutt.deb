@@ -20,8 +20,8 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_MAILDIR_MAILDIR_PRIVATE_H
-#define MUTT_MAILDIR_MAILDIR_PRIVATE_H
+#ifndef MUTT_MAILDIR_PRIVATE_H
+#define MUTT_MAILDIR_PRIVATE_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -58,7 +58,7 @@ struct Maildir
 };
 
 typedef uint8_t MhSeqFlags;     ///< Flags, e.g. #MH_SEQ_UNSEEN
-#define MH_SEQ_NO_FLAGS         ///< No flags are set
+#define MH_SEQ_NO_FLAGS      0  ///< No flags are set
 #define MH_SEQ_UNSEEN  (1 << 0) ///< Email hasn't been read
 #define MH_SEQ_REPLIED (1 << 1) ///< Email has been replied to
 #define MH_SEQ_FLAGGED (1 << 2) ///< Email is flagged
@@ -110,4 +110,4 @@ int mh_sync_message(struct Mailbox *m, int msgno);
 int maildir_sync_message(struct Mailbox *m, int msgno);
 int mh_rewrite_message(struct Mailbox *m, int msgno);
 
-#endif /* MUTT_MAILDIR_MAILDIR_PRIVATE_H */
+#endif /* MUTT_MAILDIR_PRIVATE_H */

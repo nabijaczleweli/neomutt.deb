@@ -66,8 +66,11 @@ void mailbox_free(struct Mailbox **ptr)
 
   mailbox_changed(m, NT_MAILBOX_CLOSED);
 
-  if (m->mdata && m->free_mdata)
-    m->free_mdata(&m->mdata);
+  if (m->mdata && m->mdata_free)
+    m->mdata_free(&m->mdata);
+
+  for (size_t i = 0; i < m->email_max; i++)
+    email_free(&m->emails[i]);
 
   mutt_buffer_dealloc(&m->pathbuf);
   cs_subset_free(&m->sub);
@@ -96,7 +99,8 @@ struct Mailbox *mailbox_find(const char *path)
   if (stat(path, &sb) != 0)
     return NULL;
 
-  struct MailboxList ml = neomutt_mailboxlist_get_all(NeoMutt, MUTT_MAILBOX_ANY);
+  struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
+  neomutt_mailboxlist_get_all(&ml, NeoMutt, MUTT_MAILBOX_ANY);
   struct MailboxNode *np = NULL;
   struct Mailbox *m = NULL;
   STAILQ_FOREACH(np, &ml, entries)
@@ -126,7 +130,8 @@ struct Mailbox *mailbox_find_name(const char *name)
   if (!name)
     return NULL;
 
-  struct MailboxList ml = neomutt_mailboxlist_get_all(NeoMutt, MUTT_MAILBOX_ANY);
+  struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
+  neomutt_mailboxlist_get_all(&ml, NeoMutt, MUTT_MAILBOX_ANY);
   struct MailboxNode *np = NULL;
   struct Mailbox *m = NULL;
   STAILQ_FOREACH(np, &ml, entries)

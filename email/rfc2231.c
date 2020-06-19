@@ -36,7 +36,6 @@
 #include <ctype.h>
 #include <limits.h>
 #include <stdbool.h>
-#include <stdlib.h>
 #include <string.h>
 #include "mutt/lib.h"
 #include "rfc2231.h"
@@ -280,7 +279,8 @@ void rfc2231_decode_parameters(struct ParameterList *pl)
       s[0] = '\0';
       s++; /* let s point to the first character of index. */
       for (t = s; (t[0] != '\0') && isdigit((unsigned char) t[0]); t++)
-        ;
+        ; // do nothing
+
       encoded = (t[0] == '*');
       t[0] = '\0';
 
@@ -318,21 +318,19 @@ void rfc2231_decode_parameters(struct ParameterList *pl)
 
 /**
  * rfc2231_encode_string - Encode a string to be suitable for an RFC2231 header
+ * @param head      String encoded as a ParameterList, empty on error
  * @param attribute Name of attribute to encode
  * @param value     Value of attribute to encode
- * @retval obj String encoded as a ParameterList
- * @retval obj Error: empty object
+ * @retval num Number of Parameters in the List
  *
  * If the value is large, the list will contain continuation lines.
  */
-struct ParameterList rfc2231_encode_string(const char *attribute, char *value)
+size_t rfc2231_encode_string(struct ParameterList *head, const char *attribute, char *value)
 {
-  struct ParameterList pl;
-  TAILQ_INIT(&pl);
-
   if (!attribute || !value)
-    return pl;
+    return 0;
 
+  size_t count = 0;
   bool encode = false;
   bool add_quotes = false;
   bool free_src_value = false;
@@ -428,7 +426,8 @@ struct ParameterList rfc2231_encode_string(const char *attribute, char *value)
   while (*cur)
   {
     current = mutt_param_new();
-    TAILQ_INSERT_TAIL(&pl, current, entries);
+    TAILQ_INSERT_TAIL(head, current, entries);
+    count++;
 
     mutt_buffer_strcpy(cur_attribute, attribute);
     if (split)
@@ -477,5 +476,5 @@ struct ParameterList rfc2231_encode_string(const char *attribute, char *value)
   if (free_src_value)
     FREE(&src_value);
 
-  return pl;
+  return count;
 }

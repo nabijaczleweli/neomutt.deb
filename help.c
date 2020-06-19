@@ -35,6 +35,7 @@
 #include <wchar.h>
 #include "mutt/lib.h"
 #include "gui/lib.h"
+#include "mutt.h"
 #include "functions.h"
 #include "globals.h"
 #include "keymap.h"
@@ -42,13 +43,6 @@
 #include "opcodes.h"
 #include "pager.h"
 #include "protos.h" // IWYU pragma: keep
-
-static const char *HelpStrings[] = {
-#define DEFINE_HELP_MESSAGE(opcode, help_string) help_string,
-  OPS(DEFINE_HELP_MESSAGE)
-#undef DEFINE_HELP_MESSAGE
-      NULL,
-};
 
 /**
  * help_lookup_function - Find a keybinding for an operation
@@ -252,8 +246,9 @@ static int get_wrapped_width(const char *t, size_t wid)
  * @param fp  File to write to
  * @param col Current screen column
  * @param i   Screen column to pad until
- * @retval num `i` - Padding was added
- * @retval num `col` - Content was already wider than col
+ * @retval num
+ * - `i` - Padding was added
+ * - `col` - Content was already wider than col
  */
 static int pad(FILE *fp, int col, int i)
 {
@@ -398,7 +393,7 @@ static void dump_menu(FILE *fp, enum MenuType menu, int wraplen)
       {
         b = help_lookup_function(map->op, menu);
         format_line(fp, 0, buf, b ? b->name : "UNKNOWN",
-                    b ? _(HelpStrings[b->op]) : _("ERROR: please report this bug"), wraplen);
+                    b ? _(OpStrings[b->op][1]) : _("ERROR: please report this bug"), wraplen);
       }
     }
   }
@@ -432,7 +427,7 @@ static void dump_unbound(FILE *fp, const struct Binding *funcs,
   for (int i = 0; funcs[i].name; i++)
   {
     if (!is_bound(map, funcs[i].op) && (!aux || !is_bound(aux, funcs[i].op)))
-      format_line(fp, 0, funcs[i].name, "", _(HelpStrings[funcs[i].op]), wraplen);
+      format_line(fp, 0, funcs[i].name, "", _(OpStrings[funcs[i].op][1]), wraplen);
   }
 }
 

@@ -29,7 +29,8 @@ ADDRESS_OBJS	= test/address/mutt_addr_cat.o \
 		  test/address/mutt_addrlist_search.o \
 		  test/address/mutt_addrlist_to_intl.o \
 		  test/address/mutt_addrlist_to_local.o \
-		  test/address/mutt_addrlist_write.o
+		  test/address/mutt_addrlist_write.o \
+		  test/address/mutt_addrlist_write_list.o
 
 ATTACH_OBJS	= test/attach/mutt_actx_add_attach.o \
 		  test/attach/mutt_actx_add_body.o \
@@ -61,9 +62,6 @@ BUFFER_OBJS	= test/buffer/mutt_buffer_add_printf.o \
 		  test/buffer/mutt_buffer_is_empty.o \
 		  test/buffer/mutt_buffer_len.o \
 		  test/buffer/mutt_buffer_make.o \
-		  test/buffer/mutt_buffer_pool_free.o \
-		  test/buffer/mutt_buffer_pool_get.o \
-		  test/buffer/mutt_buffer_pool_release.o \
 		  test/buffer/mutt_buffer_printf.o \
 		  test/buffer/mutt_buffer_reset.o \
 		  test/buffer/mutt_buffer_strcpy.o \
@@ -92,6 +90,19 @@ CHARSET_OBJS	= test/charset/mutt_ch_canonical_charset.o \
 		  test/charset/mutt_ch_lookup_remove.o \
 		  test/charset/mutt_ch_set_charset.o
 
+@if USE_LZ4 || USE_ZLIB || USE_ZSTD
+COMPRESS_OBJS	+= test/compress/common.o
+@endif
+@if USE_LZ4
+COMPRESS_OBJS	+= test/compress/lz4.o
+@endif
+@if USE_ZLIB
+COMPRESS_OBJS	+= test/compress/zlib.o
+@endif
+@if USE_ZSTD
+COMPRESS_OBJS	+= test/compress/zstd.o
+@endif
+
 CONFIG_OBJS	= test/config/account.o \
 		  test/config/address.o \
 		  test/config/bool.o \
@@ -117,7 +128,6 @@ DATE_OBJS	= test/date/mutt_date_add_timeout.o \
 		  test/date/mutt_date_epoch.o \
 		  test/date/mutt_date_epoch_ms.o \
 		  test/date/mutt_date_gmtime.o \
-		  test/date/mutt_date_is_day_name.o \
 		  test/date/mutt_date_local_tz.o \
 		  test/date/mutt_date_localtime.o \
 		  test/date/mutt_date_localtime_format.o \
@@ -137,10 +147,10 @@ EMAIL_OBJS	= test/email/common.o \
 		  test/email/email_size.o \
 		  test/email/emaillist_add_email.o \
 		  test/email/emaillist_clear.o \
+		  test/email/mutt_autocrypthdr_free.o \
 		  test/email/mutt_autocrypthdr_new.o
 
-ENVELOPE_OBJS	= test/envelope/mutt_autocrypthdr_free.o \
-		  test/envelope/mutt_env_cmp_strict.o \
+ENVELOPE_OBJS	= test/envelope/mutt_env_cmp_strict.o \
 		  test/envelope/mutt_env_free.o \
 		  test/envelope/mutt_env_merge.o \
 		  test/envelope/mutt_env_new.o \
@@ -286,7 +296,8 @@ MAILBOX_OBJS	= test/mailbox/mailbox_changed.o \
 		  test/mailbox/mailbox_update.o
 
 MAPPING_OBJS	= test/mapping/mutt_map_get_name.o \
-		  test/mapping/mutt_map_get_value.o
+		  test/mapping/mutt_map_get_value.o \
+		  test/mapping/mutt_map_get_value_n.o
 
 MBYTE_OBJS	= test/mbyte/mutt_mb_charlen.o \
 		  test/mbyte/mutt_mb_filter_unprintable.o \
@@ -374,6 +385,13 @@ PATTERN_OBJS	= pattern.o \
 		  test/pattern/dummy.o \
 		  test/pattern/extract.o
 
+POOL_OBJS	= test/pool/mutt_buffer_pool_free.o \
+		  test/pool/mutt_buffer_pool_get.o \
+		  test/pool/mutt_buffer_pool_release.o
+
+PREX_OBJS	= test/prex/mutt_prex_capture.o \
+		  test/prex/mutt_prex_free.o
+
 REGEX_OBJS	= test/regex/mutt_regex_capture.o \
 		  test/regex/mutt_regex_compile.o \
 		  test/regex/mutt_regex_free.o \
@@ -420,6 +438,34 @@ SLIST_OBJS	= test/slist/slist_add_list.o \
 		  test/slist/slist_is_member.o \
 		  test/slist/slist_parse.o \
 		  test/slist/slist_remove_string.o
+
+@if HAVE_BDB || HAVE_GDBM || HAVE_KC || HAVE_LMDB || HAVE_QDBM || HAVE_ROCKSDB || HAVE_TDB || HAVE_TC
+STORE_OBJS	+= test/store/common.o test/store/store.o
+@endif
+@if HAVE_BDB
+STORE_OBJS	+= test/store/bdb.o
+@endif
+@if HAVE_GDBM
+STORE_OBJS	+= test/store/gdbm.o
+@endif
+@if HAVE_KC
+STORE_OBJS	+= test/store/kc.o
+@endif
+@if HAVE_LMDB
+STORE_OBJS	+= test/store/lmdb.o
+@endif
+@if HAVE_QDBM
+STORE_OBJS	+= test/store/qdbm.o
+@endif
+@if HAVE_ROCKSDB
+STORE_OBJS	+= test/store/rocksdb.o
+@endif
+@if HAVE_TDB
+STORE_OBJS	+= test/store/tdb.o
+@endif
+@if HAVE_TC
+STORE_OBJS	+= test/store/tc.o
+@endif
 
 STRING_OBJS	= test/string/mutt_str_adjust.o \
 		  test/string/mutt_str_append_item.o \
@@ -492,18 +538,20 @@ URL_OBJS	= test/url/url_check_scheme.o \
 
 BUILD_DIRS	= $(PWD)/test/account $(PWD)/test/address $(PWD)/test/attach \
 		  $(PWD)/test/base64 $(PWD)/test/body $(PWD)/test/buffer \
-		  $(PWD)/test/charset $(PWD)/test/config $(PWD)/test/date \
-		  $(PWD)/test/email $(PWD)/test/envelope $(PWD)/test/envlist \
-		  $(PWD)/test/file $(PWD)/test/filter $(PWD)/test/from \
-		  $(PWD)/test/group $(PWD)/test/gui $(PWD)/test/hash \
-		  $(PWD)/test/history $(PWD)/test/idna $(PWD)/test/list \
-		  $(PWD)/test/logging $(PWD)/test/mailbox $(PWD)/test/mapping \
-		  $(PWD)/test/mbyte $(PWD)/test/md5 $(PWD)/test/memory \
-		  $(PWD)/test/neo $(PWD)/test/notify $(PWD)/test/parameter \
-		  $(PWD)/test/parse $(PWD)/test/path $(PWD)/test/pattern \
+		  $(PWD)/test/charset $(PWD)/test/compress $(PWD)/test/config \
+		  $(PWD)/test/date $(PWD)/test/email $(PWD)/test/envelope \
+		  $(PWD)/test/envlist $(PWD)/test/file $(PWD)/test/filter \
+		  $(PWD)/test/from $(PWD)/test/group $(PWD)/test/gui \
+		  $(PWD)/test/hash $(PWD)/test/history $(PWD)/test/idna \
+		  $(PWD)/test/list $(PWD)/test/logging $(PWD)/test/mailbox \
+		  $(PWD)/test/mapping $(PWD)/test/mbyte $(PWD)/test/md5 \
+		  $(PWD)/test/memory $(PWD)/test/neo $(PWD)/test/notify \
+		  $(PWD)/test/parameter $(PWD)/test/parse $(PWD)/test/path \
+		  $(PWD)/test/pattern $(PWD)/test/pool $(PWD)/test/prex \
 		  $(PWD)/test/regex $(PWD)/test/rfc2047 $(PWD)/test/rfc2231 \
-		  $(PWD)/test/signal $(PWD)/test/slist $(PWD)/test/string \
-		  $(PWD)/test/tags $(PWD)/test/thread $(PWD)/test/url
+		  $(PWD)/test/signal $(PWD)/test/slist $(PWD)/test/store \
+		  $(PWD)/test/string $(PWD)/test/tags $(PWD)/test/thread \
+		  $(PWD)/test/url
 
 TEST_OBJS	= test/main.o test/common.o \
 		  $(ACCOUNT_OBJS) \
@@ -513,6 +561,7 @@ TEST_OBJS	= test/main.o test/common.o \
 		  $(BODY_OBJS) \
 		  $(BUFFER_OBJS) \
 		  $(CHARSET_OBJS) \
+		  $(COMPRESS_OBJS) \
 		  $(CONFIG_OBJS) \
 		  $(DATE_OBJS) \
 		  $(EMAIL_OBJS) \
@@ -539,11 +588,14 @@ TEST_OBJS	= test/main.o test/common.o \
 		  $(PARSE_OBJS) \
 		  $(PATH_OBJS) \
 		  $(PATTERN_OBJS) \
+		  $(POOL_OBJS) \
+		  $(PREX_OBJS) \
 		  $(REGEX_OBJS) \
 		  $(RFC2047_OBJS) \
 		  $(RFC2231_OBJS) \
 		  $(SIGNAL_OBJS) \
 		  $(SLIST_OBJS) \
+		  $(STORE_OBJS) \
 		  $(STRING_OBJS) \
 		  $(TAGS_OBJS) \
 		  $(THREAD_OBJS) \

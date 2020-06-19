@@ -1,9 +1,9 @@
 /**
  * @file
- * Test code for mutt_date_is_day_name()
+ * Test code for the store
  *
  * @authors
- * Copyright (C) 2019 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -23,18 +23,32 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include <limits.h>
 #include "mutt/lib.h"
+#include "common.h"
+#include "store/lib.h"
 
-void test_mutt_date_is_day_name(void)
+void test_store_store(void)
 {
-  // bool mutt_date_is_day_name(const char *s);
+  const char *list = NULL;
 
-  TEST_CHECK(mutt_date_is_day_name(NULL) == false);
-  TEST_CHECK(mutt_date_is_day_name("mo") == false);
-  TEST_CHECK(mutt_date_is_day_name("Mon") == false);
-  TEST_CHECK(mutt_date_is_day_name("Dec ") == false);
-  TEST_CHECK(mutt_date_is_day_name("Tuesday") == false);
+  list = store_backend_list();
+  TEST_CHECK(list != NULL);
+  FREE(&list);
 
-  TEST_CHECK(mutt_date_is_day_name("Mon ") == true);
-  TEST_CHECK(mutt_date_is_day_name("TUE ") == true);
+  const struct StoreOps *sops = NULL;
+
+  sops = store_get_backend_ops(NULL);
+  TEST_CHECK(sops != NULL);
+
+#ifdef HAVE_TC
+  sops = store_get_backend_ops("tokyocabinet");
+  TEST_CHECK(sops != NULL);
+#endif
+
+  TEST_CHECK(store_is_valid_backend(NULL) == true);
+
+#ifdef HAVE_TC
+  TEST_CHECK(store_is_valid_backend("tokyocabinet") == true);
+#endif
 }

@@ -30,7 +30,7 @@
 #include "config.h"
 #include <stddef.h>
 #include <lz4.h>
-#include "compress_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "lib.h"
 #include "hcache/lib.h"
@@ -58,8 +58,8 @@ static void *compr_lz4_open(short level)
 
   if ((level < MIN_COMP_LEVEL) || (level > MAX_COMP_LEVEL))
   {
-    mutt_warning(_("The compression level for %s should be between %d and %d"),
-                 compr_lz4_ops.name, MIN_COMP_LEVEL, MAX_COMP_LEVEL);
+    mutt_debug(LL_DEBUG1, "The compression level for %s should be between %d and %d",
+               compr_lz4_ops.name, MIN_COMP_LEVEL, MAX_COMP_LEVEL);
     level = MIN_COMP_LEVEL;
   }
 
@@ -85,7 +85,7 @@ static void *compr_lz4_compress(void *cctx, const char *data, size_t dlen, size_
 
   len = LZ4_compress_fast(data, cbuf + 4, datalen, len, ctx->level);
   if (len == 0)
-    return NULL;
+    return NULL; // LCOV_EXCL_LINE
   *clen = len + 4;
 
   /* save ulen to first 4 bytes */
@@ -141,4 +141,4 @@ static void compr_lz4_close(void **cctx)
   FREE(cctx);
 }
 
-COMPRESS_OPS(lz4)
+COMPRESS_OPS(lz4, MIN_COMP_LEVEL, MAX_COMP_LEVEL)

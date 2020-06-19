@@ -115,7 +115,7 @@ struct Mailbox
   bool dontwrite              : 1;    ///< Don't write the mailbox on close
   bool first_check_stats_done : 1;    ///< True when the check have been done at least on time
   bool peekonly               : 1;    ///< Just taking a glance, revert atime
-  bool quiet                  : 1;    ///< Inhibit status messages?
+  bool verbose                : 1;    ///< Display status messages?
   bool readonly               : 1;    ///< Don't allow changes to the mailbox
 
   AclFlags rights;                    ///< ACL bits, see #AclFlags
@@ -124,9 +124,9 @@ struct Mailbox
   void *compress_info;                ///< Compressed mbox module private data
 #endif
 
-  struct Hash *id_hash;               ///< Hash table by msg id
-  struct Hash *subj_hash;             ///< Hash table by subject
-  struct Hash *label_hash;            ///< Hash table for x-labels
+  struct HashTable *id_hash;          ///< Hash Table by msg id
+  struct HashTable *subj_hash;        ///< Hash Table by subject
+  struct HashTable *label_hash;       ///< Hash Table for x-labels
 
   struct Account *account;            ///< Account that owns this Mailbox
   int opened;                         ///< Number of times mailbox is opened
@@ -134,7 +134,7 @@ struct Mailbox
   int flags;                          ///< e.g. #MB_NORMAL
 
   void *mdata;                        ///< Driver specific data
-  void (*free_mdata)(void **ptr);     ///< Driver-specific data free function
+  void (*mdata_free)(void **ptr);     ///< Driver-specific data free function
 
   struct Notify *notify;              ///< Notifications handler
 };
@@ -150,15 +150,9 @@ struct MailboxNode
 STAILQ_HEAD(MailboxList, MailboxNode);
 
 /**
- * struct EventMailbox - An Event that happened to a Mailbox
- */
-struct EventMailbox
-{
-  struct Mailbox *mailbox; ///< The Mailbox this Event relates to
-};
-
-/**
  * enum NotifyMailbox - Types of Mailbox Event
+ *
+ * Observers of #NT_MAILBOX will be passed an #EventMailbox.
  */
 enum NotifyMailbox
 {
@@ -172,6 +166,14 @@ enum NotifyMailbox
   NT_MAILBOX_RESORT,  ///< Email list needs resorting
   NT_MAILBOX_UPDATE,  ///< Update internal tables
   NT_MAILBOX_UNTAG,   ///< Clear the 'last-tagged' pointer
+};
+
+/**
+ * struct EventMailbox - An Event that happened to a Mailbox
+ */
+struct EventMailbox
+{
+  struct Mailbox *mailbox; ///< The Mailbox this Event relates to
 };
 
 void            mailbox_changed   (struct Mailbox *m, enum NotifyMailbox action);

@@ -1,6 +1,6 @@
 /**
  * @file
- * Shared functions that are private to Connections
+ * Test code for mutt_map_get_value_n()
  *
  * @authors
  * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
@@ -20,20 +20,11 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_CONN_CONN_PRIVATE_H
-#define MUTT_CONN_CONN_PRIVATE_H
+#define TEST_NO_MAIN
+#include "config.h"
+#include "acutest.h"
 
-#include <stddef.h>
-#include <time.h>
-
-struct Connection;
-
-int raw_socket_close(struct Connection *conn);
-int raw_socket_open (struct Connection *conn);
-int raw_socket_poll (struct Connection *conn, time_t wait_secs);
-int raw_socket_read (struct Connection *conn, char *buf, size_t len);
-int raw_socket_write(struct Connection *conn, const char *buf, size_t count);
-
-void mutt_tunnel_socket_setup(struct Connection *conn);
-
-#endif /* MUTT_CONN_CONN_PRIVATE_H */
+void test_mutt_map_get_value_n(void)
+{
+  // int mutt_map_get_value_n(const char *name, size_t len, const struct Mapping *map);
+}

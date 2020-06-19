@@ -1,9 +1,9 @@
 /**
  * @file
- * Routines for querying and external address book
+ * Common code for store tests
  *
  * @authors
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -20,16 +20,16 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_QUERY_H
-#define MUTT_QUERY_H
+#ifndef TEST_STORE_COMMON_H
+#define TEST_STORE_COMMON_H
 
-#include <stdio.h>
+#include "acutest.h"
+#include <stdbool.h>
 
-/* These Config Variables are only used in query.c */
-extern char *C_QueryCommand;
-extern char *C_QueryFormat;
+struct StoreOps;
 
-int  mutt_query_complete(char *buf, size_t buflen);
-void mutt_query_menu(char *buf, size_t buflen);
+bool test_store_db(const struct StoreOps *sops, void *db);
+bool test_store_degenerate(const struct StoreOps *sops, const char *name);
+bool test_store_setup(char *buf, size_t buflen);
 
-#endif /* MUTT_QUERY_H */
+#endif /* TEST_STORE_COMMON_H */

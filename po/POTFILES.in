@@ -1,8 +1,12 @@
-addrbook.c
 address/address.c
 address/group.c
 address/idna.c
-alias.c
+alias/alias.c
+alias/commands.c
+alias/dlgalias.c
+alias/dlgquery.c
+alias/gui.c
+alias/reverse.c
 autocrypt/acct_menu.c
 autocrypt/autocrypt.c
 autocrypt/db.c
@@ -52,6 +56,7 @@ core/account.c
 core/mailbox.c
 core/neomutt.c
 debug/backtrace.c
+debug/common.c
 debug/graphviz.c
 debug/notify.c
 debug/parse_test.c
@@ -102,6 +107,7 @@ imap/browse.c
 imap/command.c
 imap/imap.c
 imap/message.c
+imap/search.c
 imap/utf7.c
 imap/util.c
 index.c
@@ -111,6 +117,7 @@ mailcap.c
 maildir/maildir.c
 maildir/mh.c
 maildir/shared.c
+maillist.c
 main.c
 mbox/mbox.c
 menu.c
@@ -175,8 +182,9 @@ nntp/browse.c
 nntp/complete.c
 nntp/newsrc.c
 nntp/nntp.c
-notmuch/mutt_notmuch.c
-notmuch/nm_db.c
+notmuch/db.c
+notmuch/notmuch.c
+opcodes.c
 opcodes.h
 pager.c
 pattern.c
@@ -186,7 +194,6 @@ pop/pop_auth.c
 pop/pop_lib.c
 postpone.c
 progress.c
-query.c
 recvattach.c
 recvcmd.c
 remailer.c

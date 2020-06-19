@@ -36,9 +36,9 @@
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "email/lib.h"
+#include "alias/lib.h"
 #include "mutt.h"
 #include "hook.h"
-#include "alias.h"
 #include "context.h"
 #include "format_flags.h"
 #include "globals.h"
@@ -74,7 +74,7 @@ TAILQ_HEAD(HookList, Hook);
 
 static struct HookList Hooks = TAILQ_HEAD_INITIALIZER(Hooks);
 
-static struct Hash *IdxFmtHooks = NULL;
+static struct HashTable *IdxFmtHooks = NULL;
 static HookFlags current_hook_type = MUTT_HOOK_NO_FLAGS;
 
 /**
@@ -320,10 +320,7 @@ void mutt_delete_hooks(HookFlags type)
 }
 
 /**
- * delete_idxfmt_hooklist - Delete a index-format-hook from the Hash Table - Implements ::hashelem_free_t
- * @param type Type of Hash Element
- * @param obj  Pointer to Hashed object
- * @param data Private data
+ * delete_idxfmt_hooklist - Delete a index-format-hook from the Hash Table - Implements ::hash_hdata_free_t
  */
 static void delete_idxfmt_hooklist(int type, void *obj, intptr_t data)
 {
@@ -425,7 +422,7 @@ enum CommandResult mutt_parse_idxfmt_hook(struct Buffer *buf, struct Buffer *s,
     goto out;
 
   hook = mutt_mem_calloc(1, sizeof(struct Hook));
-  hook->type = data;
+  hook->type = MUTT_IDXFMTHOOK;
   hook->command = mutt_buffer_strdup(fmtstring);
   hook->pattern = pat;
   hook->regex.pattern = mutt_buffer_strdup(pattern);

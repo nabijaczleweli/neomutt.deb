@@ -41,10 +41,10 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
 #include "pager.h"
-#include "alias.h"
 #include "commands.h"
 #include "context.h"
 #include "format_flags.h"
@@ -1358,13 +1358,12 @@ static int fill_buffer(FILE *fp, LOFF_T *last_pos, LOFF_T offset, unsigned char 
 {
   unsigned char *p = NULL, *q = NULL;
   static int b_read;
-  int l = 0;
 
   if (*buf_ready == 0)
   {
     if (offset != *last_pos)
       fseeko(fp, offset, SEEK_SET);
-    *buf = (unsigned char *) mutt_file_read_line((char *) *buf, blen, fp, &l, MUTT_EOL);
+    *buf = (unsigned char *) mutt_file_read_line((char *) *buf, blen, fp, NULL, MUTT_EOL);
     if (!*buf)
     {
       fmt[0] = NULL;
@@ -1395,16 +1394,16 @@ static int fill_buffer(FILE *fp, LOFF_T *last_pos, LOFF_T offset, unsigned char 
       }
       else if ((p[0] == '\033') && (p[1] == '[') && is_ansi(p + 2)) // Escape
       {
-        while (*p++ != 'm') /* skip ANSI sequence */
-          ;
+        while (*p++ != 'm')
+          ; // skip ANSI sequence
       }
       else if ((p[0] == '\033') && (p[1] == ']') && // Escape
                ((check_attachment_marker((char *) p) == 0) ||
                 (check_protected_header_marker((char *) p) == 0)))
       {
         mutt_debug(LL_DEBUG2, "Seen attachment marker\n");
-        while (*p++ != '\a') /* skip pseudo-ANSI sequence */
-          ;
+        while (*p++ != '\a')
+          ; // skip pseudo-ANSI sequence
       }
       else
         *q++ = *p++;
@@ -2093,7 +2092,7 @@ static void pager_custom_redraw(struct Menu *pager_menu)
           rd->lines++;
         }
         rd->curline++;
-        mutt_window_move(rd->extra->win_pager, rd->lines, 0);
+        mutt_window_move(rd->extra->win_pager, 0, rd->lines);
       }
       rd->last_offset = rd->line_info[rd->curline].offset;
     } while (rd->force_redraw);
@@ -2105,7 +2104,7 @@ static void pager_custom_redraw(struct Menu *pager_menu)
       if (C_Tilde)
         mutt_window_addch('~');
       rd->lines++;
-      mutt_window_move(rd->extra->win_pager, rd->lines, 0);
+      mutt_window_move(rd->extra->win_pager, 0, rd->lines);
     }
     mutt_curses_set_color(MT_COLOR_NORMAL);
 
@@ -2253,9 +2252,9 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
     rd.extra->win_index->size = MUTT_WIN_SIZE_FIXED;
     rd.extra->win_index->req_rows = index_space;
     rd.extra->win_index->parent->size = MUTT_WIN_SIZE_MINIMISE;
-    rd.extra->win_index->parent->state.visible = (index_space > 0);
+    window_set_visible(rd.extra->win_index->parent, (index_space > 0));
   }
-  rd.extra->win_pager->parent->state.visible = true;
+  window_set_visible(rd.extra->win_pager->parent, true);
   rd.extra->win_pager->size = MUTT_WIN_SIZE_MAXIMISE;
   mutt_window_reflow(mutt_window_dialog(rd.extra->win_pager));
 
@@ -2319,12 +2318,12 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
     {
       if (braille_line != -1)
       {
-        mutt_window_move_abs(braille_line + 1, 0);
+        mutt_window_move_abs(0, braille_line + 1);
         braille_line = -1;
       }
     }
     else
-      mutt_window_move(rd.extra->win_pbar, 0, rd.extra->win_pager->state.cols - 1);
+      mutt_window_move(rd.extra->win_pbar, rd.extra->win_pager->state.cols - 1, 0);
 
     mutt_refresh();
 
@@ -2344,6 +2343,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
     if (ch >= 0)
     {
       mutt_clear_error();
+      mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", OpStrings[ch][0], ch);
     }
     mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
 
@@ -2397,10 +2397,10 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
 
             index_hint = e->index;
 
-            bool q = Context->mailbox->quiet;
-            Context->mailbox->quiet = true;
+            bool verbose = Context->mailbox->verbose;
+            Context->mailbox->verbose = false;
             update_index(rd.menu, Context, check, oldcount, index_hint);
-            Context->mailbox->quiet = q;
+            Context->mailbox->verbose = verbose;
 
             rd.menu->max = Context->mailbox->vcount;
 
@@ -2665,7 +2665,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
         if (mutt_get_field(((ch == OP_SEARCH) || (ch == OP_SEARCH_NEXT)) ?
                                _("Search for: ") :
                                _("Reverse search for: "),
-                           buf, sizeof(buf), MUTT_CLEAR) != 0)
+                           buf, sizeof(buf), MUTT_CLEAR | MUTT_PATTERN) != 0)
         {
           break;
         }
@@ -2980,10 +2980,12 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
 
       case OP_CREATE_ALIAS:
         CHECK_MODE(IsEmail(extra) || IsMsgAttach(extra));
+        struct AddressList *al = NULL;
         if (IsMsgAttach(extra))
-          mutt_alias_create(extra->body->email->env, NULL);
+          al = mutt_get_address(extra->body->email->env, NULL);
         else
-          mutt_alias_create(extra->email->env, NULL);
+          al = mutt_get_address(extra->email->env, NULL);
+        alias_create(al);
         break;
 
       case OP_PURGE_MESSAGE:
@@ -3515,7 +3517,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
       case OP_SIDEBAR_PAGE_UP:
       case OP_SIDEBAR_PREV:
       case OP_SIDEBAR_PREV_NEW:
-        mutt_sb_change_mailbox(ch);
+        sb_change_mailbox(ch);
         break;
 
       case OP_SIDEBAR_TOGGLE_VISIBLE:
@@ -3570,13 +3572,13 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
 
   if (rd.extra->win_index)
   {
-    rd.extra->win_index->parent->state.visible = true;
     rd.extra->win_index->size = MUTT_WIN_SIZE_MAXIMISE;
     rd.extra->win_index->req_rows = MUTT_WIN_SIZE_UNLIMITED;
     rd.extra->win_index->parent->size = MUTT_WIN_SIZE_MAXIMISE;
     rd.extra->win_index->parent->req_rows = MUTT_WIN_SIZE_UNLIMITED;
+    window_set_visible(rd.extra->win_index->parent, true);
   }
-  rd.extra->win_pager->parent->state.visible = false;
+  window_set_visible(rd.extra->win_pager->parent, false);
   mutt_window_reflow(mutt_window_dialog(rd.extra->win_pager));
 
   return (rc != -1) ? rc : 0;

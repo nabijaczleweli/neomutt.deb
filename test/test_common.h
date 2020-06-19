@@ -23,10 +23,22 @@
 #ifndef TEST_TEST_COMMON_H
 #define TEST_TEST_COMMON_H
 
-#include "acutest.h"
 #include <stdio.h>
 #include "mutt/lib.h"
 
 void test_gen_path(char *buf, size_t buflen, const char *fmt);
+void test_init(void);
+
+#define TEST_CHECK_STR_EQ(expected, actual)                                    \
+  do                                                                           \
+  {                                                                            \
+    if (!TEST_CHECK(mutt_str_strcmp(expected, actual) == 0))                   \
+    {                                                                          \
+      TEST_MSG("Expected: %s", expected);                                      \
+      TEST_MSG("Actual  : %s", actual);                                        \
+    }                                                                          \
+  } while (false)
+
+#define LONG_IS_64 (LONG_MAX == 9223372036854775807)
 
 #endif /* TEST_TEST_COMMON_H */

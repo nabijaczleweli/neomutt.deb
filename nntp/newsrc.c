@@ -38,7 +38,7 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include "nntp_private.h"
+#include "private.h"
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
@@ -921,7 +921,7 @@ void nntp_clear_cache(struct NntpAccountData *adata)
  */
 const char *nntp_format_str(char *buf, size_t buflen, size_t col, int cols, char op,
                             const char *src, const char *prec, const char *if_str,
-                            const char *else_str, unsigned long data, MuttFormatFlags flags)
+                            const char *else_str, intptr_t data, MuttFormatFlags flags)
 {
   struct NntpAccountData *adata = (struct NntpAccountData *) data;
   struct ConnAccount *cac = &adata->conn->account;
@@ -1019,7 +1019,7 @@ struct NntpAccountData *nntp_select_server(struct Mailbox *m, char *server, bool
   struct NntpAccountData *adata = NULL;
   struct Connection *conn = NULL;
 
-  if (!server || !*server)
+  if (!server || (*server == '\0'))
   {
     mutt_error(_("No news server defined"));
     return NULL;
@@ -1105,7 +1105,7 @@ struct NntpAccountData *nntp_select_server(struct Mailbox *m, char *server, bool
   if (rc >= 0)
   {
     mutt_expando_format(file, sizeof(file), 0, sizeof(file), NONULL(C_Newsrc),
-                        nntp_format_str, (unsigned long) adata, MUTT_FORMAT_NO_FLAGS);
+                        nntp_format_str, IP adata, MUTT_FORMAT_NO_FLAGS);
     mutt_expand_path(file, sizeof(file));
     adata->newsrc_file = mutt_str_strdup(file);
     rc = nntp_newsrc_parse(adata);
@@ -1248,7 +1248,7 @@ void nntp_article_status(struct Mailbox *m, struct Email *e, char *group, anum_t
  */
 struct NntpMboxData *mutt_newsgroup_subscribe(struct NntpAccountData *adata, char *group)
 {
-  if (!adata || !adata->groups_hash || !group || !*group)
+  if (!adata || !adata->groups_hash || !group || (*group == '\0'))
     return NULL;
 
   struct NntpMboxData *mdata = mdata_find(adata, group);
@@ -1272,7 +1272,7 @@ struct NntpMboxData *mutt_newsgroup_subscribe(struct NntpAccountData *adata, cha
  */
 struct NntpMboxData *mutt_newsgroup_unsubscribe(struct NntpAccountData *adata, char *group)
 {
-  if (!adata || !adata->groups_hash || !group || !*group)
+  if (!adata || !adata->groups_hash || !group || (*group == '\0'))
     return NULL;
 
   struct NntpMboxData *mdata = mutt_hash_find(adata->groups_hash, group);
@@ -1299,7 +1299,7 @@ struct NntpMboxData *mutt_newsgroup_unsubscribe(struct NntpAccountData *adata, c
 struct NntpMboxData *mutt_newsgroup_catchup(struct Mailbox *m,
                                             struct NntpAccountData *adata, char *group)
 {
-  if (!adata || !adata->groups_hash || !group || !*group)
+  if (!adata || !adata->groups_hash || !group || (*group == '\0'))
     return NULL;
 
   struct NntpMboxData *mdata = mutt_hash_find(adata->groups_hash, group);
@@ -1338,7 +1338,7 @@ struct NntpMboxData *mutt_newsgroup_catchup(struct Mailbox *m,
 struct NntpMboxData *mutt_newsgroup_uncatchup(struct Mailbox *m,
                                               struct NntpAccountData *adata, char *group)
 {
-  if (!adata || !adata->groups_hash || !group || !*group)
+  if (!adata || !adata->groups_hash || !group || (*group == '\0'))
     return NULL;
 
   struct NntpMboxData *mdata = mutt_hash_find(adata->groups_hash, group);
