@@ -726,14 +726,24 @@ static void change_folder_mailbox(struct Menu *menu, struct Mailbox *m,
    * could be deleted, leaving `m` dangling. */
   // TODO: Refactor this function to avoid the need for an observer
   notify_observer_add(m->notify, mailbox_index_observer, &m);
+  char *dup_path = mutt_str_strdup(mailbox_path(m));
 
   mutt_folder_hook(mailbox_path(m), m ? m->name : NULL);
+  if (m)
+  {
+    /* `m` is still valid, but we won't need the observer again before the end
+     * of the function. */
+    notify_observer_remove(m->notify, mailbox_index_observer, &m);
+  }
+  else
+  {
+    // Recreate the Mailbox (probably because a hook has done `unmailboxes *`)
+    m = mx_path_resolve(dup_path);
+  }
+  FREE(&dup_path);
+
   if (!m)
     return;
-
-  /* `m` is still valid, but we won't need the observer again before the end
-   * of the function. */
-  notify_observer_remove(m->notify, mailbox_index_observer, &m);
 
   const int flags = read_only ? MUTT_READONLY : MUTT_OPEN_NO_FLAGS;
   Context = mx_mbox_open(m, flags);
@@ -1932,12 +1942,6 @@ int mutt_index_menu(struct MuttWindow *dlg)
             break;
           mutt_set_flag(Context->mailbox, e_cur, MUTT_TAG, !e_cur->tagged);
 
-          Context->last_tag = e_cur->tagged ?
-                                  e_cur :
-                                  (((Context->last_tag == e_cur) && !e_cur->tagged) ?
-                                       NULL :
-                                       Context->last_tag);
-
           menu->redraw |= REDRAW_STATUS;
           if (C_Resolve && (menu->current < Context->mailbox->vcount - 1))
           {
@@ -2675,13 +2679,11 @@ int mutt_index_menu(struct MuttWindow *dlg)
           mutt_error(_("Threading is not enabled"));
         else if (!e_cur->env->message_id)
           mutt_error(_("No Message-ID: header available to link thread"));
-        else if (!tag && (!Context->last_tag || !Context->last_tag->tagged))
-          mutt_error(_("First, please tag a message to be linked here"));
         else
         {
           struct Email *e_oldcur = e_cur;
           struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
-          el_add_tagged(&el, Context, Context->last_tag, tag);
+          el_add_tagged(&el, Context, NULL, true);
 
           if (mutt_link_threads(e_cur, &el, Context->mailbox))
           {

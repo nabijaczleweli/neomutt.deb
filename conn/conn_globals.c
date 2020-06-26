@@ -27,10 +27,8 @@
  */
 
 #include "config.h"
-#include <stdio.h>
-#ifdef USE_SSL
 #include <stdbool.h>
-#endif
+#include <stdio.h>
 
 // clang-format off
 short       C_ConnectTimeout = 0;           ///< Config: Timeout for making network connections (-1 to wait indefinitely)
@@ -57,5 +55,6 @@ short       C_SslMinDhPrimeBits = 0;        ///< Config: Minimum keysize for Dif
 #ifdef USE_SOCKET
 const char *C_Preconnect = NULL;            ///< Config: (socket) External command to run prior to opening a socket
 const char *C_Tunnel = NULL;                ///< Config: Shell command to establish a tunnel
+bool C_TunnelIsSecure = true;               ///< Config: Assume a tunneled connection is secure
 #endif
 // clang-format on
