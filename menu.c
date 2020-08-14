@@ -37,19 +37,20 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
+#include "pattern/lib.h"
 #include "commands.h"
 #include "context.h"
-#include "globals.h"
 #include "keymap.h"
+#include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "mutt_menu.h"
+#include "mutt_thread.h"
 #include "muttlib.h"
 #include "opcodes.h"
 #include "options.h"
-#include "pattern.h"
 #include "protos.h"
 #ifdef USE_SIDEBAR
-#include "sidebar.h"
+#include "sidebar/lib.h"
 #endif
 
 /* These Config Variables are only used in menu.c */
@@ -99,11 +100,10 @@ static int get_color(int index, unsigned char *s)
     case MT_COLOR_INDEX_TAG:
       STAILQ_FOREACH(np, &Colors->index_tag_list, entries)
       {
-        if (strncmp((const char *) (s + 1), np->pattern, strlen(np->pattern)) == 0)
+        if (mutt_strn_equal((const char *) (s + 1), np->pattern, strlen(np->pattern)))
           return np->pair;
         const char *transform = mutt_hash_find(TagTransforms, np->pattern);
-        if (transform &&
-            (strncmp((const char *) (s + 1), transform, strlen(transform)) == 0))
+        if (transform && mutt_strn_equal((const char *) (s + 1), transform, strlen(transform)))
         {
           return np->pair;
         }
@@ -134,7 +134,7 @@ static void print_enriched_string(int index, int attr, unsigned char *s, bool do
 {
   wchar_t wc;
   size_t k;
-  size_t n = mutt_str_strlen((char *) s);
+  size_t n = mutt_str_len((char *) s);
   mbstate_t mbstate;
 
   memset(&mbstate, 0, sizeof(mbstate));
@@ -318,7 +318,7 @@ static void make_entry(char *buf, size_t buflen, struct Menu *menu, int i)
 {
   if (menu->dialog)
   {
-    mutt_str_strfcpy(buf, NONULL(menu->dialog[i]), buflen);
+    mutt_str_copy(buf, NONULL(menu->dialog[i]), buflen);
     menu->current = -1; /* hide menubar */
   }
   else
@@ -335,12 +335,12 @@ static void make_entry(char *buf, size_t buflen, struct Menu *menu, int i)
  */
 static void menu_pad_string(struct Menu *menu, char *buf, size_t buflen)
 {
-  char *scratch = mutt_str_strdup(buf);
+  char *scratch = mutt_str_dup(buf);
   int shift = C_ArrowCursor ? mutt_strwidth(C_ArrowString) + 1 : 0;
   int cols = menu->win_index->state.cols - shift;
 
   mutt_simple_format(buf, buflen, cols, cols, JUSTIFY_LEFT, ' ', scratch,
-                     mutt_str_strlen(scratch), true);
+                     mutt_str_len(scratch), true);
   buf[buflen - 1] = '\0';
   FREE(&scratch);
 }
@@ -356,13 +356,7 @@ void menu_redraw_full(struct Menu *menu)
   mutt_window_move_abs(0, 0);
   mutt_window_clrtobot();
 
-  if (C_Help)
-  {
-    mutt_curses_set_color(MT_COLOR_STATUS);
-    mutt_window_move(MuttHelpWindow, 0, 0);
-    mutt_paddstr(MuttHelpWindow->state.cols, menu->help);
-    mutt_curses_set_color(MT_COLOR_NORMAL);
-  }
+  window_redraw(RootWindow, true);
   menu->pagelen = menu->win_index->state.rows;
 
   mutt_show_error();
@@ -397,7 +391,7 @@ void menu_redraw_status(struct Menu *menu)
 void menu_redraw_sidebar(struct Menu *menu)
 {
   menu->redraw &= ~REDRAW_SIDEBAR;
-  struct MuttWindow *dlg = mutt_window_dialog(menu->win_index);
+  struct MuttWindow *dlg = dialog_find(menu->win_index);
   struct MuttWindow *sidebar = mutt_window_find(dlg, WT_SIDEBAR);
   sb_draw(sidebar);
 }
@@ -560,8 +554,8 @@ static void menu_redraw_prompt(struct Menu *menu)
   if (ErrorBufMessage)
     mutt_clear_error();
 
-  mutt_window_mvaddstr(MuttMessageWindow, 0, 0, menu->prompt);
-  mutt_window_clrtoeol(MuttMessageWindow);
+  mutt_window_mvaddstr(MessageWindow, 0, 0, menu->prompt);
+  mutt_window_clrtoeol(MessageWindow);
 }
 
 /**
@@ -980,6 +974,7 @@ struct Menu *mutt_menu_new(enum MenuType type)
   menu->redraw = REDRAW_FULL;
   menu->color = default_color;
   menu->search = generic_search;
+  menu->custom_search = false;
 
   return menu;
 }
@@ -1017,7 +1012,7 @@ void mutt_menu_add_dialog_row(struct Menu *menu, const char *row)
     menu->dsize += 10;
     mutt_mem_realloc(&menu->dialog, menu->dsize * sizeof(char *));
   }
-  menu->dialog[menu->max++] = mutt_str_strdup(row);
+  menu->dialog[menu->max++] = mutt_str_dup(row);
 }
 
 /**
@@ -1166,8 +1161,8 @@ static int search(struct Menu *menu, int op)
 
   if (!(search_buf && *search_buf) || ((op != OP_SEARCH_NEXT) && (op != OP_SEARCH_OPPOSITE)))
   {
-    mutt_str_strfcpy(buf, search_buf && (search_buf[0] != '\0') ? search_buf : "",
-                     sizeof(buf));
+    mutt_str_copy(buf, search_buf && (search_buf[0] != '\0') ? search_buf : "",
+                  sizeof(buf));
     if ((mutt_get_field(((op == OP_SEARCH) || (op == OP_SEARCH_NEXT)) ?
                             _("Search for: ") :
                             _("Reverse search for: "),
@@ -1368,8 +1363,8 @@ int mutt_menu_loop(struct Menu *menu)
     /* give visual indication that the next command is a tag- command */
     if (menu->tagprefix)
     {
-      mutt_window_mvaddstr(MuttMessageWindow, 0, 0, "tag-");
-      mutt_window_clrtoeol(MuttMessageWindow);
+      mutt_window_mvaddstr(MessageWindow, 0, 0, "tag-");
+      mutt_window_clrtoeol(MessageWindow);
     }
 
     menu->oldcurrent = menu->current;
@@ -1397,7 +1392,7 @@ int mutt_menu_loop(struct Menu *menu)
       if (menu->tagprefix)
       {
         menu->tagprefix = false;
-        mutt_window_clearline(MuttMessageWindow, 0);
+        mutt_window_clearline(MessageWindow, 0);
         continue;
       }
 
@@ -1433,7 +1428,7 @@ int mutt_menu_loop(struct Menu *menu)
     if (i < 0)
     {
       if (menu->tagprefix)
-        mutt_window_clearline(MuttMessageWindow, 0);
+        mutt_window_clearline(MessageWindow, 0);
       continue;
     }
 
@@ -1498,7 +1493,9 @@ int mutt_menu_loop(struct Menu *menu)
       case OP_SEARCH_REVERSE:
       case OP_SEARCH_NEXT:
       case OP_SEARCH_OPPOSITE:
-        if (menu->search && !menu->dialog) /* Searching dialogs won't work */
+        if (menu->custom_search)
+          return i;
+        else if (menu->search && !menu->dialog) /* Searching dialogs won't work */
         {
           menu->oldcurrent = menu->current;
           menu->current = search(menu, i);
@@ -1520,6 +1517,8 @@ int mutt_menu_loop(struct Menu *menu)
 
       case OP_ENTER_COMMAND:
         mutt_enter_command();
+        window_set_focus(menu->win_index);
+        window_redraw(RootWindow, false);
         break;
 
       case OP_TAG:

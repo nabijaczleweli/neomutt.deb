@@ -39,17 +39,17 @@
 #include "alias/lib.h"
 #include "mutt.h"
 #include "hook.h"
+#include "ncrypt/lib.h"
+#include "pattern/lib.h"
 #include "context.h"
 #include "format_flags.h"
-#include "globals.h"
 #include "hdrline.h"
 #include "init.h"
 #include "mutt_attach.h"
 #include "mutt_commands.h"
+#include "mutt_globals.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "pattern.h"
-#include "ncrypt/lib.h"
 #ifdef USE_COMP_MBOX
 #include "compmbox/lib.h"
 #endif
@@ -190,14 +190,14 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
     if (data & MUTT_GLOBAL_HOOK)
     {
       /* Ignore duplicate global hooks */
-      if (mutt_str_strcmp(hook->command, mutt_b2s(cmd)) == 0)
+      if (mutt_str_equal(hook->command, mutt_b2s(cmd)))
       {
         rc = MUTT_CMD_SUCCESS;
         goto cleanup;
       }
     }
     else if ((hook->type == data) && (hook->regex.pat_not == pat_not) &&
-             (mutt_str_strcmp(mutt_b2s(pattern), hook->regex.pattern) == 0))
+             mutt_str_equal(mutt_b2s(pattern), hook->regex.pattern))
     {
       if (data & (MUTT_FOLDER_HOOK | MUTT_SEND_HOOK | MUTT_SEND2_HOOK | MUTT_MESSAGE_HOOK |
                   MUTT_ACCOUNT_HOOK | MUTT_REPLY_HOOK | MUTT_CRYPT_HOOK |
@@ -206,7 +206,7 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
         /* these hooks allow multiple commands with the same
          * pattern, so if we've already seen this pattern/command pair, just
          * ignore it instead of creating a duplicate */
-        if (mutt_str_strcmp(hook->command, mutt_b2s(cmd)) == 0)
+        if (mutt_str_equal(hook->command, mutt_b2s(cmd)))
         {
           rc = MUTT_CMD_SUCCESS;
           goto cleanup;
@@ -403,7 +403,7 @@ enum CommandResult mutt_parse_idxfmt_hook(struct Buffer *buf, struct Buffer *s,
     TAILQ_FOREACH(hook, hl, entries)
     {
       if ((hook->regex.pat_not == pat_not) &&
-          (mutt_str_strcmp(mutt_b2s(pattern), hook->regex.pattern) == 0))
+          mutt_str_equal(mutt_b2s(pattern), hook->regex.pattern))
       {
         mutt_str_replace(&hook->command, mutt_b2s(fmtstring));
         rc = MUTT_CMD_SUCCESS;
@@ -456,7 +456,7 @@ enum CommandResult mutt_parse_unhook(struct Buffer *buf, struct Buffer *s,
   while (MoreArgs(s))
   {
     mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
-    if (mutt_str_strcmp("*", buf->data) == 0)
+    if (mutt_str_equal("*", buf->data))
     {
       if (current_hook_type != MUTT_TOKEN_NO_FLAGS)
       {
@@ -635,7 +635,8 @@ static int addr_hook(char *path, size_t pathlen, HookFlags type,
       if ((mutt_pattern_exec(SLIST_FIRST(hook->pattern), 0, m, e, &cache) > 0) ^
           hook->regex.pat_not)
       {
-        mutt_make_string_flags(path, pathlen, 0, hook->command, ctx, m, e, MUTT_FORMAT_PLAIN);
+        mutt_make_string_flags(path, pathlen, 0, hook->command, m,
+                               ctx ? ctx->msg_in_pager : -1, e, MUTT_FORMAT_PLAIN);
         return 0;
       }
     }
@@ -730,7 +731,7 @@ static void list_hook(struct ListHead *matches, const char *match, HookFlags hoo
   {
     if ((tmp->type & hook) && mutt_regex_match(&tmp->regex, match))
     {
-      mutt_list_insert_tail(matches, mutt_str_strdup(tmp->command));
+      mutt_list_insert_tail(matches, mutt_str_dup(tmp->command));
     }
   }
 }
@@ -747,7 +748,6 @@ void mutt_crypt_hook(struct ListHead *list, struct Address *addr)
   list_hook(list, addr->mailbox, MUTT_CRYPT_HOOK);
 }
 
-#ifdef USE_SOCKET
 /**
  * mutt_account_hook - Perform an account hook
  * @param url Account URL to match
@@ -790,7 +790,6 @@ void mutt_account_hook(const char *url)
 done:
   mutt_buffer_pool_release(&err);
 }
-#endif
 
 /**
  * mutt_timeout_hook - Execute any timeout hooks

@@ -50,37 +50,11 @@ typedef uint16_t MuttRedrawFlags;      ///< Flags, e.g. #REDRAW_INDEX
 #endif
 
 /**
- * enum TreeChar - Tree characters for menus
- *
- * @sa linearize_tree(), print_enriched_string()
- */
-enum TreeChar
-{
-  MUTT_TREE_LLCORNER = 1, ///< Lower left corner
-  MUTT_TREE_ULCORNER,     ///< Upper left corner
-  MUTT_TREE_LTEE,         ///< Left T-piece
-  MUTT_TREE_HLINE,        ///< Horizontal line
-  MUTT_TREE_VLINE,        ///< Vertical line
-  MUTT_TREE_SPACE,        ///< Blank space
-  MUTT_TREE_RARROW,       ///< Right arrow
-  MUTT_TREE_STAR,         ///< Star character (for threads)
-  MUTT_TREE_HIDDEN,       ///< Ampersand character (for threads)
-  MUTT_TREE_EQUALS,       ///< Equals (for threads)
-  MUTT_TREE_TTEE,         ///< Top T-piece
-  MUTT_TREE_BTEE,         ///< Bottom T-piece
-  MUTT_TREE_MISSING,      ///< Question mark
-  MUTT_TREE_MAX,
-
-  MUTT_SPECIAL_INDEX = MUTT_TREE_MAX, ///< Colour indicator
-};
-
-/**
  * struct Menu - GUI selectable list of items
  */
 struct Menu
 {
   const char *title;      ///< Title of this menu
-  const char *help;       ///< Quickref for the current menu
   void *mdata;            ///< Extra data for the current menu
   int current;            ///< Current entry
   int max;                ///< Number of entries in the menu
@@ -106,6 +80,7 @@ struct Menu
   int oldcurrent;         ///< For driver use only
   int search_dir;         ///< Direction of search
   int tagged;             ///< Number of tagged entries
+  bool custom_search : 1; ///< The menu implements its own non-Menu::search()-compatible search, trickle OP_SEARCH*
 
   /**
    * make_entry - Format a item for a menu

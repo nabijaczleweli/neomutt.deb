@@ -39,7 +39,7 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt_logging.h"
-#include "globals.h"
+#include "mutt_globals.h"
 #include "muttlib.h"
 #include "options.h"
 
@@ -118,7 +118,7 @@ void mutt_clear_error(void)
 
   ErrorBufMessage = false;
   if (!OptNoCurses)
-    mutt_window_clearline(MuttMessageWindow, 0);
+    mutt_window_clearline(MessageWindow, 0);
 }
 
 /**
@@ -167,7 +167,7 @@ int log_disp_curses(time_t stamp, const char *file, int line,
     error_pause();
 
   mutt_simple_format(ErrorBuf, sizeof(ErrorBuf), 0,
-                     MuttMessageWindow ? MuttMessageWindow->state.cols : sizeof(ErrorBuf),
+                     MessageWindow ? MessageWindow->state.cols : sizeof(ErrorBuf),
                      JUSTIFY_LEFT, 0, buf, sizeof(buf), false);
   ErrorBufMessage = true;
 
@@ -187,9 +187,9 @@ int log_disp_curses(time_t stamp, const char *file, int line,
         break;
     }
 
-    mutt_window_mvaddstr(MuttMessageWindow, 0, 0, ErrorBuf);
+    mutt_window_mvaddstr(MessageWindow, 0, 0, ErrorBuf);
     mutt_curses_set_color(MT_COLOR_NORMAL);
-    mutt_window_clrtoeol(MuttMessageWindow);
+    mutt_window_clrtoeol(MessageWindow);
     mutt_refresh();
   }
 
@@ -237,7 +237,7 @@ void mutt_log_stop(void)
  */
 int mutt_log_set_file(const char *file, bool verbose)
 {
-  if (mutt_str_strcmp(CurrentFile, C_DebugFile) != 0)
+  if (!mutt_str_equal(CurrentFile, C_DebugFile))
   {
     const char *name = rotate_logs(C_DebugFile, NumOfLogs);
     if (!name)
@@ -329,9 +329,9 @@ int mutt_log_observer(struct NotifyCallback *nc)
 
   struct EventConfig *ec = nc->event_data;
 
-  if (mutt_str_strcmp(ec->name, "debug_file") == 0)
+  if (mutt_str_equal(ec->name, "debug_file"))
     mutt_log_set_file(C_DebugFile, true);
-  else if (mutt_str_strcmp(ec->name, "debug_level") == 0)
+  else if (mutt_str_equal(ec->name, "debug_level"))
     mutt_log_set_level(C_DebugLevel, true);
 
   return 0;

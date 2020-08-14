@@ -93,7 +93,7 @@ size_t mutt_b64_encode(const char *in, size_t inlen, char *out, size_t outlen)
   unsigned char *begin = (unsigned char *) out;
   const unsigned char *inu = (const unsigned char *) in;
 
-  while ((inlen >= 3) && (outlen > 10))
+  while ((inlen >= 3) && (outlen > 4))
   {
     *out++ = B64Chars[inu[0] >> 2];
     *out++ = B64Chars[((inu[0] << 4) & 0x30) | (inu[1] >> 4)];
@@ -211,7 +211,7 @@ int mutt_b64_buffer_decode(struct Buffer *buf, const char *in)
   if (!buf)
     return -1;
 
-  mutt_buffer_alloc(buf, mutt_str_strlen(in));
+  mutt_buffer_alloc(buf, mutt_str_len(in));
   int olen = mutt_b64_decode(in, buf->data, buf->dsize);
   /* mutt_from_base64 returns raw bytes, so don't terminate the buffer either */
   if (olen > 0)

@@ -51,7 +51,7 @@ int alias_sort_name(const void *a, const void *b)
   const struct AliasView *av_a = *(struct AliasView const *const *) a;
   const struct AliasView *av_b = *(struct AliasView const *const *) b;
 
-  int r = mutt_str_strcasecmp(av_a->alias->name, av_b->alias->name);
+  int r = mutt_istr_cmp(av_a->alias->name, av_b->alias->name);
 
   return RSORT(r);
 }
@@ -82,17 +82,19 @@ int alias_sort_address(const void *a, const void *b)
   {
     const struct Address *addr_a = TAILQ_FIRST(al_a);
     const struct Address *addr_b = TAILQ_FIRST(al_b);
-    if (addr_a->personal)
+    if (addr_a && addr_a->personal)
     {
-      if (addr_b->personal)
-        r = mutt_str_strcasecmp(addr_a->personal, addr_b->personal);
+      if (addr_b && addr_b->personal)
+        r = mutt_istr_cmp(addr_a->personal, addr_b->personal);
       else
         r = 1;
     }
-    else if (addr_b->personal)
+    else if (addr_b && addr_b->personal)
       r = -1;
+    else if (addr_a && addr_b)
+      r = mutt_istr_cmp(addr_a->mailbox, addr_b->mailbox);
     else
-      r = mutt_str_strcasecmp(addr_a->mailbox, addr_b->mailbox);
+      r = 0;
   }
   return RSORT(r);
 }

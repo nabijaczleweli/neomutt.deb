@@ -38,13 +38,14 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "gui/lib.h"
-#include "globals.h"
+#include "autocrypt/lib.h"
+#include "hcache/lib.h"
+#include "ncrypt/lib.h"
+#include "send/lib.h"
+#include "mutt_globals.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "options.h"
-#include "send.h"
-#include "autocrypt/lib.h"
-#include "ncrypt/lib.h"
 
 /**
  * autocrypt_dir_init - Initialise an Autocrypt directory
@@ -167,7 +168,7 @@ int mutt_autocrypt_account_init(bool prompt)
   {
     addr = mutt_addr_copy(C_From);
     if (!addr->personal && C_Realname)
-      addr->personal = mutt_str_strdup(C_Realname);
+      addr->personal = mutt_str_dup(C_Realname);
   }
 
   struct AddressList al = TAILQ_HEAD_INITIALIZER(al);
@@ -261,7 +262,7 @@ int mutt_autocrypt_process_autocrypt_header(struct Email *e, struct Envelope *en
   if (mutt_autocrypt_init(false))
     return -1;
 
-  if (!e || !e->content || !env)
+  if (!e || !e->body || !env)
     return 0;
 
   /* 1.1 spec says to skip emails with more than one From header */
@@ -270,8 +271,8 @@ int mutt_autocrypt_process_autocrypt_header(struct Email *e, struct Envelope *en
     return 0;
 
   /* 1.1 spec also says to skip multipart/report emails */
-  if ((e->content->type == TYPE_MULTIPART) &&
-      (mutt_str_strcasecmp(e->content->subtype, "report") == 0))
+  if ((e->body->type == TYPE_MULTIPART) &&
+      mutt_istr_equal(e->body->subtype, "report"))
   {
     return 0;
   }
@@ -289,7 +290,7 @@ int mutt_autocrypt_process_autocrypt_header(struct Email *e, struct Envelope *en
     /* NOTE: this assumes the processing is occurring right after
      * mutt_parse_rfc822_line() and the from ADDR is still in the same
      * form (intl) as the autocrypt header addr field */
-    if (mutt_str_strcasecmp(from->mailbox, ac_hdr->addr) != 0)
+    if (!mutt_istr_equal(from->mailbox, ac_hdr->addr))
       continue;
 
     /* 1.1 spec says ignore all, if more than one valid header is found. */
@@ -323,7 +324,7 @@ int mutt_autocrypt_process_autocrypt_header(struct Email *e, struct Envelope *en
       update_db = true;
       peer->autocrypt_timestamp = e->date_sent;
       peer->prefer_encrypt = valid_ac_hdr->prefer_encrypt;
-      if (mutt_str_strcmp(peer->keydata, valid_ac_hdr->keydata) != 0)
+      if (!mutt_str_equal(peer->keydata, valid_ac_hdr->keydata))
       {
         import_gpg = true;
         insert_db_history = true;
@@ -349,7 +350,7 @@ int mutt_autocrypt_process_autocrypt_header(struct Email *e, struct Envelope *en
     peer = mutt_autocrypt_db_peer_new();
     peer->last_seen = e->date_sent;
     peer->autocrypt_timestamp = e->date_sent;
-    peer->keydata = mutt_str_strdup(valid_ac_hdr->keydata);
+    peer->keydata = mutt_str_dup(valid_ac_hdr->keydata);
     peer->prefer_encrypt = valid_ac_hdr->prefer_encrypt;
   }
 
@@ -370,9 +371,9 @@ int mutt_autocrypt_process_autocrypt_header(struct Email *e, struct Envelope *en
   if (insert_db_history)
   {
     peerhist = mutt_autocrypt_db_peer_history_new();
-    peerhist->email_msgid = mutt_str_strdup(env->message_id);
+    peerhist->email_msgid = mutt_str_dup(env->message_id);
     peerhist->timestamp = e->date_sent;
-    peerhist->keydata = mutt_str_strdup(peer->keydata);
+    peerhist->keydata = mutt_str_dup(peer->keydata);
     if (mutt_autocrypt_db_peer_history_insert(from, peerhist))
       goto cleanup;
   }
@@ -445,11 +446,10 @@ int mutt_autocrypt_process_gossip_header(struct Email *e, struct Envelope *prot_
     ac_hdr_addr.intl_checked = true;
     mutt_autocrypt_db_normalize_addr(&ac_hdr_addr);
 
-    /* Check to make sure the address is in the recipient list.  Since the
-     * addresses are normalized we use strcmp, not mutt_str_strcasecmp. */
+    /* Check to make sure the address is in the recipient list. */
     TAILQ_FOREACH(peer_addr, &recips, entries)
     {
-      if (mutt_str_strcmp(peer_addr->mailbox, ac_hdr_addr.mailbox) == 0)
+      if (mutt_str_equal(peer_addr->mailbox, ac_hdr_addr.mailbox))
         break;
     }
 
@@ -472,9 +472,8 @@ int mutt_autocrypt_process_gossip_header(struct Email *e, struct Envelope *prot_
       /* This is slightly different from the autocrypt 1.1 spec.
        * Avoid setting an empty peer.gossip_keydata with a value that matches
        * the current peer.keydata. */
-      if ((peer->gossip_keydata &&
-           (mutt_str_strcmp(peer->gossip_keydata, ac_hdr->keydata) != 0)) ||
-          (!peer->gossip_keydata && (mutt_str_strcmp(peer->keydata, ac_hdr->keydata) != 0)))
+      if ((peer->gossip_keydata && !mutt_str_equal(peer->gossip_keydata, ac_hdr->keydata)) ||
+          (!peer->gossip_keydata && !mutt_str_equal(peer->keydata, ac_hdr->keydata)))
       {
         import_gpg = true;
         insert_db_history = true;
@@ -492,7 +491,7 @@ int mutt_autocrypt_process_gossip_header(struct Email *e, struct Envelope *prot_
     {
       peer = mutt_autocrypt_db_peer_new();
       peer->gossip_timestamp = e->date_sent;
-      peer->gossip_keydata = mutt_str_strdup(ac_hdr->keydata);
+      peer->gossip_keydata = mutt_str_dup(ac_hdr->keydata);
     }
 
     if (import_gpg)
@@ -511,10 +510,10 @@ int mutt_autocrypt_process_gossip_header(struct Email *e, struct Envelope *prot_
     if (insert_db_history)
     {
       gossip_hist = mutt_autocrypt_db_gossip_history_new();
-      gossip_hist->sender_email_addr = mutt_str_strdup(from->mailbox);
-      gossip_hist->email_msgid = mutt_str_strdup(env->message_id);
+      gossip_hist->sender_email_addr = mutt_str_dup(from->mailbox);
+      gossip_hist->email_msgid = mutt_str_dup(env->message_id);
       gossip_hist->timestamp = e->date_sent;
-      gossip_hist->gossip_keydata = mutt_str_strdup(peer->gossip_keydata);
+      gossip_hist->gossip_keydata = mutt_str_dup(peer->gossip_keydata);
       if (mutt_autocrypt_db_gossip_history_insert(peer_addr, gossip_hist))
         goto cleanup;
     }
@@ -561,20 +560,43 @@ enum AutocryptRec mutt_autocrypt_ui_recommendation(struct Email *e, char **keyli
   struct Buffer *keylist_buf = NULL;
 
   if (!C_Autocrypt || mutt_autocrypt_init(false) || !e)
+  {
+    if (keylist)
+    {
+      /* L10N: Error displayed if the user tries to force sending an Autocrypt
+         email when the engine is not available.  */
+      mutt_message(_("Autocrypt is not available"));
+    }
     return AUTOCRYPT_REC_OFF;
+  }
 
   struct Address *from = TAILQ_FIRST(&e->env->from);
   if (!from || TAILQ_NEXT(from, entries))
+  {
+    if (keylist)
+      mutt_message(_("Autocrypt is not available"));
     return AUTOCRYPT_REC_OFF;
+  }
 
   if (e->security & APPLICATION_SMIME)
+  {
+    if (keylist)
+      mutt_message(_("Autocrypt is not available"));
     return AUTOCRYPT_REC_OFF;
+  }
 
-  if (mutt_autocrypt_db_account_get(from, &account) <= 0)
+  if ((mutt_autocrypt_db_account_get(from, &account) <= 0) || !account->enabled)
+  {
+    if (keylist)
+    {
+      /* L10N: Error displayed if the user tries to force sending an Autocrypt
+         email when the account does not exist or is not enabled.
+         %s is the From email address used to look up the Autocrypt account.
+      */
+      mutt_message(_("Autocrypt is not enabled for %s"), NONULL(from->mailbox));
+    }
     goto cleanup;
-
-  if (!account->enabled)
-    goto cleanup;
+  }
 
   keylist_buf = mutt_buffer_pool_get();
   mutt_buffer_addstr(keylist_buf, account->keyid);
@@ -793,9 +815,9 @@ int mutt_autocrypt_generate_gossip_list(struct Email *e)
   if (!C_Autocrypt || mutt_autocrypt_init(false) || !e)
     return -1;
 
-  struct Envelope *mime_headers = e->content->mime_headers;
+  struct Envelope *mime_headers = e->body->mime_headers;
   if (!mime_headers)
-    mime_headers = e->content->mime_headers = mutt_env_new();
+    mime_headers = e->body->mime_headers = mutt_env_new();
   mutt_autocrypthdr_free(&mime_headers->autocrypt_gossip);
 
   struct AddressList recips = TAILQ_HEAD_INITIALIZER(recips);
@@ -818,8 +840,8 @@ int mutt_autocrypt_generate_gossip_list(struct Email *e)
     if (keydata)
     {
       struct AutocryptHeader *gossip = mutt_autocrypthdr_new();
-      gossip->addr = mutt_str_strdup(peer->email_addr);
-      gossip->keydata = mutt_str_strdup(keydata);
+      gossip->addr = mutt_str_dup(peer->email_addr);
+      gossip->keydata = mutt_str_dup(keydata);
       gossip->next = mime_headers->autocrypt_gossip;
       mime_headers->autocrypt_gossip = gossip;
     }
@@ -848,8 +870,8 @@ int mutt_autocrypt_generate_gossip_list(struct Email *e)
     if (keydata)
     {
       struct AutocryptHeader *gossip = mutt_autocrypthdr_new();
-      gossip->addr = mutt_str_strdup(addr);
-      gossip->keydata = mutt_str_strdup(keydata);
+      gossip->addr = mutt_str_dup(addr);
+      gossip->keydata = mutt_str_dup(keydata);
       gossip->next = mime_headers->autocrypt_gossip;
       mime_headers->autocrypt_gossip = gossip;
     }
@@ -886,7 +908,8 @@ void mutt_autocrypt_scan_mailboxes(void)
      through one or more mailboxes for Autocrypt: headers.  Those headers are
      then captured in the database as peer records and used for encryption.
      If this is answered yes, they will be prompted for a mailbox.  */
-  int scan = mutt_yesorno(_("Scan a mailbox for autocrypt headers?"), MUTT_YES);
+  enum QuadOption scan =
+      mutt_yesorno(_("Scan a mailbox for autocrypt headers?"), MUTT_YES);
   while (scan == MUTT_YES)
   {
     // L10N: The prompt for a mailbox to scan for Autocrypt: headers

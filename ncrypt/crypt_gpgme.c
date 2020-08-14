@@ -33,12 +33,10 @@
  */
 
 #include "config.h"
-#include <ctype.h>
 #include <errno.h>
 #include <gpg-error.h>
 #include <gpgme.h>
 #include <langinfo.h>
-#include <limits.h>
 #include <locale.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -48,38 +46,29 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#include "private.h"
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
+#include "core/lib.h"
 #include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
 #include "crypt_gpgme.h"
+#include "ncrypt/lib.h"
+#include "send/lib.h"
 #include "crypt.h"
-#include "format_flags.h"
-#include "globals.h"
 #include "handler.h"
 #include "hook.h"
-#include "keymap.h"
 #include "mutt_attach.h"
 #include "mutt_logging.h"
-#include "mutt_menu.h"
 #include "muttlib.h"
-#include "opcodes.h"
 #include "options.h"
-#include "pager.h"
-#include "protos.h"
-#include "recvattach.h"
-#include "sendlib.h"
-#include "sort.h"
 #include "state.h"
-#include "ncrypt/lib.h"
-#ifdef ENABLE_NLS
-#include <libintl.h>
+#ifdef USE_AUTOCRYPT
+#include "autocrypt/lib.h"
 #endif
-
-struct Mailbox;
 
 // clang-format off
 /* Values used for comparing addresses. */
@@ -100,39 +89,6 @@ struct CryptCache
   struct CryptCache *next;
 };
 
-/**
- * struct DnArray - An X500 Distinguished Name
- */
-struct DnArray
-{
-  char *key;
-  char *value;
-};
-
-/* We work based on user IDs, getting from a user ID to the key is
- * check and does not need any memory (GPGME uses reference counting). */
-/**
- * struct CryptKeyInfo - A stored PGP key
- */
-struct CryptKeyInfo
-{
-  struct CryptKeyInfo *next;
-  gpgme_key_t kobj;
-  int idx;                   ///< and the user ID at this index
-  const char *uid;           ///< and for convenience point to this user ID
-  KeyFlags flags;            ///< global and per uid flags (for convenience)
-  gpgme_validity_t validity; ///< uid validity (cached for convenience)
-};
-
-/**
- * struct CryptEntry - An entry in the Select-Key menu
- */
-struct CryptEntry
-{
-  size_t num;
-  struct CryptKeyInfo *key;
-};
-
 static struct CryptCache *id_defaults = NULL;
 static gpgme_key_t signature_key = NULL;
 static char *current_sender = NULL;
@@ -147,52 +103,13 @@ static char *current_sender = NULL;
   _LINE_COMPARE("-----BEGIN PGP SIGNATURE-----", _y)
 
 /**
- * enum KeyCap - PGP/SMIME Key Capabilities
- */
-enum KeyCap
-{
-  KEY_CAP_CAN_ENCRYPT, ///< Key can be used for encryption
-  KEY_CAP_CAN_SIGN,    ///< Key can be used for signing
-  KEY_CAP_CAN_CERTIFY, ///< Key can be used to certify
-};
-
-/**
- * enum KeyInfo - PGP Key info
- */
-enum KeyInfo
-{
-  KIP_NAME = 0,    ///< PGP Key field: Name
-  KIP_AKA,         ///< PGP Key field: aka (Also Known As)
-  KIP_VALID_FROM,  ///< PGP Key field: Valid From date
-  KIP_VALID_TO,    ///< PGP Key field: Valid To date
-  KIP_KEY_TYPE,    ///< PGP Key field: Key Type
-  KIP_KEY_USAGE,   ///< PGP Key field: Key Usage
-  KIP_FINGERPRINT, ///< PGP Key field: Fingerprint
-  KIP_SERIAL_NO,   ///< PGP Key field: Serial number
-  KIP_ISSUED_BY,   ///< PGP Key field: Issued By
-  KIP_SUBKEY,      ///< PGP Key field: Subkey
-  KIP_MAX,
-};
-
-static const char *const KeyInfoPrompts[] = {
-  /* L10N: The following are the headers for the "verify key" output from the
-     GPGME key selection menu (bound to "c" in the key selection menu).
-     They will be automatically aligned. */
-  N_("Name: "),      N_("aka: "),       N_("Valid From: "),  N_("Valid To: "),
-  N_("Key Type: "),  N_("Key Usage: "), N_("Fingerprint: "), N_("Serial-No: "),
-  N_("Issued By: "), N_("Subkey: ")
-};
-
-int KeyInfoPadding[KIP_MAX] = { 0 };
-
-/**
  * is_pka_notation - Is this the standard pka email address
  * @param notation GPGME notation
  * @retval true If it is
  */
 static bool is_pka_notation(gpgme_sig_notation_t notation)
 {
-  return mutt_str_strcmp(notation->name, PKA_NOTATION_NAME) == 0;
+  return mutt_str_equal(notation->name, PKA_NOTATION_NAME);
 }
 
 /**
@@ -213,47 +130,6 @@ static void redraw_if_needed(gpgme_ctx_t ctx)
     mutt_need_hard_redraw();
   }
 #endif
-}
-
-/**
- * digit - Is the character a number
- * @param s Only the first character of this string is tested
- * @retval true when s points to a digit
- */
-static int digit(const char *s)
-{
-  return (*s >= '0' && *s <= '9');
-}
-
-/**
- * digit_or_letter - Is the character a number or letter
- * @param s Only the first character of this string is tested
- * @retval true when s points to a digit or letter
- */
-static int digit_or_letter(const char *s)
-{
-  return digit(s) || (*s >= 'A' && *s <= 'Z') || (*s >= 'a' && *s <= 'z');
-}
-
-/**
- * print_utf8 - Write a UTF-8 string to a file
- * @param fp  File to write to
- * @param buf Buffer to read from
- * @param len Length to read
- *
- * Convert the character set.
- */
-static void print_utf8(FILE *fp, const char *buf, size_t len)
-{
-  char *tstr = mutt_mem_malloc(len + 1);
-  memcpy(tstr, buf, len);
-  tstr[len] = 0;
-
-  /* fromcode "utf-8" is sure, so we don't want
-   * charset-hook corrections: flags must be 0.  */
-  mutt_ch_convert_string(&tstr, "utf-8", C_Charset, 0);
-  fputs(tstr, fp);
-  FREE(&tstr);
 }
 
 #if GPGRT_VERSION_NUMBER >= 0x012100 /* libgpg-error >= 1.33 */
@@ -297,9 +173,9 @@ static const char *parse_version_number(const char *s, int *number)
 {
   int val = 0;
 
-  if ((*s == '0') && digit(s + 1))
+  if ((*s == '0') && isdigit(s[1]))
     return NULL; /* Leading zeros are not allowed.  */
-  for (; digit(s); s++)
+  for (; isdigit(s[0]); s++)
   {
     val *= 10;
     val += *s - '0';
@@ -468,7 +344,7 @@ static int cmp_version_strings(const char *a, const char *b, int level)
  * Return the keyID for the key K.
  * Note that this string is valid as long as K is valid
  */
-static const char *crypt_keyid(struct CryptKeyInfo *k)
+const char *crypt_keyid(struct CryptKeyInfo *k)
 {
   const char *s = "????????";
 
@@ -543,7 +419,7 @@ static const char *crypt_fpr(struct CryptKeyInfo *k)
  * @param k Key to examine
  * @retval ptr Fingerprint if available, otherwise the long keyid
  */
-static const char *crypt_fpr_or_lkeyid(struct CryptKeyInfo *k)
+const char *crypt_fpr_or_lkeyid(struct CryptKeyInfo *k)
 {
   const char *s = "????????????????";
 
@@ -559,62 +435,11 @@ static const char *crypt_fpr_or_lkeyid(struct CryptKeyInfo *k)
 }
 
 /**
- * crypt_key_abilities - Parse key flags into a string
- * @param flags Flags, see #KeyFlags
- * @retval ptr Flag string
- *
- * @note The string is statically allocated.
- */
-static char *crypt_key_abilities(KeyFlags flags)
-{
-  static char buf[3];
-
-  if (!(flags & KEYFLAG_CANENCRYPT))
-    buf[0] = '-';
-  else if (flags & KEYFLAG_PREFER_SIGNING)
-    buf[0] = '.';
-  else
-    buf[0] = 'e';
-
-  if (!(flags & KEYFLAG_CANSIGN))
-    buf[1] = '-';
-  else if (flags & KEYFLAG_PREFER_ENCRYPTION)
-    buf[1] = '.';
-  else
-    buf[1] = 's';
-
-  buf[2] = '\0';
-
-  return buf;
-}
-
-/**
- * crypt_flags - Parse the key flags into a single character
- * @param flags Flags, see #KeyFlags
- * @retval char Flag character
- *
- * The returned character describes the most important flag.
- */
-static char crypt_flags(KeyFlags flags)
-{
-  if (flags & KEYFLAG_REVOKED)
-    return 'R';
-  if (flags & KEYFLAG_EXPIRED)
-    return 'X';
-  if (flags & KEYFLAG_DISABLED)
-    return 'd';
-  if (flags & KEYFLAG_CRITICAL)
-    return 'c';
-
-  return ' ';
-}
-
-/**
  * crypt_copy_key - Return a copy of KEY
  * @param key Key to copy
  * @retval ptr Copy of key
  */
-static struct CryptKeyInfo *crypt_copy_key(struct CryptKeyInfo *key)
+struct CryptKeyInfo *crypt_copy_key(struct CryptKeyInfo *key)
 {
   struct CryptKeyInfo *k = NULL;
 
@@ -651,23 +476,11 @@ static void crypt_key_free(struct CryptKeyInfo **keylist)
 }
 
 /**
- * crypt_key_is_valid - Is the key valid
- * @param k Key to test
- * @retval true If key is valid
- */
-static bool crypt_key_is_valid(struct CryptKeyInfo *k)
-{
-  if (k->flags & KEYFLAG_CANTUSE)
-    return false;
-  return true;
-}
-
-/**
  * crypt_id_is_strong - Is the key strong
  * @param key Key to test
  * @retval true Validity of key is sufficient
  */
-static bool crypt_id_is_strong(struct CryptKeyInfo *key)
+bool crypt_id_is_strong(struct CryptKeyInfo *key)
 {
   if (!key)
     return false;
@@ -702,7 +515,7 @@ static bool crypt_id_is_strong(struct CryptKeyInfo *key)
  *
  * When the key is not marked as unusable
  */
-static int crypt_id_is_valid(struct CryptKeyInfo *key)
+int crypt_id_is_valid(struct CryptKeyInfo *key)
 {
   if (!key)
     return 0;
@@ -734,13 +547,13 @@ static int crypt_id_matches_addr(struct Address *addr, struct Address *u_addr,
   if (addr && u_addr)
   {
     if (addr->mailbox && u_addr->mailbox &&
-        (mutt_str_strcasecmp(addr->mailbox, u_addr->mailbox) == 0))
+        mutt_istr_equal(addr->mailbox, u_addr->mailbox))
     {
       rc |= CRYPT_KV_ADDR;
     }
 
     if (addr->personal && u_addr->personal &&
-        (mutt_str_strcasecmp(addr->personal, u_addr->personal) == 0))
+        mutt_istr_equal(addr->personal, u_addr->personal))
     {
       rc |= CRYPT_KV_STRING;
     }
@@ -754,7 +567,7 @@ static int crypt_id_matches_addr(struct Address *addr, struct Address *u_addr,
  * @param for_smime If true, protocol of the context is set to CMS
  * @retval ptr New GPGME context
  */
-static gpgme_ctx_t create_gpgme_context(bool for_smime)
+gpgme_ctx_t create_gpgme_context(bool for_smime)
 {
   gpgme_ctx_t ctx = NULL;
 
@@ -828,12 +641,12 @@ static bool have_gpg_version(const char *version)
       engineinfo = engineinfo->next;
     if (engineinfo)
     {
-      engine_version = mutt_str_strdup(engineinfo->version);
+      engine_version = mutt_str_dup(engineinfo->version);
     }
     else
     {
       mutt_debug(LL_DEBUG1, "Error finding GPGME PGP engine\n");
-      engine_version = mutt_str_strdup("0.0.0");
+      engine_version = mutt_str_dup("0.0.0");
     }
     gpgme_release(ctx);
   }
@@ -862,9 +675,9 @@ static gpgme_data_t body_to_data_object(struct Body *a, bool convert)
     goto cleanup;
   }
 
-  mutt_write_mime_header(a, fp_tmp);
+  mutt_write_mime_header(a, fp_tmp, NeoMutt->sub);
   fputc('\n', fp_tmp);
-  mutt_write_mime_body(a, fp_tmp);
+  mutt_write_mime_body(a, fp_tmp, NeoMutt->sub);
 
   if (convert)
   {
@@ -1192,7 +1005,7 @@ static bool set_signer_from_address(gpgme_ctx_t ctx, const char *address, bool f
     char *fpr2 = "fpr2";
     if (key2->subkeys)
       fpr2 = key2->subkeys->fpr ? key2->subkeys->fpr : key2->subkeys->keyid;
-    if (mutt_str_strcmp(fpr, fpr2))
+    if (!mutt_str_equal(fpr, fpr2))
     {
       gpgme_key_unref(key);
       gpgme_key_unref(key2);
@@ -1395,13 +1208,13 @@ static int get_micalg(gpgme_ctx_t ctx, int use_smime, char *buf, size_t buflen)
       {
         /* convert GPGME raw hash name to RFC2633 format */
         snprintf(buf, buflen, "%s", algorithm_name);
-        mutt_str_strlower(buf);
+        mutt_str_lower(buf);
       }
       else
       {
         /* convert GPGME raw hash name to RFC3156 format */
         snprintf(buf, buflen, "pgp-%s", algorithm_name);
-        mutt_str_strlower(buf + 4);
+        mutt_str_lower(buf + 4);
       }
     }
   }
@@ -1502,7 +1315,7 @@ static struct Body *sign_message(struct Body *a, const struct AddressList *from,
 
   t = mutt_body_new();
   t->type = TYPE_MULTIPART;
-  t->subtype = mutt_str_strdup("signed");
+  t->subtype = mutt_str_dup("signed");
   t->encoding = ENC_7BIT;
   t->use_disp = false;
   t->disposition = DISP_INLINE;
@@ -1526,16 +1339,16 @@ static struct Body *sign_message(struct Body *a, const struct AddressList *from,
   t->type = TYPE_APPLICATION;
   if (use_smime)
   {
-    t->subtype = mutt_str_strdup("pkcs7-signature");
+    t->subtype = mutt_str_dup("pkcs7-signature");
     mutt_param_set(&t->parameter, "name", "smime.p7s");
     t->encoding = ENC_BASE64;
     t->use_disp = true;
     t->disposition = DISP_ATTACH;
-    t->d_filename = mutt_str_strdup("smime.p7s");
+    t->d_filename = mutt_str_dup("smime.p7s");
   }
   else
   {
-    t->subtype = mutt_str_strdup("pgp-signature");
+    t->subtype = mutt_str_dup("pgp-signature");
     mutt_param_set(&t->parameter, "name", "signature.asc");
     t->use_disp = false;
     t->disposition = DISP_NONE;
@@ -1582,7 +1395,7 @@ struct Body *pgp_gpgme_encrypt_message(struct Body *a, char *keylist, bool sign,
 
   struct Body *t = mutt_body_new();
   t->type = TYPE_MULTIPART;
-  t->subtype = mutt_str_strdup("encrypted");
+  t->subtype = mutt_str_dup("encrypted");
   t->encoding = ENC_7BIT;
   t->use_disp = false;
   t->disposition = DISP_INLINE;
@@ -1592,18 +1405,18 @@ struct Body *pgp_gpgme_encrypt_message(struct Body *a, char *keylist, bool sign,
 
   t->parts = mutt_body_new();
   t->parts->type = TYPE_APPLICATION;
-  t->parts->subtype = mutt_str_strdup("pgp-encrypted");
+  t->parts->subtype = mutt_str_dup("pgp-encrypted");
   t->parts->encoding = ENC_7BIT;
 
   t->parts->next = mutt_body_new();
   t->parts->next->type = TYPE_APPLICATION;
-  t->parts->next->subtype = mutt_str_strdup("octet-stream");
+  t->parts->next->subtype = mutt_str_dup("octet-stream");
   t->parts->next->encoding = ENC_7BIT;
   t->parts->next->filename = outfile;
   t->parts->next->use_disp = true;
   t->parts->next->disposition = DISP_ATTACH;
   t->parts->next->unlink = true; /* delete after sending the message */
-  t->parts->next->d_filename = mutt_str_strdup("msg.asc"); /* non pgp/mime
+  t->parts->next->d_filename = mutt_str_dup("msg.asc"); /* non pgp/mime
                                                            can save */
 
   return t;
@@ -1628,13 +1441,13 @@ struct Body *smime_gpgme_build_smime_entity(struct Body *a, char *keylist)
 
   struct Body *t = mutt_body_new();
   t->type = TYPE_APPLICATION;
-  t->subtype = mutt_str_strdup("pkcs7-mime");
+  t->subtype = mutt_str_dup("pkcs7-mime");
   mutt_param_set(&t->parameter, "name", "smime.p7m");
   mutt_param_set(&t->parameter, "smime-type", "enveloped-data");
   t->encoding = ENC_BASE64; /* The output of OpenSSL SHOULD be binary */
   t->use_disp = true;
   t->disposition = DISP_ATTACH;
-  t->d_filename = mutt_str_strdup("smime.p7m");
+  t->d_filename = mutt_str_dup("smime.p7m");
   t->filename = outfile;
   t->unlink = true; /* delete after sending the message */
   t->parts = 0;
@@ -2672,7 +2485,7 @@ static int pgp_gpgme_extract_keys(gpgme_data_t keydata, FILE **fp)
     while (subkey)
     {
       shortid = subkey->keyid;
-      len = mutt_str_strlen(subkey->keyid);
+      len = mutt_str_len(subkey->keyid);
       if (len > 8)
         shortid += len - 8;
       tt = subkey->timestamp;
@@ -2728,7 +2541,7 @@ err_ctx:
  */
 static int line_compare(const char *a, size_t n, const char *b)
 {
-  if (mutt_str_strncmp(a, b, n) == 0)
+  if (mutt_strn_equal(a, b, n))
   {
     /* at this point we know that 'b' is at least 'n' chars long */
     if ((b[n] == '\n') || ((b[n] == '\r') && (b[n + 1] == '\n')))
@@ -2772,7 +2585,7 @@ static int pgp_check_traditional_one_body(FILE *fp, struct Body *b)
 
   while (fgets(buf, sizeof(buf), fp_tmp))
   {
-    size_t plen = mutt_str_startswith(buf, "-----BEGIN PGP ", CASE_MATCH);
+    size_t plen = mutt_str_startswith(buf, "-----BEGIN PGP ");
     if (plen != 0)
     {
       if (MESSAGE(buf + plen))
@@ -3021,7 +2834,7 @@ int pgp_gpgme_application_handler(struct Body *m, struct State *s)
   /* For clearsigned messages we won't be able to get a character set
    * but we know that this may only be text thus we assume Latin-1 here. */
   if (!mutt_body_get_charset(m, body_charset, sizeof(body_charset)))
-    mutt_str_strfcpy(body_charset, "iso-8859-1", sizeof(body_charset));
+    mutt_str_copy(body_charset, "iso-8859-1", sizeof(body_charset));
 
   fseeko(s->fp_in, m->offset, SEEK_SET);
   last_pos = m->offset;
@@ -3032,10 +2845,10 @@ int pgp_gpgme_application_handler(struct Body *m, struct State *s)
       break;
 
     LOFF_T offset = ftello(s->fp_in);
-    bytes -= (offset - last_pos); /* don't rely on mutt_str_strlen(buf) */
+    bytes -= (offset - last_pos); /* don't rely on mutt_str_len(buf) */
     last_pos = offset;
 
-    size_t plen = mutt_str_startswith(buf, "-----BEGIN PGP ", CASE_MATCH);
+    size_t plen = mutt_str_startswith(buf, "-----BEGIN PGP ");
     if (plen != 0)
     {
       clearsign = false;
@@ -3416,697 +3229,12 @@ int smime_gpgme_application_handler(struct Body *a, struct State *s)
 }
 
 /**
- * crypt_format_str - Format a string for the key selection menu - Implements ::format_t
- *
- * | Expando | Description
- * |:--------|:--------------------------------------------------------
- * | \%n     | Number
- * | \%p     | Protocol
- * | \%t     | Trust/validity of the key-uid association
- * | \%u     | User id
- * | \%[fmt] | Date of key using strftime(3)
- * |         |
- * | \%a     | Algorithm
- * | \%c     | Capabilities
- * | \%f     | Flags
- * | \%k     | Key id
- * | \%l     | Length
- * |         |
- * | \%A     | Algorithm of the principal key
- * | \%C     | Capabilities of the principal key
- * | \%F     | Flags of the principal key
- * | \%K     | Key id of the principal key
- * | \%L     | Length of the principal key
- */
-static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int cols,
-                                    char op, const char *src, const char *prec,
-                                    const char *if_str, const char *else_str,
-                                    intptr_t data, MuttFormatFlags flags)
-{
-  char fmt[128];
-  bool optional = (flags & MUTT_FORMAT_OPTIONAL);
-
-  struct CryptEntry *entry = (struct CryptEntry *) data;
-  struct CryptKeyInfo *key = entry->key;
-
-  /*    if (isupper ((unsigned char) op)) */
-  /*      key = pkey; */
-
-  KeyFlags kflags = (key->flags /* | (pkey->flags & KEYFLAG_RESTRICTIONS)
-                                 | uid->flags */);
-
-  switch (tolower(op))
-  {
-    case 'a':
-      if (!optional)
-      {
-        const char *s = NULL;
-        snprintf(fmt, sizeof(fmt), "%%%s.3s", prec);
-        if (key->kobj->subkeys)
-          s = gpgme_pubkey_algo_name(key->kobj->subkeys->pubkey_algo);
-        else
-          s = "?";
-        snprintf(buf, buflen, fmt, s);
-      }
-      break;
-
-    case 'c':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-        snprintf(buf, buflen, fmt, crypt_key_abilities(kflags));
-      }
-      else if (!(kflags & KEYFLAG_ABILITIES))
-        optional = false;
-      break;
-
-    case 'f':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%sc", prec);
-        snprintf(buf, buflen, fmt, crypt_flags(kflags));
-      }
-      else if (!(kflags & KEYFLAG_RESTRICTIONS))
-        optional = false;
-      break;
-
-    case 'k':
-      if (!optional)
-      {
-        /* fixme: we need a way to distinguish between main and subkeys.
-         * Store the idx in entry? */
-        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-        snprintf(buf, buflen, fmt, crypt_keyid(key));
-      }
-      break;
-
-    case 'l':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%slu", prec);
-        unsigned long val;
-        if (key->kobj->subkeys)
-          val = key->kobj->subkeys->length;
-        else
-          val = 0;
-        snprintf(buf, buflen, fmt, val);
-      }
-      break;
-
-    case 'n':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
-        snprintf(buf, buflen, fmt, entry->num);
-      }
-      break;
-
-    case 'p':
-      snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-      snprintf(buf, buflen, fmt, gpgme_get_protocol_name(key->kobj->protocol));
-      break;
-
-    case 't':
-    {
-      char *s = NULL;
-      if ((kflags & KEYFLAG_ISX509))
-        s = "x";
-      else
-      {
-        switch (key->validity)
-        {
-          case GPGME_VALIDITY_FULL:
-            s = "f";
-            break;
-          case GPGME_VALIDITY_MARGINAL:
-            s = "m";
-            break;
-          case GPGME_VALIDITY_NEVER:
-            s = "n";
-            break;
-          case GPGME_VALIDITY_ULTIMATE:
-            s = "u";
-            break;
-          case GPGME_VALIDITY_UNDEFINED:
-            s = "q";
-            break;
-          case GPGME_VALIDITY_UNKNOWN:
-          default:
-            s = "?";
-            break;
-        }
-      }
-      snprintf(fmt, sizeof(fmt), "%%%sc", prec);
-      snprintf(buf, buflen, fmt, *s);
-      break;
-    }
-
-    case 'u':
-      if (!optional)
-      {
-        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-        snprintf(buf, buflen, fmt, key->uid);
-      }
-      break;
-
-    case '[':
-    {
-      char buf2[128];
-      bool do_locales = true;
-      struct tm tm = { 0 };
-
-      char *p = buf;
-
-      const char *cp = src;
-      if (*cp == '!')
-      {
-        do_locales = false;
-        cp++;
-      }
-
-      size_t len = buflen - 1;
-      while ((len > 0) && (*cp != ']'))
-      {
-        if (*cp == '%')
-        {
-          cp++;
-          if (len >= 2)
-          {
-            *p++ = '%';
-            *p++ = *cp;
-            len -= 2;
-          }
-          else
-            break; /* not enough space */
-          cp++;
-        }
-        else
-        {
-          *p++ = *cp++;
-          len--;
-        }
-      }
-      *p = '\0';
-
-      if (key->kobj->subkeys && (key->kobj->subkeys->timestamp > 0))
-        tm = mutt_date_localtime(key->kobj->subkeys->timestamp);
-      else
-        tm = mutt_date_localtime(0); // Default to 1970-01-01
-
-      if (!do_locales)
-        setlocale(LC_TIME, "C");
-      strftime(buf2, sizeof(buf2), buf, &tm);
-      if (!do_locales)
-        setlocale(LC_TIME, "");
-
-      snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-      snprintf(buf, buflen, fmt, buf2);
-      if (len > 0)
-        src = cp + 1;
-      break;
-    }
-
-    default:
-      *buf = '\0';
-  }
-
-  if (optional)
-  {
-    mutt_expando_format(buf, buflen, col, cols, if_str, crypt_format_str, data,
-                        MUTT_FORMAT_NO_FLAGS);
-  }
-  else if (flags & MUTT_FORMAT_OPTIONAL)
-  {
-    mutt_expando_format(buf, buflen, col, cols, else_str, crypt_format_str,
-                        data, MUTT_FORMAT_NO_FLAGS);
-  }
-  return src;
-}
-
-/**
- * crypt_make_entry - Format a menu item for the key selection list - Implements Menu::make_entry()
- */
-static void crypt_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
-{
-  struct CryptKeyInfo **key_table = menu->mdata;
-  struct CryptEntry entry;
-
-  entry.key = key_table[line];
-  entry.num = line + 1;
-
-  mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
-                      NONULL(C_PgpEntryFormat), crypt_format_str,
-                      (intptr_t) &entry, MUTT_FORMAT_ARROWCURSOR);
-}
-
-/**
- * compare_key_address - Compare Key addresses and IDs for sorting
- * @param a First key
- * @param b Second key
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- */
-static int compare_key_address(const void *a, const void *b)
-{
-  struct CryptKeyInfo **s = (struct CryptKeyInfo **) a;
-  struct CryptKeyInfo **t = (struct CryptKeyInfo **) b;
-  int r;
-
-  r = mutt_str_strcasecmp((*s)->uid, (*t)->uid);
-  if (r != 0)
-    return r > 0;
-  return mutt_str_strcasecmp(crypt_fpr_or_lkeyid(*s), crypt_fpr_or_lkeyid(*t)) > 0;
-}
-
-/**
- * crypt_compare_address - Compare the addresses of two keys
- * @param a First key
- * @param b Second key
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- */
-static int crypt_compare_address(const void *a, const void *b)
-{
-  return (C_PgpSortKeys & SORT_REVERSE) ? !compare_key_address(a, b) :
-                                          compare_key_address(a, b);
-}
-
-/**
- * compare_keyid - Compare Key IDs and addresses for sorting
- * @param a First key ID
- * @param b Second key ID
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- */
-static int compare_keyid(const void *a, const void *b)
-{
-  struct CryptKeyInfo **s = (struct CryptKeyInfo **) a;
-  struct CryptKeyInfo **t = (struct CryptKeyInfo **) b;
-  int r;
-
-  r = mutt_str_strcasecmp(crypt_fpr_or_lkeyid(*s), crypt_fpr_or_lkeyid(*t));
-  if (r != 0)
-    return r > 0;
-  return mutt_str_strcasecmp((*s)->uid, (*t)->uid) > 0;
-}
-
-/**
- * crypt_compare_keyid - Compare the IDs of two keys
- * @param a First key ID
- * @param b Second key ID
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- */
-static int crypt_compare_keyid(const void *a, const void *b)
-{
-  return (C_PgpSortKeys & SORT_REVERSE) ? !compare_keyid(a, b) : compare_keyid(a, b);
-}
-
-/**
- * compare_key_date - Compare Key creation dates and addresses for sorting
- * @param a First key
- * @param b Second key
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- */
-static int compare_key_date(const void *a, const void *b)
-{
-  struct CryptKeyInfo **s = (struct CryptKeyInfo **) a;
-  struct CryptKeyInfo **t = (struct CryptKeyInfo **) b;
-  unsigned long ts = 0, tt = 0;
-
-  if ((*s)->kobj->subkeys && ((*s)->kobj->subkeys->timestamp > 0))
-    ts = (*s)->kobj->subkeys->timestamp;
-  if ((*t)->kobj->subkeys && ((*t)->kobj->subkeys->timestamp > 0))
-    tt = (*t)->kobj->subkeys->timestamp;
-
-  if (ts > tt)
-    return 1;
-  if (ts < tt)
-    return 0;
-
-  return mutt_str_strcasecmp((*s)->uid, (*t)->uid) > 0;
-}
-
-/**
- * crypt_compare_date - Compare the dates of two keys
- * @param a First key
- * @param b Second key
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- */
-static int crypt_compare_date(const void *a, const void *b)
-{
-  return (C_PgpSortKeys & SORT_REVERSE) ? !compare_key_date(a, b) :
-                                          compare_key_date(a, b);
-}
-
-/**
- * compare_key_trust - Compare the trust of keys for sorting
- * @param a First key
- * @param b Second key
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- *
- * Compare two trust values, the key length, the creation dates. the addresses
- * and the key IDs.
- */
-static int compare_key_trust(const void *a, const void *b)
-{
-  struct CryptKeyInfo **s = (struct CryptKeyInfo **) a;
-  struct CryptKeyInfo **t = (struct CryptKeyInfo **) b;
-  unsigned long ts = 0, tt = 0;
-  int r;
-
-  r = (((*s)->flags & KEYFLAG_RESTRICTIONS) - ((*t)->flags & KEYFLAG_RESTRICTIONS));
-  if (r != 0)
-    return r > 0;
-
-  ts = (*s)->validity;
-  tt = (*t)->validity;
-  r = (tt - ts);
-  if (r != 0)
-    return r < 0;
-
-  if ((*s)->kobj->subkeys)
-    ts = (*s)->kobj->subkeys->length;
-  if ((*t)->kobj->subkeys)
-    tt = (*t)->kobj->subkeys->length;
-  if (ts != tt)
-    return ts > tt;
-
-  if ((*s)->kobj->subkeys && ((*s)->kobj->subkeys->timestamp > 0))
-    ts = (*s)->kobj->subkeys->timestamp;
-  if ((*t)->kobj->subkeys && ((*t)->kobj->subkeys->timestamp > 0))
-    tt = (*t)->kobj->subkeys->timestamp;
-  if (ts > tt)
-    return 1;
-  if (ts < tt)
-    return 0;
-
-  r = mutt_str_strcasecmp((*s)->uid, (*t)->uid);
-  if (r != 0)
-    return r > 0;
-  return mutt_str_strcasecmp(crypt_fpr_or_lkeyid((*s)), crypt_fpr_or_lkeyid((*t))) > 0;
-}
-
-/**
- * crypt_compare_trust - Compare the trust levels of two keys
- * @param a First key
- * @param b Second key
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- */
-static int crypt_compare_trust(const void *a, const void *b)
-{
-  return (C_PgpSortKeys & SORT_REVERSE) ? !compare_key_trust(a, b) :
-                                          compare_key_trust(a, b);
-}
-
-/**
- * print_dn_part - Print the X.500 Distinguished Name
- * @param fp  File to write to
- * @param dn  Distinguished Name
- * @param key Key string
- * @retval true  If any DN keys match the given key string
- * @retval false Otherwise
- *
- * Print the X.500 Distinguished Name part KEY from the array of parts DN to FP.
- */
-static bool print_dn_part(FILE *fp, struct DnArray *dn, const char *key)
-{
-  bool any = false;
-
-  for (; dn->key; dn++)
-  {
-    if (strcmp(dn->key, key) == 0)
-    {
-      if (any)
-        fputs(" + ", fp);
-      print_utf8(fp, dn->value, strlen(dn->value));
-      any = true;
-    }
-  }
-  return any;
-}
-
-/**
- * print_dn_parts - Print all parts of a DN in a standard sequence
- * @param fp File to write to
- * @param dn Array of Distinguished Names
- */
-static void print_dn_parts(FILE *fp, struct DnArray *dn)
-{
-  static const char *const stdpart[] = {
-    "CN", "OU", "O", "STREET", "L", "ST", "C", NULL,
-  };
-  bool any = false;
-  bool any2 = false;
-
-  for (int i = 0; stdpart[i]; i++)
-  {
-    if (any)
-      fputs(", ", fp);
-    any = print_dn_part(fp, dn, stdpart[i]);
-  }
-  /* now print the rest without any specific ordering */
-  for (; dn->key; dn++)
-  {
-    int i;
-    for (i = 0; stdpart[i]; i++)
-    {
-      if (strcmp(dn->key, stdpart[i]) == 0)
-        break;
-    }
-    if (!stdpart[i])
-    {
-      if (any)
-        fputs(", ", fp);
-      if (!any2)
-        fputs("(", fp);
-      any = print_dn_part(fp, dn, dn->key);
-      any2 = true;
-    }
-  }
-  if (any2)
-    fputs(")", fp);
-}
-
-/**
- * parse_dn_part - Parse an RDN
- * @param array Array for results
- * @param str   String to parse
- * @retval ptr First character after Distinguished Name
- *
- * This is a helper to parse_dn()
- */
-static const char *parse_dn_part(struct DnArray *array, const char *str)
-{
-  const char *s = NULL, *s1 = NULL;
-  size_t n;
-  char *p = NULL;
-
-  /* parse attribute type */
-  for (s = str + 1; (s[0] != '\0') && (s[0] != '='); s++)
-    ; // do nothing
-
-  if (s[0] == '\0')
-    return NULL; /* error */
-  n = s - str;
-  if (n == 0)
-    return NULL; /* empty key */
-  array->key = mutt_mem_malloc(n + 1);
-  p = array->key;
-  memcpy(p, str, n); /* fixme: trim trailing spaces */
-  p[n] = 0;
-  str = s + 1;
-
-  if (*str == '#')
-  { /* hexstring */
-    str++;
-    for (s = str; isxdigit(*s); s++)
-      s++;
-    n = s - str;
-    if ((n == 0) || (n & 1))
-      return NULL; /* empty or odd number of digits */
-    n /= 2;
-    p = mutt_mem_malloc(n + 1);
-    array->value = (char *) p;
-    for (s1 = str; n; s1 += 2, n--)
-      sscanf(s1, "%2hhx", (unsigned char *) p++);
-    *p = '\0';
-  }
-  else
-  { /* regular v3 quoted string */
-    for (n = 0, s = str; *s; s++)
-    {
-      if (*s == '\\')
-      { /* pair */
-        s++;
-        if ((*s == ',') || (*s == '=') || (*s == '+') || (*s == '<') || (*s == '>') ||
-            (*s == '#') || (*s == ';') || (*s == '\\') || (*s == '\"') || (*s == ' '))
-        {
-          n++;
-        }
-        else if (isxdigit(s[0]) && isxdigit(s[1]))
-        {
-          s++;
-          n++;
-        }
-        else
-          return NULL; /* invalid escape sequence */
-      }
-      else if (*s == '\"')
-        return NULL; /* invalid encoding */
-      else if ((*s == ',') || (*s == '=') || (*s == '+') || (*s == '<') ||
-               (*s == '>') || (*s == '#') || (*s == ';'))
-      {
-        break;
-      }
-      else
-        n++;
-    }
-
-    p = mutt_mem_malloc(n + 1);
-    array->value = (char *) p;
-    for (s = str; n; s++, n--)
-    {
-      if (*s == '\\')
-      {
-        s++;
-        if (isxdigit(*s))
-        {
-          sscanf(s, "%2hhx", (unsigned char *) p++);
-          s++;
-        }
-        else
-          *p++ = *s;
-      }
-      else
-        *p++ = *s;
-    }
-    *p = '\0';
-  }
-  return s;
-}
-
-/**
- * parse_dn - Parse a DN and return an array-ized one
- * @param str String to parse
- * @retval ptr Array of Distinguished Names
- *
- * This is not a validating parser and it does not support any old-stylish
- * syntax; GPGME is expected to return only rfc2253 compatible strings.
- */
-static struct DnArray *parse_dn(const char *str)
-{
-  struct DnArray *array = NULL;
-  size_t arrayidx, arraysize;
-
-  arraysize = 7; /* C,ST,L,O,OU,CN,email */
-  array = mutt_mem_malloc((arraysize + 1) * sizeof(*array));
-  arrayidx = 0;
-  while (*str)
-  {
-    while (str[0] == ' ')
-      str++;
-    if (str[0] == '\0')
-      break; /* ready */
-    if (arrayidx >= arraysize)
-    {
-      /* neomutt lacks a real mutt_mem_realloc - so we need to copy */
-      arraysize += 5;
-      struct DnArray *a2 = mutt_mem_malloc((arraysize + 1) * sizeof(*array));
-      for (int i = 0; i < arrayidx; i++)
-      {
-        a2[i].key = array[i].key;
-        a2[i].value = array[i].value;
-      }
-      FREE(&array);
-      array = a2;
-    }
-    array[arrayidx].key = NULL;
-    array[arrayidx].value = NULL;
-    str = parse_dn_part(array + arrayidx, str);
-    arrayidx++;
-    if (!str)
-      goto failure;
-    while (str[0] == ' ')
-      str++;
-    if ((str[0] != '\0') && (str[0] != ',') && (str[0] != ';') && (str[0] != '+'))
-      goto failure; /* invalid delimiter */
-    if (str[0] != '\0')
-      str++;
-  }
-  array[arrayidx].key = NULL;
-  array[arrayidx].value = NULL;
-  return array;
-
-failure:
-  for (int i = 0; i < arrayidx; i++)
-  {
-    FREE(&array[i].key);
-    FREE(&array[i].value);
-  }
-  FREE(&array);
-  return NULL;
-}
-
-/**
- * parse_and_print_user_id - Print a nice representation of the userid
- * @param fp     File to write to
- * @param userid String returned by GPGME key functions (utf-8 encoded)
- *
- * Make sure it is displayed in a proper way, which does mean to reorder some
- * parts for S/MIME's DNs.
- */
-static void parse_and_print_user_id(FILE *fp, const char *userid)
-{
-  const char *s = NULL;
-
-  if (*userid == '<')
-  {
-    s = strchr(userid + 1, '>');
-    if (s)
-      print_utf8(fp, userid + 1, s - userid - 1);
-  }
-  else if (*userid == '(')
-    fputs(_("[Can't display this user ID (unknown encoding)]"), fp);
-  else if (!digit_or_letter(userid))
-    fputs(_("[Can't display this user ID (invalid encoding)]"), fp);
-  else
-  {
-    struct DnArray *dn = parse_dn(userid);
-    if (!dn)
-      fputs(_("[Can't display this user ID (invalid DN)]"), fp);
-    else
-    {
-      print_dn_parts(fp, dn);
-      for (int i = 0; dn[i].key; i++)
-      {
-        FREE(&dn[i].key);
-        FREE(&dn[i].value);
-      }
-      FREE(&dn);
-    }
-  }
-}
-
-/**
  * key_check_cap - Check the capabilities of a key
  * @param key GPGME key
  * @param cap Flags, e.g. #KEY_CAP_CAN_ENCRYPT
  * @retval >0 Key has the capabilities
  */
-static unsigned int key_check_cap(gpgme_key_t key, enum KeyCap cap)
+unsigned int key_check_cap(gpgme_key_t key, enum KeyCap cap)
 {
   unsigned int ret = 0;
 
@@ -4151,323 +3279,6 @@ static unsigned int key_check_cap(gpgme_key_t key, enum KeyCap cap)
   }
 
   return ret;
-}
-
-/**
- * print_key_info - Verbose information about a key or certificate to a file
- * @param key Key to use
- * @param fp  File to write to
- */
-static void print_key_info(gpgme_key_t key, FILE *fp)
-{
-  int idx;
-  const char *s = NULL, *s2 = NULL;
-  time_t tt = 0;
-  char shortbuf[128];
-  unsigned long aval = 0;
-  const char *delim = NULL;
-  gpgme_user_id_t uid = NULL;
-  static int max_header_width = 0;
-
-  if (max_header_width == 0)
-  {
-    for (int i = 0; i < KIP_MAX; i++)
-    {
-      KeyInfoPadding[i] = mutt_str_strlen(_(KeyInfoPrompts[i]));
-      const int width = mutt_strwidth(_(KeyInfoPrompts[i]));
-      if (max_header_width < width)
-        max_header_width = width;
-      KeyInfoPadding[i] -= width;
-    }
-    for (int i = 0; i < KIP_MAX; i++)
-      KeyInfoPadding[i] += max_header_width;
-  }
-
-  bool is_pgp = (key->protocol == GPGME_PROTOCOL_OpenPGP);
-
-  for (idx = 0, uid = key->uids; uid; idx++, uid = uid->next)
-  {
-    if (uid->revoked)
-      continue;
-
-    s = uid->uid;
-    /* L10N: DOTFILL */
-
-    if (idx == 0)
-      fprintf(fp, "%*s", KeyInfoPadding[KIP_NAME], _(KeyInfoPrompts[KIP_NAME]));
-    else
-      fprintf(fp, "%*s", KeyInfoPadding[KIP_AKA], _(KeyInfoPrompts[KIP_AKA]));
-    if (uid->invalid)
-    {
-      /* L10N: comes after the Name or aka if the key is invalid */
-      fputs(_("[Invalid]"), fp);
-      putc(' ', fp);
-    }
-    if (is_pgp)
-      print_utf8(fp, s, strlen(s));
-    else
-      parse_and_print_user_id(fp, s);
-    putc('\n', fp);
-  }
-
-  if (key->subkeys && (key->subkeys->timestamp > 0))
-  {
-    tt = key->subkeys->timestamp;
-
-    mutt_date_localtime_format(shortbuf, sizeof(shortbuf), nl_langinfo(D_T_FMT), tt);
-    fprintf(fp, "%*s%s\n", KeyInfoPadding[KIP_VALID_FROM],
-            _(KeyInfoPrompts[KIP_VALID_FROM]), shortbuf);
-  }
-
-  if (key->subkeys && (key->subkeys->expires > 0))
-  {
-    tt = key->subkeys->expires;
-
-    mutt_date_localtime_format(shortbuf, sizeof(shortbuf), nl_langinfo(D_T_FMT), tt);
-    fprintf(fp, "%*s%s\n", KeyInfoPadding[KIP_VALID_TO],
-            _(KeyInfoPrompts[KIP_VALID_TO]), shortbuf);
-  }
-
-  if (key->subkeys)
-    s = gpgme_pubkey_algo_name(key->subkeys->pubkey_algo);
-  else
-    s = "?";
-
-  s2 = is_pgp ? "PGP" : "X.509";
-
-  if (key->subkeys)
-    aval = key->subkeys->length;
-
-  fprintf(fp, "%*s", KeyInfoPadding[KIP_KEY_TYPE], _(KeyInfoPrompts[KIP_KEY_TYPE]));
-  /* L10N: This is printed after "Key Type: " and looks like this: PGP, 2048 bit RSA */
-  fprintf(fp, ngettext("%s, %lu bit %s\n", "%s, %lu bit %s\n", aval), s2, aval, s);
-
-  fprintf(fp, "%*s", KeyInfoPadding[KIP_KEY_USAGE], _(KeyInfoPrompts[KIP_KEY_USAGE]));
-  delim = "";
-
-  if (key_check_cap(key, KEY_CAP_CAN_ENCRYPT))
-  {
-    /* L10N: value in Key Usage: field */
-    fprintf(fp, "%s%s", delim, _("encryption"));
-    delim = _(", ");
-  }
-  if (key_check_cap(key, KEY_CAP_CAN_SIGN))
-  {
-    /* L10N: value in Key Usage: field */
-    fprintf(fp, "%s%s", delim, _("signing"));
-    delim = _(", ");
-  }
-  if (key_check_cap(key, KEY_CAP_CAN_CERTIFY))
-  {
-    /* L10N: value in Key Usage: field */
-    fprintf(fp, "%s%s", delim, _("certification"));
-  }
-  putc('\n', fp);
-
-  if (key->subkeys)
-  {
-    s = key->subkeys->fpr;
-    fprintf(fp, "%*s", KeyInfoPadding[KIP_FINGERPRINT], _(KeyInfoPrompts[KIP_FINGERPRINT]));
-    if (is_pgp && (strlen(s) == 40))
-    {
-      for (int i = 0; (s[0] != '\0') && (s[1] != '\0') && (s[2] != '\0') &&
-                      (s[3] != '\0') && (s[4] != '\0');
-           s += 4, i++)
-      {
-        putc(*s, fp);
-        putc(s[1], fp);
-        putc(s[2], fp);
-        putc(s[3], fp);
-        putc(' ', fp);
-        if (i == 4)
-          putc(' ', fp);
-      }
-    }
-    else
-    {
-      for (int i = 0; (s[0] != '\0') && (s[1] != '\0') && (s[2] != '\0'); s += 2, i++)
-      {
-        putc(*s, fp);
-        putc(s[1], fp);
-        putc(is_pgp ? ' ' : ':', fp);
-        if (is_pgp && (i == 7))
-          putc(' ', fp);
-      }
-    }
-    fprintf(fp, "%s\n", s);
-  }
-
-  if (key->issuer_serial)
-  {
-    s = key->issuer_serial;
-    if (s)
-    {
-      fprintf(fp, "%*s0x%s\n", KeyInfoPadding[KIP_SERIAL_NO],
-              _(KeyInfoPrompts[KIP_SERIAL_NO]), s);
-    }
-  }
-
-  if (key->issuer_name)
-  {
-    s = key->issuer_name;
-    if (s)
-    {
-      fprintf(fp, "%*s", KeyInfoPadding[KIP_ISSUED_BY], _(KeyInfoPrompts[KIP_ISSUED_BY]));
-      parse_and_print_user_id(fp, s);
-      putc('\n', fp);
-    }
-  }
-
-  /* For PGP we list all subkeys. */
-  if (is_pgp)
-  {
-    gpgme_subkey_t subkey = NULL;
-
-    for (idx = 1, subkey = key->subkeys; subkey; idx++, subkey = subkey->next)
-    {
-      s = subkey->keyid;
-
-      putc('\n', fp);
-      if (strlen(s) == 16)
-        s += 8; /* display only the short keyID */
-      fprintf(fp, "%*s0x%s", KeyInfoPadding[KIP_SUBKEY], _(KeyInfoPrompts[KIP_SUBKEY]), s);
-      if (subkey->revoked)
-      {
-        putc(' ', fp);
-        /* L10N: describes a subkey */
-        fputs(_("[Revoked]"), fp);
-      }
-      if (subkey->invalid)
-      {
-        putc(' ', fp);
-        /* L10N: describes a subkey */
-        fputs(_("[Invalid]"), fp);
-      }
-      if (subkey->expired)
-      {
-        putc(' ', fp);
-        /* L10N: describes a subkey */
-        fputs(_("[Expired]"), fp);
-      }
-      if (subkey->disabled)
-      {
-        putc(' ', fp);
-        /* L10N: describes a subkey */
-        fputs(_("[Disabled]"), fp);
-      }
-      putc('\n', fp);
-
-      if (subkey->timestamp > 0)
-      {
-        tt = subkey->timestamp;
-
-        mutt_date_localtime_format(shortbuf, sizeof(shortbuf), nl_langinfo(D_T_FMT), tt);
-        fprintf(fp, "%*s%s\n", KeyInfoPadding[KIP_VALID_FROM],
-                _(KeyInfoPrompts[KIP_VALID_FROM]), shortbuf);
-      }
-
-      if (subkey->expires > 0)
-      {
-        tt = subkey->expires;
-
-        mutt_date_localtime_format(shortbuf, sizeof(shortbuf), nl_langinfo(D_T_FMT), tt);
-        fprintf(fp, "%*s%s\n", KeyInfoPadding[KIP_VALID_TO],
-                _(KeyInfoPrompts[KIP_VALID_TO]), shortbuf);
-      }
-
-      s = gpgme_pubkey_algo_name(subkey->pubkey_algo);
-
-      aval = subkey->length;
-
-      fprintf(fp, "%*s", KeyInfoPadding[KIP_KEY_TYPE], _(KeyInfoPrompts[KIP_KEY_TYPE]));
-      /* L10N: This is printed after "Key Type: " and looks like this: PGP, 2048 bit RSA */
-      fprintf(fp, ngettext("%s, %lu bit %s\n", "%s, %lu bit %s\n", aval), "PGP", aval, s);
-
-      fprintf(fp, "%*s", KeyInfoPadding[KIP_KEY_USAGE], _(KeyInfoPrompts[KIP_KEY_USAGE]));
-      delim = "";
-
-      if (subkey->can_encrypt)
-      {
-        fprintf(fp, "%s%s", delim, _("encryption"));
-        delim = _(", ");
-      }
-      if (subkey->can_sign)
-      {
-        fprintf(fp, "%s%s", delim, _("signing"));
-        delim = _(", ");
-      }
-      if (subkey->can_certify)
-      {
-        fprintf(fp, "%s%s", delim, _("certification"));
-      }
-      putc('\n', fp);
-    }
-  }
-}
-
-/**
- * verify_key - Show detailed information about the selected key
- * @param key Key to show
- */
-static void verify_key(struct CryptKeyInfo *key)
-{
-  char cmd[1024];
-  const char *s = NULL;
-  gpgme_ctx_t listctx = NULL;
-  gpgme_error_t err;
-  gpgme_key_t k = NULL;
-  int maxdepth = 100;
-
-  struct Buffer tempfile = mutt_buffer_make(PATH_MAX);
-  mutt_buffer_mktemp(&tempfile);
-  FILE *fp = mutt_file_fopen(mutt_b2s(&tempfile), "w");
-  if (!fp)
-  {
-    mutt_perror(_("Can't create temporary file"));
-    goto cleanup;
-  }
-  mutt_message(_("Collecting data..."));
-
-  print_key_info(key->kobj, fp);
-
-  listctx = create_gpgme_context(key->flags & KEYFLAG_ISX509);
-
-  k = key->kobj;
-  gpgme_key_ref(k);
-  while ((s = k->chain_id) && k->subkeys && (strcmp(s, k->subkeys->fpr) != 0))
-  {
-    putc('\n', fp);
-    err = gpgme_op_keylist_start(listctx, s, 0);
-    gpgme_key_unref(k);
-    k = NULL;
-    if (err == 0)
-      err = gpgme_op_keylist_next(listctx, &k);
-    if (err != 0)
-    {
-      fprintf(fp, _("Error finding issuer key: %s\n"), gpgme_strerror(err));
-      goto leave;
-    }
-    gpgme_op_keylist_end(listctx);
-
-    print_key_info(k, fp);
-    if (!--maxdepth)
-    {
-      putc('\n', fp);
-      fputs(_("Error: certification chain too long - stopping here\n"), fp);
-      break;
-    }
-  }
-
-leave:
-  gpgme_key_unref(k);
-  gpgme_release(listctx);
-  mutt_file_fclose(&fp);
-  mutt_clear_error();
-  snprintf(cmd, sizeof(cmd), _("Key ID: 0x%s"), crypt_keyid(key));
-  mutt_do_pager(cmd, mutt_b2s(&tempfile), MUTT_PAGER_NO_FLAGS, NULL);
-
-cleanup:
-  mutt_buffer_dealloc(&tempfile);
 }
 
 /**
@@ -4579,7 +3390,7 @@ static struct CryptKeyInfo *get_candidates(struct ListHead *hints, SecurityFlags
     STAILQ_FOREACH(np, hints, entries)
     {
       if (np->data && *np->data)
-        patarr[n++] = mutt_str_strdup(np->data);
+        patarr[n++] = mutt_str_dup(np->data);
     }
     patarr[n] = NULL;
     err = gpgme_op_keylist_ext_start(ctx, (const char **) patarr, secret, 0);
@@ -4688,7 +3499,7 @@ static struct CryptKeyInfo *get_candidates(struct ListHead *hints, SecurityFlags
  */
 static void crypt_add_string_to_hints(const char *str, struct ListHead *hints)
 {
-  char *scratch = mutt_str_strdup(str);
+  char *scratch = mutt_str_dup(str);
   if (!scratch)
     return;
 
@@ -4696,271 +3507,10 @@ static void crypt_add_string_to_hints(const char *str, struct ListHead *hints)
        t = strtok(NULL, " ,.:\"()<>\n"))
   {
     if (strlen(t) > 3)
-      mutt_list_insert_tail(hints, mutt_str_strdup(t));
+      mutt_list_insert_tail(hints, mutt_str_dup(t));
   }
 
   FREE(&scratch);
-}
-
-/**
- * crypt_select_key - Get the user to select a key
- * @param[in]  keys         List of keys to select from
- * @param[in]  p            Address to match
- * @param[in]  s            Real name to display
- * @param[in]  app          Flags, e.g. #APPLICATION_PGP
- * @param[out] forced_valid Set to true if user overrode key's validity
- * @retval ptr Key selected by user
- *
- * Display a menu to select a key from the array of keys.
- */
-static struct CryptKeyInfo *crypt_select_key(struct CryptKeyInfo *keys,
-                                             struct Address *p, const char *s,
-                                             unsigned int app, int *forced_valid)
-{
-  int keymax;
-  int i;
-  bool done = false;
-  char helpstr[1024], buf[1024];
-  struct CryptKeyInfo *k = NULL;
-  int (*f)(const void *, const void *);
-  enum MenuType menu_to_use = MENU_GENERIC;
-  bool unusable = false;
-
-  *forced_valid = 0;
-
-  /* build the key table */
-  keymax = 0;
-  i = 0;
-  struct CryptKeyInfo **key_table = NULL;
-  for (k = keys; k; k = k->next)
-  {
-    if (!C_PgpShowUnusable && (k->flags & KEYFLAG_CANTUSE))
-    {
-      unusable = true;
-      continue;
-    }
-
-    if (i == keymax)
-    {
-      keymax += 20;
-      mutt_mem_realloc(&key_table, sizeof(struct CryptKeyInfo *) * keymax);
-    }
-
-    key_table[i++] = k;
-  }
-
-  if (!i && unusable)
-  {
-    mutt_error(_("All matching keys are marked expired/revoked"));
-    return NULL;
-  }
-
-  switch (C_PgpSortKeys & SORT_MASK)
-  {
-    case SORT_ADDRESS:
-      f = crypt_compare_address;
-      break;
-    case SORT_DATE:
-      f = crypt_compare_date;
-      break;
-    case SORT_KEYID:
-      f = crypt_compare_keyid;
-      break;
-    case SORT_TRUST:
-    default:
-      f = crypt_compare_trust;
-      break;
-  }
-  qsort(key_table, i, sizeof(struct CryptKeyInfo *), f);
-
-  if (app & APPLICATION_PGP)
-    menu_to_use = MENU_KEY_SELECT_PGP;
-  else if (app & APPLICATION_SMIME)
-    menu_to_use = MENU_KEY_SELECT_SMIME;
-
-  helpstr[0] = '\0';
-  mutt_make_help(buf, sizeof(buf), _("Exit  "), menu_to_use, OP_EXIT);
-  strcat(helpstr, buf);
-  mutt_make_help(buf, sizeof(buf), _("Select  "), menu_to_use, OP_GENERIC_SELECT_ENTRY);
-  strcat(helpstr, buf);
-  mutt_make_help(buf, sizeof(buf), _("Check key  "), menu_to_use, OP_VERIFY_KEY);
-  strcat(helpstr, buf);
-  mutt_make_help(buf, sizeof(buf), _("Help"), menu_to_use, OP_HELP);
-  strcat(helpstr, buf);
-
-  struct MuttWindow *dlg =
-      mutt_window_new(WT_DLG_CRYPT_GPGME, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  dlg->notify = notify_new();
-
-  struct MuttWindow *index =
-      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  index->notify = notify_new();
-  notify_set_parent(index->notify, dlg->notify);
-
-  struct MuttWindow *ibar =
-      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
-                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
-  ibar->notify = notify_new();
-  notify_set_parent(ibar->notify, dlg->notify);
-
-  if (C_StatusOnTop)
-  {
-    mutt_window_add_child(dlg, ibar);
-    mutt_window_add_child(dlg, index);
-  }
-  else
-  {
-    mutt_window_add_child(dlg, index);
-    mutt_window_add_child(dlg, ibar);
-  }
-
-  dialog_push(dlg);
-
-  struct Menu *menu = mutt_menu_new(menu_to_use);
-
-  menu->pagelen = index->state.rows;
-  menu->win_index = index;
-  menu->win_ibar = ibar;
-
-  menu->max = i;
-  menu->make_entry = crypt_make_entry;
-  menu->help = helpstr;
-  menu->mdata = key_table;
-  mutt_menu_push_current(menu);
-
-  {
-    const char *ts = NULL;
-
-    if ((app & APPLICATION_PGP) && (app & APPLICATION_SMIME))
-      ts = _("PGP and S/MIME keys matching");
-    else if ((app & APPLICATION_PGP))
-      ts = _("PGP keys matching");
-    else if ((app & APPLICATION_SMIME))
-      ts = _("S/MIME keys matching");
-    else
-      ts = _("keys matching");
-
-    if (p)
-    {
-      /* L10N: 1$s is one of the previous four entries.
-         %2$s is an address.
-         e.g. "S/MIME keys matching <me@mutt.org>" */
-      snprintf(buf, sizeof(buf), _("%s <%s>"), ts, p->mailbox);
-    }
-    else
-    {
-      /* L10N: e.g. 'S/MIME keys matching "Michael Elkins".' */
-      snprintf(buf, sizeof(buf), _("%s \"%s\""), ts, s);
-    }
-    menu->title = buf;
-  }
-
-  mutt_clear_error();
-  k = NULL;
-  while (!done)
-  {
-    *forced_valid = 0;
-    switch (mutt_menu_loop(menu))
-    {
-      case OP_VERIFY_KEY:
-        verify_key(key_table[menu->current]);
-        menu->redraw = REDRAW_FULL;
-        break;
-
-      case OP_VIEW_ID:
-        mutt_message("%s", key_table[menu->current]->uid);
-        break;
-
-      case OP_GENERIC_SELECT_ENTRY:
-        /* FIXME make error reporting more verbose - this should be
-         * easy because GPGME provides more information */
-        if (OptPgpCheckTrust)
-        {
-          if (!crypt_key_is_valid(key_table[menu->current]))
-          {
-            mutt_error(_("This key can't be used: "
-                         "expired/disabled/revoked"));
-            break;
-          }
-        }
-
-        if (OptPgpCheckTrust && (!crypt_id_is_valid(key_table[menu->current]) ||
-                                 !crypt_id_is_strong(key_table[menu->current])))
-        {
-          const char *warn_s = NULL;
-          char buf2[1024];
-
-          if (key_table[menu->current]->flags & KEYFLAG_CANTUSE)
-          {
-            warn_s = _("ID is expired/disabled/revoked. Do you really want to "
-                       "use the key?");
-          }
-          else
-          {
-            warn_s = "??";
-            switch (key_table[menu->current]->validity)
-            {
-              case GPGME_VALIDITY_NEVER:
-                warn_s =
-                    _("ID is not valid. Do you really want to use the key?");
-                break;
-              case GPGME_VALIDITY_MARGINAL:
-                warn_s = _("ID is only marginally valid. Do you really want to "
-                           "use the key?");
-                break;
-              case GPGME_VALIDITY_FULL:
-              case GPGME_VALIDITY_ULTIMATE:
-                break;
-              case GPGME_VALIDITY_UNKNOWN:
-              case GPGME_VALIDITY_UNDEFINED:
-                warn_s = _("ID has undefined validity. Do you really want to "
-                           "use the key?");
-                break;
-            }
-          }
-
-          snprintf(buf2, sizeof(buf2), "%s", warn_s);
-
-          if (mutt_yesorno(buf2, MUTT_NO) != MUTT_YES)
-          {
-            mutt_clear_error();
-            break;
-          }
-
-          /* A '!' is appended to a key in find_keys() when forced_valid is
-           * set.  Prior to GPGME 1.11.0, encrypt_gpgme_object() called
-           * create_recipient_set() which interpreted the '!' to mean set
-           * GPGME_VALIDITY_FULL for the key.
-           *
-           * Starting in GPGME 1.11.0, we now use a '\n' delimited recipient
-           * string, which is passed directly to the gpgme_op_encrypt_ext()
-           * function.  This allows to use the original meaning of '!' to
-           * force a subkey use. */
-#if (GPGME_VERSION_NUMBER < 0x010b00) /* GPGME < 1.11.0 */
-          *forced_valid = 1;
-#endif
-        }
-
-        k = crypt_copy_key(key_table[menu->current]);
-        done = true;
-        break;
-
-      case OP_EXIT:
-        k = NULL;
-        done = true;
-        break;
-    }
-  }
-
-  mutt_menu_pop_current(menu);
-  mutt_menu_free(&menu);
-  FREE(&key_table);
-  dialog_pop();
-  mutt_window_free(&dlg);
-
-  return k;
 }
 
 /**
@@ -5082,7 +3632,7 @@ static struct CryptKeyInfo *crypt_getkeybyaddr(struct Address *a,
     else
     {
       /* Else: Ask the user.  */
-      k = crypt_select_key(matches, a, NULL, app, forced_valid);
+      k = dlg_select_gpgme_key(matches, a, NULL, app, forced_valid);
     }
 
     crypt_key_free(&matches);
@@ -5133,10 +3683,9 @@ static struct CryptKeyInfo *crypt_getkeybystr(const char *p, KeyFlags abilities,
     mutt_debug(LL_DEBUG5, "matching \"%s\" against key %s, \"%s\": ", p,
                crypt_long_keyid(k), k->uid);
 
-    if ((*p == '\0') || (pfcopy && (mutt_str_strcasecmp(pfcopy, crypt_fpr(k)) == 0)) ||
-        (pl && (mutt_str_strcasecmp(pl, crypt_long_keyid(k)) == 0)) ||
-        (ps && (mutt_str_strcasecmp(ps, crypt_short_keyid(k)) == 0)) ||
-        mutt_str_stristr(k->uid, p))
+    if ((*p == '\0') || (pfcopy && mutt_istr_equal(pfcopy, crypt_fpr(k))) ||
+        (pl && mutt_istr_equal(pl, crypt_long_keyid(k))) ||
+        (ps && mutt_istr_equal(ps, crypt_short_keyid(k))) || mutt_istr_find(k->uid, p))
     {
       mutt_debug(LL_DEBUG5, "match\n");
 
@@ -5155,7 +3704,7 @@ static struct CryptKeyInfo *crypt_getkeybystr(const char *p, KeyFlags abilities,
 
   if (matches)
   {
-    k = crypt_select_key(matches, NULL, p, app, forced_valid);
+    k = dlg_select_gpgme_key(matches, NULL, p, app, forced_valid);
     crypt_key_free(&matches);
     return k;
   }
@@ -5194,9 +3743,9 @@ static struct CryptKeyInfo *crypt_ask_for_key(char *tag, char *whatfor, KeyFlags
   {
     for (l = id_defaults; l; l = l->next)
     {
-      if (mutt_str_strcasecmp(whatfor, l->what) == 0)
+      if (mutt_istr_equal(whatfor, l->what))
       {
-        mutt_str_strfcpy(resp, l->dflt, sizeof(resp));
+        mutt_str_copy(resp, l->dflt, sizeof(resp));
         break;
       }
     }
@@ -5217,8 +3766,8 @@ static struct CryptKeyInfo *crypt_ask_for_key(char *tag, char *whatfor, KeyFlags
         l = mutt_mem_malloc(sizeof(struct CryptCache));
         l->next = id_defaults;
         id_defaults = l;
-        l->what = mutt_str_strdup(whatfor);
-        l->dflt = mutt_str_strdup(resp);
+        l->what = mutt_str_dup(whatfor);
+        l->dflt = mutt_str_dup(resp);
       }
     }
 
@@ -5252,7 +3801,7 @@ static char *find_keys(struct AddressList *addrlist, unsigned int app, bool oppe
   size_t keylist_used = 0;
   struct Address *p = NULL;
   struct CryptKeyInfo *k_info = NULL;
-  const char *fqdn = mutt_fqdn(true);
+  const char *fqdn = mutt_fqdn(true, NeoMutt->sub);
   char buf[1024];
   int forced_valid;
   bool key_selected;
@@ -5283,7 +3832,7 @@ static char *find_keys(struct AddressList *addrlist, unsigned int app, bool oppe
         {
           if (crypt_is_numerical_keyid(keyid))
           {
-            if (strncmp(keyid, "0x", 2) == 0)
+            if (mutt_strn_equal(keyid, "0x", 2))
               keyid += 2;
             goto bypass_selection; /* you don't see this. */
           }
@@ -5340,11 +3889,11 @@ static char *find_keys(struct AddressList *addrlist, unsigned int app, bool oppe
       keyid = crypt_fpr_or_lkeyid(k_info);
 
     bypass_selection:
-      keylist_size += mutt_str_strlen(keyid) + 4 + 1;
+      keylist_size += mutt_str_len(keyid) + 4 + 1;
       mutt_mem_realloc(&keylist, keylist_size);
       sprintf(keylist + keylist_used, "%s0x%s%s", keylist_used ? " " : "",
               keyid, forced_valid ? "!" : "");
-      keylist_used = mutt_str_strlen(keylist);
+      keylist_used = mutt_str_len(keylist);
 
       key_selected = true;
 
@@ -5453,7 +4002,7 @@ int mutt_gpgme_select_secret_key(struct Buffer *keyid)
     goto cleanup;
   }
 
-  choice = crypt_select_key(results, NULL, "*", APPLICATION_PGP, &junk);
+  choice = dlg_select_gpgme_key(results, NULL, "*", APPLICATION_PGP, &junk);
   if (!(choice && choice->kobj && choice->kobj->subkeys && choice->kobj->subkeys->fpr))
     goto cleanup;
   mutt_buffer_strcpy(keyid, choice->kobj->subkeys->fpr);
@@ -5511,13 +4060,13 @@ struct Body *pgp_gpgme_make_key_attachment(void)
   att->unlink = true;
   att->use_disp = false;
   att->type = TYPE_APPLICATION;
-  att->subtype = mutt_str_strdup("pgp-keys");
+  att->subtype = mutt_str_dup("pgp-keys");
   /* L10N: MIME description for exported (attached) keys.
      You can translate this entry to a non-ASCII string (it will be encoded),
      but it may be safer to keep it untranslated. */
   snprintf(buf, sizeof(buf), _("PGP Key 0x%s"), crypt_keyid(key));
-  att->description = mutt_str_strdup(buf);
-  mutt_update_encoding(att);
+  att->description = mutt_str_dup(buf);
+  mutt_update_encoding(att, NeoMutt->sub);
 
   stat(tempf, &sb);
   att->length = sb.st_size;
@@ -5820,7 +4369,7 @@ static bool verify_sender(struct Email *e)
             int domainname_length = sender_length - mailbox_length;
             int mailbox_match, domainname_match;
 
-            mailbox_match = (strncmp(tmp_email, tmp_sender, mailbox_length) == 0);
+            mailbox_match = mutt_strn_equal(tmp_email, tmp_sender, mailbox_length);
             tmp_email += mailbox_length;
             tmp_sender += mailbox_length;
             domainname_match =
@@ -5830,7 +4379,7 @@ static bool verify_sender(struct Email *e)
           }
           else
           {
-            if (strncmp(uid->email + 1, sender->mailbox, sender_length) == 0)
+            if (mutt_strn_equal(uid->email + 1, sender->mailbox, sender_length))
               rc = false;
           }
         }
@@ -5866,7 +4415,7 @@ void pgp_gpgme_set_sender(const char *sender)
 {
   mutt_debug(LL_DEBUG2, "setting to: %s\n", sender);
   FREE(&current_sender);
-  current_sender = mutt_str_strdup(sender);
+  current_sender = mutt_str_dup(sender);
 }
 
 /**

@@ -172,7 +172,7 @@ static void tls_fingerprint(gnutls_digest_algorithm_t algo, char *buf,
     {
       char ch[8];
       snprintf(ch, 8, "%02X%s", md[i], ((i % 2) ? " " : ""));
-      mutt_str_strcat(buf, buflen, ch);
+      mutt_str_cat(buf, buflen, ch);
     }
     buf[2 * n + n / 2 - 1] = '\0'; /* don't want trailing space */
   }
@@ -431,7 +431,7 @@ static void add_cert(const char *title, gnutls_x509_crt_t cert, bool issuer,
   int rc;
 
   // Allocate formatted strings and let the ListHead take ownership
-  mutt_list_insert_tail(list, mutt_str_strdup(title));
+  mutt_list_insert_tail(list, mutt_str_dup(title));
 
   for (size_t i = 0; i < mutt_array_size(part); i++)
   {
@@ -494,7 +494,7 @@ static int tls_check_one_certificate(const gnutls_datum_t *certdata,
   add_cert(_("This certificate was issued by:"), cert, true, &list);
 
   mutt_list_insert_tail(&list, NULL);
-  mutt_list_insert_tail(&list, mutt_str_strdup(_("This certificate is valid")));
+  mutt_list_insert_tail(&list, mutt_str_dup(_("This certificate is valid")));
 
   char *line = NULL;
   t = gnutls_x509_crt_get_activation_time(cert);
@@ -518,7 +518,7 @@ static int tls_check_one_certificate(const gnutls_datum_t *certdata,
   fpbuf[39] = '\0'; /* Divide into two lines of output */
   mutt_str_asprintf(&line, "%s%s", _("SHA256 Fingerprint: "), fpbuf);
   mutt_list_insert_tail(&list, line);
-  mutt_str_asprintf(&line, "%*s%s", (int) mutt_str_strlen(_("SHA256 Fingerprint: ")),
+  mutt_str_asprintf(&line, "%*s%s", (int) mutt_str_len(_("SHA256 Fingerprint: ")),
                     "", fpbuf + 40);
   mutt_list_insert_tail(&list, line);
 
@@ -528,37 +528,35 @@ static int tls_check_one_certificate(const gnutls_datum_t *certdata,
   if (certerr & CERTERR_NOTYETVALID)
   {
     mutt_list_insert_tail(
-        &list,
-        mutt_str_strdup(_("WARNING: Server certificate is not yet valid")));
+        &list, mutt_str_dup(_("WARNING: Server certificate is not yet valid")));
   }
   if (certerr & CERTERR_EXPIRED)
   {
     mutt_list_insert_tail(
-        &list, mutt_str_strdup(_("WARNING: Server certificate has expired")));
+        &list, mutt_str_dup(_("WARNING: Server certificate has expired")));
   }
   if (certerr & CERTERR_REVOKED)
   {
     mutt_list_insert_tail(
-        &list,
-        mutt_str_strdup(_("WARNING: Server certificate has been revoked")));
+        &list, mutt_str_dup(_("WARNING: Server certificate has been revoked")));
   }
   if (certerr & CERTERR_HOSTNAME)
   {
     mutt_list_insert_tail(
-        &list, mutt_str_strdup(
-                   _("WARNING: Server hostname does not match certificate")));
+        &list,
+        mutt_str_dup(_("WARNING: Server hostname does not match certificate")));
   }
   if (certerr & CERTERR_SIGNERNOTCA)
   {
     mutt_list_insert_tail(
-        &list, mutt_str_strdup(
-                   _("WARNING: Signer of server certificate is not a CA")));
+        &list,
+        mutt_str_dup(_("WARNING: Signer of server certificate is not a CA")));
   }
   if (certerr & CERTERR_INSECUREALG)
   {
     mutt_list_insert_tail(
-        &list, mutt_str_strdup(_("Warning: Server certificate was signed using "
-                                 "an insecure algorithm")));
+        &list, mutt_str_dup(_("Warning: Server certificate was signed using "
+                              "an insecure algorithm")));
   }
 
   snprintf(title, sizeof(title),
@@ -567,7 +565,7 @@ static int tls_check_one_certificate(const gnutls_datum_t *certdata,
   const bool allow_always =
       (C_CertificateFile && !savedcert &&
        !(certerr & (CERTERR_EXPIRED | CERTERR_NOTYETVALID | CERTERR_REVOKED)));
-  int rc = dlg_verify_cert(title, &list, allow_always, false);
+  int rc = dlg_verify_certificate(title, &list, allow_always, false);
   if (rc == 3) // Accept always
   {
     bool saved = false;
@@ -692,15 +690,17 @@ static int tls_check_certificate(struct Connection *conn)
 /**
  * tls_get_client_cert - Get the client certificate for a TLS connection
  * @param conn Connection to a server
+ *
+ * @note This function grabs the CN out of the client cert but appears to do
+ *       nothing with it.  It does contain a call to mutt_account_getuser().
  */
 static void tls_get_client_cert(struct Connection *conn)
 {
   struct TlsSockData *data = conn->sockdata;
   gnutls_x509_crt_t clientcrt;
-  char *dn = NULL;
   char *cn = NULL;
-  char *cnend = NULL;
-  size_t dnlen;
+  size_t cnlen = 0;
+  int rc;
 
   /* get our cert CN if we have one */
   const gnutls_datum_t *crtdata = gnutls_certificate_get_ours(data->state);
@@ -712,38 +712,33 @@ static void tls_get_client_cert(struct Connection *conn)
     mutt_debug(LL_DEBUG1, "Failed to init gnutls crt\n");
     return;
   }
+
   if (gnutls_x509_crt_import(clientcrt, crtdata, GNUTLS_X509_FMT_DER) < 0)
   {
     mutt_debug(LL_DEBUG1, "Failed to import gnutls client crt\n");
-    goto err_crt;
+    goto err;
   }
-  /* get length of DN */
-  dnlen = 0;
-  gnutls_x509_crt_get_dn(clientcrt, NULL, &dnlen);
-  dn = mutt_mem_calloc(1, dnlen);
 
-  gnutls_x509_crt_get_dn(clientcrt, dn, &dnlen);
-  mutt_debug(LL_DEBUG2, "client certificate DN: %s\n", dn);
-
-  /* extract CN to use as external user name */
-  cn = strstr(dn, "CN=");
-  if (!cn)
+  /* get length of CN, then grab it. */
+  rc = gnutls_x509_crt_get_dn_by_oid(clientcrt, GNUTLS_OID_X520_COMMON_NAME, 0,
+                                     0, NULL, &cnlen);
+  if (((rc >= 0) || (rc == GNUTLS_E_SHORT_MEMORY_BUFFER)) && (cnlen > 0))
   {
-    mutt_debug(LL_DEBUG1, "no CN found in DN\n");
-    goto err_dn;
+    cn = mutt_mem_calloc(1, cnlen);
+    if (gnutls_x509_crt_get_dn_by_oid(clientcrt, GNUTLS_OID_X520_COMMON_NAME, 0,
+                                      0, cn, &cnlen) < 0)
+    {
+      goto err;
+    }
+    mutt_debug(LL_DEBUG2, "client certificate CN: %s\n", cn);
+
+    /* if we are using a client cert, SASL may expect an external auth name */
+    if (mutt_account_getuser(&conn->account) < 0)
+      mutt_debug(LL_DEBUG1, "Couldn't get user info\n");
   }
 
-  cnend = strstr(dn, ",EMAIL=");
-  if (cnend)
-    *cnend = '\0';
-
-  /* if we are using a client cert, SASL may expect an external auth name */
-  if (mutt_account_getuser(&conn->account) < 0)
-    mutt_debug(LL_DEBUG1, "Couldn't get user info\n");
-
-err_dn:
-  FREE(&dn);
-err_crt:
+err:
+  FREE(&cn);
   gnutls_x509_crt_deinit(clientcrt);
 }
 
@@ -906,7 +901,7 @@ static int tls_negotiate(struct Connection *conn)
   err = gnutls_init(&data->state, GNUTLS_CLIENT);
   if (err)
   {
-    mutt_error("gnutls_handshake: %s", gnutls_strerror(err));
+    mutt_error("gnutls_init: %s", gnutls_strerror(err));
     goto fail;
   }
 
@@ -914,7 +909,7 @@ static int tls_negotiate(struct Connection *conn)
   gnutls_transport_set_ptr(data->state, (gnutls_transport_ptr_t)(long) conn->fd);
 
   if (gnutls_server_name_set(data->state, GNUTLS_NAME_DNS, conn->account.host,
-                             mutt_str_strlen(conn->account.host)))
+                             mutt_str_len(conn->account.host)))
   {
     mutt_error(_("Warning: unable to set TLS SNI host name"));
   }
@@ -929,16 +924,13 @@ static int tls_negotiate(struct Connection *conn)
     gnutls_dh_set_prime_bits(data->state, C_SslMinDhPrimeBits);
   }
 
-  /* gnutls_set_cred (data->state, GNUTLS_ANON, NULL); */
-
   gnutls_credentials_set(data->state, GNUTLS_CRD_CERTIFICATE, data->xcred);
 
-  err = gnutls_handshake(data->state);
-
-  while (err == GNUTLS_E_AGAIN)
+  do
   {
     err = gnutls_handshake(data->state);
-  }
+  } while ((err == GNUTLS_E_AGAIN) || (err == GNUTLS_E_INTERRUPTED));
+
   if (err < 0)
   {
     if (err == GNUTLS_E_FATAL_ALERT_RECEIVED)

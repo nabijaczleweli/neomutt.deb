@@ -45,11 +45,11 @@
 #include "mutt/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
-#include "globals.h"
+#include "maildir/lib.h"
 #include "monitor.h"
+#include "mutt_globals.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "maildir/lib.h"
 #ifdef USE_HCACHE
 #include "hcache/lib.h"
 #endif
@@ -58,9 +58,6 @@
 #define MMC_NO_DIRS 0        ///< No directories changed
 #define MMC_NEW_DIR (1 << 0) ///< 'new' directory changed
 #define MMC_CUR_DIR (1 << 1) ///< 'cur' directory changed
-
-/* These Config Variables are only used in maildir/maildir.c */
-bool C_MaildirCheckCur; ///< Config: Check both 'new' and 'cur' directories for new mail
 
 /**
  * maildir_check_dir - Check for new mail / mail counts
@@ -174,18 +171,23 @@ void maildir_gen_flags(char *dest, size_t destlen, struct Email *e)
 {
   *dest = '\0';
 
+  struct MaildirEmailData *edata = maildir_edata_get(e);
+  if (!edata)
+    return;
+
   /* The maildir specification requires that all files in the cur
    * subdirectory have the :unique string appended, regardless of whether
    * or not there are any flags.  If .old is set, we know that this message
    * will end up in the cur directory, so we include it in the following
    * test even though there is no associated flag.  */
 
-  if (e && (e->flagged || e->replied || e->read || e->deleted || e->old || e->maildir_flags))
+  if (e->flagged || e->replied || e->read || e->deleted || e->old || edata->maildir_flags)
   {
     char tmp[1024];
-    snprintf(tmp, sizeof(tmp), "%s%s%s%s%s", e->flagged ? "F" : "", e->replied ? "R" : "",
-             e->read ? "S" : "", e->deleted ? "T" : "", NONULL(e->maildir_flags));
-    if (e->maildir_flags)
+    snprintf(tmp, sizeof(tmp), "%s%s%s%s%s", e->flagged ? "F" : "",
+             e->replied ? "R" : "", e->read ? "S" : "", e->deleted ? "T" : "",
+             NONULL(edata->maildir_flags));
+    if (edata->maildir_flags)
       qsort(tmp, strlen(tmp), 1, ch_compare);
     snprintf(dest, destlen, ":2,%s", tmp);
   }
@@ -257,7 +259,7 @@ int maildir_sync_message(struct Mailbox *m, int msgno)
     mutt_buffer_printf(fullpath, "%s/%s", mailbox_path(m), mutt_b2s(partpath));
     mutt_buffer_printf(oldpath, "%s/%s", mailbox_path(m), e->path);
 
-    if (mutt_str_strcmp(mutt_b2s(fullpath), mutt_b2s(oldpath)) == 0)
+    if (mutt_str_equal(mutt_b2s(fullpath), mutt_b2s(oldpath)))
     {
       /* message hasn't really changed */
       goto cleanup;
@@ -364,7 +366,7 @@ static int maildir_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
  * already knew about.  We don't treat either subdirectory differently, as mail
  * could be copied directly into the cur directory from another agent.
  */
-int maildir_mbox_check(struct Mailbox *m, int *index_hint)
+int maildir_mbox_check(struct Mailbox *m)
 {
   if (!m)
     return -1;
@@ -468,7 +470,7 @@ int maildir_mbox_check(struct Mailbox *m, int *index_hint)
 
       /* check to see if the message has moved to a different
        * subdirectory.  If so, update the associated filename.  */
-      if (mutt_str_strcmp(e->path, p->email->path) != 0)
+      if (!mutt_str_equal(e->path, p->email->path))
         mutt_str_replace(&e->path, p->email->path);
 
       /* if the user hasn't modified the flags on this message, update
@@ -493,8 +495,8 @@ int maildir_mbox_check(struct Mailbox *m, int *index_hint)
     /* This message was not in the list of messages we just scanned.
      * Check to see if we have enough information to know if the
      * message has disappeared out from underneath us.  */
-    else if (((changed & MMC_NEW_DIR) && (strncmp(e->path, "new/", 4) == 0)) ||
-             ((changed & MMC_CUR_DIR) && (strncmp(e->path, "cur/", 4) == 0)))
+    else if (((changed & MMC_NEW_DIR) && mutt_strn_equal(e->path, "new/", 4)) ||
+             ((changed & MMC_CUR_DIR) && mutt_strn_equal(e->path, "cur/", 4)))
     {
       /* This message disappeared, so we need to simulate a "reopen"
        * event.  We know it disappeared because we just scanned the
@@ -610,9 +612,9 @@ int maildir_msg_open_new(struct Mailbox *m, struct Message *msg, struct Email *e
     *suffix = '\0';
 
   if (e && (e->read || e->old))
-    mutt_str_strfcpy(subdir, "cur", sizeof(subdir));
+    mutt_str_copy(subdir, "cur", sizeof(subdir));
   else
-    mutt_str_strfcpy(subdir, "new", sizeof(subdir));
+    mutt_str_copy(subdir, "new", sizeof(subdir));
 
   mode_t omask = umask(mh_umask(m));
   while (true)
@@ -636,7 +638,7 @@ int maildir_msg_open_new(struct Mailbox *m, struct Message *msg, struct Email *e
     else
     {
       mutt_debug(LL_DEBUG2, "Success\n");
-      msg->path = mutt_str_strdup(path);
+      msg->path = mutt_str_dup(path);
       break;
     }
   }
@@ -672,7 +674,7 @@ static int maildir_msg_save_hcache(struct Mailbox *m, struct Email *e)
 {
   int rc = 0;
 #ifdef USE_HCACHE
-  header_cache_t *hc = mutt_hcache_open(C_HeaderCache, mailbox_path(m), NULL);
+  struct HeaderCache *hc = mutt_hcache_open(C_HeaderCache, mailbox_path(m), NULL);
   char *key = e->path + 3;
   int keylen = maildir_hcache_keylen(key);
   rc = mutt_hcache_store(hc, key, keylen, e, 0);

@@ -28,13 +28,6 @@
  * - Backed by `char *`
  * - Empty string is stored as `NULL`
  * - Validator is passed `char *`, which may be `NULL`
- *
- * ## Functions supported
- * - ConfigSetType::string_set()
- * - ConfigSetType::string_get()
- * - ConfigSetType::native_set()
- * - ConfigSetType::native_get()
- * - ConfigSetType::reset()
  */
 
 #include "config.h"
@@ -85,7 +78,7 @@ static int string_string_set(const struct ConfigSet *cs, void *var, struct Confi
 
   if (var)
   {
-    if (mutt_str_strcmp(value, (*(char **) var)) == 0)
+    if (mutt_str_equal(value, (*(char **) var)))
       return CSR_SUCCESS | CSR_SUC_NO_CHANGE;
 
     if (cdef->validator)
@@ -98,7 +91,7 @@ static int string_string_set(const struct ConfigSet *cs, void *var, struct Confi
 
     string_destroy(cs, var, cdef);
 
-    const char *str = mutt_str_strdup(value);
+    const char *str = mutt_str_dup(value);
     if (!str)
       rc |= CSR_SUC_EMPTY;
 
@@ -108,13 +101,13 @@ static int string_string_set(const struct ConfigSet *cs, void *var, struct Confi
   {
     /* we're already using the initial value */
     if (*(char **) cdef->var == (char *) cdef->initial)
-      *(char **) cdef->var = mutt_str_strdup((char *) cdef->initial);
+      *(char **) cdef->var = mutt_str_dup((char *) cdef->initial);
 
     if (cdef->type & DT_INITIAL_SET)
       FREE(&cdef->initial);
 
     cdef->type |= DT_INITIAL_SET;
-    cdef->initial = IP mutt_str_strdup(value);
+    cdef->initial = IP mutt_str_dup(value);
   }
 
   return rc;
@@ -159,7 +152,7 @@ static int string_native_set(const struct ConfigSet *cs, void *var,
     return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
   }
 
-  if (mutt_str_strcmp((const char *) value, (*(char **) var)) == 0)
+  if (mutt_str_equal((const char *) value, (*(char **) var)))
     return CSR_SUCCESS | CSR_SUC_NO_CHANGE;
 
   int rc;
@@ -174,7 +167,7 @@ static int string_native_set(const struct ConfigSet *cs, void *var,
 
   string_destroy(cs, var, cdef);
 
-  str = mutt_str_strdup(str);
+  str = mutt_str_dup(str);
   rc = CSR_SUCCESS;
   if (!str)
     rc |= CSR_SUC_EMPTY;
@@ -206,7 +199,7 @@ static int string_reset(const struct ConfigSet *cs, void *var,
   if (!str)
     rc |= CSR_SUC_EMPTY;
 
-  if (mutt_str_strcmp(str, (*(char **) var)) == 0)
+  if (mutt_str_equal(str, (*(char **) var)))
     return rc | CSR_SUC_NO_CHANGE;
 
   if (cdef->validator)

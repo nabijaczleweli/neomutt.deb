@@ -239,7 +239,7 @@ struct ImapMboxData
   unsigned int max_msn;        ///< the largest MSN fetched so far
   struct BodyCache *bcache;
 
-  header_cache_t *hcache;
+  struct HeaderCache *hcache;
 };
 
 /**
@@ -256,6 +256,26 @@ struct SeqsetIterator
   char *substr_cur;
   char *substr_end;
 };
+
+extern struct Slist *C_ImapAuthenticators;
+extern bool          C_ImapCheckSubscribed;
+extern bool          C_ImapCondstore;
+#ifdef USE_ZLIB
+extern bool          C_ImapDeflate;
+#endif
+extern char *        C_ImapDelimChars;
+extern long          C_ImapFetchChunkSize;
+extern char *        C_ImapHeaders;
+extern bool          C_ImapIdle;
+extern char *        C_ImapLogin;
+extern char *        C_ImapOauthRefreshCommand;
+extern char *        C_ImapPass;
+extern short         C_ImapPipelineDepth;
+extern short         C_ImapPollTimeout;
+extern bool          C_ImapQresync;
+extern bool          C_ImapRfc5161;
+extern bool          C_ImapServernoise;
+extern char *        C_ImapUser;
 
 /* -- private IMAP functions -- */
 /* imap.c */

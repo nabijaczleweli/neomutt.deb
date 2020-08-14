@@ -30,6 +30,7 @@
  */
 enum NotifyType
 {
+  NT_ALL = 0, ///< Register for all notifications
   NT_ACCOUNT, ///< Account has changed,         #NotifyAccount, #EventAccount
   NT_COLOR,   ///< Colour has changed,          #ColorId,       #EventColor
   NT_COMMAND, ///< A Command has been executed, #Command
@@ -40,6 +41,7 @@ enum NotifyType
   NT_MAILBOX, ///< Mailbox has changed,         #NotifyMailbox, #EventMailbox
   NT_WINDOW,  ///< MuttWindow has changed,      #NotifyWindow,  #EventWindow
   NT_ALIAS,   ///< Alias has changed,           #NotifyAlias,   #EventAlias
+  NT_BINDING, ///< Key binding has changed,     #NotifyBinding, #EventBinding
 };
 
 #endif /* MUTT_LIB_NOTIFY_TYPE_H */

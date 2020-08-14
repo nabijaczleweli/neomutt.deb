@@ -45,16 +45,18 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "commands.h"
+#include "ncrypt/lib.h"
+#include "send/lib.h"
 #include "context.h"
 #include "copy.h"
 #include "format_flags.h"
-#include "globals.h"
 #include "hdrline.h"
 #include "hook.h"
 #include "icommands.h"
 #include "init.h"
 #include "keymap.h"
 #include "mutt_commands.h"
+#include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
 #include "mutt_menu.h"
@@ -63,10 +65,9 @@
 #include "mx.h"
 #include "options.h"
 #include "pager.h"
+#include "progress.h"
 #include "protos.h"
-#include "sendlib.h"
 #include "sort.h"
-#include "ncrypt/lib.h"
 #ifdef USE_IMAP
 #include "imap/lib.h"
 #endif
@@ -81,7 +82,6 @@
 #endif
 
 /* These Config Variables are only used in commands.c */
-unsigned char C_CryptVerifySig; ///< Config: Verify PGP or SMIME signatures
 char *C_DisplayFilter; ///< Config: External command to pre-process an email before display
 bool C_PipeDecode; ///< Config: Decode the message when piping it
 char *C_PipeSep;   ///< Config: Separator to add between multiple piped messages
@@ -132,32 +132,32 @@ static void process_protected_headers(struct Email *e)
     if (!(e->security & SEC_GOODSIGN))
       return;
 
-    if (mutt_is_multipart_signed(e->content) && e->content->parts)
+    if (mutt_is_multipart_signed(e->body) && e->body->parts)
     {
-      prot_headers = e->content->parts->mime_headers;
+      prot_headers = e->body->parts->mime_headers;
     }
-    else if (((WithCrypto & APPLICATION_SMIME) != 0) && mutt_is_application_smime(e->content))
+    else if (((WithCrypto & APPLICATION_SMIME) != 0) && mutt_is_application_smime(e->body))
     {
-      prot_headers = e->content->mime_headers;
+      prot_headers = e->body->mime_headers;
     }
   }
   if (!prot_headers && (e->security & SEC_ENCRYPT))
   {
     if (((WithCrypto & APPLICATION_PGP) != 0) &&
-        (mutt_is_valid_multipart_pgp_encrypted(e->content) ||
-         mutt_is_malformed_multipart_pgp_encrypted(e->content)))
+        (mutt_is_valid_multipart_pgp_encrypted(e->body) ||
+         mutt_is_malformed_multipart_pgp_encrypted(e->body)))
     {
-      prot_headers = e->content->mime_headers;
+      prot_headers = e->body->mime_headers;
     }
-    else if (((WithCrypto & APPLICATION_SMIME) != 0) && mutt_is_application_smime(e->content))
+    else if (((WithCrypto & APPLICATION_SMIME) != 0) && mutt_is_application_smime(e->body))
     {
-      prot_headers = e->content->mime_headers;
+      prot_headers = e->body->mime_headers;
     }
   }
 
   /* Update protected headers in the index and header cache. */
   if (C_CryptProtectedHeadersRead && prot_headers && prot_headers->subject &&
-      mutt_str_strcmp(e->env->subject, prot_headers->subject))
+      !mutt_str_equal(e->env->subject, prot_headers->subject))
   {
     if (Context->mailbox->subj_hash && e->env->real_subj)
       mutt_hash_delete(Context->mailbox->subj_hash, e->env->real_subj, e);
@@ -284,15 +284,15 @@ int mutt_display_message(struct MuttWindow *win_index, struct MuttWindow *win_ib
     }
   }
 
-  if (!C_Pager || (mutt_str_strcmp(C_Pager, "builtin") == 0))
+  if (!C_Pager || mutt_str_equal(C_Pager, "builtin"))
     builtin = true;
   else
   {
     char buf[1024];
     struct HdrFormatInfo hfi;
 
-    hfi.ctx = Context;
     hfi.mailbox = m;
+    hfi.msg_in_pager = Context ? Context->msg_in_pager : -1;
     hfi.pager_progress = ExtPagerProgress;
     hfi.email = e;
     mutt_make_string_info(buf, sizeof(buf), win_index->state.cols,
@@ -329,7 +329,7 @@ int mutt_display_message(struct MuttWindow *win_index, struct MuttWindow *win_ib
   {
     /* update crypto information for this message */
     e->security &= ~(SEC_GOODSIGN | SEC_BADSIGN);
-    e->security |= crypt_query(e->content);
+    e->security |= crypt_query(e->body);
 
     /* Remove color cache for this message, in case there
      * are color patterns for both ~g and ~V */
@@ -430,16 +430,16 @@ void ci_bounce_message(struct Mailbox *m, struct EmailList *el)
   {
     /* RFC5322 mandates a From: header,
      * so warn before bouncing messages without one */
-    if (!TAILQ_EMPTY(&en->email->env->from))
+    if (TAILQ_EMPTY(&en->email->env->from))
       mutt_error(_("Warning: message contains no From: header"));
 
     msg_count++;
   }
 
   if (msg_count == 1)
-    mutt_str_strfcpy(prompt, _("Bounce message to: "), sizeof(prompt));
+    mutt_str_copy(prompt, _("Bounce message to: "), sizeof(prompt));
   else
-    mutt_str_strfcpy(prompt, _("Bounce tagged messages to: "), sizeof(prompt));
+    mutt_str_copy(prompt, _("Bounce tagged messages to: "), sizeof(prompt));
 
   rc = mutt_get_field(prompt, buf, sizeof(buf), MUTT_ALIAS);
   if (rc || (buf[0] == '\0'))
@@ -469,24 +469,24 @@ void ci_bounce_message(struct Mailbox *m, struct EmailList *el)
   snprintf(scratch, sizeof(scratch),
            ngettext("Bounce message to %s?", "Bounce messages to %s?", msg_count), buf);
 
-  if (mutt_strwidth(scratch) > MuttMessageWindow->state.cols - EXTRA_SPACE)
+  if (mutt_strwidth(scratch) > (MessageWindow->state.cols - EXTRA_SPACE))
   {
-    mutt_simple_format(prompt, sizeof(prompt), 0, MuttMessageWindow->state.cols - EXTRA_SPACE,
+    mutt_simple_format(prompt, sizeof(prompt), 0, MessageWindow->state.cols - EXTRA_SPACE,
                        JUSTIFY_LEFT, 0, scratch, sizeof(scratch), false);
-    mutt_str_strcat(prompt, sizeof(prompt), "...?");
+    mutt_str_cat(prompt, sizeof(prompt), "...?");
   }
   else
-    snprintf(prompt, sizeof(prompt), "%s", scratch);
+    mutt_str_copy(prompt, scratch, sizeof(prompt));
 
   if (query_quadoption(C_Bounce, prompt) != MUTT_YES)
   {
     mutt_addrlist_clear(&al);
-    mutt_window_clearline(MuttMessageWindow, 0);
+    mutt_window_clearline(MessageWindow, 0);
     mutt_message(ngettext("Message not bounced", "Messages not bounced", msg_count));
     return;
   }
 
-  mutt_window_clearline(MuttMessageWindow, 0);
+  mutt_window_clearline(MessageWindow, 0);
 
   struct Message *msg = NULL;
   STAILQ_FOREACH(en, el, entries)
@@ -498,7 +498,7 @@ void ci_bounce_message(struct Mailbox *m, struct EmailList *el)
       break;
     }
 
-    rc = mutt_bounce_message(msg->fp, en->email, &al);
+    rc = mutt_bounce_message(msg->fp, en->email, &al, NeoMutt->sub);
     mx_msg_close(m, &msg);
 
     if (rc < 0)
@@ -526,7 +526,7 @@ static void pipe_set_flags(bool decode, bool print, CopyMessageFlags *cmflags,
     *chflags |= CH_DECODE | CH_REORDER;
     *cmflags |= MUTT_CM_DECODE | MUTT_CM_CHARCONV;
 
-    if (C_Weed)
+    if (print ? C_PrintDecodeWeed : C_PipeDecodeWeed)
     {
       *chflags |= CH_WEED;
       *cmflags |= MUTT_CM_WEED;
@@ -850,11 +850,11 @@ void mutt_shell_escape(void)
     return;
 
   if ((buf[0] == '\0') && C_Shell)
-    mutt_str_strfcpy(buf, C_Shell, sizeof(buf));
+    mutt_str_copy(buf, C_Shell, sizeof(buf));
   if (buf[0] == '\0')
     return;
 
-  mutt_window_clearline(MuttMessageWindow, 0);
+  mutt_window_clearline(MessageWindow, 0);
   mutt_endwin();
   fflush(stdout);
   int rc = mutt_system(buf);
@@ -873,6 +873,8 @@ void mutt_enter_command(void)
 {
   char buf[1024] = { 0 };
 
+  window_set_focus(MessageWindow);
+  window_redraw(RootWindow, true);
   /* if enter is pressed after : with no command, just return */
   if ((mutt_get_field(":", buf, sizeof(buf), MUTT_COMMAND) != 0) || (buf[0] == '\0'))
     return;
@@ -947,18 +949,18 @@ static void set_copy_flags(struct Email *e, bool decode, bool decrypt,
 
   if ((WithCrypto != 0) && !decode && decrypt && (e->security & SEC_ENCRYPT))
   {
-    if (((WithCrypto & APPLICATION_PGP) != 0) && mutt_is_multipart_encrypted(e->content))
+    if (((WithCrypto & APPLICATION_PGP) != 0) && mutt_is_multipart_encrypted(e->body))
     {
       *chflags = CH_NONEWLINE | CH_XMIT | CH_MIME;
       *cmflags = MUTT_CM_DECODE_PGP;
     }
     else if (((WithCrypto & APPLICATION_PGP) != 0) &&
-             mutt_is_application_pgp(e->content) & SEC_ENCRYPT)
+             mutt_is_application_pgp(e->body) & SEC_ENCRYPT)
     {
       decode = 1;
     }
     else if (((WithCrypto & APPLICATION_SMIME) != 0) &&
-             mutt_is_application_smime(e->content) & SEC_ENCRYPT)
+             mutt_is_application_smime(e->body) & SEC_ENCRYPT)
     {
       *chflags = CH_NONEWLINE | CH_XMIT | CH_MIME;
       *cmflags = MUTT_CM_DECODE_SMIME;
@@ -974,7 +976,7 @@ static void set_copy_flags(struct Email *e, bool decode, bool decrypt,
     {
       *chflags |= CH_DECODE; /* then decode RFC2047 headers, */
 
-      if (C_Weed)
+      if (C_CopyDecodeWeed)
       {
         *chflags |= CH_WEED; /* and respect $weed. */
         *cmflags |= MUTT_CM_WEED;
@@ -1040,6 +1042,9 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
   int app = 0;
   int rc = -1;
   const char *prompt = NULL;
+  const char *progress_msg = NULL;
+  struct Progress progress;
+  int tagged_progress_count = 0;
   struct stat st;
   struct EmailNode *en = STAILQ_FIRST(el);
   bool single = !STAILQ_NEXT(en, entries);
@@ -1090,7 +1095,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
    * Leitner <leitner@prz.fu-berlin.de> */
   if (mutt_buffer_len(&LastSaveFolder) == 0)
     mutt_buffer_alloc(&LastSaveFolder, PATH_MAX);
-  if (mutt_str_strcmp(mutt_b2s(buf), ".") == 0)
+  if (mutt_str_equal(mutt_b2s(buf), "."))
     mutt_buffer_copy(buf, &LastSaveFolder);
   else
     mutt_buffer_strcpy(&LastSaveFolder, mutt_b2s(buf));
@@ -1133,7 +1138,12 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
   mutt_file_resolve_symlink(buf);
   struct Mailbox *m_save = mx_path_resolve(mutt_b2s(buf));
   bool old_append = m_save->append;
-  struct Context *ctx_save = mx_mbox_open(m_save, MUTT_NEWFOLDER);
+  OpenMailboxFlags mbox_flags = MUTT_NEWFOLDER;
+  /* Display a tagged message progress counter, rather than (for
+   * IMAP) a per-message progress counter */
+  if (!single)
+    mbox_flags |= MUTT_QUIET;
+  struct Context *ctx_save = mx_mbox_open(m_save, mbox_flags);
   if (!ctx_save)
   {
     mailbox_free(&m_save);
@@ -1181,12 +1191,25 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
   {
     rc = 0;
 
+    // L10N: Progress meter message when saving tagged messages
+    progress_msg = delete_original ? _("Saving tagged messages...") :
+                                     // L10N: Progress meter message when copying tagged messages
+                       _("Copying tagged messages...");
+
+    int msg_count = 0;
+    STAILQ_FOREACH(en, el, entries)
+    {
+      msg_count++;
+    }
+    mutt_progress_init(&progress, progress_msg, MUTT_PROGRESS_WRITE, msg_count);
+
 #ifdef USE_NOTMUCH
     if (m->type == MUTT_NOTMUCH)
       nm_db_longrun_init(m, true);
 #endif
     STAILQ_FOREACH(en, el, entries)
     {
+      mutt_progress_update(&progress, ++tagged_progress_count, -1);
       mutt_message_hook(m, en->email, MUTT_MESSAGE_HOOK);
       rc = mutt_save_message_ctx(en->email, delete_original, decode, decrypt,
                                  ctx_save->mailbox);
@@ -1258,10 +1281,10 @@ bool mutt_edit_content_type(struct Email *e, struct Body *b, FILE *fp)
   bool structure_changed = false;
 
   char *cp = mutt_param_get(&b->parameter, "charset");
-  mutt_str_strfcpy(charset, cp, sizeof(charset));
+  mutt_str_copy(charset, cp, sizeof(charset));
 
   snprintf(buf, sizeof(buf), "%s/%s", TYPE(b), b->subtype);
-  mutt_str_strfcpy(obuf, buf, sizeof(obuf));
+  mutt_str_copy(obuf, buf, sizeof(obuf));
   if (!TAILQ_EMPTY(&b->parameter))
   {
     size_t l = strlen(buf);
@@ -1292,9 +1315,9 @@ bool mutt_edit_content_type(struct Email *e, struct Body *b, FILE *fp)
   mutt_parse_content_type(buf, b);
 
   snprintf(tmp, sizeof(tmp), "%s/%s", TYPE(b), NONULL(b->subtype));
-  type_changed = (mutt_str_strcasecmp(tmp, obuf) != 0);
+  type_changed = !mutt_istr_equal(tmp, obuf);
   charset_changed =
-      (mutt_str_strcasecmp(charset, mutt_param_get(&b->parameter, "charset")) != 0);
+      !mutt_istr_equal(charset, mutt_param_get(&b->parameter, "charset"));
 
   /* if in send mode, check for conversion - current setting is default. */
 
@@ -1302,7 +1325,7 @@ bool mutt_edit_content_type(struct Email *e, struct Body *b, FILE *fp)
   {
     snprintf(tmp, sizeof(tmp), _("Convert to %s upon sending?"),
              mutt_param_get(&b->parameter, "charset"));
-    int ans = mutt_yesorno(tmp, b->noconv ? MUTT_NO : MUTT_YES);
+    enum QuadOption ans = mutt_yesorno(tmp, b->noconv ? MUTT_NO : MUTT_YES);
     if (ans != MUTT_ABORT)
       b->noconv = (ans == MUTT_NO);
   }
@@ -1331,7 +1354,7 @@ bool mutt_edit_content_type(struct Email *e, struct Body *b, FILE *fp)
   if (!mutt_is_message_type(b->type, b->subtype) && b->email)
   {
     structure_changed = true;
-    b->email->content = NULL;
+    b->email->body = NULL;
     email_free(&b->email);
   }
 
@@ -1343,7 +1366,7 @@ bool mutt_edit_content_type(struct Email *e, struct Body *b, FILE *fp)
 
   if ((WithCrypto != 0) && e)
   {
-    if (e->content == b)
+    if (e->body == b)
       e->security = SEC_NO_FLAGS;
 
     e->security |= crypt_query(b);
@@ -1368,9 +1391,9 @@ static bool check_traditional_pgp(struct Email *e, MuttRedrawFlags *redraw)
   struct Message *msg = mx_msg_open(Context->mailbox, e->msgno);
   if (!msg)
     return 0;
-  if (crypt_pgp_check_traditional(msg->fp, e->content, false))
+  if (crypt_pgp_check_traditional(msg->fp, e->body, false))
   {
-    e->security = crypt_query(e->content);
+    e->security = crypt_query(e->body);
     *redraw |= REDRAW_FULL;
     rc = true;
   }

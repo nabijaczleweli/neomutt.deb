@@ -38,7 +38,7 @@
 #include "alias/lib.h"
 #include "sort.h"
 #include "context.h"
-#include "globals.h"
+#include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "mutt_thread.h"
 #include "options.h"
@@ -103,7 +103,7 @@ static int compare_size(const void *a, const void *b)
 {
   struct Email const *const *pa = (struct Email const *const *) a;
   struct Email const *const *pb = (struct Email const *const *) b;
-  int result = (*pa)->content->length - (*pb)->content->length;
+  int result = (*pa)->body->length - (*pb)->body->length;
   result = perform_auxsort(result, a, b);
   return SORT_CODE(result);
 }
@@ -139,7 +139,7 @@ static int compare_subject(const void *a, const void *b)
   else if (!(*pb)->env->real_subj)
     rc = 1;
   else
-    rc = mutt_str_strcasecmp((*pa)->env->real_subj, (*pb)->env->real_subj);
+    rc = mutt_istr_cmp((*pa)->env->real_subj, (*pb)->env->real_subj);
   rc = perform_auxsort(rc, a, b);
   return SORT_CODE(rc);
 }
@@ -180,9 +180,9 @@ static int compare_to(const void *a, const void *b)
   struct Email const *const *ppb = (struct Email const *const *) b;
   char fa[128];
 
-  mutt_str_strfcpy(fa, mutt_get_name(TAILQ_FIRST(&(*ppa)->env->to)), sizeof(fa));
+  mutt_str_copy(fa, mutt_get_name(TAILQ_FIRST(&(*ppa)->env->to)), sizeof(fa));
   const char *fb = mutt_get_name(TAILQ_FIRST(&(*ppb)->env->to));
-  int result = mutt_str_strncasecmp(fa, fb, sizeof(fa));
+  int result = mutt_istrn_cmp(fa, fb, sizeof(fa));
   result = perform_auxsort(result, a, b);
   return SORT_CODE(result);
 }
@@ -196,9 +196,9 @@ static int compare_from(const void *a, const void *b)
   struct Email const *const *ppb = (struct Email const *const *) b;
   char fa[128];
 
-  mutt_str_strfcpy(fa, mutt_get_name(TAILQ_FIRST(&(*ppa)->env->from)), sizeof(fa));
+  mutt_str_copy(fa, mutt_get_name(TAILQ_FIRST(&(*ppa)->env->from)), sizeof(fa));
   const char *fb = mutt_get_name(TAILQ_FIRST(&(*ppb)->env->from));
-  int result = mutt_str_strncasecmp(fa, fb, sizeof(fa));
+  int result = mutt_istrn_cmp(fa, fb, sizeof(fa));
   result = perform_auxsort(result, a, b);
   return SORT_CODE(result);
 }
@@ -312,7 +312,7 @@ static int compare_label(const void *a, const void *b)
   }
 
   /* If both have a label, we just do a lexical compare. */
-  result = mutt_str_strcasecmp((*ppa)->env->x_label, (*ppb)->env->x_label);
+  result = mutt_istr_cmp((*ppa)->env->x_label, (*ppb)->env->x_label);
   return SORT_CODE(result);
 }
 
@@ -358,17 +358,18 @@ sort_t mutt_get_sort_func(enum SortType method)
 
 /**
  * mutt_sort_headers - Sort emails by their headers
- * @param ctx  Mailbox
+ * @param m       Mailbox
+ * @param threads Threads context
  * @param init If true, rebuild the thread
+ * @param[out] vsize Size in bytes of the messages in view
  */
-void mutt_sort_headers(struct Context *ctx, bool init)
+void mutt_sort_headers(struct Mailbox *m, struct ThreadsContext *threads,
+                       bool init, off_t *vsize)
 {
-  if (!ctx || !ctx->mailbox || !ctx->mailbox->emails || !ctx->mailbox->emails[0])
+  if (!m || !m->emails[0])
     return;
 
-  struct MuttThread *thread = NULL, *top = NULL;
   sort_t sortfunc = NULL;
-  struct Mailbox *m = ctx->mailbox;
 
   OptNeedResort = false;
 
@@ -378,8 +379,8 @@ void mutt_sort_headers(struct Context *ctx, bool init)
      * deleted all the messages.  the virtual message numbers are not updated
      * in that routine, so we must make sure to zero the vcount member.  */
     m->vcount = 0;
-    ctx->vsize = 0;
-    mutt_clear_threads(ctx);
+    mutt_clear_threads(threads);
+    *vsize = 0;
     return; /* nothing to do! */
   }
 
@@ -404,8 +405,8 @@ void mutt_sort_headers(struct Context *ctx, bool init)
     init = true;
   }
 
-  if (init && ctx->tree)
-    mutt_clear_threads(ctx);
+  if (init)
+    mutt_clear_threads(threads);
 
   if ((C_Sort & SORT_MASK) == SORT_THREADS)
   {
@@ -416,12 +417,11 @@ void mutt_sort_headers(struct Context *ctx, bool init)
     {
       int i = C_Sort;
       C_Sort = C_SortAux;
-      if (ctx->tree)
-        ctx->tree = mutt_sort_subthreads(ctx->tree, true);
+      mutt_sort_subthreads(threads, true);
       C_Sort = i;
       OptSortSubthreads = false;
     }
-    mutt_sort_threads(ctx, init);
+    mutt_sort_threads(threads, init);
   }
   else if (!(sortfunc = mutt_get_sort_func(C_Sort & SORT_MASK)) ||
            !(AuxSort = mutt_get_sort_func(C_SortAux & SORT_MASK)))
@@ -442,7 +442,7 @@ void mutt_sort_headers(struct Context *ctx, bool init)
     if (!e_cur)
       break;
 
-    if ((e_cur->vnum != -1) || (e_cur->collapsed && (!ctx->pattern || e_cur->limited)))
+    if ((e_cur->vnum != -1) || (e_cur->collapsed && e_cur->visible))
     {
       e_cur->vnum = m->vcount;
       m->v2r[m->vcount] = i;
@@ -454,20 +454,12 @@ void mutt_sort_headers(struct Context *ctx, bool init)
   /* re-collapse threads marked as collapsed */
   if ((C_Sort & SORT_MASK) == SORT_THREADS)
   {
-    top = ctx->tree;
-    while ((thread = top))
-    {
-      while (!thread->message)
-        thread = thread->child;
-
-      struct Email *e = thread->message;
-      if (e->collapsed)
-        mutt_collapse_thread(ctx, e);
-      top = top->next;
-    }
-    mutt_set_vnum(ctx);
+    mutt_thread_collapse_collapsed(threads);
+    *vsize = mutt_set_vnum(m);
   }
 
   if (m->verbose)
     mutt_clear_error();
+
+  return;
 }

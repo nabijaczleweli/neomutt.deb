@@ -46,14 +46,16 @@ void init_extended_keys(void);
  */
 struct Keymap
 {
-  char *macro;         ///< macro expansion (op == OP_MACRO)
-  char *desc;          ///< description of a macro for the help menu
-  struct Keymap *next; ///< next key in map
-  short op;            ///< operation to perform
-  short eq;            ///< number of leading keys equal to next entry
-  short len;           ///< length of key sequence (unit: sizeof (keycode_t))
-  keycode_t *keys;     ///< key sequence
+  char *macro;                  ///< macro expansion (op == OP_MACRO)
+  char *desc;                   ///< description of a macro for the help menu
+  short op;                     ///< operation to perform
+  short eq;                     ///< number of leading keys equal to next entry
+  short len;                    ///< length of key sequence (unit: sizeof (keycode_t))
+  keycode_t *keys;              ///< key sequence
+  STAILQ_ENTRY(Keymap) entries; ///< next key in map
 };
+
+STAILQ_HEAD(KeymapList, Keymap);
 
 /**
  * struct KeyEvent - An event such as a keypress
@@ -105,7 +107,7 @@ int mutt_abort_key_config_observer(struct NotifyCallback *nc);
 enum CommandResult km_bind(char *s, enum MenuType menu, int op, char *macro, char *desc);
 int km_dokey(enum MenuType menu);
 
-extern struct Keymap *Keymaps[]; ///< Array of Keymap keybindings, one for each Menu
+extern struct KeymapList Keymaps[]; ///< Array of Keymap keybindings, one for each Menu
 
 extern int LastKey; ///< Last real key pressed, recorded by dokey()
 extern keycode_t AbortKey; ///< key to abort edits etc, normally Ctrl-G
@@ -120,6 +122,32 @@ struct Binding
   const char *name; ///< name of the function
   int op;           ///< function id number
   const char *seq;  ///< default key binding
+};
+
+/**
+ * struct EventBinding - A key binding Event
+ */
+struct EventBinding
+{
+  enum MenuType menu; ///< Menu, e.g. #MENU_PAGER
+  const char *key;    ///< Key string being bound (for new bind/macro)
+  int op;             ///< Operation the key's bound to (for bind), e.g. OP_DELETE
+};
+
+/**
+ * enum NotifyBinding - Key Binding notification types
+ *
+ * Observers of #NT_BINDING will be passed an #EventBinding.
+ */
+enum NotifyBinding
+{
+  NT_BINDING_NEW = 1,    ///< A key binding has been created
+  NT_BINDING_DELETED,    ///< A key binding has been deleted
+  NT_BINDING_DELETE_ALL, ///< All key bindings are about to be deleted
+
+  NT_MACRO_NEW,          ///< A key macro has been created
+  NT_MACRO_DELETED,      ///< A key macro has been deleted
+  NT_MACRO_DELETE_ALL,   ///< All key macros are about to be deleted
 };
 
 const struct Binding *km_get_table(enum MenuType menu);

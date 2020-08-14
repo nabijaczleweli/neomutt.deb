@@ -22,7 +22,7 @@
  */
 
 /**
- * @page bcache Body Caching - local copies of email bodies
+ * @page bcache BCACHE: Body Caching - local copies of email bodies
  *
  * Body Caching - local copies of email bodies
  */
@@ -30,17 +30,21 @@
 #include "config.h"
 #include <dirent.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include "mutt/lib.h"
 #include "email/lib.h"
+#include "bcache/lib.h"
 #include "mutt_account.h"
 #include "muttlib.h"
-#include "bcache/lib.h"
+
+struct ConnAccount;
 
 /* These Config Variables are only used in bcache.c */
+bool C_MessageCacheClean; ///< Config: (imap/pop) Clean out obsolete entries from the message cache
 char *C_MessageCachedir; ///< Config: (imap/pop) Directory for the message cache
 
 /**
@@ -329,8 +333,7 @@ int mutt_bcache_list(struct BodyCache *bcache, bcache_list_t want_id, void *data
 
   while ((de = readdir(d)))
   {
-    if (mutt_str_startswith(de->d_name, ".", CASE_MATCH) ||
-        mutt_str_startswith(de->d_name, "..", CASE_MATCH))
+    if (mutt_str_startswith(de->d_name, ".") || mutt_str_startswith(de->d_name, ".."))
     {
       continue;
     }

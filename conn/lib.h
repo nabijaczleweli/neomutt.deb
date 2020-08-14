@@ -27,8 +27,8 @@
  *
  * | File                | Description              |
  * | :------------------ | :----------------------- |
+ * | conn/config.c       | @subpage conn_config     |
  * | conn/connaccount.c  | @subpage conn_account    |
- * | conn/conn_globals.c | @subpage conn_globals    |
  * | conn/getdomain.c    | @subpage conn_getdomain  |
  * | conn/gnutls.c       | @subpage conn_gnutls     |
  * | conn/gui.c          | @subpage conn_gui        |
@@ -46,7 +46,6 @@
 
 #include "config.h"
 // IWYU pragma: begin_exports
-#include "conn_globals.h"
 #include "connaccount.h"
 #include "connection.h"
 #include "sasl_plain.h"
@@ -60,6 +59,12 @@
 // IWYU pragma: end_exports
 
 struct Buffer;
+struct ConfigSet;
+
+// These Config Variables are used outside of libconn
+extern bool          C_SslForceTls;
+extern unsigned char C_SslStarttls;
+extern const char *  C_Tunnel;
 
 #ifdef USE_SSL
 int mutt_ssl_starttls(struct Connection *conn);

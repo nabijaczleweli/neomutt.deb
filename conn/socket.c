@@ -35,9 +35,10 @@
 #include "private.h"
 #include "mutt/lib.h"
 #include "socket.h"
-#include "conn_globals.h"
+#include "lib.h"
 #include "connaccount.h"
 #include "connection.h"
+#include "mutt_globals.h"
 #include "protos.h"
 #include "ssl.h"
 

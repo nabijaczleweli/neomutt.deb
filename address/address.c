@@ -260,12 +260,12 @@ static const char *parse_address(const char *s, char *token, size_t *tokenlen,
   }
 
   terminate_string(token, *tokenlen, tokenmax);
-  addr->mailbox = mutt_str_strdup(token);
+  addr->mailbox = mutt_str_dup(token);
 
   if (*commentlen && !addr->personal)
   {
     terminate_string(comment, *commentlen, commentmax);
-    addr->personal = mutt_str_strdup(comment);
+    addr->personal = mutt_str_dup(comment);
   }
 
   return s;
@@ -321,7 +321,7 @@ static const char *parse_route_addr(const char *s, char *comment, size_t *commen
   }
 
   if (!addr->mailbox)
-    addr->mailbox = mutt_str_strdup("@");
+    addr->mailbox = mutt_str_dup("@");
 
   s++;
   return s;
@@ -398,8 +398,8 @@ struct Address *mutt_addr_new(void)
 struct Address *mutt_addr_create(const char *personal, const char *mailbox)
 {
   struct Address *a = mutt_addr_new();
-  a->personal = mutt_str_strdup(personal);
-  a->mailbox = mutt_str_strdup(mailbox);
+  a->personal = mutt_str_dup(personal);
+  a->mailbox = mutt_str_dup(mailbox);
   return a;
 }
 
@@ -422,7 +422,7 @@ int mutt_addrlist_remove(struct AddressList *al, const char *mailbox)
   struct Address *a = NULL, *tmp = NULL;
   TAILQ_FOREACH_SAFE(a, al, entries, tmp)
   {
-    if (mutt_str_strcasecmp(mailbox, a->mailbox) == 0)
+    if (mutt_istr_equal(mailbox, a->mailbox))
     {
       TAILQ_REMOVE(al, a, entries);
       mutt_addr_free(&a);
@@ -485,10 +485,10 @@ int mutt_addrlist_parse(struct AddressList *al, const char *s)
         else if (commentlen != 0)
         {
           struct Address *last = TAILQ_LAST(al, AddressList);
-          if (last && !last->personal)
+          if (last && !last->personal && last->mailbox)
           {
             terminate_buffer(comment, commentlen);
-            last->personal = mutt_str_strdup(comment);
+            last->personal = mutt_str_dup(comment);
           }
         }
 
@@ -529,7 +529,7 @@ int mutt_addrlist_parse(struct AddressList *al, const char *s)
       {
         struct Address *a = mutt_addr_new();
         terminate_buffer(phrase, phraselen);
-        a->mailbox = mutt_str_strdup(phrase);
+        a->mailbox = mutt_str_dup(phrase);
         a->group = true;
         mutt_addrlist_append(al, a);
         phraselen = 0;
@@ -542,7 +542,7 @@ int mutt_addrlist_parse(struct AddressList *al, const char *s)
       {
         struct Address *a = mutt_addr_new();
         terminate_buffer(phrase, phraselen);
-        a->personal = mutt_str_strdup(phrase);
+        a->personal = mutt_str_dup(phrase);
         s = parse_route_addr(s + 1, comment, &commentlen, sizeof(comment) - 1, a);
         if (!s)
         {
@@ -594,10 +594,10 @@ int mutt_addrlist_parse(struct AddressList *al, const char *s)
   else if (commentlen != 0)
   {
     struct Address *last = TAILQ_LAST(al, AddressList);
-    if (last && !last->personal)
+    if (last && !last->personal && last->mailbox)
     {
       terminate_buffer(comment, commentlen);
-      last->personal = mutt_str_strdup(comment);
+      last->personal = mutt_str_dup(comment);
     }
   }
 
@@ -623,7 +623,7 @@ int mutt_addrlist_parse2(struct AddressList *al, const char *s)
   /* check for a simple whitespace separated list of addresses */
   if (!strpbrk(s, "\"<>():;,\\"))
   {
-    char *copy = mutt_str_strdup(s);
+    char *copy = mutt_str_dup(s);
     char *r = copy;
     while ((r = strtok(r, " \t")))
     {
@@ -657,7 +657,7 @@ void mutt_addrlist_qualify(struct AddressList *al, const char *host)
   {
     if (!a->group && a->mailbox && !strchr(a->mailbox, '@'))
     {
-      char *p = mutt_mem_malloc(mutt_str_strlen(a->mailbox) + mutt_str_strlen(host) + 2);
+      char *p = mutt_mem_malloc(mutt_str_len(a->mailbox) + mutt_str_len(host) + 2);
       sprintf(p, "%s@%s", a->mailbox, host);
       FREE(&a->mailbox);
       a->mailbox = p;
@@ -702,10 +702,10 @@ void mutt_addr_cat(char *buf, size_t buflen, const char *value, const char *spec
     }
     *pc++ = '"';
     *pc = '\0';
-    mutt_str_strfcpy(buf, tmp, buflen);
+    mutt_str_copy(buf, tmp, buflen);
   }
   else
-    mutt_str_strfcpy(buf, value, buflen);
+    mutt_str_copy(buf, value, buflen);
 }
 
 /**
@@ -720,8 +720,8 @@ struct Address *mutt_addr_copy(const struct Address *addr)
 
   struct Address *p = mutt_addr_new();
 
-  p->personal = mutt_str_strdup(addr->personal);
-  p->mailbox = mutt_str_strdup(addr->mailbox);
+  p->personal = mutt_str_dup(addr->personal);
+  p->mailbox = mutt_str_dup(addr->mailbox);
   p->group = addr->group;
   p->is_intl = addr->is_intl;
   p->intl_checked = addr->intl_checked;
@@ -787,7 +787,7 @@ bool mutt_addr_valid_msgid(const char *msgid)
   if (!msgid || (*msgid == '\0'))
     return false;
 
-  size_t l = mutt_str_strlen(msgid);
+  size_t l = mutt_str_len(msgid);
   if (l < 5) /* <atom@atom> */
     return false;
   if ((msgid[0] != '<') || (msgid[l - 1] != '>'))
@@ -821,8 +821,8 @@ bool mutt_addrlist_equal(const struct AddressList *ala, const struct AddressList
 
   while (ana && anb)
   {
-    if ((mutt_str_strcmp(ana->mailbox, anb->mailbox) != 0) ||
-        (mutt_str_strcmp(ana->personal, anb->personal) != 0))
+    if (!mutt_str_equal(ana->mailbox, anb->mailbox) ||
+        !mutt_str_equal(ana->personal, anb->personal))
     {
       break;
     }
@@ -867,7 +867,7 @@ bool mutt_addr_cmp(const struct Address *a, const struct Address *b)
     return false;
   if (!a->mailbox || !b->mailbox)
     return false;
-  if (mutt_str_strcasecmp(a->mailbox, b->mailbox) != 0)
+  if (!mutt_istr_equal(a->mailbox, b->mailbox))
     return false;
   return true;
 }
@@ -937,8 +937,8 @@ static int addr_mbox_to_udomain(const char *mbox, char **user, char **domain)
   if (!ptr || (ptr == mbox) || (ptr[1] == '\0'))
     return -1;
 
-  *user = mutt_str_substr_dup(mbox, ptr);
-  *domain = mutt_str_strdup(ptr + 1);
+  *user = mutt_strn_dup(mbox, ptr - mbox);
+  *domain = mutt_str_dup(ptr + 1);
 
   return 0;
 }
@@ -1027,6 +1027,9 @@ size_t mutt_addr_write(char *buf, size_t buflen, struct Address *addr, bool disp
   if (!buf || (buflen == 0) || !addr)
     return 0;
 
+  if (!addr->personal && !addr->mailbox)
+    return 0;
+
   size_t len;
   char *pbuf = buf;
   char *pc = NULL;
@@ -1062,7 +1065,7 @@ size_t mutt_addr_write(char *buf, size_t buflen, struct Address *addr, bool disp
     {
       if (buflen == 0)
         goto done;
-      len = mutt_str_strfcpy(pbuf, addr->personal, buflen + 1 /* strfcpy terminates */);
+      len = mutt_str_copy(pbuf, addr->personal, buflen + 1);
       pbuf += len;
       buflen -= len;
     }
@@ -1085,14 +1088,14 @@ size_t mutt_addr_write(char *buf, size_t buflen, struct Address *addr, bool disp
   {
     if (buflen == 0)
       goto done;
-    if (mutt_str_strcmp(addr->mailbox, "@") == 0)
+    if (mutt_str_equal(addr->mailbox, "@"))
     {
       *pbuf = '\0';
     }
     else
     {
       const char *a = display ? mutt_addr_for_display(addr) : addr->mailbox;
-      len = mutt_str_strfcpy(pbuf, a, buflen + 1 /* strfcpy terminates */);
+      len = mutt_str_copy(pbuf, a, buflen + 1);
       pbuf += len;
       buflen -= len;
     }
@@ -1146,10 +1149,10 @@ done:
  */
 size_t mutt_addrlist_write(const struct AddressList *al, char *buf, size_t buflen, bool display)
 {
-  if (!buf || buflen == 0 || !al)
+  if (!buf || (buflen == 0) || !al)
     return 0;
 
-  size_t len = mutt_str_strlen(buf);
+  size_t len = mutt_str_len(buf);
   if (len >= buflen)
   {
     return 0;
@@ -1205,12 +1208,63 @@ size_t mutt_addrlist_write_list(const struct AddressList *al, struct ListHead *l
   struct Address *a = NULL;
   TAILQ_FOREACH(a, al, entries)
   {
-    mutt_addr_write(addr, sizeof(addr), a, true);
-    mutt_list_insert_tail(list, strdup(addr));
-    count++;
+    if (mutt_addr_write(addr, sizeof(addr), a, true) != 0)
+    {
+      mutt_list_insert_tail(list, strdup(addr));
+      count++;
+    }
   }
 
   return count;
+}
+
+/**
+ * mutt_addrlist_write_file - Wrapper for mutt_write_address()
+ * @param al        Address list
+ * @param fp        File to write to
+ * @param start_col Starting column in the output line
+ * @param display   True if these addresses will be displayed to the user
+ *
+ * So we can handle very large recipient lists without needing a huge temporary
+ * buffer in memory
+ */
+void mutt_addrlist_write_file(const struct AddressList *al, FILE *fp, int start_col, bool display)
+{
+  char buf[1024];
+  int count = 0;
+  int linelen = start_col;
+
+  struct Address *a = NULL;
+  TAILQ_FOREACH(a, al, entries)
+  {
+    buf[0] = '\0';
+    size_t len = mutt_addr_write(buf, sizeof(buf), a, display);
+    if (len == 0)
+      continue;
+    if (count && (linelen + len > 74))
+    {
+      fputs("\n\t", fp);
+      linelen = len + 8; /* tab is usually about 8 spaces... */
+    }
+    else
+    {
+      if (count && a->mailbox)
+      {
+        fputc(' ', fp);
+        linelen++;
+      }
+      linelen += len;
+    }
+    fputs(buf, fp);
+    struct Address *next = TAILQ_NEXT(a, entries);
+    if (!a->group && next && next->mailbox)
+    {
+      linelen++;
+      fputc(',', fp);
+    }
+    count++;
+  }
+  fputc('\n', fp);
 }
 
 /**
@@ -1277,7 +1331,7 @@ int mutt_addrlist_to_intl(struct AddressList *al, char **err)
     {
       rc = -1;
       if (err && !*err)
-        *err = mutt_str_strdup(a->mailbox);
+        *err = mutt_str_dup(a->mailbox);
       continue;
     }
 
@@ -1365,7 +1419,7 @@ void mutt_addrlist_dedupe(struct AddressList *al)
       {
         TAILQ_FOREACH_FROM_SAFE(a2, al, entries, tmp)
         {
-          if (a2->mailbox && (mutt_str_strcasecmp(a->mailbox, a2->mailbox) == 0))
+          if (a2->mailbox && mutt_istr_equal(a->mailbox, a2->mailbox))
           {
             mutt_debug(LL_DEBUG2, "Removing %s\n", a2->mailbox);
             TAILQ_REMOVE(al, a2, entries);
@@ -1446,4 +1500,45 @@ void mutt_addrlist_prepend(struct AddressList *al, struct Address *a)
 {
   if (al && a)
     TAILQ_INSERT_HEAD(al, a, entries);
+}
+
+/**
+ * mutt_addr_uses_unicode - Does this address use Unicode character
+ * @param str Address string to check
+ * @retval true If the string uses 8-bit characters
+ */
+bool mutt_addr_uses_unicode(const char *str)
+{
+  if (!str)
+    return false;
+
+  while (*str)
+  {
+    if ((unsigned char) *str & (1 << 7))
+      return true;
+    str++;
+  }
+
+  return false;
+}
+
+/**
+ * mutt_addrlist_uses_unicode - Do any of a list of addresses use Unicode characters
+ * @param al Address list to check
+ * @retval true If any use 8-bit characters
+ */
+bool mutt_addrlist_uses_unicode(const struct AddressList *al)
+{
+  if (!al)
+  {
+    return false;
+  }
+
+  struct Address *a = NULL;
+  TAILQ_FOREACH(a, al, entries)
+  {
+    if (a->mailbox && !a->group && mutt_addr_uses_unicode(a->mailbox))
+      return true;
+  }
+  return false;
 }

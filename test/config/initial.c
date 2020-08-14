@@ -83,9 +83,8 @@ static bool test_set_initial(struct ConfigSet *cs, struct Buffer *err)
   TEST_MSG("Cherry = %s\n", VarCherry);
 
   log_line(__func__);
-  return ((mutt_str_strcmp(VarApple, aval) != 0) &&
-          (mutt_str_strcmp(VarBanana, bval) != 0) &&
-          (mutt_str_strcmp(VarCherry, cval) != 0));
+  return (!mutt_str_equal(VarApple, aval) && !mutt_str_equal(VarBanana, bval) &&
+          !mutt_str_equal(VarCherry, cval));
 }
 
 void test_config_initial(void)
@@ -105,7 +104,7 @@ void test_config_initial(void)
   if (!cs_register_variables(cs, Vars, 0))
     return;
 
-  notify_observer_add(NeoMutt->notify, log_observer, 0);
+  notify_observer_add(NeoMutt->notify, NT_CONFIG, log_observer, 0);
 
   set_list(cs);
 

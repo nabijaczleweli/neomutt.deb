@@ -36,32 +36,36 @@
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "email/lib.h"
+#include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
 #include "lib.h"
+#include "send/lib.h"
 #include "alias.h"
 #include "format_flags.h"
-#include "globals.h"
 #include "gui.h"
 #include "keymap.h"
+#include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "mutt_menu.h"
 #include "muttlib.h"
 #include "opcodes.h"
-#include "send.h"
 
 /* These Config Variables are only used in dlgquery.c */
 char *C_QueryCommand; ///< Config: External command to query and external address book
 char *C_QueryFormat; ///< Config: printf-like format string for the query menu (address book)
 
+/// Help Bar for the Address Query dialog
 static const struct Mapping QueryHelp[] = {
-  { N_("Exit"), OP_EXIT },
-  { N_("Mail"), OP_MAIL },
-  { N_("New Query"), OP_QUERY },
+  // clang-format off
+  { N_("Exit"),       OP_EXIT },
+  { N_("Mail"),       OP_MAIL },
+  { N_("New Query"),  OP_QUERY },
   { N_("Make Alias"), OP_CREATE_ALIAS },
-  { N_("Search"), OP_SEARCH },
-  { N_("Help"), OP_HELP },
+  { N_("Search"),     OP_SEARCH },
+  { N_("Help"),       OP_HELP },
   { NULL, 0 },
+  // clang-format on
 };
 
 /**
@@ -81,7 +85,7 @@ static bool alias_to_addrlist(struct AddressList *al, struct Alias *alias)
     struct Address *first = TAILQ_FIRST(al);
     struct Address *second = TAILQ_NEXT(first, entries);
     if (!second && !first->personal)
-      first->personal = mutt_str_strdup(alias->name);
+      first->personal = mutt_str_dup(alias->name);
 
     mutt_addrlist_to_intl(al, NULL);
   }
@@ -264,10 +268,10 @@ static int query_run(char *s, bool verbose, struct AliasList *al)
       p = strtok(NULL, "\t\n");
       if (p)
       {
-        alias->name = mutt_str_strdup(p);
+        alias->name = mutt_str_dup(p);
         p = strtok(NULL, "\t\n");
         if (p)
-          alias->comment = mutt_str_strdup(p);
+          alias->comment = mutt_str_dup(p);
       }
       TAILQ_INSERT_TAIL(al, alias, entries);
     }
@@ -291,13 +295,13 @@ static int query_run(char *s, bool verbose, struct AliasList *al)
 }
 
 /**
- * query_menu - Get the user to enter an Address Query
+ * dlg_select_query - Get the user to enter an Address Query
  * @param buf    Buffer for the query
  * @param buflen Length of buffer
  * @param all    Alias List
  * @param retbuf If true, populate the results
  */
-static void query_menu(char *buf, size_t buflen, struct AliasList *all, bool retbuf)
+static void dlg_select_query(char *buf, size_t buflen, struct AliasList *all, bool retbuf)
 {
   struct AliasMenuData *mdata = menu_data_new();
   struct Alias *np = NULL;
@@ -312,48 +316,15 @@ static void query_menu(char *buf, size_t buflen, struct AliasList *all, bool ret
 
   snprintf(title, sizeof(title), _("Query '%s'"), buf);
 
-  struct MuttWindow *dlg =
-      mutt_window_new(WT_DLG_QUERY, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  dlg->notify = notify_new();
-
-  struct MuttWindow *index =
-      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  index->notify = notify_new();
-  notify_set_parent(index->notify, dlg->notify);
-
-  struct MuttWindow *ibar =
-      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
-                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
-  ibar->notify = notify_new();
-  notify_set_parent(ibar->notify, dlg->notify);
-
-  if (C_StatusOnTop)
-  {
-    mutt_window_add_child(dlg, ibar);
-    mutt_window_add_child(dlg, index);
-  }
-  else
-  {
-    mutt_window_add_child(dlg, index);
-    mutt_window_add_child(dlg, ibar);
-  }
-
-  dialog_push(dlg);
-
   menu = mutt_menu_new(MENU_QUERY);
-
-  menu->pagelen = index->state.rows;
-  menu->win_index = index;
-  menu->win_ibar = ibar;
+  struct MuttWindow *dlg = dialog_create_simple_index(menu, WT_DLG_QUERY);
+  dlg->help_data = QueryHelp;
+  dlg->help_menu = MENU_QUERY;
 
   menu->make_entry = query_make_entry;
   menu->search = query_search;
   menu->tag = query_tag;
   menu->title = title;
-  char helpstr[1024];
-  menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_QUERY, QueryHelp);
   menu->max = mdata->num_views;
   menu->mdata = mdata;
   mutt_menu_push_current(menu);
@@ -466,7 +437,7 @@ static void query_menu(char *buf, size_t buflen, struct AliasList *all, bool ret
             mutt_addrlist_clear(&al);
           }
         }
-        mutt_send_message(SEND_NO_FLAGS, e, NULL, Context, NULL);
+        mutt_send_message(SEND_NO_FLAGS, e, NULL, Context, NULL, NeoMutt->sub);
         menu->redraw = REDRAW_FULL;
         break;
       }
@@ -499,7 +470,7 @@ static void query_menu(char *buf, size_t buflen, struct AliasList *all, bool ret
           mutt_addrlist_to_local(&al);
           tagged = true;
           mutt_addrlist_write(&al, buf, buflen, false);
-          curpos = mutt_str_strlen(buf);
+          curpos = mutt_str_len(buf);
           mutt_addrlist_clear(&al);
         }
       }
@@ -511,7 +482,7 @@ static void query_menu(char *buf, size_t buflen, struct AliasList *all, bool ret
           mutt_addrlist_to_local(&al);
           strcat(buf, ", ");
           mutt_addrlist_write(&al, buf + curpos + 2, buflen - curpos - 2, false);
-          curpos = mutt_str_strlen(buf);
+          curpos = mutt_str_len(buf);
           mutt_addrlist_clear(&al);
         }
       }
@@ -531,8 +502,7 @@ static void query_menu(char *buf, size_t buflen, struct AliasList *all, bool ret
 
   mutt_menu_pop_current(menu);
   mutt_menu_free(&menu);
-  dialog_pop();
-  mutt_window_free(&dlg);
+  dialog_destroy_simple_index(&dlg);
   menu_data_free(&mdata);
 }
 
@@ -572,7 +542,7 @@ int query_complete(char *buf, size_t buflen)
   }
 
   /* multiple results, choose from query menu */
-  query_menu(buf, buflen, &al, true);
+  dlg_select_query(buf, buflen, &al, true);
   aliaslist_free(&al);
   return 0;
 }
@@ -600,6 +570,6 @@ void query_index(void)
   if (TAILQ_EMPTY(&al))
     return;
 
-  query_menu(buf, sizeof(buf), &al, false);
+  dlg_select_query(buf, sizeof(buf), &al, false);
   aliaslist_free(&al);
 }

@@ -131,7 +131,7 @@ static bool test_initial_values(struct ConfigSet *cs, struct Buffer *err)
     return false;
   }
 
-  if (!TEST_CHECK(mutt_str_strcmp(value.data, "date") == 0))
+  if (!TEST_CHECK(mutt_str_equal(value.data, "date")))
   {
     TEST_MSG("Apple's initial value is wrong: '%s'\n", value.data);
     FREE(&value.data);
@@ -149,7 +149,7 @@ static bool test_initial_values(struct ConfigSet *cs, struct Buffer *err)
     return false;
   }
 
-  if (!TEST_CHECK(mutt_str_strcmp(value.data, "size") == 0))
+  if (!TEST_CHECK(mutt_str_equal(value.data, "size")))
   {
     TEST_MSG("Banana's initial value is wrong: '%s'\n", value.data);
     FREE(&value.data);
@@ -740,7 +740,7 @@ void test_config_sort(void)
     return;
   dont_fail = false;
 
-  notify_observer_add(NeoMutt->notify, log_observer, 0);
+  notify_observer_add(NeoMutt->notify, NT_CONFIG, log_observer, 0);
 
   set_list(cs);
 

@@ -115,15 +115,26 @@ struct PopAuth
 {
   /**
    * authenticate - Authenticate a POP connection
-   * @param adata Pop Account data
-   * @param method Use this named method, or any available method if NULL
-   * @retval #ImapAuthRes Result, e.g. #IMAP_AUTH_SUCCESS
+   * @param adata  POP Account data
+   * @param method Name of this authentication method (UNUSED)
+   * @retval num Result, e.g. #POP_A_SUCCESS
    */
   enum PopAuthRes (*authenticate)(struct PopAccountData *adata, const char *method);
 
   const char *method; ///< Name of authentication method supported, NULL means variable.
                       ///< If this is not null, authenticate may ignore the second parameter.
 };
+
+extern bool          C_PopAuthTryAll;
+extern struct Slist *C_PopAuthenticators;
+extern short         C_PopCheckinterval;
+extern unsigned char C_PopDelete;
+extern char *        C_PopHost;
+extern bool          C_PopLast;
+extern char *        C_PopOauthRefreshCommand;
+extern char *        C_PopPass;
+extern unsigned char C_PopReconnect;
+extern char *        C_PopUser;
 
 /* pop_auth.c */
 int pop_authenticate(struct PopAccountData *adata);
@@ -150,6 +161,6 @@ int pop_reconnect(struct Mailbox *m);
 void pop_logout(struct Mailbox *m);
 struct PopAccountData *pop_adata_get(struct Mailbox *m);
 struct PopEmailData *pop_edata_get(struct Email *e);
-const char *pop_get_field(enum ConnAccountField field);
+const char *pop_get_field(enum ConnAccountField field, void *gf_data);
 
 #endif /* MUTT_POP_PRIVATE_H */

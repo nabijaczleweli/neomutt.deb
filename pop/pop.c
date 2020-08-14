@@ -42,20 +42,20 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "conn/lib.h"
+#include "gui/lib.h"
 #include "lib.h"
+#include "bcache/lib.h"
+#include "ncrypt/lib.h"
 #include "context.h"
-#include "globals.h"
 #include "hook.h"
-#include "init.h"
 #include "mutt_account.h"
+#include "mutt_globals.h"
 #include "mutt_header.h"
 #include "mutt_logging.h"
 #include "mutt_socket.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "progress.h"
-#include "bcache/lib.h"
-#include "ncrypt/lib.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
@@ -65,12 +65,6 @@
 
 struct BodyCache;
 struct stat;
-
-/* These Config Variables are only used in pop/pop.c */
-short C_PopCheckinterval; ///< Config: (pop) Interval between checks for new mail
-unsigned char C_PopDelete; ///< Config: (pop) After downloading POP messages, delete them on the server
-char *C_PopHost; ///< Config: (pop) Url of the POP server
-bool C_PopLast;  ///< Config: (pop) Use the 'LAST' command to fetch new mail
 
 #define HC_FNAME "neomutt" /* filename for hcache as POP lacks paths */
 #define HC_FEXT "hcache"   /* extension for hcache as POP lacks paths */
@@ -87,14 +81,13 @@ bool C_PopLast;  ///< Config: (pop) Use the 'LAST' command to fetch new mail
 static const char *cache_id(const char *id)
 {
   static char clean[128];
-  mutt_str_strfcpy(clean, id, sizeof(clean));
+  mutt_str_copy(clean, id, sizeof(clean));
   mutt_file_sanitize_filename(clean, true);
   return clean;
 }
 
 /**
- * pop_adata_free - Free data attached to the Mailbox
- * @param[out] ptr POP data
+ * pop_adata_free - Free the private Account data - Implements Account::adata_free()
  *
  * The PopAccountData struct stores global POP data, such as the connection to
  * the database.  This function will close the database, free the resources and
@@ -120,8 +113,7 @@ static struct PopAccountData *pop_adata_new(void)
 }
 
 /**
- * pop_edata_free - Free data attached to an Email
- * @param[out] ptr Email data
+ * pop_edata_free - Free the private Email data - Implements Email::edata_free()
  *
  * Each email has an attached PopEmailData, which contains things like the tags
  * (labels).
@@ -144,7 +136,7 @@ static void pop_edata_free(void **ptr)
 static struct PopEmailData *pop_edata_new(const char *uid)
 {
   struct PopEmailData *edata = mutt_mem_calloc(1, sizeof(struct PopEmailData));
-  edata->uid = mutt_str_strdup(uid);
+  edata->uid = mutt_str_dup(uid);
   return edata;
 }
 
@@ -225,11 +217,11 @@ static int pop_read_header(struct PopAccountData *adata, struct Email *e)
     {
       rewind(fp);
       e->env = mutt_rfc822_read_header(fp, e, false, false);
-      e->content->length = length - e->content->offset + 1;
+      e->body->length = length - e->body->offset + 1;
       rewind(fp);
       while (!feof(fp))
       {
-        e->content->length--;
+        e->body->length--;
         fgets(buf, sizeof(buf), fp);
       }
       break;
@@ -279,7 +271,7 @@ static int fetch_uidl(const char *line, void *data)
   for (i = 0; i < m->msg_count; i++)
   {
     struct PopEmailData *edata = pop_edata_get(m->emails[i]);
-    if (mutt_str_strcmp(line, edata->uid) == 0)
+    if (mutt_str_equal(line, edata->uid))
       break;
   }
 
@@ -330,7 +322,7 @@ static int msg_cache_check(const char *id, struct BodyCache *bcache, void *data)
   {
     struct PopEmailData *edata = pop_edata_get(m->emails[i]);
     /* if the id we get is known for a header: done (i.e. keep in cache) */
-    if (edata->uid && (mutt_str_strcmp(edata->uid, id) == 0))
+    if (edata->uid && mutt_str_equal(edata->uid, id))
       return 0;
   }
 
@@ -354,7 +346,7 @@ static void pop_hcache_namer(const char *path, struct Buffer *dest)
  * @param path  Path to the mailbox
  * @retval ptr Header cache
  */
-static header_cache_t *pop_hcache_open(struct PopAccountData *adata, const char *path)
+static struct HeaderCache *pop_hcache_open(struct PopAccountData *adata, const char *path)
 {
   if (!adata || !adata->conn)
     return mutt_hcache_open(C_HeaderCache, path, NULL);
@@ -386,7 +378,7 @@ static int pop_fetch_headers(struct Mailbox *m)
   struct Progress progress;
 
 #ifdef USE_HCACHE
-  header_cache_t *hc = pop_hcache_open(adata, mailbox_path(m));
+  struct HeaderCache *hc = pop_hcache_open(adata, mailbox_path(m));
 #endif
 
   adata->check_time = mutt_date_epoch();
@@ -613,7 +605,7 @@ void pop_fetch_mail(void)
   mutt_message(_("Checking for new messages..."));
 
   /* find out how many messages are in the mailbox. */
-  mutt_str_strfcpy(buf, "STAT\r\n", sizeof(buf));
+  mutt_str_copy(buf, "STAT\r\n", sizeof(buf));
   ret = pop_query(adata, buf, sizeof(buf));
   if (ret == -1)
     goto fail;
@@ -628,7 +620,7 @@ void pop_fetch_mail(void)
   /* only get unread messages */
   if ((msgs > 0) && C_PopLast)
   {
-    mutt_str_strfcpy(buf, "LAST\r\n", sizeof(buf));
+    mutt_str_copy(buf, "LAST\r\n", sizeof(buf));
     ret = pop_query(adata, buf, sizeof(buf));
     if (ret == -1)
       goto fail;
@@ -722,14 +714,14 @@ void pop_fetch_mail(void)
   if (rset)
   {
     /* make sure no messages get deleted */
-    mutt_str_strfcpy(buf, "RSET\r\n", sizeof(buf));
+    mutt_str_copy(buf, "RSET\r\n", sizeof(buf));
     if (pop_query(adata, buf, sizeof(buf)) == -1)
       goto fail;
   }
 
 finish:
   /* exit gracefully */
-  mutt_str_strfcpy(buf, "QUIT\r\n", sizeof(buf));
+  mutt_str_copy(buf, "QUIT\r\n", sizeof(buf));
   if (pop_query(adata, buf, sizeof(buf)) == -1)
     goto fail;
   mutt_socket_close(conn);
@@ -758,8 +750,7 @@ static struct Account *pop_ac_find(struct Account *a, const char *path)
   struct PopAccountData *adata = a->adata;
   struct ConnAccount *cac = &adata->conn->account;
 
-  if ((mutt_str_strcasecmp(url->host, cac->host) != 0) ||
-      (mutt_str_strcasecmp(url->user, cac->user) != 0))
+  if (!mutt_istr_equal(url->host, cac->host) || !mutt_istr_equal(url->user, cac->user))
   {
     a = NULL;
   }
@@ -882,7 +873,7 @@ static int pop_mbox_open(struct Mailbox *m)
 /**
  * pop_mbox_check - Check for new mail - Implements MxOps::mbox_check()
  */
-static int pop_mbox_check(struct Mailbox *m, int *index_hint)
+static int pop_mbox_check(struct Mailbox *m)
 {
   if (!m)
     return -1;
@@ -923,7 +914,7 @@ static int pop_mbox_check(struct Mailbox *m, int *index_hint)
  *
  * Update POP mailbox, delete messages from server
  */
-static int pop_mbox_sync(struct Mailbox *m, int *index_hint)
+static int pop_mbox_sync(struct Mailbox *m)
 {
   if (!m)
     return -1;
@@ -933,7 +924,7 @@ static int pop_mbox_sync(struct Mailbox *m, int *index_hint)
   struct PopAccountData *adata = pop_adata_get(m);
   struct Progress progress;
 #ifdef USE_HCACHE
-  header_cache_t *hc = NULL;
+  struct HeaderCache *hc = NULL;
 #endif
 
   adata->check_time = 0;
@@ -971,7 +962,7 @@ static int pop_mbox_sync(struct Mailbox *m, int *index_hint)
         {
           mutt_bcache_del(adata->bcache, cache_id(edata->uid));
 #ifdef USE_HCACHE
-          mutt_hcache_delete_header(hc, edata->uid, strlen(edata->uid));
+          mutt_hcache_delete_record(hc, edata->uid, strlen(edata->uid));
 #endif
         }
       }
@@ -990,7 +981,7 @@ static int pop_mbox_sync(struct Mailbox *m, int *index_hint)
 
     if (rc == 0)
     {
-      mutt_str_strfcpy(buf, "QUIT\r\n", sizeof(buf));
+      mutt_str_copy(buf, "QUIT\r\n", sizeof(buf));
       rc = pop_query(adata, buf, sizeof(buf));
     }
 
@@ -1102,7 +1093,7 @@ static int pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
     }
 
     mutt_progress_init(&progress, _("Fetching message..."), MUTT_PROGRESS_NET,
-                       e->content->length + e->content->offset - 1);
+                       e->body->length + e->body->offset - 1);
 
     /* see if we can put in body cache; use our cache as fallback */
     msg->fp = mutt_bcache_put(adata->bcache, cache_id(edata->uid));
@@ -1182,11 +1173,11 @@ static int pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
     fgets(buf, sizeof(buf), msg->fp);
   }
 
-  e->content->length = ftello(msg->fp) - e->content->offset;
+  e->body->length = ftello(msg->fp) - e->body->offset;
 
   /* This needs to be done in case this is a multipart message */
   if (!WithCrypto)
-    e->security = crypt_query(e->content);
+    e->security = crypt_query(e->body);
 
   mutt_clear_error();
   rewind(msg->fp);
@@ -1217,7 +1208,7 @@ static int pop_msg_save_hcache(struct Mailbox *m, struct Email *e)
 #ifdef USE_HCACHE
   struct PopAccountData *adata = pop_adata_get(m);
   struct PopEmailData *edata = e->edata;
-  header_cache_t *hc = pop_hcache_open(adata, mailbox_path(m));
+  struct HeaderCache *hc = pop_hcache_open(adata, mailbox_path(m));
   rc = mutt_hcache_store(hc, edata->uid, strlen(edata->uid), e, 0);
   mutt_hcache_close(hc);
 #endif
@@ -1233,10 +1224,10 @@ enum MailboxType pop_path_probe(const char *path, const struct stat *st)
   if (!path)
     return MUTT_UNKNOWN;
 
-  if (mutt_str_startswith(path, "pop://", CASE_IGNORE))
+  if (mutt_istr_startswith(path, "pop://"))
     return MUTT_POP;
 
-  if (mutt_str_startswith(path, "pops://", CASE_IGNORE))
+  if (mutt_istr_startswith(path, "pops://"))
     return MUTT_POP;
 
   return MUTT_UNKNOWN;

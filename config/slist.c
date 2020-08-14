@@ -29,13 +29,6 @@
  * - Empty string list is stored as `NULL`
  * - Validator is passed `struct Slist`, which may be `NULL`
  * - Data is freed when `ConfigSet` is freed
- *
- * ## Functions supported
- * - ConfigSetType::string_set()
- * - ConfigSetType::string_get()
- * - ConfigSetType::native_set()
- * - ConfigSetType::native_get()
- * - ConfigSetType::reset()
  */
 
 #include "config.h"
@@ -107,7 +100,7 @@ static int slist_string_set(const struct ConfigSet *cs, void *var, struct Config
       FREE(&cdef->initial);
 
     cdef->type |= DT_INITIAL_SET;
-    cdef->initial = IP mutt_str_strdup(value);
+    cdef->initial = IP mutt_str_dup(value);
   }
 
   return rc;

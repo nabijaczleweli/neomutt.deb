@@ -28,12 +28,13 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "config/lib.h"
 #include "mutt.h"
 #include "hook.h"
 #include "mutt_commands.h"
 
 struct Buffer;
+struct ConfigDef;
+struct ConfigSet;
 struct ListHead;
 
 int charset_validator    (const struct ConfigSet *cs, const struct ConfigDef *cdef, intptr_t value, struct Buffer *err);
@@ -47,7 +48,6 @@ int hcache_validator     (const struct ConfigSet *cs, const struct ConfigDef *cd
 int multipart_validator  (const struct ConfigSet *cs, const struct ConfigDef *cdef, intptr_t value, struct Buffer *err);
 int pager_validator      (const struct ConfigSet *cs, const struct ConfigDef *cdef, intptr_t value, struct Buffer *err);
 int reply_validator      (const struct ConfigSet *cs, const struct ConfigDef *cdef, intptr_t value, struct Buffer *err);
-int wrapheaders_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef, intptr_t value, struct Buffer *err);
 
 struct ConfigSet *    init_config            (size_t size);
 int                   mutt_command_complete  (char *buf, size_t buflen, int pos, int numtabs);
@@ -62,8 +62,7 @@ bool                  mutt_nm_tag_complete   (char *buf, size_t buflen, int numt
 void                  mutt_opts_free         (void);
 enum CommandResult    mutt_parse_rc_buffer   (struct Buffer *line, struct Buffer *token, struct Buffer *err);
 enum CommandResult    mutt_parse_rc_line     (const char *line, struct Buffer *err);
-int                   mutt_query_variables   (struct ListHead *queries);
+int                   mutt_query_variables   (struct ListHead *queries, bool show_docs);
 int                   mutt_var_value_complete(char *buf, size_t buflen, int pos);
-enum QuadOption       query_quadoption       (enum QuadOption opt, const char *prompt);
 
 #endif /* MUTT_INIT_H */

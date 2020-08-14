@@ -35,13 +35,13 @@
 #include "core/lib.h"
 #include "mutt.h"
 #include "score.h"
-#include "globals.h"
+#include "pattern/lib.h"
 #include "init.h"
 #include "keymap.h"
 #include "mutt_commands.h"
+#include "mutt_globals.h"
 #include "mutt_menu.h"
 #include "options.h"
-#include "pattern.h"
 #include "protos.h"
 #include "sort.h"
 
@@ -111,8 +111,7 @@ enum CommandResult mutt_parse_score(struct Buffer *buf, struct Buffer *s,
     mutt_buffer_printf(err, _("%s: too few arguments"), "score");
     return MUTT_CMD_WARNING;
   }
-  pattern = buf->data;
-  mutt_buffer_init(buf);
+  pattern = mutt_buffer_strdup(buf);
   mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
   if (MoreArgs(s))
   {
@@ -124,7 +123,7 @@ enum CommandResult mutt_parse_score(struct Buffer *buf, struct Buffer *s,
   /* look for an existing entry and update the value, else add it to the end
    * of the list */
   for (ptr = ScoreList, last = NULL; ptr; last = ptr, ptr = ptr->next)
-    if (mutt_str_strcmp(pattern, ptr->str) == 0)
+    if (mutt_str_equal(pattern, ptr->str))
       break;
   if (!ptr)
   {
@@ -211,7 +210,7 @@ enum CommandResult mutt_parse_unscore(struct Buffer *buf, struct Buffer *s,
   while (MoreArgs(s))
   {
     mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
-    if (mutt_str_strcmp("*", buf->data) == 0)
+    if (mutt_str_equal("*", buf->data))
     {
       for (tmp = ScoreList; tmp;)
       {
@@ -226,7 +225,7 @@ enum CommandResult mutt_parse_unscore(struct Buffer *buf, struct Buffer *s,
     {
       for (tmp = ScoreList; tmp; last = tmp, tmp = tmp->next)
       {
-        if (mutt_str_strcmp(buf->data, tmp->str) == 0)
+        if (mutt_str_equal(buf->data, tmp->str))
         {
           if (last)
             last->next = tmp->next;

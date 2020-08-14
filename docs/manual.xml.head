@@ -181,7 +181,7 @@ vim: ts=2 sw=2 sts=2 expandtab:
     <sect1 id="copyright">
       <title>Copyright</title>
       <para>
-        NeoMutt is Copyright © 1996-2019 Michael R. Elkins
+        NeoMutt is Copyright © 1996-2020 Michael R. Elkins
         <email>me@neomutt.org</email> and others.
       </para>
       <para>
@@ -281,8 +281,7 @@ vim: ts=2 sw=2 sts=2 expandtab:
       </para>
       <para>
         Besides an interactive mode, NeoMutt can also be used as a command-line
-        tool to send messages. It also supports
-        a <literal>mailx(1)</literal>-compatible interface, see
+        tool to send messages. See
         <xref linkend="tab-commandline-options" /> for a complete list of
         command-line options.
       </para>
@@ -694,7 +693,7 @@ set sidebar_divider_char = '│'          <emphasis role="comment"># Pretty line
               <link linkend="formatstrings-conditionals">conditionals</link>.
             </para>
             <para>
-              The default value is: <literal>%B%* %n</literal>
+              The default value is: <literal>%D%* %n</literal>
             </para>
             <para>
               A more detailed value is:
@@ -2476,6 +2475,7 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
                 Asks for an external Unix command and pipes the current or
                 tagged message(s) to it. The variables
                 <link linkend="pipe-decode">$pipe_decode</link>,
+                <link linkend="pipe-decode-weed">$pipe_decode_weed</link>,
                 <link linkend="pipe-split">$pipe_split</link>,
                 <link linkend="pipe-sep">$pipe_sep</link> and
                 <link linkend="wait-key">$wait_key</link> control the exact
@@ -2941,11 +2941,11 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
             <emphasis>&lt;id&gt;</emphasis> ]
           </para>
           <para>
-            <quote>E</quote> selects encryption, <quote>S</quote> selects
-            signing and <quote>S&lt;id&gt;</quote> selects signing with the
-            given key, setting <link linkend="pgp-sign-as">$pgp_sign_as</link>
-            for the duration of the message composition session. The selection
-            can later be changed in the compose menu.
+            <quote>E</quote> selects encryption, <quote>S</quote> selects signing
+            and <quote>S&lt;id&gt;</quote> selects signing with the given key,
+            setting <link linkend="pgp-sign-as">$pgp_sign_as</link> for the
+            duration of the message composition session. The selection can later
+            be changed in the compose menu.
           </para>
         </sect3>
 
@@ -4457,6 +4457,55 @@ bind index gg first-entry
 </screen>
 
       </sect2>
+
+      <sect2 id="stty">
+        <title>Terminal Keybindings</title>
+        <para>
+          Some key bindings are controlled by the terminal, and so by
+          default can't be bound inside NeoMutt.  These may include
+          <literal>^C</literal>, <literal>^\</literal>, <literal>^Q</literal>,
+          <literal>^S</literal>, <literal>^Z</literal>, and on BSD/Mac
+          <literal>^Y</literal>.  These terminal settings can be viewed and
+          changed using the <literal>stty</literal> program.
+        </para>
+        <para>
+          <quote><literal>stty -a</literal></quote> will list the bound
+          characters (not all of them affect NeoMutt), and what actions they
+          take when pressed.  For example,
+          you may see <quote><literal>intr = ^C</literal></quote> in its
+          output.  This means typing <literal>^C</literal> will send an
+          interrupt signal.  <quote><literal>quit = ^\</literal></quote>
+          means typing <literal>^\</literal> (commonly also
+          <literal>^4</literal>) will send a quit signal.
+        </para>
+        <para>
+          To unbind a key from an action, you invoke <quote>stty action
+          undef</quote>.  For example, <quote><literal>stty quit
+          undef</literal></quote> will unbind <literal>^\</literal> (and
+          <literal>^4</literal>) from sending the quit signal.  Once unbound
+          (e.g, by placing that line in your .bashrc, or in a NeoMutt wrapper
+          script/function) you can use the key sequence in your NeoMutt
+          bindings.
+        </para>
+      </sect2>
+    </sect1>
+
+    <sect1 id="cd">
+      <title>Changing the current working directory</title>
+      <para>Usage:</para>
+      <cmdsynopsis>
+        <command>cd</command>
+        <arg choice="plain">
+          <replaceable class="parameter">directory</replaceable>
+        </arg>
+      </cmdsynopsis>
+      <para>
+        The <literal>cd</literal> command changes NeoMutt's current working directory.
+        This affects commands and functions like <literal>source</literal>,
+        <literal>change-folder</literal>, and <literal>save-entry</literal> that use
+        relative paths. Using <literal>cd</literal> without directory changes to your
+        home directory.
+      </para>
     </sect1>
 
     <sect1 id="charset-hook">
@@ -8231,6 +8280,13 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
                 <entry></entry>
                 <entry>
                   cryptographically verified messages
+                </entry>
+              </row>
+              <row>
+                <entry>~w <emphasis>EXPR</emphasis></entry>
+                <entry></entry>
+                <entry>
+                  newsgroups matching EXPR
                 </entry>
               </row>
               <row>
@@ -13502,7 +13558,7 @@ startup-hook 'echo `action.sh ARGS`'
           </para>
           <para>
             This feature implements a hook that is called when NeoMutt shuts
-            down, but before closing the first mailbox. This is most likely to
+            down, but before closing the last mailbox. This is most likely to
             be useful to users of <link linkend="notmuch">notmuch</link>.
           </para>
         </sect3>
@@ -16376,7 +16432,7 @@ set sort_browser="reverse-size"
               <row>
                 <entry><literal>sidebar_format</literal></entry>
                 <entry>string</entry>
-                <entry><literal>%B%* %n</literal></entry>
+                <entry><literal>%D%* %n</literal></entry>
               </row>
               <row>
                 <entry><literal>sidebar_indent_string</literal></entry>
@@ -17361,7 +17417,7 @@ bind index D purge-message
           your muttrc.  The first time NeoMutt is run after that, you will be
           prompted to create
           <link linkend="autocrypt-dir">$autocrypt_dir</link>.  NeoMutt will then
-          automatically create an sqlite3 database and gpg keyring in that
+          automatically create an sqlite3 database and GPG keyring in that
           directory.  Note since these files should be considered private,
           NeoMutt will create this directory with mode
           <literal>700</literal>.  If you create the directory manually,
@@ -17634,7 +17690,7 @@ bind index D purge-message
           </listitem>
           <listitem>
             <para>
-              When NeoMutt creates an account from a gpg key, it exports the
+              When NeoMutt creates an account from a GPG key, it exports the
               public key, base64 encodes it, and stores that value in the
               sqlite3 database.  The value is then used in the Autocrypt
               header added to outgoing emails.  The ECC keys NeoMutt creates
@@ -17955,6 +18011,12 @@ neomutt -a image.jpg *.png -- address1 address2
               </entry>
             </row>
             <row>
+              <entry>-D -O</entry>
+              <entry>
+                Like <emphasis role="bold">-D</emphasis>, but show one-liner documentation
+              </entry>
+            </row>
+            <row>
               <entry>-D -S</entry>
               <entry>
                 Like <emphasis role="bold">-D</emphasis>, but hide the value of
@@ -18078,7 +18140,8 @@ neomutt -a image.jpg *.png -- address1 address2
               <entry>
                 Query a configuration <literal>variable</literal> and print its
                 value to stdout (after the config has been read and any
-                commands executed)
+                commands executed).  Adding <literal>-O</literal> will display
+                one-liner documentation.
               </entry>
             </row>
             <row>
@@ -18104,13 +18167,6 @@ neomutt -a image.jpg *.png -- address1 address2
               <entry>-vv</entry>
               <entry>
                 Print the NeoMutt license and copyright information and exit
-              </entry>
-            </row>
-            <row>
-              <entry>-x</entry>
-              <entry>
-                Simulate the <emphasis role="bold">mailx</emphasis>(1) send
-                mode
               </entry>
             </row>
             <row>
@@ -18478,6 +18534,14 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
             </arg>
             <arg choice="plain">
               <replaceable class="parameter">function</replaceable>
+            </arg>
+          </cmdsynopsis>
+        </listitem>
+        <listitem>
+          <cmdsynopsis>
+            <command><link linkend="cd">cd</link></command>
+            <arg choice="plain">
+              <replaceable class="parameter">directory</replaceable>
             </arg>
           </cmdsynopsis>
         </listitem>

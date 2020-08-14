@@ -35,10 +35,9 @@
 #include <wchar.h>
 #include "mutt/lib.h"
 #include "gui/lib.h"
-#include "mutt.h"
 #include "functions.h"
-#include "globals.h"
 #include "keymap.h"
+#include "mutt_globals.h"
 #include "muttlib.h"
 #include "opcodes.h"
 #include "pager.h"
@@ -75,60 +74,6 @@ static const struct Binding *help_lookup_function(int op, enum MenuType menu)
 }
 
 /**
- * mutt_make_help - Create one entry for the help bar
- * @param buf    Buffer for the result
- * @param buflen Length of buffer
- * @param txt    Text part, e.g. "delete"
- * @param menu   Current Menu, e.g. #MENU_PAGER
- * @param op     Operation, e.g. OP_DELETE
- *
- * This will return something like: "d:delete"
- */
-void mutt_make_help(char *buf, size_t buflen, const char *txt, enum MenuType menu, int op)
-{
-  char tmp[128];
-
-  if (km_expand_key(tmp, sizeof(tmp), km_find_func(menu, op)) ||
-      km_expand_key(tmp, sizeof(tmp), km_find_func(MENU_GENERIC, op)))
-  {
-    snprintf(buf, buflen, "%s:%s", tmp, txt);
-  }
-  else
-  {
-    buf[0] = '\0';
-  }
-}
-
-/**
- * mutt_compile_help - Create the text for the help menu
- * @param buf    Buffer for the result
- * @param buflen Length of buffer
- * @param menu   Current Menu, e.g. #MENU_PAGER
- * @param items  Map of functions to display in the help bar
- * @retval ptr Buffer containing result
- */
-char *mutt_compile_help(char *buf, size_t buflen, enum MenuType menu,
-                        const struct Mapping *items)
-{
-  char *pbuf = buf;
-
-  for (int i = 0; items[i].name && buflen > 2; i++)
-  {
-    if (i)
-    {
-      *pbuf++ = ' ';
-      *pbuf++ = ' ';
-      buflen -= 2;
-    }
-    mutt_make_help(pbuf, buflen, _(items[i].name), menu, items[i].value);
-    const size_t len = mutt_str_strlen(pbuf);
-    pbuf += len;
-    buflen -= len;
-  }
-  return buf;
-}
-
-/**
  * print_macro - Print a macro string to a file
  * @param[in]  fp       File to write to
  * @param[in]  maxwidth Maximum width in screen columns
@@ -142,7 +87,7 @@ static int print_macro(FILE *fp, int maxwidth, const char **macro)
   int n = maxwidth;
   wchar_t wc;
   size_t k;
-  size_t len = mutt_str_strlen(*macro);
+  size_t len = mutt_str_len(*macro);
   mbstate_t mbstate1, mbstate2;
 
   memset(&mbstate1, 0, sizeof(mbstate1));
@@ -213,7 +158,7 @@ static int get_wrapped_width(const char *t, size_t wid)
   wchar_t wc;
   size_t k;
   size_t m, n;
-  size_t len = mutt_str_strlen(t);
+  size_t len = mutt_str_len(t);
   const char *s = t;
   mbstate_t mbstate;
 
@@ -304,7 +249,7 @@ static void format_line(FILE *fp, int ismacro, const char *t1, const char *t2,
 
   if (ismacro > 0)
   {
-    if (!C_Pager || (mutt_str_strcmp(C_Pager, "builtin") == 0))
+    if (!C_Pager || mutt_str_equal(C_Pager, "builtin"))
       fputs("_\010", fp); // Ctrl-H (backspace)
     fputs("M ", fp);
     col += 2;
@@ -344,7 +289,7 @@ static void format_line(FILE *fp, int ismacro, const char *t1, const char *t2,
 
       if (*t3)
       {
-        if (mutt_str_strcmp(C_Pager, "builtin") == 0)
+        if (mutt_str_equal(C_Pager, "builtin"))
         {
           n += col - wraplen;
           if (C_Markers)
@@ -375,8 +320,7 @@ static void dump_menu(FILE *fp, enum MenuType menu, int wraplen)
   const struct Binding *b = NULL;
   char buf[128];
 
-  /* browse through the keymap table */
-  for (map = Keymaps[menu]; map; map = map->next)
+  STAILQ_FOREACH(map, &Keymaps[menu], entries)
   {
     if (map->op != OP_NULL)
     {
@@ -401,15 +345,18 @@ static void dump_menu(FILE *fp, enum MenuType menu, int wraplen)
 
 /**
  * is_bound - Does a function have a keybinding?
- * @param map Keymap to examine
- * @param op  Operation, e.g. OP_DELETE
+ * @param km_list Keymap to examine
+ * @param op      Operation, e.g. OP_DELETE
  * @retval true If a key is bound to that operation
  */
-static bool is_bound(struct Keymap *map, int op)
+static bool is_bound(struct KeymapList *km_list, int op)
 {
-  for (; map; map = map->next)
+  struct Keymap *map = NULL;
+  STAILQ_FOREACH(map, km_list, entries)
+  {
     if (map->op == op)
       return true;
+  }
   return false;
 }
 
@@ -417,16 +364,16 @@ static bool is_bound(struct Keymap *map, int op)
  * dump_unbound - Write out all the operations with no key bindings
  * @param fp      File to write to
  * @param funcs   All the bindings for the current menu
- * @param map     First key map to consider
+ * @param km_list First key map to consider
  * @param aux     Second key map to consider
  * @param wraplen Width to wrap to
  */
 static void dump_unbound(FILE *fp, const struct Binding *funcs,
-                         struct Keymap *map, struct Keymap *aux, int wraplen)
+                         struct KeymapList *km_list, struct KeymapList *aux, int wraplen)
 {
   for (int i = 0; funcs[i].name; i++)
   {
-    if (!is_bound(map, funcs[i].op) && (!aux || !is_bound(aux, funcs[i].op)))
+    if (!is_bound(km_list, funcs[i].op) && (!aux || !is_bound(aux, funcs[i].op)))
       format_line(fp, 0, funcs[i].name, "", _(OpStrings[funcs[i].op][1]), wraplen);
   }
 }
@@ -468,9 +415,9 @@ void mutt_help(enum MenuType menu, int wraplen)
 
     fprintf(fp, "\n%s\n\n", _("Unbound functions:"));
     if (funcs)
-      dump_unbound(fp, funcs, Keymaps[menu], NULL, wraplen);
+      dump_unbound(fp, funcs, &Keymaps[menu], NULL, wraplen);
     if (menu != MENU_PAGER)
-      dump_unbound(fp, OpGeneric, Keymaps[MENU_GENERIC], Keymaps[menu], wraplen);
+      dump_unbound(fp, OpGeneric, &Keymaps[MENU_GENERIC], &Keymaps[menu], wraplen);
 
     mutt_file_fclose(&fp);
 

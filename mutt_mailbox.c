@@ -35,7 +35,8 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt_mailbox.h"
-#include "globals.h"
+#include "mbox/lib.h"
+#include "mutt_globals.h"
 #include "mutt_menu.h"
 #include "muttlib.h"
 #include "mx.h"
@@ -103,7 +104,7 @@ static void mailbox_check(struct Mailbox *m_cur, struct Mailbox *m_check,
   if (!m_cur || mutt_buffer_is_empty(&m_cur->pathbuf) ||
       (((m_check->type == MUTT_IMAP) || (m_check->type == MUTT_NNTP) ||
         (m_check->type == MUTT_NOTMUCH) || (m_check->type == MUTT_POP)) ?
-           (mutt_str_strcmp(mailbox_path(m_check), mailbox_path(m_cur)) != 0) :
+           !mutt_str_equal(mailbox_path(m_check), mailbox_path(m_cur)) :
            ((sb.st_dev != ctx_sb->st_dev) || (sb.st_ino != ctx_sb->st_ino))))
   {
     switch (m_check->type)
@@ -252,8 +253,8 @@ bool mutt_mailbox_list(void)
     mutt_buffer_strcpy(path, mailbox_path(np->mailbox));
     mutt_buffer_pretty_mailbox(path);
 
-    if (!first && (MuttMessageWindow->state.cols >= 7) &&
-        ((pos + mutt_buffer_len(path)) >= ((size_t) MuttMessageWindow->state.cols - 7)))
+    if (!first && (MessageWindow->state.cols >= 7) &&
+        ((pos + mutt_buffer_len(path)) >= ((size_t) MessageWindow->state.cols - 7)))
     {
       break;
     }
@@ -344,7 +345,7 @@ struct Mailbox *mutt_mailbox_next(struct Mailbox *m_cur, struct Buffer *s)
           neomutt_mailboxlist_clear(&ml);
           return m_result;
         }
-        if (mutt_str_strcmp(mutt_b2s(s), mailbox_path(np->mailbox)) == 0)
+        if (mutt_str_equal(mutt_b2s(s), mailbox_path(np->mailbox)))
           found = true;
       }
       neomutt_mailboxlist_clear(&ml);
@@ -389,7 +390,7 @@ void mutt_mailbox_cleanup(const char *path, struct stat *st)
       ts[0].tv_nsec = UTIME_OMIT;
       ts[1].tv_sec = 0;
       ts[1].tv_nsec = UTIME_NOW;
-      utimensat(0, buf, ts, 0);
+      utimensat(AT_FDCWD, buf, ts, 0);
 #else
       ut.actime = st->st_atime;
       ut.modtime = mutt_date_epoch();
@@ -403,7 +404,7 @@ void mutt_mailbox_cleanup(const char *path, struct stat *st)
       ts[0].tv_nsec = UTIME_NOW;
       ts[1].tv_sec = 0;
       ts[1].tv_nsec = UTIME_NOW;
-      utimensat(0, buf, ts, 0);
+      utimensat(AT_FDCWD, buf, ts, 0);
 #else
       utime(path, NULL);
 #endif

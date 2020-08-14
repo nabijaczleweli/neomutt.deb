@@ -25,8 +25,8 @@
 #include "acutest.h"
 #include <limits.h>
 #include "mutt/lib.h"
-#include "common.h"
 #include "store/lib.h"
+#include "common.h"
 
 #define DB_NAME "tdb"
 
@@ -41,8 +41,8 @@ void test_store_tdb(void)
 
   TEST_CHECK(test_store_setup(path, sizeof(path)) == true);
 
-  mutt_str_strcat(path, sizeof(path), "/");
-  mutt_str_strcat(path, sizeof(path), DB_NAME);
+  mutt_str_cat(path, sizeof(path), "/");
+  mutt_str_cat(path, sizeof(path), DB_NAME);
 
   void *db = sops->open(path);
   TEST_CHECK(db != NULL);

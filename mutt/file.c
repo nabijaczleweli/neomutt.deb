@@ -895,7 +895,7 @@ int mutt_file_mkdir(const char *path, mode_t mode)
     return 0;
 
   /* Create a mutable copy */
-  mutt_str_strfcpy(tmp_path, path, sizeof(tmp_path));
+  mutt_str_copy(tmp_path, path, sizeof(tmp_path));
 
   for (char *p = tmp_path + 1; *p; p++)
   {
@@ -982,7 +982,14 @@ time_t mutt_file_decrease_mtime(const char *fp, struct stat *st)
     mtime -= 1;
     utim.actime = mtime;
     utim.modtime = mtime;
-    utime(fp, &utim);
+    int rc;
+    do
+    {
+      rc = utime(fp, &utim);
+    } while ((rc == -1) && (errno == EINTR));
+
+    if (rc == -1)
+      return -1;
   }
 
   return mtime;

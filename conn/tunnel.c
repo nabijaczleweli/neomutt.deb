@@ -37,9 +37,10 @@
 #include <unistd.h>
 #include "private.h"
 #include "mutt/lib.h"
-#include "conn_globals.h"
+#include "lib.h"
 #include "connaccount.h"
 #include "connection.h"
+#include "mutt_globals.h"
 
 /**
  * struct TunnelSockData - A network tunnel (pair of sockets)

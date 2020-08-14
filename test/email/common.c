@@ -23,9 +23,16 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include <stdbool.h>
 #include "common.h"
+
+bool C_Autocrypt;
 
 int mutt_autocrypt_process_autocrypt_header(struct Email *e, struct Envelope *env)
 {
   return -1;
+}
+
+void nm_edata_free(void **ptr)
+{
 }

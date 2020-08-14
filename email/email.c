@@ -34,6 +34,8 @@
 #include "envelope.h"
 #include "tags.h"
 
+void nm_edata_free(void **ptr);
+
 /**
  * email_free - Free an Email
  * @param[out] ptr Email to free
@@ -49,12 +51,14 @@ void email_free(struct Email **ptr)
     e->edata_free(&e->edata);
 
   mutt_env_free(&e->env);
-  mutt_body_free(&e->content);
-  FREE(&e->maildir_flags);
+  mutt_body_free(&e->body);
   FREE(&e->tree);
   FREE(&e->path);
 #ifdef MIXMASTER
   mutt_list_free(&e->chain);
+#endif
+#ifdef USE_NOTMUCH
+  nm_edata_free(&e->nm_edata);
 #endif
   driver_tags_free(&e->tags);
 
@@ -72,6 +76,7 @@ struct Email *email_new(void)
   STAILQ_INIT(&e->chain);
 #endif
   STAILQ_INIT(&e->tags);
+  e->visible = true;
   return e;
 }
 
@@ -86,11 +91,10 @@ bool email_cmp_strict(const struct Email *e1, const struct Email *e2)
   if (e1 && e2)
   {
     if ((e1->received != e2->received) || (e1->date_sent != e2->date_sent) ||
-        (e1->content->length != e2->content->length) ||
-        (e1->lines != e2->lines) || (e1->zhours != e2->zhours) ||
-        (e1->zminutes != e2->zminutes) || (e1->zoccident != e2->zoccident) ||
-        (e1->mime != e2->mime) || !mutt_env_cmp_strict(e1->env, e2->env) ||
-        !mutt_body_cmp_strict(e1->content, e2->content))
+        (e1->body->length != e2->body->length) || (e1->lines != e2->lines) ||
+        (e1->zhours != e2->zhours) || (e1->zminutes != e2->zminutes) ||
+        (e1->zoccident != e2->zoccident) || (e1->mime != e2->mime) ||
+        !mutt_env_cmp_strict(e1->env, e2->env) || !mutt_body_cmp_strict(e1->body, e2->body))
     {
       return false;
     }
@@ -109,9 +113,9 @@ bool email_cmp_strict(const struct Email *e1, const struct Email *e2)
  */
 size_t email_size(const struct Email *e)
 {
-  if (!e || !e->content)
+  if (!e || !e->body)
     return 0;
-  return e->content->length + e->content->offset - e->content->hdr_offset;
+  return e->body->length + e->body->offset - e->body->hdr_offset;
 }
 
 /**

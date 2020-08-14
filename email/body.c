@@ -86,8 +86,8 @@ void mutt_body_free(struct Body **ptr)
 
     if (b->email)
     {
-      /* Don't free twice (b->email->content = b->parts) */
-      b->email->content = NULL;
+      /* Don't free twice (b->email->body = b->parts) */
+      b->email->body = NULL;
       email_free(&b->email);
     }
 
@@ -111,11 +111,37 @@ bool mutt_body_cmp_strict(const struct Body *b1, const struct Body *b2)
     return false;
 
   if ((b1->type != b2->type) || (b1->encoding != b2->encoding) ||
-      (mutt_str_strcmp(b1->subtype, b2->subtype) != 0) ||
-      (mutt_str_strcmp(b1->description, b2->description) != 0) ||
+      !mutt_str_equal(b1->subtype, b2->subtype) ||
+      !mutt_str_equal(b1->description, b2->description) ||
       !mutt_param_cmp_strict(&b1->parameter, &b2->parameter) || (b1->length != b2->length))
   {
     return false;
   }
   return true;
+}
+
+/**
+ * mutt_body_get_charset - Get a body's character set
+ * @param b      Body to examine
+ * @param buf    Buffer for the result
+ * @param buflen Length of the buffer
+ * @retval ptr  Buffer containing character set
+ * @retval NULL On error, or if not a text type
+ */
+char *mutt_body_get_charset(struct Body *b, char *buf, size_t buflen)
+{
+  char *p = NULL;
+
+  if (b && (b->type != TYPE_TEXT))
+    return NULL;
+
+  if (b)
+    p = mutt_param_get(&b->parameter, "charset");
+
+  if (p)
+    mutt_ch_canonical_charset(buf, buflen, p);
+  else
+    mutt_str_copy(buf, "us-ascii", buflen);
+
+  return buf;
 }

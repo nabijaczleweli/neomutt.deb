@@ -76,22 +76,24 @@
  * Any changes to the database should bump the schema version by adding a call
  * in mutt_autocrypt_schema_update().
  *
- * | File                            | Description                  |
- * | :------------------------------ | :--------------------------- |
- * | autocrypt/autocrypt.c           | @subpage autocrypt_autocrypt |
- * | autocrypt/autocrypt_acct_menu.c | @subpage autocrypt_account   |
- * | autocrypt/autocrypt_db.c        | @subpage autocrypt_db        |
- * | autocrypt/autocrypt_gpgme.c     | @subpage autocrypt_gpgme     |
- * | autocrypt/autocrypt_schema.c    | @subpage autocrypt_schema    |
+ * | File                   | Description                  |
+ * | :--------------------- | :--------------------------- |
+ * | autocrypt/autocrypt.c  | @subpage autocrypt_autocrypt |
+ * | autocrypt/acct_menu.c  | @subpage autocrypt_account   |
+ * | autocrypt/config.c     | @subpage autocrypt_config    |
+ * | autocrypt/db.c         | @subpage autocrypt_db        |
+ * | autocrypt/gpgme.c      | @subpage autocrypt_gpgme     |
+ * | autocrypt/schema.c     | @subpage autocrypt_schema    |
  */
 
 #ifndef MUTT_AUTOCRYPT_LIB_H
 #define MUTT_AUTOCRYPT_LIB_H
 
-#include <sqlite3.h>
 #include <stdbool.h>
+#include <sqlite3.h>
 #include <stdio.h>
 
+struct ConfigSet;
 struct Email;
 struct Envelope;
 
@@ -158,7 +160,14 @@ enum AutocryptRec
   AUTOCRYPT_REC_YES,        ///< Autocrypt should be used
 };
 
-void              mutt_autocrypt_account_menu            (void);
+extern char *AutocryptSignAs;
+extern char *AutocryptDefaultKey;
+extern bool  C_Autocrypt;
+extern bool  C_AutocryptReply;
+extern char *C_AutocryptAcctFormat;
+extern char *C_AutocryptDir;
+
+void              dlg_select_autocrypt_account            (void);
 void              mutt_autocrypt_cleanup                 (void);
 int               mutt_autocrypt_generate_gossip_list    (struct Email *e);
 int               mutt_autocrypt_init                    (bool can_create);

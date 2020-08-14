@@ -35,7 +35,8 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "connaccount.h"
-#include "globals.h"
+#include "lib.h"
+#include "mutt_globals.h"
 #include "options.h"
 
 /**
@@ -51,9 +52,9 @@ int mutt_account_getuser(struct ConnAccount *cac)
   if (!cac->get_field)
     return -1;
 
-  const char *user = cac->get_field(MUTT_CA_USER);
+  const char *user = cac->get_field(MUTT_CA_USER, cac->gf_data);
   if (user)
-    mutt_str_strfcpy(cac->user, user, sizeof(cac->user));
+    mutt_str_copy(cac->user, user, sizeof(cac->user));
   else if (OptNoCurses)
     return -1;
   else
@@ -62,7 +63,7 @@ int mutt_account_getuser(struct ConnAccount *cac)
     char prompt[256];
     /* L10N: Example: Username at myhost.com */
     snprintf(prompt, sizeof(prompt), _("Username at %s: "), cac->host);
-    mutt_str_strfcpy(cac->user, Username, sizeof(cac->user));
+    mutt_str_copy(cac->user, Username, sizeof(cac->user));
     if (mutt_get_field_unbuffered(prompt, cac->user, sizeof(cac->user), MUTT_COMP_NO_FLAGS))
       return -1;
   }
@@ -84,7 +85,7 @@ int mutt_account_getlogin(struct ConnAccount *cac)
   if (!cac->get_field)
     return -1;
 
-  const char *login = cac->get_field(MUTT_CA_LOGIN);
+  const char *login = cac->get_field(MUTT_CA_LOGIN, cac->gf_data);
   if (!login && (mutt_account_getuser(cac) == 0))
   {
     login = cac->user;
@@ -96,7 +97,7 @@ int mutt_account_getlogin(struct ConnAccount *cac)
     return -1;
   }
 
-  mutt_str_strfcpy(cac->login, login, sizeof(cac->login));
+  mutt_str_copy(cac->login, login, sizeof(cac->login));
   cac->flags |= MUTT_ACCT_LOGIN;
   return 0;
 }
@@ -114,9 +115,9 @@ int mutt_account_getpass(struct ConnAccount *cac)
   if (!cac->get_field)
     return -1;
 
-  const char *pass = cac->get_field(MUTT_CA_PASS);
+  const char *pass = cac->get_field(MUTT_CA_PASS, cac->gf_data);
   if (pass)
-    mutt_str_strfcpy(cac->pass, pass, sizeof(cac->pass));
+    mutt_str_copy(cac->pass, pass, sizeof(cac->pass));
   else if (OptNoCurses)
     return -1;
   else
@@ -163,7 +164,7 @@ char *mutt_account_getoauthbearer(struct ConnAccount *cac)
   if (mutt_account_getlogin(cac))
     return NULL;
 
-  const char *cmd = cac->get_field(MUTT_CA_OAUTH_CMD);
+  const char *cmd = cac->get_field(MUTT_CA_OAUTH_CMD, cac->gf_data);
   if (!cmd)
   {
     /* L10N: You will see this error message if (1) you have "oauthbearer" in

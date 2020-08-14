@@ -38,7 +38,7 @@
 #include "email/lib.h"
 #include "gui/lib.h"
 #include "rfc3676.h"
-#include "globals.h"
+#include "mutt_globals.h"
 #include "muttlib.h"
 #include "state.h"
 
@@ -237,7 +237,7 @@ static void print_flowed_line(char *line, struct State *s, int ql,
   }
 
   width = quote_width(s, ql);
-  last = line[mutt_str_strlen(line) - 1];
+  last = line[mutt_str_len(line) - 1];
 
   mutt_debug(LL_DEBUG5, "f=f: line [%s], width = %ld, spaces = %lu\n", line,
              (long) width, fst->spaces);
@@ -325,7 +325,7 @@ int rfc3676_handler(struct Body *a, struct State *s)
   char *t = mutt_param_get(&a->parameter, "delsp");
   if (t)
   {
-    delsp = (mutt_str_strcasecmp(t, "yes") == 0);
+    delsp = mutt_istr_equal(t, "yes");
     t = NULL;
     fst.delsp = true;
   }
@@ -334,7 +334,7 @@ int rfc3676_handler(struct Body *a, struct State *s)
 
   while ((buf = mutt_file_read_line(buf, &sz, s->fp_in, NULL, 0)))
   {
-    const size_t buf_len = mutt_str_strlen(buf);
+    const size_t buf_len = mutt_str_len(buf);
     const unsigned int newql = get_quote_level(buf);
 
     /* end flowed paragraph (if we're within one) if quoting level
@@ -350,7 +350,7 @@ int rfc3676_handler(struct Body *a, struct State *s)
       buf_off++;
 
     /* test for signature separator */
-    const unsigned int sigsep = (mutt_str_strcmp(buf + buf_off, "-- ") == 0);
+    const unsigned int sigsep = mutt_str_equal(buf + buf_off, "-- ");
 
     /* a fixed line either has no trailing space or is the
      * signature separator */
@@ -380,19 +380,36 @@ int rfc3676_handler(struct Body *a, struct State *s)
 }
 
 /**
+ * mutt_rfc3676_is_format_flowed - Is the Email "format-flowed"?
+ * @param b Email Body to examine
+ * @retval bool true, if "format-flowed"
+ */
+bool mutt_rfc3676_is_format_flowed(struct Body *b)
+{
+  if (b && (b->type == TYPE_TEXT) && mutt_istr_equal("plain", b->subtype))
+  {
+    const char *format = mutt_param_get(&b->parameter, "format");
+    if (mutt_istr_equal("flowed", format))
+      return true;
+  }
+
+  return false;
+}
+
+/**
  * rfc3676_space_stuff - Perform required RFC3676 space stuffing
- * @param e       Email
- * @param unstuff If true, remove space stuffing
+ * @param filename Attachment file
+ * @param unstuff  If true, remove space stuffing
  *
  * Space stuffing means that we have to add leading spaces to
  * certain lines:
  *   - lines starting with a space
  *   - lines starting with 'From '
  *
- * Care is taken to preserve the e->content->filename, as
+ * Care is taken to preserve the e->body->filename, as
  * mutt -i -E can directly edit a passed in filename.
  */
-static void rfc3676_space_stuff(struct Email *e, bool unstuff)
+static void rfc3676_space_stuff(const char *filename, bool unstuff)
 {
   FILE *fp_out = NULL;
   char *buf = NULL;
@@ -400,7 +417,7 @@ static void rfc3676_space_stuff(struct Email *e, bool unstuff)
 
   struct Buffer *tmpfile = mutt_buffer_pool_get();
 
-  FILE *fp_in = mutt_file_fopen(e->content->filename, "r");
+  FILE *fp_in = mutt_file_fopen(filename, "r");
   if (!fp_in)
     goto bail;
 
@@ -420,7 +437,7 @@ static void rfc3676_space_stuff(struct Email *e, bool unstuff)
     }
     else
     {
-      if ((buf[0] == ' ') || mutt_str_startswith(buf, "From ", CASE_MATCH))
+      if ((buf[0] == ' ') || mutt_str_startswith(buf, "From "))
         fputc(' ', fp_out);
       fputs(buf, fp_out);
     }
@@ -429,21 +446,20 @@ static void rfc3676_space_stuff(struct Email *e, bool unstuff)
   FREE(&buf);
   mutt_file_fclose(&fp_in);
   mutt_file_fclose(&fp_out);
-  mutt_file_set_mtime(e->content->filename, mutt_b2s(tmpfile));
+  mutt_file_set_mtime(filename, mutt_b2s(tmpfile));
 
   fp_in = mutt_file_fopen(mutt_b2s(tmpfile), "r");
   if (!fp_in)
     goto bail;
 
-  if ((truncate(e->content->filename, 0) == -1) ||
-      ((fp_out = mutt_file_fopen(e->content->filename, "a")) == NULL))
+  if ((truncate(filename, 0) == -1) || ((fp_out = mutt_file_fopen(filename, "a")) == NULL))
   {
-    mutt_perror(e->content->filename);
+    mutt_perror(filename);
     goto bail;
   }
 
   mutt_file_copy_stream(fp_in, fp_out);
-  mutt_file_set_mtime(mutt_b2s(tmpfile), e->content->filename);
+  mutt_file_set_mtime(mutt_b2s(tmpfile), filename);
   unlink(mutt_b2s(tmpfile));
 
 bail:
@@ -462,16 +478,11 @@ bail:
  */
 void mutt_rfc3676_space_stuff(struct Email *e)
 {
-  if (!e || !e->content || !e->content->filename)
+  if (!e || !e->body || !e->body->filename)
     return;
 
-  if ((e->content->type == TYPE_TEXT) &&
-      (mutt_str_strcasecmp("plain", e->content->subtype) == 0))
-  {
-    const char *format = mutt_param_get(&e->content->parameter, "format");
-    if (mutt_str_strcasecmp("flowed", format) == 0)
-      rfc3676_space_stuff(e, false);
-  }
+  if (mutt_rfc3676_is_format_flowed(e->body))
+    rfc3676_space_stuff(e->body->filename, false);
 }
 
 /**
@@ -480,14 +491,51 @@ void mutt_rfc3676_space_stuff(struct Email *e)
  */
 void mutt_rfc3676_space_unstuff(struct Email *e)
 {
-  if (!e || !e->content || !e->content->filename)
+  if (!e || !e->body || !e->body->filename)
     return;
 
-  if ((e->content->type == TYPE_TEXT) &&
-      !mutt_str_strcasecmp("plain", e->content->subtype))
-  {
-    const char *format = mutt_param_get(&e->content->parameter, "format");
-    if (mutt_str_strcasecmp("flowed", format) == 0)
-      rfc3676_space_stuff(e, true);
-  }
+  if (mutt_rfc3676_is_format_flowed(e->body))
+    rfc3676_space_stuff(e->body->filename, true);
+}
+
+/**
+ * mutt_rfc3676_space_unstuff_attachment - Unstuff attachments
+ * @param b        Email Body (OPTIONAL)
+ * @param filename Attachment file
+ *
+ * This routine is used when saving/piping/viewing rfc3676 attachments.
+ *
+ * If b is provided, the function will verify that the Email is format-flowed.
+ * The filename will be unstuffed, not b->filename or b->fp.
+ */
+void mutt_rfc3676_space_unstuff_attachment(struct Body *b, const char *filename)
+{
+  if (!filename)
+    return;
+
+  if (b && !mutt_rfc3676_is_format_flowed(b))
+    return;
+
+  rfc3676_space_stuff(filename, true);
+}
+
+/**
+ * mutt_rfc3676_space_stuff_attachment - Stuff attachments
+ * @param b        Email Body (OPTIONAL)
+ * @param filename Attachment file
+ *
+ * This routine is used when filtering rfc3676 attachments.
+ *
+ * If b is provided, the function will verify that the Email is format-flowed.
+ * The filename will be unstuffed, not b->filename or b->fp.
+ */
+void mutt_rfc3676_space_stuff_attachment(struct Body *b, const char *filename)
+{
+  if (!filename)
+    return;
+
+  if (b && !mutt_rfc3676_is_format_flowed(b))
+    return;
+
+  rfc3676_space_stuff(filename, false);
 }

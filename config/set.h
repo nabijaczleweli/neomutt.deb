@@ -53,8 +53,6 @@ struct HashElem;
 
 #define IP (intptr_t)
 
-#define CS_REG_DISABLED (1 << 0)
-
 /**
  * struct ConfigDef - Config item definition
  *
@@ -78,6 +76,8 @@ struct ConfigDef
    * @retval #CSR_ERR_INVALID Failure
    */
   int (*validator)(const struct ConfigSet *cs, const struct ConfigDef *cdef, intptr_t value, struct Buffer *err);
+
+  const char *docs; ///< One-liner description
 };
 
 /**
