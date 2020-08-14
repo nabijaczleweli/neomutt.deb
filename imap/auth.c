@@ -34,9 +34,6 @@
 #include "mutt/lib.h"
 #include "auth.h"
 
-/* These Config Variables are only used in imap/auth.c */
-struct Slist *C_ImapAuthenticators; ///< Config: (imap) List of allowed IMAP authentication methods
-
 /**
  * struct ImapAuth - IMAP authentication multiplexor
  */
@@ -99,7 +96,7 @@ int imap_authenticate(struct ImapAccountData *adata)
       for (size_t i = 0; i < mutt_array_size(imap_authenticators); i++)
       {
         const struct ImapAuth *auth = &imap_authenticators[i];
-        if (!auth->method || (mutt_str_strcasecmp(auth->method, np->data) == 0))
+        if (!auth->method || mutt_istr_equal(auth->method, np->data))
         {
           rc = auth->authenticate(adata, np->data);
           if (rc == IMAP_AUTH_SUCCESS)

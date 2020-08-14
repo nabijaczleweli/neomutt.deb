@@ -26,9 +26,10 @@
  *
  * Mbox local mailbox type
  *
- * | File        | Description        |
- * | :---------- | :----------------- |
- * | mbox/mbox.c | @subpage mbox_mbox |
+ * | File          | Description          |
+ * | :------------ | :------------------- |
+ * | mbox/config.c | @subpage mbox_config |
+ * | mbox/mbox.c   | @subpage mbox_mbox   |
  */
 
 #ifndef MUTT_MBOX_LIB_H
@@ -40,6 +41,7 @@
 #include "core/lib.h"
 #include "mx.h"
 
+struct ConfigSet;
 struct stat;
 
 /**
@@ -53,6 +55,8 @@ struct MboxAccountData
   bool locked : 1; ///< is the mailbox locked?
   bool append : 1; ///< mailbox is opened in append mode
 };
+
+extern bool C_CheckMboxSize;
 
 extern struct MxOps MxMboxOps;
 extern struct MxOps MxMmdfOps;

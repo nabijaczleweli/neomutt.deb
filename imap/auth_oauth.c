@@ -52,7 +52,7 @@ enum ImapAuthRes imap_auth_oauth(struct ImapAccountData *adata, const char *meth
 
   /* For now, we only support SASL_IR also and over TLS */
   if (!(adata->capabilities & IMAP_CAP_AUTH_OAUTHBEARER) ||
-      !(adata->capabilities & IMAP_CAP_SASL_IR) || !adata->conn->ssf)
+      !(adata->capabilities & IMAP_CAP_SASL_IR) || (adata->conn->ssf == 0))
   {
     return IMAP_AUTH_UNAVAIL;
   }
@@ -61,14 +61,15 @@ enum ImapAuthRes imap_auth_oauth(struct ImapAccountData *adata, const char *meth
   if (!method && !C_ImapOauthRefreshCommand)
     return IMAP_AUTH_UNAVAIL;
 
-  mutt_message(_("Authenticating (OAUTHBEARER)..."));
+  // L10N: (%s) is the method name, e.g. Anonymous, CRAM-MD5, GSSAPI, SASL
+  mutt_message(_("Authenticating (%s)..."), "OAUTHBEARER");
 
   /* We get the access token from the imap_oauth_refresh_command */
   oauthbearer = mutt_account_getoauthbearer(&adata->conn->account);
   if (!oauthbearer)
     return IMAP_AUTH_FAILURE;
 
-  ilen = mutt_str_strlen(oauthbearer) + 30;
+  ilen = mutt_str_len(oauthbearer) + 30;
   ibuf = mutt_mem_malloc(ilen);
   snprintf(ibuf, ilen, "AUTHENTICATE OAUTHBEARER %s", oauthbearer);
 
@@ -93,6 +94,7 @@ enum ImapAuthRes imap_auth_oauth(struct ImapAccountData *adata, const char *meth
     return IMAP_AUTH_SUCCESS;
   }
 
-  mutt_error(_("OAUTHBEARER authentication failed"));
+  // L10N: %s is the method name, e.g. Anonymous, CRAM-MD5, GSSAPI, SASL
+  mutt_error(_("%s authentication failed"), "OAUTHBEARER");
   return IMAP_AUTH_FAILURE;
 }

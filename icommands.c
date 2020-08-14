@@ -93,7 +93,7 @@ enum CommandResult mutt_parse_icommand(/* const */ char *line, struct Buffer *er
   mutt_extract_token(token, &expn, MUTT_TOKEN_NO_FLAGS);
   for (size_t i = 0; ICommandList[i].name; i++)
   {
-    if (mutt_str_strcmp(token->data, ICommandList[i].name) != 0)
+    if (!mutt_str_equal(token->data, ICommandList[i].name))
       continue;
 
     rc = ICommandList[i].parse(token, &expn, ICommandList[i].data, err);
@@ -185,12 +185,10 @@ static void dump_macro(struct Buffer *buf, struct Mapping *menu, struct Keymap *
 static bool dump_menu(struct Buffer *buf, struct Mapping *menu, bool bind)
 {
   bool empty = true;
-  struct Keymap *map = NULL, *next = NULL;
+  struct Keymap *map = NULL;
 
-  for (map = Keymaps[menu->value]; map; map = next)
+  STAILQ_FOREACH(map, &Keymaps[menu->value], entries)
   {
-    next = map->next;
-
     if (bind && (map->op != OP_MACRO))
     {
       empty = false;
@@ -249,7 +247,7 @@ static enum CommandResult icmd_bind(struct Buffer *buf, struct Buffer *s,
   }
 
   struct Buffer filebuf = mutt_buffer_make(4096);
-  if (dump_all || (mutt_str_strcasecmp(buf->data, "all") == 0))
+  if (dump_all || mutt_istr_equal(buf->data, "all"))
   {
     dump_all_menus(&filebuf, bind);
   }
@@ -308,6 +306,12 @@ static enum CommandResult icmd_bind(struct Buffer *buf, struct Buffer *s,
 static enum CommandResult icmd_set(struct Buffer *buf, struct Buffer *s,
                                    intptr_t data, struct Buffer *err)
 {
+  const bool set = mutt_str_equal(s->data, "set");
+  const bool set_all = mutt_str_equal(s->data, "set all");
+
+  if (!set && !set_all)
+    return MUTT_CMD_ERROR;
+
   char tempfile[PATH_MAX];
   mutt_mktemp(tempfile, sizeof(tempfile));
 
@@ -319,28 +323,13 @@ static enum CommandResult icmd_set(struct Buffer *buf, struct Buffer *s,
     return MUTT_CMD_ERROR;
   }
 
-  if (mutt_str_strcmp(s->data, "set all") == 0)
-  {
+  if (set_all)
     dump_config(NeoMutt->sub->cs, CS_DUMP_NO_FLAGS, fp_out);
-  }
-  else if (mutt_str_strcmp(s->data, "set") == 0)
-  {
-    dump_config(NeoMutt->sub->cs, CS_DUMP_ONLY_CHANGED, fp_out);
-  }
   else
-  {
-    mutt_file_fclose(&fp_out);
-    return MUTT_CMD_ERROR;
-  }
+    dump_config(NeoMutt->sub->cs, CS_DUMP_ONLY_CHANGED, fp_out);
 
   mutt_file_fclose(&fp_out);
-
-  if (mutt_do_pager("set", tempfile, MUTT_PAGER_NO_FLAGS, NULL) == -1)
-  {
-    // L10N: '%s' is the file name of the temporary file
-    mutt_buffer_printf(err, _("Could not create temporary file %s"), tempfile);
-    return MUTT_CMD_ERROR;
-  }
+  mutt_do_pager("set", tempfile, MUTT_PAGER_NO_FLAGS, NULL);
 
   return MUTT_CMD_SUCCESS;
 }

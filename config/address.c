@@ -30,13 +30,6 @@
  * - Empty address is stored as `NULL`
  * - Validator is passed `struct Address *`, which may be `NULL`
  * - Data is freed when `ConfigSet` is freed
- *
- * ## Functions supported
- * - ConfigSetType::string_set()
- * - ConfigSetType::string_get()
- * - ConfigSetType::native_set()
- * - ConfigSetType::native_get()
- * - ConfigSetType::reset()
  */
 
 #include "config.h"
@@ -110,7 +103,7 @@ static int address_string_set(const struct ConfigSet *cs, void *var, struct Conf
       FREE(&cdef->initial);
 
     cdef->type |= DT_INITIAL_SET;
-    cdef->initial = IP mutt_str_strdup(value);
+    cdef->initial = IP mutt_str_dup(value);
   }
 
   return rc;
@@ -157,8 +150,8 @@ static struct Address *address_dup(struct Address *addr)
     return NULL; /* LCOV_EXCL_LINE */
 
   struct Address *a = mutt_mem_calloc(1, sizeof(*a));
-  a->personal = mutt_str_strdup(addr->personal);
-  a->mailbox = mutt_str_strdup(addr->mailbox);
+  a->personal = mutt_str_dup(addr->personal);
+  a->mailbox = mutt_str_dup(addr->mailbox);
   return a;
 }
 
@@ -264,8 +257,8 @@ void address_init(struct ConfigSet *cs)
 struct Address *address_new(const char *addr)
 {
   struct Address *a = mutt_mem_calloc(1, sizeof(*a));
-  // a->personal = mutt_str_strdup(addr);
-  a->mailbox = mutt_str_strdup(addr);
+  // a->personal = mutt_str_dup(addr);
+  a->mailbox = mutt_str_dup(addr);
   return a;
 }
 

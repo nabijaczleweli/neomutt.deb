@@ -30,6 +30,7 @@
 
 #include "config.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,9 +43,9 @@
 #include "lib.h"
 #include "alias.h"
 #include "format_flags.h"
-#include "globals.h"
 #include "gui.h"
 #include "keymap.h"
+#include "mutt_globals.h"
 #include "mutt_menu.h"
 #include "muttlib.h"
 #include "opcodes.h"
@@ -53,10 +54,16 @@
 char *C_AliasFormat; ///< Config: printf-like format string for the alias menu
 short C_SortAlias;   ///< Config: Sort method for the alias menu
 
+/// Help Bar for the Alias dialog (address book)
 static const struct Mapping AliasHelp[] = {
-  { N_("Exit"), OP_EXIT },      { N_("Del"), OP_DELETE },
-  { N_("Undel"), OP_UNDELETE }, { N_("Select"), OP_GENERIC_SELECT_ENTRY },
-  { N_("Help"), OP_HELP },      { NULL, 0 },
+  // clang-format off
+  { N_("Exit"),   OP_EXIT },
+  { N_("Del"),    OP_DELETE },
+  { N_("Undel"),  OP_UNDELETE },
+  { N_("Select"), OP_GENERIC_SELECT_ENTRY },
+  { N_("Help"),   OP_HELP },
+  { NULL, 0 },
+  // clang-format on
 };
 
 /**
@@ -168,42 +175,12 @@ static int alias_data_observer(struct NotifyCallback *nc)
 }
 
 /**
- * alias_config_observer - Listen for config changes affecting the Alias menu - Implements ::observer_t
- */
-static int alias_config_observer(struct NotifyCallback *nc)
-{
-  if (!nc->event_data || !nc->global_data)
-    return -1;
-  if (nc->event_type != NT_CONFIG)
-    return 0;
-
-  struct EventConfig *ec = nc->event_data;
-  struct MuttWindow *dlg = nc->global_data;
-
-  if (mutt_str_strcmp(ec->name, "status_on_top") != 0)
-    return 0;
-
-  struct MuttWindow *win_first = TAILQ_FIRST(&dlg->children);
-
-  if ((C_StatusOnTop && (win_first->type == WT_INDEX)) ||
-      (!C_StatusOnTop && (win_first->type != WT_INDEX)))
-  {
-    // Swap the Index and the IndexBar Windows
-    TAILQ_REMOVE(&dlg->children, win_first, entries);
-    TAILQ_INSERT_TAIL(&dlg->children, win_first, entries);
-  }
-
-  mutt_window_reflow(dlg);
-  return 0;
-}
-
-/**
- * alias_menu - Display a menu of Aliases
+ * dlg_select_alias - Display a menu of Aliases
  * @param buf    Buffer for expanded aliases
  * @param buflen Length of buffer
  * @param mdata  Menu data holding Aliases
  */
-static void alias_menu(char *buf, size_t buflen, struct AliasMenuData *mdata)
+static void dlg_select_alias(char *buf, size_t buflen, struct AliasMenuData *mdata)
 {
   if (mdata->num_views == 0)
   {
@@ -213,53 +190,20 @@ static void alias_menu(char *buf, size_t buflen, struct AliasMenuData *mdata)
 
   int t = -1;
   bool done = false;
-  char helpstr[1024];
-
-  struct MuttWindow *dlg =
-      mutt_window_new(WT_DLG_ALIAS, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-
-  struct MuttWindow *index =
-      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  index->notify = notify_new();
-  notify_set_parent(index->notify, dlg->notify);
-
-  struct MuttWindow *ibar =
-      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
-                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
-  ibar->notify = notify_new();
-  notify_set_parent(ibar->notify, dlg->notify);
-
-  if (C_StatusOnTop)
-  {
-    mutt_window_add_child(dlg, ibar);
-    mutt_window_add_child(dlg, index);
-  }
-  else
-  {
-    mutt_window_add_child(dlg, index);
-    mutt_window_add_child(dlg, ibar);
-  }
-
-  notify_observer_add(NeoMutt->notify, alias_config_observer, dlg);
-  dialog_push(dlg);
 
   struct Menu *menu = mutt_menu_new(MENU_ALIAS);
-
-  menu->pagelen = index->state.rows;
-  menu->win_index = index;
-  menu->win_ibar = ibar;
+  struct MuttWindow *dlg = dialog_create_simple_index(menu, WT_DLG_ALIAS);
+  dlg->help_data = AliasHelp;
+  dlg->help_menu = MENU_ALIAS;
 
   menu->make_entry = alias_make_entry;
   menu->tag = alias_tag;
   menu->title = _("Aliases");
-  menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_ALIAS, AliasHelp);
-  mutt_menu_push_current(menu);
-
   menu->max = mdata->num_views;
   menu->mdata = mdata;
-  notify_observer_add(NeoMutt->notify, alias_data_observer, menu);
+
+  notify_observer_add(NeoMutt->notify, NT_ALIAS, alias_data_observer, menu);
+  mutt_menu_push_current(menu);
 
   if ((C_SortAlias & SORT_MASK) != SORT_ORDER)
   {
@@ -324,9 +268,7 @@ static void alias_menu(char *buf, size_t buflen, struct AliasMenuData *mdata)
   notify_observer_remove(NeoMutt->notify, alias_data_observer, menu);
   mutt_menu_pop_current(menu);
   mutt_menu_free(&menu);
-  dialog_pop();
-  notify_observer_remove(NeoMutt->notify, alias_config_observer, dlg);
-  mutt_window_free(&dlg);
+  dialog_destroy_simple_index(&dlg);
 }
 
 /**
@@ -350,12 +292,12 @@ int alias_complete(char *buf, size_t buflen)
   {
     TAILQ_FOREACH(np, &Aliases, entries)
     {
-      if (np->name && (strncmp(np->name, buf, strlen(buf)) == 0))
+      if (np->name && mutt_strn_equal(np->name, buf, strlen(buf)))
       {
         if (bestname[0] == '\0') /* init */
         {
-          mutt_str_strfcpy(bestname, np->name,
-                           MIN(mutt_str_strlen(np->name) + 1, sizeof(bestname)));
+          mutt_str_copy(bestname, np->name,
+                        MIN(mutt_str_len(np->name) + 1, sizeof(bestname)));
         }
         else
         {
@@ -370,10 +312,10 @@ int alias_complete(char *buf, size_t buflen)
 
     if (bestname[0] != '\0')
     {
-      if (mutt_str_strcmp(bestname, buf) != 0)
+      if (!mutt_str_equal(bestname, buf))
       {
         /* we are adding something to the completion */
-        mutt_str_strfcpy(buf, bestname, mutt_str_strlen(bestname) + 1);
+        mutt_str_copy(buf, bestname, mutt_str_len(bestname) + 1);
         return 1;
       }
 
@@ -381,7 +323,7 @@ int alias_complete(char *buf, size_t buflen)
       mdata = menu_data_new();
       TAILQ_FOREACH(np, &Aliases, entries)
       {
-        if (np->name && (strncmp(np->name, buf, strlen(buf)) == 0))
+        if (np->name && mutt_strn_equal(np->name, buf, strlen(buf)))
         {
           menu_data_alias_add(mdata, np);
         }
@@ -400,9 +342,9 @@ int alias_complete(char *buf, size_t buflen)
   menu_data_sort(mdata);
 
   bestname[0] = '\0';
-  alias_menu(bestname, sizeof(bestname), mdata);
+  dlg_select_alias(bestname, sizeof(bestname), mdata);
   if (bestname[0] != '\0')
-    mutt_str_strfcpy(buf, bestname, buflen);
+    mutt_str_copy(buf, bestname, buflen);
 
   for (int i = 0; i < mdata->num_views; i++)
   {

@@ -43,8 +43,8 @@
 #include "gui/lib.h"
 #include "lib.h"
 #include "format_flags.h"
-#include "globals.h"
 #include "hook.h"
+#include "mutt_globals.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "protos.h"
@@ -192,9 +192,9 @@ static struct CompressInfo *set_compress_info(struct Mailbox *m)
   struct CompressInfo *ci = mutt_mem_calloc(1, sizeof(struct CompressInfo));
   m->compress_info = ci;
 
-  ci->cmd_open = mutt_str_strdup(o);
-  ci->cmd_close = mutt_str_strdup(c);
-  ci->cmd_append = mutt_str_strdup(a);
+  ci->cmd_open = mutt_str_dup(o);
+  ci->cmd_close = mutt_str_dup(c);
+  ci->cmd_append = mutt_str_dup(a);
 
   return ci;
 }
@@ -557,7 +557,6 @@ cmoa_fail1:
 /**
  * comp_mbox_check - Check for new mail - Implements MxOps::mbox_check()
  * @param m          Mailbox
- * @param index_hint Currently selected mailbox
  * @retval 0              Mailbox OK
  * @retval #MUTT_REOPENED The mailbox was closed and reopened
  * @retval -1             Mailbox bad
@@ -569,7 +568,7 @@ cmoa_fail1:
  *
  * The return codes are picked to match mx_mbox_check().
  */
-static int comp_mbox_check(struct Mailbox *m, int *index_hint)
+static int comp_mbox_check(struct Mailbox *m)
 {
   if (!m || !m->compress_info)
     return -1;
@@ -596,7 +595,7 @@ static int comp_mbox_check(struct Mailbox *m, int *index_hint)
   if (rc == 0)
     return -1;
 
-  return ops->mbox_check(m, index_hint);
+  return ops->mbox_check(m);
 }
 
 /**
@@ -605,7 +604,7 @@ static int comp_mbox_check(struct Mailbox *m, int *index_hint)
  * Changes in NeoMutt only affect the tmp file.
  * Calling comp_mbox_sync() will commit them to the compressed file.
  */
-static int comp_mbox_sync(struct Mailbox *m, int *index_hint)
+static int comp_mbox_sync(struct Mailbox *m)
 {
   if (!m || !m->compress_info)
     return -1;
@@ -628,11 +627,11 @@ static int comp_mbox_sync(struct Mailbox *m, int *index_hint)
     return -1;
   }
 
-  int rc = comp_mbox_check(m, index_hint);
+  int rc = comp_mbox_check(m);
   if (rc != 0)
     goto sync_cleanup;
 
-  rc = ops->mbox_sync(m, index_hint);
+  rc = ops->mbox_sync(m);
   if (rc != 0)
     goto sync_cleanup;
 

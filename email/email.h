@@ -28,8 +28,8 @@
 #include <stdbool.h>
 #include <time.h>
 #include "mutt/lib.h"
-#include "tags.h"
 #include "ncrypt/lib.h"
+#include "tags.h"
 
 /**
  * struct Email - The envelope/body of an email
@@ -71,8 +71,9 @@ struct Email
 
   // the following are used to support collapsing threads
   bool collapsed : 1;          ///< Is this message part of a collapsed thread?
-  bool limited   : 1;          ///< Is this message in a limited view?
+  bool visible   : 1;          ///< Is this message part of the view?
   size_t num_hidden;           ///< Number of hidden messages in this view
+                               ///< (only valid when collapsed is set)
 
   short recipient;             ///< User_is_recipient()'s return value, cached
 
@@ -87,7 +88,7 @@ struct Email
   int vnum;                    ///< Virtual message number
   int score;                   ///< Message score
   struct Envelope *env;        ///< Envelope information
-  struct Body *content;        ///< List of MIME parts
+  struct Body *body;        ///< List of MIME parts
   char *path;                  ///< Path of Email (for local Mailboxes)
 
   char *tree;                  ///< Character string to print thread tree
@@ -99,12 +100,20 @@ struct Email
   struct ListHead chain;       ///< Mixmaster chain
 #endif
 
+#ifdef USE_NOTMUCH
+  void *nm_edata;              ///< Notmuch private data
+#endif
+
   struct TagList tags;         ///< For drivers that support server tagging
 
-  char *maildir_flags;         ///< Unknown maildir flags
-
   void *edata;                    ///< Driver-specific data
-  void (*edata_free)(void **ptr); ///< Driver-specific data free function
+
+  /**
+   * edata_free - Free the private data attached to the Email
+   * @param ptr Private data to be freed
+   */
+  void (*edata_free)(void **ptr);
+
   struct Notify *notify;          ///< Notifications handler
 };
 

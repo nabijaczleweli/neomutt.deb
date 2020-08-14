@@ -40,16 +40,16 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
+#include "send/lib.h"
 #include "format_flags.h"
-#include "globals.h"
 #include "keymap.h"
+#include "mutt_globals.h"
 #include "mutt_menu.h"
 #include "muttlib.h"
 #include "opcodes.h"
 #include "options.h"
 #include "protos.h"
 #include "recvattach.h"
-#include "sendlib.h"
 #ifdef MIXMASTER
 #include "remailer.h"
 #endif
@@ -71,10 +71,16 @@ struct Coord
   short c; ///< column
 };
 
+/// Help Bar for the Mixmaster dialog
 static const struct Mapping RemailerHelp[] = {
-  { N_("Append"), OP_MIX_APPEND }, { N_("Insert"), OP_MIX_INSERT },
-  { N_("Delete"), OP_MIX_DELETE }, { N_("Abort"), OP_EXIT },
-  { N_("OK"), OP_MIX_USE },        { NULL, 0 },
+  // clang-format off
+  { N_("Append"), OP_MIX_APPEND },
+  { N_("Insert"), OP_MIX_INSERT },
+  { N_("Delete"), OP_MIX_DELETE },
+  { N_("Abort"),  OP_EXIT },
+  { N_("OK"),     OP_MIX_USE },
+  { NULL, 0 },
+  // clang-format on
 };
 
 /**
@@ -205,7 +211,7 @@ static struct Remailer **mix_type2_list(size_t *l)
   /* first, generate the "random" remailer */
 
   p = remailer_new();
-  p->shortname = mutt_str_strdup(_("<random>"));
+  p->shortname = mutt_str_dup(_("<random>"));
   mix_add_entry(&type2_list, p, &slots, &used);
 
   while (fgets(line, sizeof(line), fp))
@@ -216,13 +222,13 @@ static struct Remailer **mix_type2_list(size_t *l)
     if (!t)
       goto problem;
 
-    p->shortname = mutt_str_strdup(t);
+    p->shortname = mutt_str_dup(t);
 
     t = strtok(NULL, " \t\n");
     if (!t)
       goto problem;
 
-    p->addr = mutt_str_strdup(t);
+    p->addr = mutt_str_dup(t);
 
     t = strtok(NULL, " \t\n");
     if (!t)
@@ -232,7 +238,7 @@ static struct Remailer **mix_type2_list(size_t *l)
     if (!t)
       goto problem;
 
-    p->ver = mutt_str_strdup(t);
+    p->ver = mutt_str_dup(t);
 
     t = strtok(NULL, " \t\n");
     if (!t)
@@ -509,10 +515,6 @@ static const char *mix_format_str(char *buf, size_t buflen, size_t col, int cols
 
 /**
  * mix_make_entry - Format a menu item for the mixmaster chain list - Implements Menu::make_entry()
- * @param[out] buf    Buffer in which to save string
- * @param[in]  buflen Buffer length
- * @param[in]  menu   Menu containing aliases
- * @param[in]  num    Index into the menu
  */
 static void mix_make_entry(char *buf, size_t buflen, struct Menu *menu, int num)
 {
@@ -537,7 +539,7 @@ static int mix_chain_add(struct MixChain *chain, const char *s, struct Remailer 
   if (chain->cl >= MAX_MIXES)
     return -1;
 
-  if ((mutt_str_strcmp(s, "0") == 0) || (mutt_str_strcasecmp(s, "<random>") == 0))
+  if (mutt_str_equal(s, "0") || mutt_istr_equal(s, "<random>"))
   {
     chain->ch[chain->cl++] = 0;
     return 0;
@@ -545,7 +547,7 @@ static int mix_chain_add(struct MixChain *chain, const char *s, struct Remailer 
 
   for (i = 0; type2_list[i]; i++)
   {
-    if (mutt_str_strcasecmp(s, type2_list[i]->shortname) == 0)
+    if (mutt_istr_equal(s, type2_list[i]->shortname))
     {
       chain->ch[chain->cl++] = i;
       return 0;
@@ -561,44 +563,14 @@ static int mix_chain_add(struct MixChain *chain, const char *s, struct Remailer 
 }
 
 /**
- * mutt_dlg_mixmaster_observer - Listen for config changes affecting the Mixmaster menu - Implements ::observer_t
- */
-static int mutt_dlg_mixmaster_observer(struct NotifyCallback *nc)
-{
-  if (!nc->event_data || !nc->global_data)
-    return -1;
-  if (nc->event_type != NT_CONFIG)
-    return 0;
-
-  struct EventConfig *ec = nc->event_data;
-  struct MuttWindow *dlg = nc->global_data;
-
-  if (mutt_str_strcmp(ec->name, "status_on_top") != 0)
-    return 0;
-
-  struct MuttWindow *win_first = TAILQ_FIRST(&dlg->children);
-
-  if ((C_StatusOnTop && (win_first->type == WT_INDEX)) ||
-      (!C_StatusOnTop && (win_first->type != WT_INDEX)))
-  {
-    // Swap the Index and the IndexBar Windows
-    TAILQ_REMOVE(&dlg->children, win_first, entries);
-    TAILQ_INSERT_TAIL(&dlg->children, win_first, entries);
-  }
-
-  mutt_window_reflow(dlg);
-  return 0;
-}
-
-/**
- * mix_make_chain - Create a Mixmaster chain
+ * dlg_select_mixmaster_chain - Create a Mixmaster chain
  * @param win       Window
  * @param chainhead List of chain links
  * @param cols      Number of screen columns
  *
  * Ask the user to select Mixmaster hosts to create a chain.
  */
-void mix_make_chain(struct MuttWindow *win, struct ListHead *chainhead, int cols)
+void dlg_select_mixmaster_chain(struct MuttWindow *win, struct ListHead *chainhead, int cols)
 {
   int c_cur = 0, c_old = 0;
   bool c_redraw = true;
@@ -607,7 +579,6 @@ void mix_make_chain(struct MuttWindow *win, struct ListHead *chainhead, int cols
   struct Coord *coords = NULL;
 
   struct Menu *menu = NULL;
-  char helpstr[1024];
   bool loop = true;
 
   char *t = NULL;
@@ -637,48 +608,16 @@ void mix_make_chain(struct MuttWindow *win, struct ListHead *chainhead, int cols
 
   mix_screen_coordinates(win, type2_list, &coords, chain, 0);
 
-  struct MuttWindow *dlg =
-      mutt_window_new(WT_DLG_REMAILER, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  dlg->notify = notify_new();
-
-  struct MuttWindow *index =
-      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  index->notify = notify_new();
-  notify_set_parent(index->notify, dlg->notify);
-
-  struct MuttWindow *ibar =
-      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
-                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
-  ibar->notify = notify_new();
-  notify_set_parent(ibar->notify, dlg->notify);
-
-  if (C_StatusOnTop)
-  {
-    mutt_window_add_child(dlg, ibar);
-    mutt_window_add_child(dlg, index);
-  }
-  else
-  {
-    mutt_window_add_child(dlg, index);
-    mutt_window_add_child(dlg, ibar);
-  }
-
-  notify_observer_add(NeoMutt->notify, mutt_dlg_mixmaster_observer, dlg);
-  dialog_push(dlg);
-
   menu = mutt_menu_new(MENU_MIX);
-  menu->pagelen = index->state.rows;
-  menu->win_index = index;
-  menu->win_ibar = ibar;
+  struct MuttWindow *dlg = dialog_create_simple_index(menu, WT_DLG_REMAILER);
+  dlg->help_data = RemailerHelp;
+  dlg->help_menu = MENU_MIX;
 
   menu->max = ttll;
   menu->make_entry = mix_make_entry;
   menu->tag = NULL;
   menu->title = _("Select a remailer chain");
   menu->mdata = type2_list;
-  menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_MIX, RemailerHelp);
   menu->pagelen = MIX_VOFFSET - 1;
   mutt_menu_push_current(menu);
 
@@ -822,9 +761,7 @@ void mix_make_chain(struct MuttWindow *win, struct ListHead *chainhead, int cols
 
   mutt_menu_pop_current(menu);
   mutt_menu_free(&menu);
-  dialog_pop();
-  notify_observer_remove(NeoMutt->notify, mutt_dlg_mixmaster_observer, dlg);
-  mutt_window_free(&dlg);
+  dialog_destroy_simple_index(&dlg);
 
   /* construct the remailer list */
 
@@ -838,7 +775,7 @@ void mix_make_chain(struct MuttWindow *win, struct ListHead *chainhead, int cols
       else
         t = "*";
 
-      mutt_list_insert_tail(chainhead, mutt_str_strdup(t));
+      mutt_list_insert_tail(chainhead, mutt_str_dup(t));
     }
   }
 
@@ -881,7 +818,7 @@ int mix_check_message(struct Email *e)
 
   if (need_hostname)
   {
-    const char *fqdn = mutt_fqdn(true);
+    const char *fqdn = mutt_fqdn(true, NeoMutt->sub);
     if (!fqdn)
     {
       mutt_error(_("Please set the hostname variable to a proper value when "

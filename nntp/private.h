@@ -44,6 +44,26 @@ enum NntpStatus
   NNTP_BYE,      ///< Disconnected from server
 };
 
+extern unsigned char C_CatchupNewsgroup;
+extern unsigned char C_FollowupToPoster;
+extern char *        C_GroupIndexFormat;
+extern char *        C_NewsCacheDir;
+extern char *        C_NewsServer;
+extern char *        C_NewsgroupsCharset;
+extern char *        C_Newsrc;
+extern char *        C_NntpAuthenticators;
+extern short         C_NntpContext;
+extern bool          C_NntpListgroup;
+extern bool          C_NntpLoadDescription;
+extern char *        C_NntpPass;
+extern short         C_NntpPoll;
+extern char *        C_NntpUser;
+extern unsigned char C_PostModerated;
+extern bool          C_SaveUnsubscribed;
+extern bool          C_ShowNewNews;
+extern bool          C_ShowOnlyUnread;
+extern bool          C_XCommentTo;
+
 void                    nntp_acache_free       (struct NntpMboxData *mdata);
 int                     nntp_active_save_cache (struct NntpAccountData *adata);
 struct NntpAccountData *nntp_adata_new         (struct Connection *conn);
@@ -55,8 +75,8 @@ void                    nntp_delete_group_cache(struct NntpMboxData *mdata);
 struct NntpEmailData *  nntp_edata_get         (struct Email *e);
 void                    nntp_group_unread_stat (struct NntpMboxData *mdata);
 void                    nntp_hash_destructor_t (int type, void *obj, intptr_t data);
-header_cache_t *        nntp_hcache_open       (struct NntpMboxData *mdata);
-void                    nntp_hcache_update     (struct NntpMboxData *mdata, header_cache_t *hc);
+struct HeaderCache *        nntp_hcache_open       (struct NntpMboxData *mdata);
+void                    nntp_hcache_update     (struct NntpMboxData *mdata, struct HeaderCache *hc);
 void                    nntp_mdata_free        (void **ptr);
 void                    nntp_newsrc_gen_entries(struct Mailbox *m);
 int                     nntp_open_connection   (struct NntpAccountData *adata);

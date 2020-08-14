@@ -40,12 +40,15 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
+#include "ncrypt/lib.h"
+#include "pattern/lib.h"
+#include "send/lib.h"
 #include "context.h"
 #include "format_flags.h"
-#include "globals.h"
 #include "handler.h"
 #include "hdrline.h"
 #include "keymap.h"
+#include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "mutt_menu.h"
 #include "mutt_thread.h"
@@ -55,21 +58,21 @@
 #include "options.h"
 #include "protos.h"
 #include "rfc3676.h"
-#include "send.h"
-#include "sendlib.h"
 #include "sort.h"
 #include "state.h"
-#include "ncrypt/lib.h"
 #ifdef USE_IMAP
 #include "imap/lib.h"
 #endif
 
+/// Help Bar for the Postponed email selection dialog
 static const struct Mapping PostponeHelp[] = {
-  { N_("Exit"), OP_EXIT },
-  { N_("Del"), OP_DELETE },
+  // clang-format off
+  { N_("Exit"),  OP_EXIT },
+  { N_("Del"),   OP_DELETE },
   { N_("Undel"), OP_UNDELETE },
-  { N_("Help"), OP_HELP },
+  { N_("Help"),  OP_HELP },
   { NULL, 0 },
+  // clang-format on
 };
 
 static short PostCount = 0;
@@ -96,10 +99,10 @@ int mutt_num_postponed(struct Mailbox *m, bool force)
     force = true;
   }
 
-  if (mutt_str_strcmp(C_Postponed, OldPostponed) != 0)
+  if (!mutt_str_equal(C_Postponed, OldPostponed))
   {
     FREE(&OldPostponed);
-    OldPostponed = mutt_str_strdup(C_Postponed);
+    OldPostponed = mutt_str_dup(C_Postponed);
     LastModify = 0;
     force = true;
   }
@@ -108,7 +111,7 @@ int mutt_num_postponed(struct Mailbox *m, bool force)
     return 0;
 
   // We currently are in the C_Postponed mailbox so just pick the current status
-  if (m && (mutt_str_strcmp(C_Postponed, m->realpath) == 0))
+  if (m && mutt_str_equal(C_Postponed, m->realpath))
   {
     PostCount = m->msg_count - m->msg_deleted;
     return PostCount;
@@ -209,62 +212,30 @@ static void post_make_entry(char *buf, size_t buflen, struct Menu *menu, int lin
   struct Context *ctx = menu->mdata;
 
   mutt_make_string_flags(buf, buflen, menu->win_index->state.cols,
-                         NONULL(C_IndexFormat), ctx, ctx->mailbox,
+                         NONULL(C_IndexFormat), ctx->mailbox, ctx->msg_in_pager,
                          ctx->mailbox->emails[line], MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
- * select_msg - Create a Menu to select a postponed message
+ * dlg_select_postponed_email - Create a Menu to select a postponed message
  * @param ctx Context
  * @retval ptr Email
  */
-static struct Email *select_msg(struct Context *ctx)
+static struct Email *dlg_select_postponed_email(struct Context *ctx)
 {
   int r = -1;
   bool done = false;
-  char helpstr[1024];
-
-  struct MuttWindow *dlg =
-      mutt_window_new(WT_DLG_POSTPONE, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  dlg->notify = notify_new();
-
-  struct MuttWindow *index =
-      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  index->notify = notify_new();
-  notify_set_parent(index->notify, dlg->notify);
-
-  struct MuttWindow *ibar =
-      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
-                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
-  ibar->notify = notify_new();
-  notify_set_parent(ibar->notify, dlg->notify);
-
-  if (C_StatusOnTop)
-  {
-    mutt_window_add_child(dlg, ibar);
-    mutt_window_add_child(dlg, index);
-  }
-  else
-  {
-    mutt_window_add_child(dlg, index);
-    mutt_window_add_child(dlg, ibar);
-  }
-
-  dialog_push(dlg);
 
   struct Menu *menu = mutt_menu_new(MENU_POSTPONE);
-
-  menu->pagelen = index->state.rows;
-  menu->win_index = index;
-  menu->win_ibar = ibar;
+  struct MuttWindow *dlg = dialog_create_simple_index(menu, WT_DLG_POSTPONE);
+  dlg->help_data = PostponeHelp;
+  dlg->help_menu = MENU_POSTPONE;
 
   menu->make_entry = post_make_entry;
   menu->max = ctx->mailbox->msg_count;
   menu->title = _("Postponed Messages");
   menu->mdata = ctx;
-  menu->help = mutt_compile_help(helpstr, sizeof(helpstr), MENU_POSTPONE, PostponeHelp);
+  menu->custom_search = true;
   mutt_menu_push_current(menu);
 
   /* The postponed mailbox is setup to have sorting disabled, but the global
@@ -300,6 +271,18 @@ static struct Email *select_msg(struct Context *ctx)
           menu->redraw |= REDRAW_CURRENT;
         break;
 
+      // All search operations must exist to show the menu
+      case OP_SEARCH_REVERSE:
+      case OP_SEARCH_NEXT:
+      case OP_SEARCH_OPPOSITE:
+      case OP_SEARCH:
+        menu->current = mutt_search_command(ctx->mailbox, menu->current, op);
+        if (menu->current == -1)
+          menu->current = menu->oldcurrent;
+        else
+          menu->redraw = REDRAW_MOTION;
+        break;
+
       case OP_GENERIC_SELECT_ENTRY:
         r = menu->current;
         done = true;
@@ -314,8 +297,7 @@ static struct Email *select_msg(struct Context *ctx)
   C_Sort = orig_sort;
   mutt_menu_pop_current(menu);
   mutt_menu_free(&menu);
-  dialog_pop();
-  mutt_window_free(&dlg);
+  dialog_destroy_simple_index(&dlg);
 
   return (r > -1) ? ctx->mailbox->emails[r] : NULL;
 }
@@ -338,6 +320,7 @@ int mutt_get_postponed(struct Context *ctx, struct Email *hdr,
 
   struct Email *e = NULL;
   int rc = SEND_POSTPONED;
+  int rc_close;
   const char *p = NULL;
   struct Context *ctx_post = NULL;
 
@@ -365,7 +348,7 @@ int mutt_get_postponed(struct Context *ctx, struct Email *hdr,
    * segvs, but probably the flag needs to be reset after downloading
    * headers in imap_open_mailbox().
    */
-  mx_mbox_check(ctx_post->mailbox, NULL);
+  mx_mbox_check(ctx_post->mailbox);
 
   if (ctx_post->mailbox->msg_count == 0)
   {
@@ -373,7 +356,7 @@ int mutt_get_postponed(struct Context *ctx, struct Email *hdr,
     if (ctx_post == ctx)
       ctx_post = NULL;
     else
-      mx_mbox_close(&ctx_post);
+      mx_fastclose_mailbox(ctx_post->mailbox);
     mutt_error(_("No postponed messages"));
     return -1;
   }
@@ -383,12 +366,20 @@ int mutt_get_postponed(struct Context *ctx, struct Email *hdr,
     /* only one message, so just use that one. */
     e = ctx_post->mailbox->emails[0];
   }
-  else if (!(e = select_msg(ctx_post)))
+  else if (!(e = dlg_select_postponed_email(ctx_post)))
   {
     if (ctx_post == ctx)
       ctx_post = NULL;
     else
-      mx_mbox_close(&ctx_post);
+    {
+      /* messages might have been marked for deletion.
+       * try once more on reopen before giving up. */
+      rc_close = mx_mbox_close(&ctx_post);
+      if (rc_close > 0)
+        rc_close = mx_mbox_close(&ctx_post);
+      if (rc_close != 0)
+        mx_fastclose_mailbox(ctx_post->mailbox);
+    }
     return -1;
   }
 
@@ -415,13 +406,19 @@ int mutt_get_postponed(struct Context *ctx, struct Email *hdr,
   if (ctx_post == ctx)
     ctx_post = NULL;
   else
-    mx_mbox_close(&ctx_post);
+  {
+    rc_close = mx_mbox_close(&ctx_post);
+    if (rc_close > 0)
+      rc_close = mx_mbox_close(&ctx_post);
+    if (rc_close != 0)
+      mx_fastclose_mailbox(ctx_post->mailbox);
+  }
   C_Delete = opt_delete;
 
   struct ListNode *np = NULL, *tmp = NULL;
   STAILQ_FOREACH_SAFE(np, &hdr->env->userhdrs, entries, tmp)
   {
-    size_t plen = mutt_str_startswith(np->data, "X-Mutt-References:", CASE_IGNORE);
+    size_t plen = mutt_istr_startswith(np->data, "X-Mutt-References:");
     if (plen)
     {
       /* if a mailbox is currently open, look to see if the original message
@@ -434,7 +431,7 @@ int mutt_get_postponed(struct Context *ctx, struct Email *hdr,
       if (*cur)
         rc |= SEND_REPLY;
     }
-    else if ((plen = mutt_str_startswith(np->data, "X-Mutt-Fcc:", CASE_IGNORE)))
+    else if ((plen = mutt_istr_startswith(np->data, "X-Mutt-Fcc:")))
     {
       p = mutt_str_skip_email_wsp(np->data + plen);
       mutt_buffer_strcpy(fcc, p);
@@ -448,28 +445,28 @@ int mutt_get_postponed(struct Context *ctx, struct Email *hdr,
     }
     else if (((WithCrypto & APPLICATION_PGP) != 0) &&
              /* this is generated by old neomutt versions */
-             (mutt_str_startswith(np->data, "Pgp:", CASE_MATCH) ||
+             (mutt_str_startswith(np->data, "Pgp:") ||
               /* this is the new way */
-              mutt_str_startswith(np->data, "X-Mutt-PGP:", CASE_MATCH)))
+              mutt_str_startswith(np->data, "X-Mutt-PGP:")))
     {
       hdr->security = mutt_parse_crypt_hdr(strchr(np->data, ':') + 1, true, APPLICATION_PGP);
       hdr->security |= APPLICATION_PGP;
     }
     else if (((WithCrypto & APPLICATION_SMIME) != 0) &&
-             mutt_str_startswith(np->data, "X-Mutt-SMIME:", CASE_MATCH))
+             mutt_str_startswith(np->data, "X-Mutt-SMIME:"))
     {
       hdr->security = mutt_parse_crypt_hdr(strchr(np->data, ':') + 1, true, APPLICATION_SMIME);
       hdr->security |= APPLICATION_SMIME;
     }
 #ifdef MIXMASTER
-    else if (mutt_str_startswith(np->data, "X-Mutt-Mix:", CASE_MATCH))
+    else if (mutt_str_startswith(np->data, "X-Mutt-Mix:"))
     {
       mutt_list_free(&hdr->chain);
 
       char *t = strtok(np->data + 11, " \t\n");
       while (t)
       {
-        mutt_list_insert_tail(&hdr->chain, mutt_str_strdup(t));
+        mutt_list_insert_tail(&hdr->chain, mutt_str_dup(t));
         t = strtok(NULL, " \t\n");
       }
     }
@@ -680,8 +677,8 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
   e_new->offset = e->offset;
   /* enable header weeding for resent messages */
   e_new->env = mutt_rfc822_read_header(fp, e_new, true, resend);
-  e_new->content->length = e->content->length;
-  mutt_parse_part(fp, e_new->content);
+  e_new->body->length = e->body->length;
+  mutt_parse_part(fp, e_new->body);
 
   /* If resending a message, don't keep message_id or mail_followup_to.
    * Otherwise, we are resuming a postponed message, and want to keep those
@@ -695,20 +692,20 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
   /* decrypt pgp/mime encoded messages */
 
   if (((WithCrypto & APPLICATION_PGP) != 0) &&
-      (sec_type = mutt_is_multipart_encrypted(e_new->content)))
+      (sec_type = mutt_is_multipart_encrypted(e_new->body)))
   {
     e_new->security |= sec_type;
     if (!crypt_valid_passphrase(sec_type))
       goto bail;
 
     mutt_message(_("Decrypting message..."));
-    if ((crypt_pgp_decrypt_mime(fp, &fp_body, e_new->content, &b) == -1) || !b)
+    if ((crypt_pgp_decrypt_mime(fp, &fp_body, e_new->body, &b) == -1) || !b)
     {
       goto bail;
     }
 
-    mutt_body_free(&e_new->content);
-    e_new->content = b;
+    mutt_body_free(&e_new->body);
+    e_new->body = b;
 
     if (b->mime_headers)
     {
@@ -721,13 +718,12 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
 
   /* remove a potential multipart/signed layer - useful when
    * resending messages */
-  if ((WithCrypto != 0) && mutt_is_multipart_signed(e_new->content))
+  if ((WithCrypto != 0) && mutt_is_multipart_signed(e_new->body))
   {
     e_new->security |= SEC_SIGN;
     if (((WithCrypto & APPLICATION_PGP) != 0) &&
-        (mutt_str_strcasecmp(
-             mutt_param_get(&e_new->content->parameter, "protocol"),
-             "application/pgp-signature") == 0))
+        mutt_istr_equal(mutt_param_get(&e_new->body->parameter, "protocol"),
+                        "application/pgp-signature"))
     {
       e_new->security |= APPLICATION_PGP;
     }
@@ -735,14 +731,14 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
       e_new->security |= APPLICATION_SMIME;
 
     /* destroy the signature */
-    mutt_body_free(&e_new->content->parts->next);
-    e_new->content = mutt_remove_multipart(e_new->content);
+    mutt_body_free(&e_new->body->parts->next);
+    e_new->body = mutt_remove_multipart(e_new->body);
 
-    if (e_new->content->mime_headers)
+    if (e_new->body->mime_headers)
     {
       mutt_env_free(&protected_headers);
-      protected_headers = e_new->content->mime_headers;
-      e_new->content->mime_headers = NULL;
+      protected_headers = e_new->body->mime_headers;
+      e_new->body->mime_headers = NULL;
     }
   }
 
@@ -752,15 +748,15 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
    * XXX - we don't handle multipart/alternative in any
    * smart way when sending messages.  However, one may
    * consider this a feature.  */
-  if (e_new->content->type == TYPE_MULTIPART)
-    e_new->content = mutt_remove_multipart(e_new->content);
+  if (e_new->body->type == TYPE_MULTIPART)
+    e_new->body = mutt_remove_multipart(e_new->body);
 
   s.fp_in = fp_body;
 
   struct Buffer *file = mutt_buffer_pool_get();
 
   /* create temporary files for all attachments */
-  for (b = e_new->content; b; b = b->next)
+  for (b = e_new->body; b; b = b->next)
   {
     /* what follows is roughly a receive-mode variant of
      * mutt_get_tmp_attachment () from muttlib.c */
@@ -769,7 +765,7 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
     if (b->filename)
     {
       mutt_buffer_strcpy(file, b->filename);
-      b->d_filename = mutt_str_strdup(b->filename);
+      b->d_filename = mutt_str_dup(b->filename);
     }
     else
     {
@@ -783,8 +779,8 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
 
     if (b->type == TYPE_TEXT)
     {
-      if (mutt_str_strcasecmp("yes",
-                              mutt_param_get(&b->parameter, "x-mutt-noconv")) == 0)
+      if (mutt_istr_equal("yes",
+                          mutt_param_get(&b->parameter, "x-mutt-noconv")))
       {
         b->noconv = true;
       }
@@ -818,7 +814,7 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
         goto bail;
       }
 
-      if ((b == e_new->content) && !protected_headers)
+      if ((b == e_new->body) && !protected_headers)
       {
         protected_headers = b->mime_headers;
         b->mime_headers = NULL;
@@ -863,11 +859,11 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
 
     mutt_body_free(&b->parts);
     if (b->email)
-      b->email->content = NULL; /* avoid dangling pointer */
+      b->email->body = NULL; /* avoid dangling pointer */
   }
 
   if (C_CryptProtectedHeadersRead && protected_headers && protected_headers->subject &&
-      (mutt_str_strcmp(e_new->env->subject, protected_headers->subject) != 0))
+      !mutt_str_equal(e_new->env->subject, protected_headers->subject))
   {
     mutt_str_replace(&e_new->env->subject, protected_headers->subject);
   }
@@ -876,7 +872,7 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
   /* Fix encryption flags. */
 
   /* No inline if multipart. */
-  if ((WithCrypto != 0) && (e_new->security & SEC_INLINE) && e_new->content->next)
+  if ((WithCrypto != 0) && (e_new->security & SEC_INLINE) && e_new->body->next)
     e_new->security &= ~SEC_INLINE;
 
   /* Do we even support multiple mechanisms? */
@@ -907,7 +903,7 @@ bail:
   if (rc == -1)
   {
     mutt_env_free(&e_new->env);
-    mutt_body_free(&e_new->content);
+    mutt_body_free(&e_new->body);
   }
 
   return rc;

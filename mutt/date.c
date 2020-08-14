@@ -34,6 +34,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include "date.h"
+#include "buffer.h"
 #include "logging.h"
 #include "memory.h"
 #include "prex.h"
@@ -174,7 +175,7 @@ static const struct Tz *find_tz(const char *s, size_t len)
 {
   for (size_t i = 0; i < mutt_array_size(TimeZones); i++)
   {
-    if (mutt_str_strncasecmp(TimeZones[i].tzname, s, len) == 0)
+    if (mutt_istrn_equal(TimeZones[i].tzname, s, len))
       return &TimeZones[i];
   }
   return NULL;
@@ -368,14 +369,15 @@ void mutt_date_normalize_time(struct tm *tm)
 
 /**
  * mutt_date_make_date - Write a date in RFC822 format to a buffer
- * @param buf    Buffer for result
- * @param buflen Length of buffer
- * @retval ptr Buffer containing result
+ * @param buf Buffer for result
+ *
+ * Appends the date to the passed in buffer.
+ * The buffer is not cleared because some callers prepend quotes.
  */
-char *mutt_date_make_date(char *buf, size_t buflen)
+void mutt_date_make_date(struct Buffer *buf)
 {
   if (!buf)
-    return NULL;
+    return;
 
   time_t t = mutt_date_epoch();
   struct tm tm = mutt_date_localtime(t);
@@ -383,10 +385,10 @@ char *mutt_date_make_date(char *buf, size_t buflen)
 
   tz /= 60;
 
-  snprintf(buf, buflen, "Date: %s, %d %s %d %02d:%02d:%02d %+03d%02d\n",
-           Weekdays[tm.tm_wday], tm.tm_mday, Months[tm.tm_mon], tm.tm_year + 1900,
-           tm.tm_hour, tm.tm_min, tm.tm_sec, (int) tz / 60, (int) abs((int) tz) % 60);
-  return buf;
+  mutt_buffer_add_printf(buf, "%s, %d %s %d %02d:%02d:%02d %+03d%02d",
+                         Weekdays[tm.tm_wday], tm.tm_mday, Months[tm.tm_mon],
+                         tm.tm_year + 1900, tm.tm_hour, tm.tm_min, tm.tm_sec,
+                         (int) tz / 60, (int) abs((int) tz) % 60);
 }
 
 /**
@@ -401,7 +403,7 @@ char *mutt_date_make_date(char *buf, size_t buflen)
 int mutt_date_check_month(const char *s)
 {
   for (int i = 0; i < mutt_array_size(Months); i++)
-    if (mutt_str_startswith(s, Months[i], CASE_IGNORE))
+    if (mutt_istr_startswith(s, Months[i]))
       return i;
 
   return -1; /* error */

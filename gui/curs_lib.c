@@ -48,12 +48,14 @@
 #include "curs_lib.h"
 #include "browser.h"
 #include "color.h"
+#include "dialog.h"
 #include "enter_state.h"
-#include "globals.h"
 #include "keymap.h"
 #include "mutt_curses.h"
+#include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "mutt_menu.h"
+#include "mutt_thread.h"
 #include "mutt_window.h"
 #include "opcodes.h"
 #include "options.h"
@@ -271,12 +273,12 @@ int mutt_buffer_get_field_full(const char *field, struct Buffer *buf, Completion
       clearok(stdscr, true);
       mutt_menu_current_redraw();
     }
-    mutt_window_clearline(MuttMessageWindow, 0);
+    mutt_window_clearline(MessageWindow, 0);
     mutt_curses_set_color(MT_COLOR_PROMPT);
     mutt_window_addstr(field);
     mutt_curses_set_color(MT_COLOR_NORMAL);
     mutt_refresh();
-    mutt_window_get_coords(MuttMessageWindow, &col, NULL);
+    mutt_window_get_coords(MessageWindow, &col, NULL);
     ret = mutt_enter_string_full(buf->data, buf->dsize, col, complete, multiple,
                                  files, numfiles, es);
   } while (ret == 1);
@@ -286,7 +288,7 @@ int mutt_buffer_get_field_full(const char *field, struct Buffer *buf, Completion
   else
     mutt_buffer_reset(buf);
 
-  mutt_window_clearline(MuttMessageWindow, 0);
+  mutt_window_clearline(MessageWindow, 0);
   mutt_enter_state_free(&es);
 
   return ret;
@@ -313,7 +315,7 @@ int mutt_get_field_full(const char *field, char *buf, size_t buflen, CompletionF
 
   struct Buffer tmp = {
     .data = buf,
-    .dptr = buf + mutt_str_strlen(buf),
+    .dptr = buf + mutt_str_len(buf),
     .dsize = buflen,
   };
   return mutt_buffer_get_field_full(field, &tmp, complete, multiple, files, numfiles);
@@ -418,13 +420,13 @@ enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
         clearok(stdscr, true);
         mutt_menu_current_redraw();
       }
-      if (MuttMessageWindow->state.cols)
+      if (MessageWindow->state.cols)
       {
-        prompt_lines = (msg_wid + answer_string_wid + MuttMessageWindow->state.cols - 1) /
-                       MuttMessageWindow->state.cols;
+        prompt_lines = (msg_wid + answer_string_wid + MessageWindow->state.cols - 1) /
+                       MessageWindow->state.cols;
         prompt_lines = MAX(1, MIN(3, prompt_lines));
       }
-      if (prompt_lines != MuttMessageWindow->state.rows)
+      if (prompt_lines != MessageWindow->state.rows)
       {
         mutt_window_reflow_message_rows(prompt_lines);
         mutt_menu_current_redraw();
@@ -432,15 +434,15 @@ enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
 
       /* maxlen here is sort of arbitrary, so pick a reasonable upper bound */
       trunc_msg_len = mutt_wstr_trunc(
-          msg, (size_t) 4 * prompt_lines * MuttMessageWindow->state.cols,
-          ((size_t) prompt_lines * MuttMessageWindow->state.cols) - answer_string_wid, NULL);
+          msg, (size_t) 4 * prompt_lines * MessageWindow->state.cols,
+          ((size_t) prompt_lines * MessageWindow->state.cols) - answer_string_wid, NULL);
 
-      mutt_window_move(MuttMessageWindow, 0, 0);
+      mutt_window_move(MessageWindow, 0, 0);
       mutt_curses_set_color(MT_COLOR_PROMPT);
       mutt_window_addnstr(msg, trunc_msg_len);
       mutt_window_addstr(answer_string);
       mutt_curses_set_color(MT_COLOR_NORMAL);
-      mutt_window_clrtoeol(MuttMessageWindow);
+      mutt_window_clrtoeol(MessageWindow);
     }
 
     mutt_refresh();
@@ -482,9 +484,9 @@ enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
   if (reno_ok)
     regfree(&reno);
 
-  if (MuttMessageWindow->state.rows == 1)
+  if (MessageWindow->state.rows == 1)
   {
-    mutt_window_clearline(MuttMessageWindow, 0);
+    mutt_window_clearline(MessageWindow, 0);
   }
   else
   {
@@ -504,6 +506,29 @@ enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
     mutt_refresh();
   }
   return def;
+}
+
+/**
+ * query_quadoption - Ask the user a quad-question
+ * @param opt    Option to use
+ * @param prompt Message to show to the user
+ * @retval #QuadOption Result, e.g. #MUTT_NO
+ */
+enum QuadOption query_quadoption(enum QuadOption opt, const char *prompt)
+{
+  switch (opt)
+  {
+    case MUTT_YES:
+    case MUTT_NO:
+      return opt;
+
+    default:
+      opt = mutt_yesorno(prompt, (opt == MUTT_ASKYES) ? MUTT_YES : MUTT_NO);
+      mutt_window_clearline(MessageWindow, 0);
+      return opt;
+  }
+
+  /* not reached */
 }
 
 /**
@@ -535,9 +560,9 @@ void mutt_show_error(void)
     return;
 
   mutt_curses_set_color(OptMsgErr ? MT_COLOR_ERROR : MT_COLOR_MESSAGE);
-  mutt_window_mvaddstr(MuttMessageWindow, 0, 0, ErrorBuf);
+  mutt_window_mvaddstr(MessageWindow, 0, 0, ErrorBuf);
   mutt_curses_set_color(MT_COLOR_NORMAL);
-  mutt_window_clrtoeol(MuttMessageWindow);
+  mutt_window_clrtoeol(MessageWindow);
 }
 
 /**
@@ -634,7 +659,7 @@ static int mutt_dlg_dopager_observer(struct NotifyCallback *nc)
   struct EventConfig *ec = nc->event_data;
   struct MuttWindow *dlg = nc->global_data;
 
-  if (mutt_str_strcmp(ec->name, "status_on_top") != 0)
+  if (!mutt_str_equal(ec->name, "status_on_top"))
     return 0;
 
   struct MuttWindow *win_first = TAILQ_FIRST(&dlg->children);
@@ -672,19 +697,15 @@ int mutt_do_pager(const char *banner, const char *tempfile, PagerFlags do_color,
   struct MuttWindow *dlg =
       mutt_window_new(WT_DLG_DO_PAGER, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  dlg->notify = notify_new();
 
   struct MuttWindow *pager =
       mutt_window_new(WT_PAGER, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  pager->notify = notify_new();
-  notify_set_parent(pager->notify, dlg->notify);
+  dlg->focus = pager;
 
   struct MuttWindow *pbar =
       mutt_window_new(WT_PAGER_BAR, MUTT_WIN_ORIENT_VERTICAL,
                       MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
-  pbar->notify = notify_new();
-  notify_set_parent(pbar->notify, dlg->notify);
 
   if (C_StatusOnTop)
   {
@@ -697,7 +718,7 @@ int mutt_do_pager(const char *banner, const char *tempfile, PagerFlags do_color,
     mutt_window_add_child(dlg, pbar);
   }
 
-  notify_observer_add(NeoMutt->notify, mutt_dlg_dopager_observer, dlg);
+  notify_observer_add(NeoMutt->notify, NT_CONFIG, mutt_dlg_dopager_observer, dlg);
   dialog_push(dlg);
 
   info->win_ibar = NULL;
@@ -707,7 +728,7 @@ int mutt_do_pager(const char *banner, const char *tempfile, PagerFlags do_color,
 
   int rc;
 
-  if (!C_Pager || (mutt_str_strcmp(C_Pager, "builtin") == 0))
+  if (!C_Pager || mutt_str_equal(C_Pager, "builtin"))
     rc = mutt_pager(banner, tempfile, do_color, info);
   else
   {
@@ -751,12 +772,12 @@ int mutt_buffer_enter_fname_full(const char *prompt, struct Buffer *fname,
   struct KeyEvent ch;
 
   mutt_curses_set_color(MT_COLOR_PROMPT);
-  mutt_window_mvaddstr(MuttMessageWindow, 0, 0, prompt);
+  mutt_window_mvaddstr(MessageWindow, 0, 0, prompt);
   mutt_window_addstr(_(" ('?' for list): "));
   mutt_curses_set_color(MT_COLOR_NORMAL);
   if (!mutt_buffer_is_empty(fname))
     mutt_window_addstr(mutt_b2s(fname));
-  mutt_window_clrtoeol(MuttMessageWindow);
+  mutt_window_clrtoeol(MessageWindow);
   mutt_refresh();
 
   do
@@ -765,7 +786,7 @@ int mutt_buffer_enter_fname_full(const char *prompt, struct Buffer *fname,
   } while (ch.ch == -2);
   if (ch.ch < 0)
   {
-    mutt_window_clearline(MuttMessageWindow, 0);
+    mutt_window_clearline(MessageWindow, 0);
     return -1;
   }
   else if (ch.ch == '?')
@@ -783,7 +804,7 @@ int mutt_buffer_enter_fname_full(const char *prompt, struct Buffer *fname,
   }
   else
   {
-    char *pc = mutt_mem_malloc(mutt_str_strlen(prompt) + 3);
+    char *pc = mutt_mem_malloc(mutt_str_len(prompt) + 3);
 
     sprintf(pc, "%s: ", prompt);
     if (ch.op == OP_NULL)
@@ -831,7 +852,7 @@ void mutt_unget_event(int ch, int op)
  */
 void mutt_unget_string(const char *s)
 {
-  const char *p = s + mutt_str_strlen(s) - 1;
+  const char *p = s + mutt_str_len(s) - 1;
 
   while (p >= s)
   {
@@ -931,25 +952,25 @@ int mutt_multi_choice(const char *prompt, const char *letters)
         clearok(stdscr, true);
         mutt_menu_current_redraw();
       }
-      if (MuttMessageWindow->state.cols)
+      if (MessageWindow->state.cols)
       {
         int width = mutt_strwidth(prompt) + 2; // + '?' + space
         /* If we're going to colour the options,
          * make an assumption about the modified prompt size. */
         if (opt_cols)
-          width -= 2 * mutt_str_strlen(letters);
+          width -= 2 * mutt_str_len(letters);
 
-        prompt_lines = (width + MuttMessageWindow->state.cols - 1) /
-                       MuttMessageWindow->state.cols;
+        prompt_lines =
+            (width + MessageWindow->state.cols - 1) / MessageWindow->state.cols;
         prompt_lines = MAX(1, MIN(3, prompt_lines));
       }
-      if (prompt_lines != MuttMessageWindow->state.rows)
+      if (prompt_lines != MessageWindow->state.rows)
       {
         mutt_window_reflow_message_rows(prompt_lines);
         mutt_menu_current_redraw();
       }
 
-      mutt_window_move(MuttMessageWindow, 0, 0);
+      mutt_window_move(MessageWindow, 0, 0);
 
       if ((Colors->defs[MT_COLOR_OPTIONS] != 0) &&
           (Colors->defs[MT_COLOR_OPTIONS] != Colors->defs[MT_COLOR_PROMPT]))
@@ -983,7 +1004,7 @@ int mutt_multi_choice(const char *prompt, const char *letters)
       mutt_curses_set_color(MT_COLOR_NORMAL);
 
       mutt_window_addch(' ');
-      mutt_window_clrtoeol(MuttMessageWindow);
+      mutt_window_clrtoeol(MessageWindow);
     }
 
     mutt_refresh();
@@ -1010,15 +1031,15 @@ int mutt_multi_choice(const char *prompt, const char *letters)
       else if ((ch.ch <= '9') && (ch.ch > '0'))
       {
         choice = ch.ch - '0';
-        if (choice <= mutt_str_strlen(letters))
+        if (choice <= mutt_str_len(letters))
           break;
       }
     }
     mutt_beep(false);
   }
-  if (MuttMessageWindow->state.rows == 1)
+  if (MessageWindow->state.rows == 1)
   {
-    mutt_window_clearline(MuttMessageWindow, 0);
+    mutt_window_clearline(MessageWindow, 0);
   }
   else
   {
@@ -1210,7 +1231,7 @@ void mutt_format_s_x(char *buf, size_t buflen, const char *prec, const char *s, 
   }
 
   mutt_simple_format(buf, buflen, min_width, max_width, justify, ' ', s,
-                     mutt_str_strlen(s), arboreal);
+                     mutt_str_len(s), arboreal);
 }
 
 /**
@@ -1246,7 +1267,7 @@ void mutt_paddstr(int n, const char *s)
 {
   wchar_t wc;
   size_t k;
-  size_t len = mutt_str_strlen(s);
+  size_t len = mutt_str_len(s);
   mbstate_t mbstate;
 
   memset(&mbstate, 0, sizeof(mbstate));
@@ -1295,7 +1316,7 @@ size_t mutt_wstr_trunc(const char *src, size_t maxlen, size_t maxwid, size_t *wi
   if (!src)
     goto out;
 
-  n = mutt_str_strlen(src);
+  n = mutt_str_len(src);
 
   memset(&mbstate, 0, sizeof(mbstate));
   for (w = 0; n && (cl = mbrtowc(&wc, src, n, &mbstate)); src += cl, n -= cl)
@@ -1339,7 +1360,7 @@ int mutt_strwidth(const char *s)
 {
   if (!s)
     return 0;
-  return mutt_strnwidth(s, mutt_str_strlen(s));
+  return mutt_strnwidth(s, mutt_str_len(s));
 }
 
 /**

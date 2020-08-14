@@ -36,8 +36,6 @@ struct NotifyCallback;
 /* These Config Variables are only used in index.c */
 extern bool  C_ChangeFolderNext;
 extern bool  C_CollapseAll;
-extern bool  C_CollapseFlagged;
-extern bool  C_CollapseUnread;
 extern char *C_MarkMacroPrefix;
 extern bool  C_PgpAutoDecode;
 extern bool  C_UncollapseJump;
@@ -48,7 +46,7 @@ void index_make_entry(char *buf, size_t buflen, struct Menu *menu, int line);
 void mutt_draw_statusline(int cols, const char *buf, size_t buflen);
 int  mutt_index_menu(struct MuttWindow *dlg);
 void mutt_set_header_color(struct Mailbox *m, struct Email *e);
-void update_index(struct Menu *menu, struct Context *ctx, int check, int oldcount, int index_hint);
+void mutt_update_index(struct Menu *menu, struct Context *ctx, int check, int oldcount, const struct Email *curr_email);
 struct MuttWindow *index_pager_init(void);
 void index_pager_shutdown(struct MuttWindow *dlg);
 int mutt_dlgindex_observer(struct NotifyCallback *nc);

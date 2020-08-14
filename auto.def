@@ -16,7 +16,7 @@ use system cc cc-lib mutt-gettext mutt-iconv pkg-config
 ###############################################################################
 # Names and versions
 define PACKAGE          "neomutt"
-define PACKAGE_VERSION  "20200626"
+define PACKAGE_VERSION  "20200814"
 define BUGS_ADDRESS     "neomutt-devel@neomutt.org"
 
 # Subdirectories that contain additional Makefile.autosetup files
@@ -319,6 +319,7 @@ if {1} {
     ioctl.h \
     sys/ioctl.h \
     syscall.h \
+    sys/random.h \
     sys/syscall.h \
     sysexits.h
 
@@ -327,6 +328,7 @@ if {1} {
     fgetc_unlocked \
     futimens \
     getaddrinfo \
+    getrandom \
     getsid \
     iswblank \
     mkdtemp \
@@ -357,7 +359,6 @@ define USE_NNTP
 define USE_POP
 define USE_SIDEBAR
 define USE_SMTP
-define USE_SOCKET
 define SUN_ATTACHMENT
 define TEST_CASE_MAXSIZE 1024
 ###############################################################################
@@ -585,12 +586,12 @@ if {[get-define want-testing]} {
 if {[get-define want-lua]} {
 
   if {[get-define want-pkgconf]} {
-    if {![pkgconf false lua] && ![pkgconf false lua-5.3] && ![pkgconf false lua-5.2]} {
+    if {![pkgconf false lua] && ![pkgconf false lua-5.4] && ![pkgconf false lua-5.3] && ![pkgconf false lua-5.2]} {
       user-error "Unable to find LUA"
     }
     define USE_LUA
   } else {
-    set lua_versions { 5.3 5.2 } ;# Will be checked in order
+    set lua_versions { 5.4 5.3 5.2 } ;# Will be checked in order
 
     apply {{lua_prefix lua_versions} {
       foreach ver $lua_versions {

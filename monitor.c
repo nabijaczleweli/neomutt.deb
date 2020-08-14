@@ -42,7 +42,7 @@
 #include "gui/lib.h"
 #include "monitor.h"
 #include "context.h"
-#include "globals.h"
+#include "mutt_globals.h"
 #ifndef HAVE_INOTIFY_INIT1
 #include <fcntl.h>
 #endif
@@ -211,7 +211,7 @@ static struct Monitor *monitor_new(struct MonitorInfo *info, int descriptor)
   monitor->desc = descriptor;
   monitor->next = Monitor;
   if (info->type == MUTT_MH)
-    monitor->mh_backup_path = mutt_str_strdup(info->path);
+    monitor->mh_backup_path = mutt_str_dup(info->path);
 
   Monitor = monitor;
 

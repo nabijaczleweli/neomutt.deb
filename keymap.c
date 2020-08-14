@@ -37,14 +37,14 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "keymap.h"
+#include "ncrypt/lib.h"
 #include "functions.h"
-#include "globals.h"
 #include "init.h"
 #include "mutt_commands.h"
+#include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "opcodes.h"
 #include "options.h"
-#include "ncrypt/lib.h"
 #ifndef USE_SLANG_CURSES
 #include <strings.h>
 #endif
@@ -146,7 +146,7 @@ static struct Mapping KeyNames[] = {
 int LastKey;        ///< contains the last key the user pressed
 keycode_t AbortKey; ///< code of key to abort prompts, normally Ctrl-G
 
-struct Keymap *Keymaps[MENU_MAX];
+struct KeymapList Keymaps[MENU_MAX];
 
 #ifdef NCURSES_VERSION
 /**
@@ -196,6 +196,35 @@ static const struct Extkey ExtKeys[] = {
 #endif
 
 /**
+ * mutt_keymap_free - Free a Keymap
+ * @param km Keymap to free
+ */
+static void mutt_keymap_free(struct Keymap **km)
+{
+  if (!km || !*km)
+    return;
+
+  FREE(&(*km)->macro);
+  FREE(&(*km)->desc);
+  FREE(&(*km)->keys);
+  FREE(km);
+}
+
+/**
+ * mutt_keymaplist_free - Free a List of Keymaps
+ * @param km_list List of Keymaps to free
+ */
+static void mutt_keymaplist_free(struct KeymapList *km_list)
+{
+  struct Keymap *np = NULL, *tmp = NULL;
+  STAILQ_FOREACH_SAFE(np, km_list, entries, tmp)
+  {
+    STAILQ_REMOVE(km_list, np, Keymap, entries);
+    mutt_keymap_free(&np);
+  }
+}
+
+/**
  * alloc_keys - Allocate space for a sequence of keys
  * @param len  Number of keys
  * @param keys Array of keys
@@ -205,7 +234,7 @@ static struct Keymap *alloc_keys(size_t len, keycode_t *keys)
 {
   struct Keymap *p = mutt_mem_calloc(1, sizeof(struct Keymap));
   p->len = len;
-  p->keys = mutt_mem_malloc(len * sizeof(keycode_t));
+  p->keys = mutt_mem_calloc(len, sizeof(keycode_t));
   memcpy(p->keys, keys, len * sizeof(keycode_t));
   return p;
 }
@@ -275,7 +304,7 @@ static size_t parsekeys(const char *str, keycode_t *d, size_t max)
   char c;
   char *t = NULL;
 
-  mutt_str_strfcpy(buf, str, sizeof(buf));
+  mutt_str_copy(buf, str, sizeof(buf));
   char *s = buf;
 
   while (*s && len)
@@ -320,6 +349,28 @@ static size_t parsekeys(const char *str, keycode_t *d, size_t max)
 }
 
 /**
+ * km_compare_keys - Compare two keymaps' keyscodes and return the bigger one
+ * @param k1    first keymap to compare
+ * @param k2    second keymap to compare
+ * @param pos   position where the two keycodes differ
+ * @retval ptr Keymap with a bigger ASCII keycode
+ */
+static struct Keymap *km_compare_keys(struct Keymap *k1, struct Keymap *k2, size_t *pos)
+{
+  while (*pos < k1->len && *pos < k2->len)
+  {
+    if (k1->keys[*pos] < k2->keys[*pos])
+      return k2;
+    else if (k1->keys[*pos] > k2->keys[*pos])
+      return k1;
+    else
+      *pos = *pos + 1;
+  }
+
+  return NULL;
+}
+
+/**
  * km_bind_err - Set up a key binding
  * @param s     Key string
  * @param menu  Menu id, e.g. #MENU_EDITOR
@@ -336,7 +387,7 @@ static enum CommandResult km_bind_err(const char *s, enum MenuType menu, int op,
                                       char *macro, char *desc, struct Buffer *err)
 {
   enum CommandResult rc = MUTT_CMD_SUCCESS;
-  struct Keymap *last = NULL, *next = NULL;
+  struct Keymap *last = NULL, *np = NULL, *compare = NULL;
   keycode_t buf[MAX_SEQ];
   size_t pos = 0, lastpos = 0;
 
@@ -344,85 +395,72 @@ static enum CommandResult km_bind_err(const char *s, enum MenuType menu, int op,
 
   struct Keymap *map = alloc_keys(len, buf);
   map->op = op;
-  map->macro = mutt_str_strdup(macro);
-  map->desc = mutt_str_strdup(desc);
+  map->macro = mutt_str_dup(macro);
+  map->desc = mutt_str_dup(desc);
 
-  struct Keymap *tmp = Keymaps[menu];
-
-  while (tmp)
+  /* find position to place new keymap */
+  STAILQ_FOREACH(np, &Keymaps[menu], entries)
   {
-    if ((pos >= len) || (pos >= tmp->len))
+    compare = km_compare_keys(map, np, &pos);
+
+    if (compare == map) /* map's keycode is bigger */
     {
-      /* map and tmp match so overwrite */
-      do
-      {
-        /* Don't warn on overwriting a 'noop' binding */
-        if ((tmp->len != len) && (tmp->op != OP_NULL))
-        {
-          /* Overwrite with the different lengths, warn */
-          /* TODO: MAX_SEQ here is wrong */
-          char old_binding[MAX_SEQ];
-          char new_binding[MAX_SEQ];
-          km_expand_key(old_binding, MAX_SEQ, map);
-          km_expand_key(new_binding, MAX_SEQ, tmp);
-          if (err)
-          {
-            /* err was passed, put the string there */
-            snprintf(
-                err->data, err->dsize,
-                _("Binding '%s' will alias '%s'  Before, try: 'bind %s %s "
-                  "noop'  "
-                  "https://neomutt.org/guide/configuration.html#bind-warnings"),
-                old_binding, new_binding, mutt_map_get_name(menu, Menus), new_binding);
-          }
-          else
-          {
-            mutt_error(
-                _("Binding '%s' will alias '%s'  Before, try: 'bind %s %s "
-                  "noop'  "
-                  "https://neomutt.org/guide/configuration.html#bind-warnings"),
-                old_binding, new_binding, mutt_map_get_name(menu, Menus), new_binding);
-          }
-          rc = MUTT_CMD_WARNING;
-        }
-        len = tmp->eq;
-        next = tmp->next;
-        FREE(&tmp->macro);
-        FREE(&tmp->keys);
-        FREE(&tmp->desc);
-        FREE(&tmp);
-        tmp = next;
-      } while (tmp && len >= pos);
-      map->eq = len;
-      break;
+      last = np;
+      lastpos = pos;
+      if (pos > np->eq)
+        pos = np->eq;
     }
-    else if (buf[pos] == tmp->keys[pos])
-      pos++;
-    else if (buf[pos] < tmp->keys[pos])
+    else if (compare == np) /* np's keycode is bigger, found insert location */
     {
-      /* found location to insert between last and tmp */
       map->eq = pos;
       break;
     }
-    else /* buf[pos] > tmp->keys[pos] */
+    else /* equal keycodes */
     {
-      last = tmp;
-      lastpos = pos;
-      if (pos > tmp->eq)
-        pos = tmp->eq;
-      tmp = tmp->next;
+      /* Don't warn on overwriting a 'noop' binding */
+      if ((np->len != len) && (np->op != OP_NULL))
+      {
+        /* Overwrite with the different lengths, warn */
+        /* TODO: MAX_SEQ here is wrong */
+        char old_binding[MAX_SEQ];
+        char new_binding[MAX_SEQ];
+        km_expand_key(old_binding, MAX_SEQ, map);
+        km_expand_key(new_binding, MAX_SEQ, np);
+        char *err_msg =
+            _("Binding '%s' will alias '%s'  Before, try: 'bind %s %s noop'  "
+              "https://neomutt.org/guide/configuration.html#bind-warnings");
+        if (err)
+        {
+          /* err was passed, put the string there */
+          snprintf(err->data, err->dsize, err_msg, old_binding, new_binding,
+                   mutt_map_get_name(menu, Menus), new_binding);
+        }
+        else
+        {
+          mutt_error(err_msg, old_binding, new_binding,
+                     mutt_map_get_name(menu, Menus), new_binding);
+        }
+        rc = MUTT_CMD_WARNING;
+      }
+
+      map->eq = np->eq;
+      STAILQ_REMOVE(&Keymaps[menu], np, Keymap, entries);
+      mutt_keymap_free(&np);
+      break;
     }
   }
 
-  map->next = tmp;
-  if (last)
+  if (last) /* if queue has at least one entry */
   {
-    last->next = map;
+    if (STAILQ_NEXT(last, entries))
+      STAILQ_INSERT_AFTER(&Keymaps[menu], last, map, entries);
+    else /* last entry in the queue */
+      STAILQ_INSERT_TAIL(&Keymaps[menu], map, entries);
     last->eq = lastpos;
   }
-  else
+  else /* queue is empty, so insert from head */
   {
-    Keymaps[menu] = map;
+    STAILQ_INSERT_HEAD(&Keymaps[menu], map, entries);
   }
 
   return rc;
@@ -479,8 +517,8 @@ static int get_op(const struct Binding *bindings, const char *start, size_t len)
 {
   for (int i = 0; bindings[i].name; i++)
   {
-    if ((mutt_str_strncasecmp(start, bindings[i].name, len) == 0) &&
-        (mutt_str_strlen(bindings[i].name) == len))
+    if (mutt_istrn_equal(start, bindings[i].name, len) &&
+        (mutt_str_len(bindings[i].name) == len))
     {
       return bindings[i].op;
     }
@@ -521,7 +559,7 @@ const char *mutt_get_func(const struct Binding *bindings, int op)
 static void generic_tokenize_push_string(char *s, void (*generic_push)(int, int))
 {
   char *pp = NULL;
-  char *p = s + mutt_str_strlen(s) - 1;
+  char *p = s + mutt_str_len(s) - 1;
   size_t l;
   int i, op = OP_NULL;
 
@@ -547,7 +585,7 @@ static void generic_tokenize_push_string(char *s, void (*generic_push)(int, int)
         l = p - pp + 1;
         for (i = 0; KeyNames[i].name; i++)
         {
-          if (mutt_str_strncasecmp(pp, KeyNames[i].name, l) == 0)
+          if (mutt_istrn_equal(pp, KeyNames[i].name, l))
             break;
         }
         if (KeyNames[i].name)
@@ -620,7 +658,7 @@ static int retry_generic(enum MenuType menu, keycode_t *keys, int keyslen, int l
 int km_dokey(enum MenuType menu)
 {
   struct KeyEvent tmp;
-  struct Keymap *map = Keymaps[menu];
+  struct Keymap *map = STAILQ_FIRST(&Keymaps[menu]);
   int pos = 0;
   int n = 0;
 
@@ -724,9 +762,9 @@ int km_dokey(enum MenuType menu)
     /* Nope. Business as usual */
     while (LastKey > map->keys[pos])
     {
-      if ((pos > map->eq) || !map->next)
+      if ((pos > map->eq) || !STAILQ_NEXT(map, entries))
         return retry_generic(menu, map->keys, pos, LastKey);
-      map = map->next;
+      map = STAILQ_NEXT(map, entries);
     }
 
     if (LastKey != map->keys[pos])
@@ -760,7 +798,7 @@ int km_dokey(enum MenuType menu)
       }
 
       generic_tokenize_push_string(map->macro, mutt_push_macro_event);
-      map = Keymaps[menu];
+      map = STAILQ_FIRST(&Keymaps[menu]);
       pos = 0;
     }
   }
@@ -775,6 +813,8 @@ int km_dokey(enum MenuType menu)
  */
 static void create_bindings(const struct Binding *map, enum MenuType menu)
 {
+  STAILQ_INIT(&Keymaps[menu]);
+
   for (int i = 0; map[i].name; i++)
     if (map[i].seq)
       km_bindkey(map[i].seq, menu, map[i].op);
@@ -853,7 +893,7 @@ int mutt_abort_key_config_observer(struct NotifyCallback *nc)
 
   struct EventConfig *ec = nc->event_data;
 
-  if (mutt_str_strcmp(ec->name, "abort_key") != 0)
+  if (!mutt_str_equal(ec->name, "abort_key"))
     return 0;
 
   mutt_init_abort_key();
@@ -877,8 +917,8 @@ int km_expand_key(char *s, size_t len, struct Keymap *map)
 
   while (true)
   {
-    mutt_str_strfcpy(s, km_keyname(map->keys[p]), len);
-    const size_t l = mutt_str_strlen(s);
+    mutt_str_copy(s, km_keyname(map->keys[p]), len);
+    const size_t l = mutt_str_len(s);
     len -= l;
 
     if ((++p >= map->len) || !len)
@@ -898,12 +938,13 @@ int km_expand_key(char *s, size_t len, struct Keymap *map)
  */
 struct Keymap *km_find_func(enum MenuType menu, int func)
 {
-  struct Keymap *map = Keymaps[menu];
-
-  for (; map; map = map->next)
-    if (map->op == func)
+  struct Keymap *np = NULL;
+  STAILQ_FOREACH(np, &Keymaps[menu], entries)
+  {
+    if (np->op == func)
       break;
-  return map;
+  }
+  return np;
 }
 
 #ifdef NCURSES_VERSION
@@ -968,7 +1009,7 @@ void init_extended_keys(void)
  */
 void km_init(void)
 {
-  memset(Keymaps, 0, sizeof(struct Keymap *) * MENU_MAX);
+  memset(Keymaps, 0, sizeof(struct KeymapList) * MENU_MAX);
 
   create_bindings(OpAttach, MENU_ATTACH);
   create_bindings(OpBrowser, MENU_FOLDER);
@@ -1244,7 +1285,7 @@ static enum CommandResult try_bind(char *key, enum MenuType menu, char *func,
 {
   for (int i = 0; bindings[i].name; i++)
   {
-    if (mutt_str_strcmp(func, bindings[i].name) == 0)
+    if (mutt_str_equal(func, bindings[i].name))
     {
       return km_bindkey_err(key, menu, bindings[i].op, err);
     }
@@ -1331,11 +1372,18 @@ enum CommandResult mutt_parse_bind(struct Buffer *buf, struct Buffer *s,
     mutt_buffer_printf(err, _("%s: too many arguments"), "bind");
     rc = MUTT_CMD_ERROR;
   }
-  else if (mutt_str_strcasecmp("noop", buf->data) == 0)
+  else if (mutt_istr_equal("noop", buf->data))
   {
     for (int i = 0; i < num_menus; i++)
     {
       km_bindkey(key, menu[i], OP_NULL); /* the 'unbind' command */
+      bindings = km_get_table(menu[i]);
+      if (bindings)
+      {
+        int op = get_op(OpGeneric, buf->data, mutt_str_len(buf->data));
+        struct EventBinding ev_bind = { menu[i], key, op };
+        notify_send(NeoMutt->notify, NT_BINDING, NT_BINDING_DELETED, &ev_bind);
+      }
     }
   }
   else
@@ -1347,9 +1395,14 @@ enum CommandResult mutt_parse_bind(struct Buffer *buf, struct Buffer *s,
       if ((menu[i] != MENU_PAGER) && (menu[i] != MENU_EDITOR) && (menu[i] != MENU_GENERIC))
       {
         rc = try_bind(key, menu[i], buf->data, OpGeneric, err);
-        if (rc == 0)
+        if (rc == MUTT_CMD_SUCCESS)
+        {
+          int op = get_op(OpGeneric, buf->data, mutt_str_len(buf->data));
+          struct EventBinding ev_bind = { menu[i], key, op };
+          notify_send(NeoMutt->notify, NT_BINDING, NT_BINDING_NEW, &ev_bind);
           continue;
-        if (rc == -2)
+        }
+        if (rc == MUTT_CMD_WARNING)
           break;
       }
 
@@ -1359,6 +1412,13 @@ enum CommandResult mutt_parse_bind(struct Buffer *buf, struct Buffer *s,
       if (bindings)
       {
         rc = try_bind(key, menu[i], buf->data, bindings, err);
+        if (rc == MUTT_CMD_SUCCESS)
+        {
+          int op = get_op(bindings, buf->data, mutt_str_len(buf->data));
+          struct EventBinding ev_bind = { menu[i], key, op };
+          notify_send(NeoMutt->notify, NT_BINDING, NT_BINDING_NEW, &ev_bind);
+          continue;
+        }
       }
     }
   }
@@ -1376,7 +1436,7 @@ enum CommandResult mutt_parse_bind(struct Buffer *buf, struct Buffer *s,
  */
 static void *parse_menu(bool *menu, char *s, struct Buffer *err)
 {
-  char *menu_names_dup = mutt_str_strdup(s);
+  char *menu_names_dup = mutt_str_dup(s);
   char *marker = menu_names_dup;
   char *menu_name = NULL;
 
@@ -1398,49 +1458,23 @@ static void *parse_menu(bool *menu, char *s, struct Buffer *err)
 
 /**
  * km_unbind_all - Free all the keys in the supplied Keymap
- * @param map  Keymap mapping
- * @param mode Undo bind or macro, e.g. #MUTT_UNBIND, #MUTT_UNMACRO
+ * @param km_list Keymap mapping
+ * @param mode    Undo bind or macro, e.g. #MUTT_UNBIND, #MUTT_UNMACRO
  *
  * Iterate through Keymap and free keys defined either by "macro" or "bind".
  */
-static void km_unbind_all(struct Keymap **map, unsigned long mode)
+static void km_unbind_all(struct KeymapList *km_list, unsigned long mode)
 {
-  struct Keymap *next = NULL;
-  struct Keymap *first = NULL;
-  struct Keymap *last = NULL;
-  struct Keymap *cur = *map;
+  struct Keymap *np = NULL, *tmp = NULL;
 
-  while (cur)
+  STAILQ_FOREACH_SAFE(np, km_list, entries, tmp)
   {
-    next = cur->next;
-    if (((mode & MUTT_UNBIND) && !cur->macro) || ((mode & MUTT_UNMACRO) && cur->macro))
+    if (((mode & MUTT_UNBIND) && !np->macro) || ((mode & MUTT_UNMACRO) && np->macro))
     {
-      FREE(&cur->macro);
-      FREE(&cur->keys);
-      FREE(&cur->desc);
-      FREE(&cur);
+      STAILQ_REMOVE(km_list, np, Keymap, entries);
+      mutt_keymap_free(&np);
     }
-    else if (!first)
-    {
-      first = cur;
-      last = cur;
-    }
-    else if (last)
-    {
-      last->next = cur;
-      last = cur;
-    }
-    else
-    {
-      last = cur;
-    }
-    cur = next;
   }
-
-  if (last)
-    last->next = NULL;
-
-  *map = first;
 }
 
 /**
@@ -1461,7 +1495,7 @@ enum CommandResult mutt_parse_unbind(struct Buffer *buf, struct Buffer *s,
   char *key = NULL;
 
   mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
-  if (mutt_str_strcmp(buf->data, "*") == 0)
+  if (mutt_str_equal(buf->data, "*"))
   {
     for (enum MenuType i = 0; i < MENU_MAX; i++)
       menu[i] = true;
@@ -1505,9 +1539,18 @@ enum CommandResult mutt_parse_unbind(struct Buffer *buf, struct Buffer *s,
         km_bindkey("?", i, OP_HELP);
         km_bindkey("q", i, OP_EXIT);
       }
+      struct EventBinding ev_bind = { i, NULL, OP_NULL };
+      notify_send(NeoMutt->notify, NT_BINDING,
+                  (data & MUTT_UNMACRO) ? NT_MACRO_DELETE_ALL : NT_BINDING_DELETE_ALL,
+                  &ev_bind);
     }
     else
+    {
       km_bindkey(key, i, OP_NULL);
+      struct EventBinding ev_bind = { i, key, OP_NULL };
+      notify_send(NeoMutt->notify, NT_BINDING,
+                  (data & MUTT_UNMACRO) ? NT_MACRO_DELETED : NT_BINDING_DELETED, &ev_bind);
+    }
   }
 
   return MUTT_CMD_SUCCESS;
@@ -1524,7 +1567,6 @@ enum CommandResult mutt_parse_macro(struct Buffer *buf, struct Buffer *s,
   enum MenuType menu[sizeof(Menus) / sizeof(struct Mapping) - 1];
   int num_menus = 0;
   enum CommandResult rc = MUTT_CMD_ERROR;
-  char *seq = NULL;
 
   char *key = parse_keymap(menu, s, mutt_array_size(menu), &num_menus, err, false);
   if (!key)
@@ -1540,7 +1582,7 @@ enum CommandResult mutt_parse_macro(struct Buffer *buf, struct Buffer *s,
   {
     if (MoreArgs(s))
     {
-      seq = mutt_str_strdup(buf->data);
+      char *seq = mutt_str_dup(buf->data);
       mutt_extract_token(buf, s, MUTT_TOKEN_CONDENSE);
 
       if (MoreArgs(s))
@@ -1552,6 +1594,12 @@ enum CommandResult mutt_parse_macro(struct Buffer *buf, struct Buffer *s,
         for (int i = 0; i < num_menus; i++)
         {
           rc = km_bind(key, menu[i], OP_MACRO, seq, buf->data);
+          if (rc == MUTT_CMD_SUCCESS)
+          {
+            struct EventBinding ev_bind = { menu[i], key, OP_MACRO };
+            notify_send(NeoMutt->notify, NT_BINDING, NT_MACRO_NEW, &ev_bind);
+            continue;
+          }
         }
       }
 
@@ -1562,6 +1610,12 @@ enum CommandResult mutt_parse_macro(struct Buffer *buf, struct Buffer *s,
       for (int i = 0; i < num_menus; i++)
       {
         rc = km_bind(key, menu[i], OP_MACRO, buf->data, NULL);
+        if (rc == MUTT_CMD_SUCCESS)
+        {
+          struct EventBinding ev_bind = { menu[i], key, OP_MACRO };
+          notify_send(NeoMutt->notify, NT_BINDING, NT_MACRO_NEW, &ev_bind);
+          continue;
+        }
       }
     }
   }
@@ -1595,9 +1649,9 @@ enum CommandResult mutt_parse_exec(struct Buffer *buf, struct Buffer *s,
     if (!bindings && (CurrentMenu != MENU_PAGER))
       bindings = OpGeneric;
 
-    ops[nops] = get_op(bindings, function, mutt_str_strlen(function));
+    ops[nops] = get_op(bindings, function, mutt_str_len(function));
     if ((ops[nops] == OP_NULL) && (CurrentMenu != MENU_PAGER))
-      ops[nops] = get_op(OpGeneric, function, mutt_str_strlen(function));
+      ops[nops] = get_op(OpGeneric, function, mutt_str_len(function));
 
     if (ops[nops] == OP_NULL)
     {
@@ -1623,7 +1677,7 @@ void mutt_what_key(void)
 {
   int ch;
 
-  mutt_window_mvprintw(MuttMessageWindow, 0, 0, _("Enter keys (%s to abort): "),
+  mutt_window_mvprintw(MessageWindow, 0, 0, _("Enter keys (%s to abort): "),
                        km_keyname(AbortKey));
   do
   {
@@ -1643,21 +1697,8 @@ void mutt_what_key(void)
  */
 void mutt_keys_free(void)
 {
-  struct Keymap *map = NULL;
-  struct Keymap *next = NULL;
-
   for (int i = 0; i < MENU_MAX; i++)
   {
-    for (map = Keymaps[i]; map; map = next)
-    {
-      next = map->next;
-
-      FREE(&map->macro);
-      FREE(&map->desc);
-      FREE(&map->keys);
-      FREE(&map);
-    }
-
-    Keymaps[i] = NULL;
+    mutt_keymaplist_free(&Keymaps[i]);
   }
 }

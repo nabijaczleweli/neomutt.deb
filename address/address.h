@@ -61,6 +61,13 @@ extern const char AddressSpecials[];
 
 #define address_error(num) AddressErrors[num]
 
+/**
+ * typedef addr_predicate_t - Test an Address for some condition
+ * @param a Address to test
+ * @retval bool True if Address matches the test
+ */
+typedef bool (*addr_predicate_t)(const struct Address *a);
+
 /* Utility functions that don't use struct Address or struct AddressList */
 void mutt_addr_cat        (char *buf, size_t buflen, const char *value, const char *specials);
 bool mutt_addr_valid_msgid(const char *msgid);
@@ -74,6 +81,7 @@ void            mutt_addr_free       (struct Address **ptr);
 struct Address *mutt_addr_new        (void);
 bool            mutt_addr_to_intl    (struct Address *a);
 bool            mutt_addr_to_local   (struct Address *a);
+bool            mutt_addr_uses_unicode(const char *str);
 size_t          mutt_addr_write      (char *buf, size_t buflen, struct Address *addr, bool display);
 
 /* Functions that work on struct AddressList */
@@ -92,7 +100,9 @@ void   mutt_addrlist_remove_xrefs(const struct AddressList *a, struct AddressLis
 bool   mutt_addrlist_search      (const struct AddressList *haystack, const struct Address *needle);
 int    mutt_addrlist_to_intl     (struct AddressList *al, char **err);
 int    mutt_addrlist_to_local    (struct AddressList *al);
+bool   mutt_addrlist_uses_unicode(const struct AddressList *al);
 size_t mutt_addrlist_write       (const struct AddressList *al, char *buf, size_t buflen, bool display);
+void   mutt_addrlist_write_file  (const struct AddressList *addr, FILE *fp, int start_col, bool display);
 size_t mutt_addrlist_write_list  (const struct AddressList *al, struct ListHead *list);
 
 #endif /* MUTT_EMAIL_ADDRESS_H */

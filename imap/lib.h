@@ -29,9 +29,8 @@
  *
  * | File              | Description              |
  * | :---------------- | :----------------------- |
- * | imap/imap.c       | @subpage imap_imap       |
- * | imap/auth_anon.c  | @subpage imap_auth_anon  |
  * | imap/auth.c       | @subpage imap_auth       |
+ * | imap/auth_anon.c  | @subpage imap_auth_anon  |
  * | imap/auth_cram.c  | @subpage imap_auth_cram  |
  * | imap/auth_gss.c   | @subpage imap_auth_gss   |
  * | imap/auth_login.c | @subpage imap_auth_login |
@@ -40,6 +39,8 @@
  * | imap/auth_sasl.c  | @subpage imap_auth_sasl  |
  * | imap/browse.c     | @subpage imap_browse     |
  * | imap/command.c    | @subpage imap_command    |
+ * | imap/config.c     | @subpage imap_config     |
+ * | imap/imap.c       | @subpage imap_imap       |
  * | imap/message.c    | @subpage imap_message    |
  * | imap/search.c     | @subpage imap_search     |
  * | imap/utf7.c       | @subpage imap_utf7       |
@@ -58,34 +59,17 @@
 
 struct BrowserState;
 struct Buffer;
+struct ConfigSet;
 struct ConnAccount;
 struct EmailList;
 struct PatternList;
 struct stat;
 
-/* These Config Variables are only used in imap/auth.c */
-extern struct Slist *C_ImapAuthenticators;
-
-/* These Config Variables are only used in imap/imap.c */
-#ifdef USE_ZLIB
-extern bool C_ImapDeflate;
-#endif
-extern bool C_ImapIdle;
-extern bool C_ImapRfc5161;
-
-/* These Config Variables are only used in imap/message.c */
-extern char *C_ImapHeaders;
-extern long C_ImapFetchChunkSize;
-
-/* These Config Variables are only used in imap/command.c */
-extern bool C_ImapServernoise;
-
-/* These Config Variables are only used in imap/util.c */
-extern char *C_ImapDelimChars;
-extern char *C_ImapLogin;
-extern char *C_ImapOauthRefreshCommand;
-extern char *C_ImapPass;
-extern short C_ImapPipelineDepth;
+// These Config Variables are used outside of libimap
+extern short C_ImapKeepalive;
+extern bool  C_ImapListSubscribed;
+extern bool  C_ImapPassive;
+extern bool  C_ImapPeek;
 
 /* imap.c */
 int imap_access(const char *path);
@@ -99,6 +83,7 @@ int imap_complete(char *buf, size_t buflen, const char *path);
 int imap_fast_trash(struct Mailbox *m, char *dest);
 enum MailboxType imap_path_probe(const char *path, const struct stat *st);
 int imap_path_canon(char *buf, size_t buflen);
+void imap_notify_delete_email(struct Mailbox *m, struct Email *e);
 
 extern struct MxOps MxImapOps;
 

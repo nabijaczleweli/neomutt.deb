@@ -37,18 +37,19 @@
 #include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
+#include "history/lib.h"
+#include "pattern/lib.h"
 #include "browser.h"
 #include "context.h"
 #include "enter_state.h"
-#include "globals.h"
 #include "init.h"
 #include "keymap.h"
+#include "mutt_globals.h"
 #include "mutt_history.h"
 #include "mutt_mailbox.h"
 #include "muttlib.h"
 #include "opcodes.h"
 #include "protos.h"
-#include "history/lib.h"
 
 /**
  * enum EnterRedrawFlags - redraw flags for mutt_enter_string_full()
@@ -178,7 +179,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
                            CompletionFlags flags, bool multiple, char ***files,
                            int *numfiles, struct EnterState *state)
 {
-  int width = MuttMessageWindow->state.cols - col - 1;
+  int width = MessageWindow->state.cols - col - 1;
   enum EnterRedrawFlags redraw = ENTER_REDRAW_NONE;
   bool pass = (flags & MUTT_PASS);
   bool first = true;
@@ -238,7 +239,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
             state->wbuf, state->lastchar,
             mutt_mb_wcswidth(state->wbuf, state->curpos) - (width / 2));
       }
-      mutt_window_move(MuttMessageWindow, col, 0);
+      mutt_window_move(MessageWindow, col, 0);
       int w = 0;
       for (size_t i = state->begin; i < state->lastchar; i++)
       {
@@ -247,8 +248,8 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
           break;
         my_addwch(state->wbuf[i]);
       }
-      mutt_window_clrtoeol(MuttMessageWindow);
-      mutt_window_move(MuttMessageWindow,
+      mutt_window_clrtoeol(MessageWindow);
+      mutt_window_move(MessageWindow,
                        col + mutt_mb_wcswidth(state->wbuf + state->begin,
                                               state->curpos - state->begin),
                        0);
@@ -507,7 +508,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
             struct Buffer *pool = mutt_buffer_pool_get();
             mutt_buffer_addstr(pool, buf);
             mutt_mailbox_next(Context ? Context->mailbox : NULL, pool);
-            mutt_str_strfcpy(buf, mutt_b2s(pool), buflen);
+            mutt_str_copy(buf, mutt_b2s(pool), buflen);
             mutt_buffer_pool_release(&pool);
 
             state->curpos = state->lastchar =
@@ -594,8 +595,15 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
           }
           else if ((flags & MUTT_PATTERN) && (ch == OP_EDITOR_COMPLETE))
           {
-            size_t i;
-            for (i = state->curpos; (i > 0) && (state->wbuf[i - 1] != '~'); i--)
+            size_t i = state->curpos;
+            if (i && (state->wbuf[i - 1] == '~'))
+            {
+              if (dlg_select_pattern(buf, buflen))
+                replace_part(state, i - 1, buf);
+              rc = 1;
+              goto bye;
+            }
+            for (; (i > 0) && (state->wbuf[i - 1] != '~'); i--)
               ; // do nothing
 
             if ((i > 0) && (i < state->curpos) && (state->wbuf[i - 1] == '~') &&
@@ -792,7 +800,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
           *numfiles = 1;
           tfiles = mutt_mem_calloc(*numfiles, sizeof(char *));
           mutt_expand_path(buf, buflen);
-          tfiles[0] = mutt_str_strdup(buf);
+          tfiles[0] = mutt_str_dup(buf);
           *files = tfiles;
         }
         rc = 0;

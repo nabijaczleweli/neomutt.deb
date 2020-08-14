@@ -3,7 +3,7 @@
  * Window management
  *
  * @authors
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2020 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -71,21 +71,22 @@ enum WindowType
   WT_ALL_DIALOGS,     ///< Container for All Dialogs (nested Windows)
 
   // Dialogs (nested Windows) displayed to the user
-  WT_DLG_ALIAS,       ///< Alias Dialog,       alias_menu()
-  WT_DLG_ATTACH,      ///< Attach Dialog,      mutt_view_attachments()
-  WT_DLG_AUTOCRYPT,   ///< Autocrypt Dialog,   mutt_autocrypt_account_menu()
+  WT_DLG_ALIAS,       ///< Alias Dialog,       dlg_select_alias()
+  WT_DLG_ATTACH,      ///< Attach Dialog,      dlg_select_attachment()
+  WT_DLG_AUTOCRYPT,   ///< Autocrypt Dialog,   dlg_select_autocrypt_account()
   WT_DLG_BROWSER,     ///< Browser Dialog,     mutt_buffer_select_file()
-  WT_DLG_CERTIFICATE, ///< Certificate Dialog, dlg_verify_cert()
+  WT_DLG_CERTIFICATE, ///< Certificate Dialog, dlg_verify_certificate()
   WT_DLG_COMPOSE,     ///< Compose Dialog,     mutt_compose_menu()
-  WT_DLG_CRYPT_GPGME, ///< Crypt-GPGME Dialog, crypt_select_key()
+  WT_DLG_CRYPT_GPGME, ///< Crypt-GPGME Dialog, dlg_select_gpgme_key()
   WT_DLG_DO_PAGER,    ///< Pager Dialog,       mutt_do_pager()
-  WT_DLG_HISTORY,     ///< History Dialog,     history_menu()
+  WT_DLG_HISTORY,     ///< History Dialog,     dlg_select_history()
   WT_DLG_INDEX,       ///< Index Dialog,       index_pager_init()
-  WT_DLG_PGP,         ///< Pgp Dialog,         pgp_select_key()
-  WT_DLG_POSTPONE,    ///< Postpone Dialog,    select_msg()
-  WT_DLG_QUERY,       ///< Query Dialog,       query_menu()
-  WT_DLG_REMAILER,    ///< Remailer Dialog,    mix_make_chain()
-  WT_DLG_SMIME,       ///< Smime Dialog,       smime_select_key()
+  WT_DLG_PATTERN,     ///< Pattern Dialog,     create_pattern_menu()
+  WT_DLG_PGP,         ///< Pgp Dialog,         dlg_select_pgp_key()
+  WT_DLG_POSTPONE,    ///< Postpone Dialog,    dlg_select_postponed_email()
+  WT_DLG_QUERY,       ///< Query Dialog,       dlg_select_query()
+  WT_DLG_REMAILER,    ///< Remailer Dialog,    dlg_select_mixmaster_chain()
+  WT_DLG_SMIME,       ///< Smime Dialog,       dlg_select_smime_key()
 
   // Common Windows
   WT_CUSTOM,          ///< Window with a custom drawing function
@@ -99,6 +100,12 @@ enum WindowType
 };
 
 TAILQ_HEAD(MuttWindowList, MuttWindow);
+
+typedef uint8_t WindowActionFlags; ///< Actions waiting to be performed on a MuttWindow
+#define WA_NO_FLAGS        0       ///< No flags are set
+#define WA_REFLOW    (1 << 0)      ///< Reflow the Window and its children
+#define WA_RECALC    (1 << 1)      ///< Recalculate the contents of the Window
+#define WA_REPAINT   (1 << 2)      ///< Redraw the contents of the Window
 
 /**
  * struct MuttWindow - A division of the screen
@@ -115,6 +122,7 @@ struct MuttWindow
 
   enum MuttWindowOrientation orient; ///< Which direction the Window will expand
   enum MuttWindowSize size;          ///< Type of Window, e.g. #MUTT_WIN_SIZE_FIXED
+  WindowActionFlags actions;         ///< Actions to be performed, e.g. #WA_RECALC
 
   TAILQ_ENTRY(MuttWindow) entries;   ///< Linked list
   struct MuttWindow *parent;         ///< Parent Window
@@ -122,9 +130,35 @@ struct MuttWindow
 
   struct Notify *notify;             ///< Notifications system
 
+  struct MuttWindow *focus;          ///< Focussed Window
+  int help_menu;                     ///< Menu for key bindings, e.g. #MENU_PAGER
+  const struct Mapping *help_data;   ///< Data for the Help Bar
+
   enum WindowType type;              ///< Window type, e.g. #WT_SIDEBAR
   void *wdata;                       ///< Private data
-  void (*wdata_free)(struct MuttWindow *win, void **ptr); ///< Callback function to free private data
+
+  /**
+   * wdata_free - Free the private data attached to the MuttWindow
+   * @param win Window
+   * @param ptr Window data to free
+   */
+  void (*wdata_free)(struct MuttWindow *win, void **ptr);
+
+  /**
+   * recalc - Recalculate the Window data
+   * @param win Window
+   * @retval  0 Success
+   * @retval -1 Error
+   */
+  int (*recalc)(struct MuttWindow *win);
+
+  /**
+   * repaint - Repaint the Window
+   * @param win Window
+   * @retval  0 Success
+   * @retval -1 Error
+   */
+  int (*repaint)(struct MuttWindow *win);
 };
 
 typedef uint8_t WindowNotifyFlags; ///< Changes to a MuttWindow
@@ -144,7 +178,11 @@ typedef uint8_t WindowNotifyFlags; ///< Changes to a MuttWindow
  */
 enum NotifyWindow
 {
-  NT_WINDOW_STATE = 1, ///< Window state has changed, e.g. #WN_VISIBLE
+  NT_WINDOW_NEW = 1, ///< New Window has been added
+  NT_WINDOW_DELETE,  ///< Window is about to be deleted
+  NT_WINDOW_STATE,   ///< Window state has changed, e.g. #WN_VISIBLE
+  NT_WINDOW_DIALOG,  ///< A new Dialog Window has been created, e.g. #WT_DLG_INDEX
+  NT_WINDOW_FOCUS,   ///< Window focus has changed
 };
 
 /**
@@ -156,13 +194,12 @@ struct EventWindow
   WindowNotifyFlags flags; ///< Attributes of Window that changed
 };
 
-extern struct MuttWindow *MuttDialogWindow;
-extern struct MuttWindow *MuttHelpWindow;
-extern struct MuttWindow *MuttMessageWindow;
+extern struct MuttWindow *RootWindow;
+extern struct MuttWindow *AllDialogsWindow;
+extern struct MuttWindow *MessageWindow;
 
 // Functions that deal with the Window
 void               mutt_window_add_child          (struct MuttWindow *parent, struct MuttWindow *child);
-void               mutt_window_copy_size          (const struct MuttWindow *win_src, struct MuttWindow *win_dst);
 void               mutt_window_free               (struct MuttWindow **ptr);
 void               mutt_window_free_all           (void);
 void               mutt_window_get_coords         (struct MuttWindow *win, int *col, int *row);
@@ -170,6 +207,7 @@ void               mutt_window_init               (void);
 struct MuttWindow *mutt_window_new                (enum WindowType type, enum MuttWindowOrientation orient, enum MuttWindowSize size, int cols, int rows);
 void               mutt_window_reflow             (struct MuttWindow *win);
 void               mutt_window_reflow_message_rows(int mw_rows);
+struct MuttWindow *mutt_window_remove_child       (struct MuttWindow *parent, struct MuttWindow *child);
 void               mutt_window_set_root           (int cols, int rows);
 int                mutt_window_wrap_cols          (int width, short wrap);
 
@@ -189,11 +227,11 @@ bool mutt_window_is_visible(struct MuttWindow *win);
 
 void               mutt_winlist_free (struct MuttWindowList *head);
 struct MuttWindow *mutt_window_find  (struct MuttWindow *root, enum WindowType type);
-struct MuttWindow *mutt_window_dialog(struct MuttWindow *win);
 void               window_notify_all (struct MuttWindow *win);
 void               window_set_visible(struct MuttWindow *win, bool visible);
+void               window_set_focus  (struct MuttWindow *win);
+struct MuttWindow *window_get_focus  (void);
 
-void dialog_pop(void);
-void dialog_push(struct MuttWindow *dlg);
+void window_redraw(struct MuttWindow *win, bool force);
 
 #endif /* MUTT_MUTT_WINDOW_H */

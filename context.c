@@ -32,14 +32,16 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "context.h"
-#include "globals.h"
+#include "imap/lib.h"
+#include "maildir/lib.h"
+#include "ncrypt/lib.h"
+#include "pattern/lib.h"
+#include "mutt_globals.h"
 #include "mutt_header.h"
 #include "mutt_thread.h"
 #include "mx.h"
-#include "pattern.h"
 #include "score.h"
 #include "sort.h"
-#include "ncrypt/lib.h"
 
 /**
  * ctx_free - Free a Context
@@ -58,7 +60,7 @@ void ctx_free(struct Context **ptr)
   if (ctx->mailbox)
     notify_observer_remove(ctx->mailbox->notify, ctx_mailbox_observer, ctx);
 
-  mutt_hash_free(&ctx->thread_hash);
+  mutt_thread_ctx_free(&ctx->threads);
   notify_free(&ctx->notify);
 
   FREE(ptr);
@@ -66,14 +68,17 @@ void ctx_free(struct Context **ptr)
 
 /**
  * ctx_new - Create a new Context
+ * @param m Mailbox
  * @retval ptr New Context
  */
-struct Context *ctx_new(void)
+struct Context *ctx_new(struct Mailbox *m)
 {
   struct Context *ctx = mutt_mem_calloc(1, sizeof(struct Context));
 
   ctx->notify = notify_new();
   notify_set_parent(ctx->notify, NeoMutt->notify);
+  ctx->mailbox = m;
+  ctx->threads = mutt_thread_ctx_init(m);
 
   return ctx;
 }
@@ -121,7 +126,7 @@ void ctx_update(struct Context *ctx)
   m->vcount = 0;
   m->changed = false;
 
-  mutt_clear_threads(ctx);
+  mutt_clear_threads(ctx->threads);
 
   struct Email *e = NULL;
   for (int msgno = 0; msgno < m->msg_count; msgno++)
@@ -133,10 +138,10 @@ void ctx_update(struct Context *ctx)
     if (WithCrypto)
     {
       /* NOTE: this _must_ be done before the check for mailcap! */
-      e->security = crypt_query(e->content);
+      e->security = crypt_query(e->body);
     }
 
-    if (ctx->pattern)
+    if (ctx_has_limit(ctx))
     {
       e->vnum = -1;
     }
@@ -189,7 +194,8 @@ void ctx_update(struct Context *ctx)
     }
   }
 
-  mutt_sort_headers(ctx, true); /* rethread from scratch */
+  /* rethread from scratch */
+  mutt_sort_headers(ctx->mailbox, ctx->threads, true, &ctx->vsize);
 }
 
 /**
@@ -234,7 +240,7 @@ void ctx_update_tables(struct Context *ctx, bool committing)
       {
         m->v2r[m->vcount] = j;
         m->emails[j]->vnum = m->vcount++;
-        struct Body *b = m->emails[j]->content;
+        struct Body *b = m->emails[j]->body;
         ctx->vsize += b->length + b->offset - b->hdr_offset + padding;
       }
 
@@ -278,6 +284,12 @@ void ctx_update_tables(struct Context *ctx, bool committing)
       if (m->id_hash && m->emails[i]->env->message_id)
         mutt_hash_delete(m->id_hash, m->emails[i]->env->message_id, m->emails[i]);
       mutt_label_hash_remove(m, m->emails[i]);
+
+#ifdef USE_IMAP
+      if (m->type == MUTT_IMAP)
+        imap_notify_delete_email(m, m->emails[i]);
+#endif
+
       email_free(&m->emails[i]);
     }
   }
@@ -299,7 +311,7 @@ int ctx_mailbox_observer(struct NotifyCallback *nc)
   switch (nc->event_subtype)
   {
     case NT_MAILBOX_CLOSED:
-      mutt_clear_threads(ctx);
+      mutt_clear_threads(ctx->threads);
       ctx_cleanup(ctx);
       break;
     case NT_MAILBOX_INVALID:
@@ -309,27 +321,11 @@ int ctx_mailbox_observer(struct NotifyCallback *nc)
       ctx_update_tables(ctx, true);
       break;
     case NT_MAILBOX_RESORT:
-      mutt_sort_headers(ctx, true);
+      mutt_sort_headers(ctx->mailbox, ctx->threads, true, &ctx->vsize);
       break;
   }
 
   return 0;
-}
-
-/**
- * message_is_visible - Is a message in the index within limit
- * @param ctx Context
- * @param e   Email
- * @retval true The message is within limit
- *
- * If no limit is in effect, all the messages are visible.
- */
-bool message_is_visible(struct Context *ctx, struct Email *e)
-{
-  if (!ctx || !e)
-    return false;
-
-  return !ctx->pattern || e->limited;
 }
 
 /**
@@ -342,7 +338,7 @@ bool message_is_visible(struct Context *ctx, struct Email *e)
  */
 bool message_is_tagged(struct Context *ctx, struct Email *e)
 {
-  return message_is_visible(ctx, e) && e->tagged;
+  return e->visible && e->tagged;
 }
 
 /**
@@ -415,4 +411,15 @@ struct Email *mutt_get_virt_email(struct Mailbox *m, int vnum)
     return NULL;
 
   return m->emails[inum];
+}
+
+/**
+ * ctx_has_limit - Is a limit active?
+ * @param ctx Context
+ * @retval true A limit is active
+ * @retval false No limit is active
+ */
+bool ctx_has_limit(const struct Context *ctx)
+{
+  return ctx && ctx->pattern;
 }

@@ -33,9 +33,12 @@
 #include <stdbool.h>
 #include <string.h>
 #include "private.h"
+#include "mutt/lib.h"
 #include "email/lib.h"
+#include "core/lib.h"
 #include "lib.h"
-#include "pattern.h"
+#include "imap/lib.h"
+#include "pattern/lib.h"
 
 // fwd decl, mutually recursive: check_pattern_list, check_pattern
 static int check_pattern_list(const struct PatternList *patterns);
@@ -89,7 +92,8 @@ static int check_pattern_list(const struct PatternList *patterns)
   return positives;
 }
 
-/** compile_search_children - Compile a search command for a pattern's children
+/**
+ * compile_search_children - Compile a search command for a pattern's children
  * @param adata Imap Account data
  * @param pat Parent pattern
  * @param buf Buffer for the resulting command
@@ -127,7 +131,8 @@ static bool compile_search_children(const struct ImapAccountData *adata,
   return true;
 }
 
-/** compile_search_self - Compile a search command for a pattern
+/**
+ * compile_search_self - Compile a search command for a pattern
  * @param adata Imap Account data
  * @param pat Pattern
  * @param buf Buffer for the resulting command

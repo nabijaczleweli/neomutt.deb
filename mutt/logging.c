@@ -152,7 +152,7 @@ int log_file_set_filename(const char *file, bool verbose)
     return -1;
 
   /* also handles both being NULL */
-  if (mutt_str_strcmp(LogFileName, file) == 0)
+  if (mutt_str_equal(LogFileName, file))
     return 0;
 
   mutt_str_replace(&LogFileName, file);
@@ -233,7 +233,7 @@ bool log_file_running(void)
 }
 
 /**
- * log_disp_file - Save a log line to a file
+ * log_disp_file - Save a log line to a file - Implements ::log_dispatcher_t
  * @param stamp    Unix time (optional)
  * @param file     Source file (UNUSED)
  * @param line     Source line (UNUSED)
@@ -430,7 +430,7 @@ int log_disp_queue(time_t stamp, const char *file, int line,
   ll->line = line;
   ll->function = function;
   ll->level = level;
-  ll->message = mutt_str_strdup(buf);
+  ll->message = mutt_str_dup(buf);
 
   log_queue_add(ll);
 

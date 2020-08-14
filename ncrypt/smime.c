@@ -37,6 +37,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
+#include "private.h"
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
@@ -45,44 +46,19 @@
 #include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
+#include "ncrypt/lib.h"
+#include "send/lib.h"
 #include "copy.h"
 #include "crypt.h"
 #include "cryptglue.h"
 #include "format_flags.h"
-#include "globals.h"
 #include "handler.h"
-#include "keymap.h"
 #include "mutt_logging.h"
-#include "mutt_menu.h"
 #include "muttlib.h"
-#include "opcodes.h"
-#include "protos.h"
-#include "send.h"
-#include "sendlib.h"
 #include "state.h"
-#include "ncrypt/lib.h"
 #ifdef CRYPT_BACKEND_CLASSIC_SMIME
 #include "smime.h"
 #endif
-
-/* These Config Variables are only used in ncrypt/smime.c */
-bool C_SmimeAskCertLabel; ///< Config: Prompt the user for a label for SMIME certificates
-char *C_SmimeCaLocation;   ///< Config: File containing trusted certificates
-char *C_SmimeCertificates; ///< Config: File containing user's public certificates
-char *C_SmimeDecryptCommand; ///< Config: (smime) External command to decrypt an SMIME message
-bool C_SmimeDecryptUseDefaultKey; ///< Config: Use the default key for decryption
-char *C_SmimeEncryptCommand; ///< Config: (smime) External command to encrypt a message
-char *C_SmimeGetCertCommand; ///< Config: (smime) External command to extract a certificate from a message
-char *C_SmimeGetCertEmailCommand; ///< Config: (smime) External command to get a certificate for an email
-char *C_SmimeGetSignerCertCommand; ///< Config: (smime) External command to extract a certificate from an email
-char *C_SmimeImportCertCommand; ///< Config: (smime) External command to import a certificate
-char *C_SmimeKeys; ///< Config: File containing user's private certificates
-char *C_SmimePk7outCommand; ///< Config: (smime) External command to extract a public certificate
-char *C_SmimeSignCommand; ///< Config: (smime) External command to sign a message
-char *C_SmimeSignDigestAlg; ///< Config: Digest algorithm
-long C_SmimeTimeout;        ///< Config: Time in seconds to cache a passphrase
-char *C_SmimeVerifyCommand; ///< Config: (smime) External command to verify a signed message
-char *C_SmimeVerifyOpaqueCommand; ///< Config: (smime) External command to verify a signature
 
 /**
  * struct SmimeCommandContext - Data for a SIME command
@@ -162,10 +138,10 @@ static struct SmimeKey *smime_copy_key(struct SmimeKey *key)
   struct SmimeKey *copy = NULL;
 
   copy = mutt_mem_calloc(1, sizeof(struct SmimeKey));
-  copy->email = mutt_str_strdup(key->email);
-  copy->hash = mutt_str_strdup(key->hash);
-  copy->label = mutt_str_strdup(key->label);
-  copy->issuer = mutt_str_strdup(key->issuer);
+  copy->email = mutt_str_dup(key->email);
+  copy->hash = mutt_str_dup(key->hash);
+  copy->label = mutt_str_dup(key->label);
+  copy->issuer = mutt_str_dup(key->issuer);
   copy->trust = key->trust;
   copy->flags = key->flags;
 
@@ -436,247 +412,6 @@ static pid_t smime_invoke(FILE **fp_smime_in, FILE **fp_smime_out, FILE **fp_smi
                           fp_smime_infd, fp_smime_outfd, fp_smime_errfd);
 }
 
-/*
- *    Key and certificate handling.
- */
-
-/**
- * smime_key_flags - Turn SMIME key flags into a string
- * @param flags Flags, see #KeyFlags
- * @retval ptr Flag string
- *
- * @note The string is statically allocated
- */
-static char *smime_key_flags(KeyFlags flags)
-{
-  static char buf[3];
-
-  if (!(flags & KEYFLAG_CANENCRYPT))
-    buf[0] = '-';
-  else
-    buf[0] = 'e';
-
-  if (!(flags & KEYFLAG_CANSIGN))
-    buf[1] = '-';
-  else
-    buf[1] = 's';
-
-  buf[2] = '\0';
-
-  return buf;
-}
-
-/**
- * smime_make_entry - Format a menu item for the smime key list - Implements Menu::make_entry()
- */
-static void smime_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
-{
-  struct SmimeKey **table = menu->mdata;
-  struct SmimeKey *key = table[line];
-  char *truststate = NULL;
-  switch (key->trust)
-  {
-    case 'e':
-      /* L10N: Describes the trust state of a S/MIME key.
-         This translation must be padded with spaces to the right such that it
-         has the same length as the other translations.
-         The translation strings which need to be padded are:
-         Expired, Invalid, Revoked, Trusted, Unverified, Verified, and Unknown.  */
-      truststate = _("Expired   ");
-      break;
-    case 'i':
-      /* L10N: Describes the trust state of a S/MIME key.
-         This translation must be padded with spaces to the right such that it
-         has the same length as the other translations.
-         The translation strings which need to be padded are:
-         Expired, Invalid, Revoked, Trusted, Unverified, Verified, and Unknown.  */
-      truststate = _("Invalid   ");
-      break;
-    case 'r':
-      /* L10N: Describes the trust state of a S/MIME key.
-         This translation must be padded with spaces to the right such that it
-         has the same length as the other translations.
-         The translation strings which need to be padded are:
-         Expired, Invalid, Revoked, Trusted, Unverified, Verified, and Unknown.  */
-      truststate = _("Revoked   ");
-      break;
-    case 't':
-      /* L10N: Describes the trust state of a S/MIME key.
-         This translation must be padded with spaces to the right such that it
-         has the same length as the other translations.
-         The translation strings which need to be padded are:
-         Expired, Invalid, Revoked, Trusted, Unverified, Verified, and Unknown.  */
-      truststate = _("Trusted   ");
-      break;
-    case 'u':
-      /* L10N: Describes the trust state of a S/MIME key.
-         This translation must be padded with spaces to the right such that it
-         has the same length as the other translations.
-         The translation strings which need to be padded are:
-         Expired, Invalid, Revoked, Trusted, Unverified, Verified, and Unknown.  */
-      truststate = _("Unverified");
-      break;
-    case 'v':
-      /* L10N: Describes the trust state of a S/MIME key.
-         This translation must be padded with spaces to the right such that it
-         has the same length as the other translations.
-         The translation strings which need to be padded are:
-         Expired, Invalid, Revoked, Trusted, Unverified, Verified, and Unknown.  */
-      truststate = _("Verified  ");
-      break;
-    default:
-      /* L10N: Describes the trust state of a S/MIME key.
-         This translation must be padded with spaces to the right such that it
-         has the same length as the other translations.
-         The translation strings which need to be padded are:
-         Expired, Invalid, Revoked, Trusted, Unverified, Verified, and Unknown.  */
-      truststate = _("Unknown   ");
-  }
-  snprintf(buf, buflen, " 0x%s %s %s %-35.35s %s", key->hash,
-           smime_key_flags(key->flags), truststate, key->email, key->label);
-}
-
-/**
- * smime_select_key - Get the user to select a key
- * @param keys  List of keys to select from
- * @param query String to match
- * @retval ptr Key selected by user
- */
-static struct SmimeKey *smime_select_key(struct SmimeKey *keys, char *query)
-{
-  struct SmimeKey **table = NULL;
-  int table_size = 0;
-  int table_index = 0;
-  struct SmimeKey *key = NULL;
-  struct SmimeKey *selected_key = NULL;
-  char helpstr[1024];
-  char buf[1024];
-  char title[256];
-  struct Menu *menu = NULL;
-  const char *s = "";
-  bool done = false;
-
-  for (table_index = 0, key = keys; key; key = key->next)
-  {
-    if (table_index == table_size)
-    {
-      table_size += 5;
-      mutt_mem_realloc(&table, sizeof(struct SmimeKey *) * table_size);
-    }
-
-    table[table_index++] = key;
-  }
-
-  snprintf(title, sizeof(title), _("S/MIME certificates matching \"%s\""), query);
-
-  /* Make Helpstring */
-  helpstr[0] = '\0';
-  mutt_make_help(buf, sizeof(buf), _("Exit  "), MENU_SMIME, OP_EXIT);
-  strcat(helpstr, buf);
-  mutt_make_help(buf, sizeof(buf), _("Select  "), MENU_SMIME, OP_GENERIC_SELECT_ENTRY);
-  strcat(helpstr, buf);
-  mutt_make_help(buf, sizeof(buf), _("Help"), MENU_SMIME, OP_HELP);
-  strcat(helpstr, buf);
-
-  struct MuttWindow *dlg =
-      mutt_window_new(WT_DLG_SMIME, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  dlg->notify = notify_new();
-
-  struct MuttWindow *index =
-      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  index->notify = notify_new();
-  notify_set_parent(index->notify, dlg->notify);
-
-  struct MuttWindow *ibar =
-      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
-                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
-  ibar->notify = notify_new();
-  notify_set_parent(ibar->notify, dlg->notify);
-
-  if (C_StatusOnTop)
-  {
-    mutt_window_add_child(dlg, ibar);
-    mutt_window_add_child(dlg, index);
-  }
-  else
-  {
-    mutt_window_add_child(dlg, index);
-    mutt_window_add_child(dlg, ibar);
-  }
-
-  dialog_push(dlg);
-
-  /* Create the menu */
-  menu = mutt_menu_new(MENU_SMIME);
-
-  menu->pagelen = index->state.rows;
-  menu->win_index = index;
-  menu->win_ibar = ibar;
-
-  menu->max = table_index;
-  menu->make_entry = smime_make_entry;
-  menu->help = helpstr;
-  menu->mdata = table;
-  menu->title = title;
-  mutt_menu_push_current(menu);
-  /* sorting keys might be done later - TODO */
-
-  mutt_clear_error();
-
-  done = false;
-  while (!done)
-  {
-    switch (mutt_menu_loop(menu))
-    {
-      case OP_GENERIC_SELECT_ENTRY:
-        if (table[menu->current]->trust != 't')
-        {
-          switch (table[menu->current]->trust)
-          {
-            case 'e':
-            case 'i':
-            case 'r':
-              s = _("ID is expired/disabled/revoked. Do you really want to use "
-                    "the key?");
-              break;
-            case 'u':
-              s = _("ID has undefined validity. Do you really want to use the "
-                    "key?");
-              break;
-            case 'v':
-              s = _("ID is not trusted. Do you really want to use the key?");
-              break;
-          }
-
-          snprintf(buf, sizeof(buf), "%s", s);
-
-          if (mutt_yesorno(buf, MUTT_NO) != MUTT_YES)
-          {
-            mutt_clear_error();
-            break;
-          }
-        }
-
-        selected_key = table[menu->current];
-        done = true;
-        break;
-      case OP_EXIT:
-        done = true;
-        break;
-    }
-  }
-
-  mutt_menu_pop_current(menu);
-  mutt_menu_free(&menu);
-  FREE(&table);
-  dialog_pop();
-  mutt_window_free(&dlg);
-
-  return selected_key;
-}
-
 /**
  * smime_parse_key - Parse an SMIME key block
  * @param buf String to parse
@@ -708,16 +443,16 @@ static struct SmimeKey *smime_parse_key(char *buf)
     switch (field)
     {
       case 1: /* mailbox */
-        key->email = mutt_str_strdup(p);
+        key->email = mutt_str_dup(p);
         break;
       case 2: /* hash */
-        key->hash = mutt_str_strdup(p);
+        key->hash = mutt_str_dup(p);
         break;
       case 3: /* label */
-        key->label = mutt_str_strdup(p);
+        key->label = mutt_str_dup(p);
         break;
       case 4: /* issuer */
-        key->issuer = mutt_str_strdup(p);
+        key->issuer = mutt_str_dup(p);
         break;
       case 5: /* trust */
         key->trust = *p;
@@ -749,7 +484,7 @@ static struct SmimeKey *smime_parse_key(char *buf)
   }
 
   if (field < 4)
-    key->issuer = mutt_str_strdup("?");
+    key->issuer = mutt_str_dup("?");
 
   if (field < 5)
     key->trust = 't';
@@ -787,7 +522,7 @@ static struct SmimeKey *smime_get_candidates(char *search, bool only_public_key)
 
   while (fgets(buf, sizeof(buf), fp))
   {
-    if (((*search == '\0')) || mutt_str_stristr(buf, search))
+    if (((*search == '\0')) || mutt_istr_find(buf, search))
     {
       key = smime_parse_key(buf);
       if (key)
@@ -818,7 +553,7 @@ static struct SmimeKey *smime_get_key_by_hash(char *hash, bool only_public_key)
   struct SmimeKey *results = smime_get_candidates(hash, only_public_key);
   for (struct SmimeKey *result = results; result; result = result->next)
   {
-    if (mutt_str_strcasecmp(hash, result->hash) == 0)
+    if (mutt_istr_equal(hash, result->hash))
     {
       match = smime_copy_key(result);
       break;
@@ -861,7 +596,7 @@ static struct SmimeKey *smime_get_key_by_addr(char *mailbox, KeyFlags abilities,
       continue;
     }
 
-    if (mutt_str_strcasecmp(mailbox, result->email) == 0)
+    if (mutt_istr_equal(mailbox, result->email))
     {
       match = smime_copy_key(result);
       *matches_end = match;
@@ -869,7 +604,7 @@ static struct SmimeKey *smime_get_key_by_addr(char *mailbox, KeyFlags abilities,
 
       if (match->trust == 't')
       {
-        if (trusted_match && (mutt_str_strcasecmp(match->hash, trusted_match->hash) != 0))
+        if (trusted_match && !mutt_istr_equal(match->hash, trusted_match->hash))
         {
           multi_trusted_matches = true;
         }
@@ -901,7 +636,7 @@ static struct SmimeKey *smime_get_key_by_addr(char *mailbox, KeyFlags abilities,
     }
     else
     {
-      return_key = smime_copy_key(smime_select_key(matches, mailbox));
+      return_key = smime_copy_key(dlg_select_smime_key(matches, mailbox));
     }
 
     smime_key_free(&matches);
@@ -936,8 +671,8 @@ static struct SmimeKey *smime_get_key_by_str(char *str, KeyFlags abilities, bool
       continue;
     }
 
-    if ((mutt_str_strcasecmp(str, result->hash) == 0) ||
-        mutt_str_stristr(result->email, str) || mutt_str_stristr(result->label, str))
+    if (mutt_istr_equal(str, result->hash) ||
+        mutt_istr_find(result->email, str) || mutt_istr_find(result->label, str))
     {
       match = smime_copy_key(result);
       *matches_end = match;
@@ -949,7 +684,7 @@ static struct SmimeKey *smime_get_key_by_str(char *str, KeyFlags abilities, bool
 
   if (matches)
   {
-    return_key = smime_copy_key(smime_select_key(matches, str));
+    return_key = smime_copy_key(dlg_select_smime_key(matches, str));
     smime_key_free(&matches);
   }
 
@@ -1007,13 +742,13 @@ static void getkeys(char *mailbox)
     key = smime_ask_for_key(buf, KEYFLAG_CANENCRYPT, false);
   }
 
-  size_t smime_keys_len = mutt_str_strlen(C_SmimeKeys);
+  size_t smime_keys_len = mutt_str_len(C_SmimeKeys);
 
   k = key ? key->hash : NONULL(C_SmimeDefaultKey);
 
   /* if the key is different from last time */
   if ((mutt_buffer_len(&SmimeKeyToUse) <= smime_keys_len) ||
-      (mutt_str_strcasecmp(k, SmimeKeyToUse.data + smime_keys_len + 1) != 0))
+      !mutt_istr_equal(k, SmimeKeyToUse.data + smime_keys_len + 1))
   {
     smime_class_void_passphrase();
     mutt_buffer_printf(&SmimeKeyToUse, "%s/%s", NONULL(C_SmimeKeys), k);
@@ -1054,7 +789,7 @@ void smime_class_getkeys(struct Envelope *env)
     }
   }
 
-  struct Address *f = mutt_default_from();
+  struct Address *f = mutt_default_from(NeoMutt->sub);
   getkeys(f->mailbox);
   mutt_addr_free(&f);
 }
@@ -1088,10 +823,10 @@ char *smime_class_find_keys(struct AddressList *al, bool oppenc_mode)
     }
 
     keyid = key->hash;
-    keylist_size += mutt_str_strlen(keyid) + 2;
+    keylist_size += mutt_str_len(keyid) + 2;
     mutt_mem_realloc(&keylist, keylist_size);
     sprintf(keylist + keylist_used, "%s%s", keylist_used ? " " : "", keyid);
-    keylist_used = mutt_str_strlen(keylist);
+    keylist_used = mutt_str_len(keylist);
 
     smime_key_free(&key);
   }
@@ -1150,10 +885,10 @@ static int smime_handle_cert_email(char *certificate, char *mailbox, bool copy,
 
   while ((fgets(email, sizeof(email), fp_out)))
   {
-    size_t len = mutt_str_strlen(email);
+    size_t len = mutt_str_len(email);
     if (len && (email[len - 1] == '\n'))
       email[len - 1] = '\0';
-    if (mutt_str_startswith(email, mailbox, CASE_IGNORE))
+    if (mutt_istr_startswith(email, mailbox))
       rc = 1;
 
     rc = (rc < 0) ? 0 : rc;
@@ -1181,11 +916,11 @@ static int smime_handle_cert_email(char *certificate, char *mailbox, bool copy,
     rewind(fp_out);
     while ((fgets(email, sizeof(email), fp_out)))
     {
-      size_t len = mutt_str_strlen(email);
+      size_t len = mutt_str_len(email);
       if (len && (email[len - 1] == '\n'))
         email[len - 1] = '\0';
-      (*buffer)[count] = mutt_mem_calloc(mutt_str_strlen(email) + 1, sizeof(char));
-      strncpy((*buffer)[count], email, mutt_str_strlen(email));
+      (*buffer)[count] = mutt_mem_calloc(mutt_str_len(email) + 1, sizeof(char));
+      strncpy((*buffer)[count], email, mutt_str_len(email));
       count++;
     }
   }
@@ -1519,8 +1254,6 @@ cleanup:
   return rc;
 }
 
-/* Creating S/MIME - bodies */
-
 /**
  * smime_invoke_encrypt - Use SMIME to encrypt a file
  * @param[out] fp_smime_in    stdin  for the command, or NULL (OPTIONAL)
@@ -1618,7 +1351,7 @@ struct Body *smime_class_build_smime_entity(struct Body *a, char *certlist)
       *cert_end = '\0';
     if (*cert_start)
     {
-      off = mutt_str_strlen(certfile);
+      off = mutt_str_len(certfile);
       snprintf(certfile + off, sizeof(certfile) - off, "%s%s/%s",
                (off != 0) ? " " : "", NONULL(C_SmimeCertificates), cert_start);
     }
@@ -1627,9 +1360,9 @@ struct Body *smime_class_build_smime_entity(struct Body *a, char *certlist)
   }
 
   /* write a MIME entity */
-  mutt_write_mime_header(a, fp_tmp);
+  mutt_write_mime_header(a, fp_tmp, NeoMutt->sub);
   fputc('\n', fp_tmp);
-  mutt_write_mime_body(a, fp_tmp);
+  mutt_write_mime_body(a, fp_tmp, NeoMutt->sub);
   mutt_file_fclose(&fp_tmp);
 
   pid = smime_invoke_encrypt(&fp_smime_in, NULL, NULL, -1, fileno(fp_out),
@@ -1674,13 +1407,13 @@ struct Body *smime_class_build_smime_entity(struct Body *a, char *certlist)
 
   t = mutt_body_new();
   t->type = TYPE_APPLICATION;
-  t->subtype = mutt_str_strdup("x-pkcs7-mime");
+  t->subtype = mutt_str_dup("x-pkcs7-mime");
   mutt_param_set(&t->parameter, "name", "smime.p7m");
   mutt_param_set(&t->parameter, "smime-type", "enveloped-data");
   t->encoding = ENC_BASE64; /* The output of OpenSSL SHOULD be binary */
   t->use_disp = true;
   t->disposition = DISP_ATTACH;
-  t->d_filename = mutt_str_strdup("smime.p7m");
+  t->d_filename = mutt_str_dup("smime.p7m");
   t->filename = mutt_buffer_strdup(tempfile);
   t->unlink = true; /* delete after sending the message */
   t->parts = NULL;
@@ -1722,7 +1455,7 @@ static char *openssl_md_to_smime_micalg(char *md)
     return 0;
 
   char *micalg = NULL;
-  if (mutt_str_startswith(md, "sha", CASE_IGNORE))
+  if (mutt_istr_startswith(md, "sha"))
   {
     const size_t l = strlen(md) + 2;
     micalg = mutt_mem_malloc(l);
@@ -1730,7 +1463,7 @@ static char *openssl_md_to_smime_micalg(char *md)
   }
   else
   {
-    micalg = mutt_str_strdup(md);
+    micalg = mutt_str_dup(md);
   }
 
   return micalg;
@@ -1779,16 +1512,16 @@ struct Body *smime_class_sign_message(struct Body *a, const struct AddressList *
     goto cleanup;
   }
 
-  mutt_write_mime_header(a, fp_sign);
+  mutt_write_mime_header(a, fp_sign, NeoMutt->sub);
   fputc('\n', fp_sign);
-  mutt_write_mime_body(a, fp_sign);
+  mutt_write_mime_body(a, fp_sign, NeoMutt->sub);
   mutt_file_fclose(&fp_sign);
 
   mutt_buffer_printf(&SmimeKeyToUse, "%s/%s", NONULL(C_SmimeKeys), signas);
   mutt_buffer_printf(&SmimeCertToUse, "%s/%s", NONULL(C_SmimeCertificates), signas);
 
   struct SmimeKey *signas_key = smime_get_key_by_hash(signas, 1);
-  if ((!signas_key) || (!mutt_str_strcmp("?", signas_key->issuer)))
+  if (!signas_key || mutt_str_equal("?", signas_key->issuer))
     intermediates = signas; /* so openssl won't complain in any case */
   else
     intermediates = signas_key->issuer;
@@ -1842,7 +1575,7 @@ struct Body *smime_class_sign_message(struct Body *a, const struct AddressList *
 
   t = mutt_body_new();
   t->type = TYPE_MULTIPART;
-  t->subtype = mutt_str_strdup("signed");
+  t->subtype = mutt_str_dup("signed");
   t->encoding = ENC_7BIT;
   t->use_disp = false;
   t->disposition = DISP_INLINE;
@@ -1861,9 +1594,9 @@ struct Body *smime_class_sign_message(struct Body *a, const struct AddressList *
   t->parts->next = mutt_body_new();
   t = t->parts->next;
   t->type = TYPE_APPLICATION;
-  t->subtype = mutt_str_strdup("x-pkcs7-signature");
+  t->subtype = mutt_str_dup("x-pkcs7-signature");
   t->filename = mutt_buffer_strdup(signedfile);
-  t->d_filename = mutt_str_strdup("smime.p7s");
+  t->d_filename = mutt_str_dup("smime.p7s");
   t->use_disp = true;
   t->disposition = DISP_ATTACH;
   t->encoding = ENC_BASE64;
@@ -1884,8 +1617,6 @@ cleanup:
   mutt_buffer_pool_release(&signedfile);
   return retval;
 }
-
-/* Handling S/MIME - bodies */
 
 /**
  * smime_invoke_verify - Use SMIME to verify a file
@@ -2017,7 +1748,7 @@ int smime_class_verify_one(struct Body *sigbdy, struct State *s, const char *tem
       rewind(fp_smime_err);
 
       line = mutt_file_read_line(line, &linelen, fp_smime_err, NULL, 0);
-      if (linelen && (mutt_str_strcasecmp(line, "verification successful") == 0))
+      if (linelen && mutt_istr_equal(line, "verification successful"))
         badsig = 0;
 
       FREE(&line);
@@ -2188,7 +1919,7 @@ static struct Body *smime_handle_entity(struct Body *m, struct State *s, FILE *f
   char buf[8192];
   while (fgets(buf, sizeof(buf) - 1, fp_smime_out))
   {
-    const size_t len = mutt_str_strlen(buf);
+    const size_t len = mutt_str_len(buf);
     if ((len > 1) && (buf[len - 2] == '\r'))
     {
       buf[len - 2] = '\n';
@@ -2263,7 +1994,7 @@ static struct Body *smime_handle_entity(struct Body *m, struct State *s, FILE *f
     rewind(fp_smime_err);
 
     line = mutt_file_read_line(line, &linelen, fp_smime_err, NULL, 0);
-    if (linelen && (mutt_str_strcasecmp(line, "verification successful") == 0))
+    if (linelen && mutt_istr_equal(line, "verification successful"))
       m->goodsig = true;
     FREE(&line);
   }

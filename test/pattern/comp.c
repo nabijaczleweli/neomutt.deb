@@ -29,8 +29,8 @@
 #include "mutt/buffer.h"
 #include "mutt/memory.h"
 #include "alias/lib.h"
-#include "globals.h"
-#include "pattern.h"
+#include "pattern/lib.h"
+#include "mutt_globals.h"
 
 bool ResumeEditedDraftFiles;
 

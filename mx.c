@@ -42,14 +42,16 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "alias/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "mx.h"
+#include "maildir/lib.h"
+#include "mbox/lib.h"
 #include "context.h"
 #include "copy.h"
-#include "globals.h"
 #include "hook.h"
-#include "init.h"
 #include "keymap.h"
+#include "mutt_globals.h"
 #include "mutt_header.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
@@ -58,8 +60,6 @@
 #include "options.h"
 #include "protos.h"
 #include "sort.h"
-#include "maildir/lib.h"
-#include "mbox/lib.h"
 #ifdef USE_COMP_MBOX
 #include "compmbox/lib.h"
 #endif
@@ -80,7 +80,6 @@
 #endif
 
 /* These Config Variables are only used in mx.c */
-unsigned char C_CatchupNewsgroup; ///< Config: (nntp) Mark all articles as read when leaving a newsgroup
 bool C_KeepFlagged; ///< Config: Don't move flagged messages from #C_Spoolfile to #C_Mbox
 unsigned char C_MboxType; ///< Config: Default type for creating new mailboxes
 unsigned char C_Move; ///< Config: Move emails from #C_Spoolfile to #C_Mbox when read
@@ -155,14 +154,16 @@ const struct MxOps *mx_get_ops(enum MailboxType type)
  */
 static bool mutt_is_spool(const char *str)
 {
+  if (mutt_str_equal(str, C_Spoolfile))
+    return true;
+
   struct Url *ua = url_parse(str);
   struct Url *ub = url_parse(C_Spoolfile);
 
   const bool is_spool =
       ua && ub && (ua->scheme == ub->scheme) &&
-      (mutt_str_strcasecmp(ua->host, ub->host) == 0) &&
-      (mutt_str_strcasecmp(ua->path, ub->path) == 0) &&
-      (!ua->user || !ub->user || (mutt_str_strcmp(ua->user, ub->user) == 0));
+      mutt_istr_equal(ua->host, ub->host) && mutt_istr_equal(ua->path, ub->path) &&
+      (!ua->user || !ub->user || mutt_str_equal(ua->user, ub->user));
 
   url_free(&ua);
   url_free(&ub);
@@ -257,6 +258,42 @@ static int mx_open_mailbox_append(struct Mailbox *m, OpenMailboxFlags flags)
 }
 
 /**
+ * mx_mbox_ac_link - Link a Mailbox to an existing or new Account
+ * @param m Mailbox to link
+ * @retval true Success
+ * @retval false Failure
+ */
+bool mx_mbox_ac_link(struct Mailbox *m)
+{
+  if (!m)
+    return false;
+
+  if (m->account)
+    return true;
+
+  struct Account *a = mx_ac_find(m);
+  const bool new_account = !a;
+  if (new_account)
+  {
+    a = account_new(NULL, NeoMutt->sub);
+    a->type = m->type;
+  }
+  if (mx_ac_add(a, m) < 0)
+  {
+    if (new_account)
+    {
+      FREE(&a);
+    }
+    return false;
+  }
+  if (new_account)
+  {
+    neomutt_account_add(NeoMutt, a);
+  }
+  return true;
+}
+
+/**
  * mx_mbox_open - Open a mailbox and parse it
  * @param m     Mailbox to open
  * @param flags Flags, see #OpenMailboxFlags
@@ -268,14 +305,13 @@ struct Context *mx_mbox_open(struct Mailbox *m, OpenMailboxFlags flags)
   if (!m)
     return NULL;
 
-  struct Context *ctx = ctx_new();
-  ctx->mailbox = m;
+  struct Context *ctx = ctx_new(m);
 
   struct EventContext ev_ctx = { ctx };
   notify_send(ctx->notify, NT_CONTEXT, NT_CONTEXT_OPEN, &ev_ctx);
 
   // If the Mailbox is closed, Context->mailbox must be set to NULL
-  notify_observer_add(m->notify, ctx_mailbox_observer, ctx);
+  notify_observer_add(m->notify, NT_MAILBOX, ctx_mailbox_observer, ctx);
 
   if ((m->type == MUTT_UNKNOWN) && (flags & (MUTT_NEWFOLDER | MUTT_APPEND)))
   {
@@ -286,30 +322,14 @@ struct Context *mx_mbox_open(struct Mailbox *m, OpenMailboxFlags flags)
   const bool newly_linked_account = !m->account;
   if (newly_linked_account)
   {
-    struct Account *a = mx_ac_find(m);
-    bool new_account = false;
-    if (!a)
-    {
-      a = account_new(NULL, NeoMutt->sub);
-      a->type = m->type;
-      new_account = true;
-    }
-    if (mx_ac_add(a, m) < 0)
+    if (!mx_mbox_ac_link(m))
     {
       ctx_free(&ctx);
-      if (new_account)
-      {
-        FREE(&a);
-      }
       return NULL;
-    }
-    if (new_account)
-    {
-      neomutt_account_add(NeoMutt, a);
     }
   }
 
-  ctx->msg_not_read_yet = -1;
+  ctx->msg_in_pager = -1;
   ctx->collapsed = false;
 
   m->verbose = !(flags & MUTT_QUIET);
@@ -396,7 +416,7 @@ struct Context *mx_mbox_open(struct Mailbox *m, OpenMailboxFlags flags)
     if (rc == -2)
     {
       mutt_error(_("Reading from %s interrupted..."), mailbox_path(m));
-      mutt_sort_headers(ctx, true);
+      mutt_sort_headers(ctx->mailbox, ctx->threads, true, &ctx->vsize);
     }
   }
   else
@@ -457,11 +477,10 @@ void mx_fastclose_mailbox(struct Mailbox *m)
 /**
  * sync_mailbox - save changes to disk
  * @param m          Mailbox
- * @param index_hint Current email
  * @retval  0 Success
  * @retval -1 Failure
  */
-static int sync_mailbox(struct Mailbox *m, int *index_hint)
+static int sync_mailbox(struct Mailbox *m)
 {
   if (!m || !m->mx_ops || !m->mx_ops->mbox_sync)
     return -1;
@@ -472,7 +491,7 @@ static int sync_mailbox(struct Mailbox *m, int *index_hint)
     mutt_message(_("Writing %s..."), mailbox_path(m));
   }
 
-  int rc = m->mx_ops->mbox_sync(m, index_hint);
+  int rc = m->mx_ops->mbox_sync(m);
   if (rc != 0)
   {
     mutt_debug(LL_DEBUG2, "mbox_sync returned: %d\n", rc);
@@ -600,6 +619,13 @@ static int trash_append(struct Mailbox *m)
  * @note The flag retvals come from a call to a backend sync function
  *
  * @note Context will be freed after it's closed
+ *
+ * @note It's very important to ensure the mailbox is properly closed before
+ *       free'ing the context.  For selected mailboxes, IMAP will cache the
+ *       context inside connection->adata until imap_close_mailbox() removes
+ *       it.  Readonly, dontwrite, and append mailboxes are guaranteed to call
+ *       mx_fastclose_mailbox(), so for most of NeoMutt's code you won't see
+ *       return value checks for temporary contexts.
  */
 int mx_mbox_close(struct Context **ptr)
 {
@@ -840,7 +866,7 @@ int mx_mbox_close(struct Context **ptr)
 
     if (m->changed || (m->msg_deleted != 0))
     {
-      int check = sync_mailbox(ctx->mailbox, NULL);
+      int check = sync_mailbox(ctx->mailbox);
       if (check != 0)
       {
         rc = check;
@@ -901,7 +927,6 @@ cleanup:
 /**
  * mx_mbox_sync - Save changes to mailbox
  * @param[in]  m          Mailbox
- * @param[out] index_hint Currently selected Email
  * @retval #MUTT_REOPENED  mailbox has been externally modified
  * @retval #MUTT_NEW_MAIL  new mail has arrived
  * @retval  0 Success
@@ -909,7 +934,7 @@ cleanup:
  *
  * @note The flag retvals come from a call to a backend sync function
  */
-int mx_mbox_sync(struct Mailbox *m, int *index_hint)
+int mx_mbox_sync(struct Mailbox *m)
 {
   if (!m)
     return -1;
@@ -924,7 +949,7 @@ int mx_mbox_sync(struct Mailbox *m, int *index_hint)
     if (km_expand_key(buf, sizeof(buf), km_find_func(MENU_MAIN, OP_TOGGLE_WRITE)))
       snprintf(tmp, sizeof(tmp), _(" Press '%s' to toggle write"), buf);
     else
-      mutt_str_strfcpy(tmp, _("Use 'toggle-write' to re-enable write"), sizeof(tmp));
+      mutt_str_copy(tmp, _("Use 'toggle-write' to re-enable write"), sizeof(tmp));
 
     mutt_error(_("Mailbox is marked unwritable. %s"), tmp);
     return -1;
@@ -990,7 +1015,7 @@ int mx_mbox_sync(struct Mailbox *m, int *index_hint)
     rc = imap_sync_mailbox(m, purge, false);
   else
 #endif
-    rc = sync_mailbox(m, index_hint);
+    rc = sync_mailbox(m);
   if (rc >= 0)
   {
 #ifdef USE_IMAP
@@ -1107,17 +1132,16 @@ struct Message *mx_msg_open_new(struct Mailbox *m, struct Email *e, MsgOpenFlags
 /**
  * mx_mbox_check - Check for new mail - Wrapper for MxOps::mbox_check()
  * @param m          Mailbox
- * @param index_hint Current email
  * @retval >0 Success, e.g. #MUTT_NEW_MAIL
  * @retval  0 Success, no change
  * @retval -1 Failure
  */
-int mx_mbox_check(struct Mailbox *m, int *index_hint)
+int mx_mbox_check(struct Mailbox *m)
 {
   if (!m || !m->mx_ops)
     return -1;
 
-  int rc = m->mx_ops->mbox_check(m, index_hint);
+  int rc = m->mx_ops->mbox_check(m);
   if ((rc == MUTT_NEW_MAIL) || (rc == MUTT_REOPENED))
     mailbox_changed(m, NT_MAILBOX_INVALID);
 
@@ -1389,7 +1413,7 @@ int mx_path_canon(char *buf, size_t buflen, const char *folder, enum MailboxType
     }
     else if ((buf[0] == '+') || (buf[0] == '='))
     {
-      size_t folder_len = mutt_str_strlen(folder);
+      size_t folder_len = mutt_str_len(folder);
       if ((folder_len > 0) && (folder[folder_len - 1] != '/'))
       {
         buf[0] = '/';
@@ -1481,9 +1505,9 @@ int mx_path_canon2(struct Mailbox *m, const char *folder)
   char buf[PATH_MAX];
 
   if (m->realpath)
-    mutt_str_strfcpy(buf, m->realpath, sizeof(buf));
+    mutt_str_copy(buf, m->realpath, sizeof(buf));
   else
-    mutt_str_strfcpy(buf, mailbox_path(m), sizeof(buf));
+    mutt_str_copy(buf, mailbox_path(m), sizeof(buf));
 
   int rc = mx_path_canon(buf, sizeof(buf), folder, &m->type);
 
@@ -1601,7 +1625,7 @@ struct Mailbox *mx_mbox_find(struct Account *a, const char *path)
   {
     if (!use_url)
     {
-      if (mutt_str_strcmp(np->mailbox->realpath, path) == 0)
+      if (mutt_str_equal(np->mailbox->realpath, path))
         return np->mailbox;
       continue;
     }
@@ -1611,9 +1635,9 @@ struct Mailbox *mx_mbox_find(struct Account *a, const char *path)
     if (!url_a)
       continue;
 
-    if (mutt_str_strcasecmp(url_a->host, url_p->host) != 0)
+    if (!mutt_istr_equal(url_a->host, url_p->host))
       continue;
-    if (url_p->user && (mutt_str_strcasecmp(url_a->user, url_p->user) != 0))
+    if (url_p->user && !mutt_istr_equal(url_a->user, url_p->user))
       continue;
     if (a->type == MUTT_IMAP)
     {
@@ -1622,7 +1646,7 @@ struct Mailbox *mx_mbox_find(struct Account *a, const char *path)
     }
     else
     {
-      if (mutt_str_strcmp(url_a->path, url_p->path) == 0)
+      if (mutt_str_equal(url_a->path, url_p->path))
         break;
     }
   }
@@ -1648,7 +1672,7 @@ struct Mailbox *mx_mbox_find2(const char *path)
     return NULL;
 
   char buf[PATH_MAX];
-  mutt_str_strfcpy(buf, path, sizeof(buf));
+  mutt_str_copy(buf, path, sizeof(buf));
   mx_path_canon(buf, sizeof(buf), C_Folder, NULL);
 
   struct Account *np = NULL;
@@ -1682,6 +1706,73 @@ struct Mailbox *mx_path_resolve(const char *path)
   m->flags = MB_HIDDEN;
   mutt_buffer_strcpy(&m->pathbuf, path);
   mx_path_canon2(m, C_Folder);
+
+  return m;
+}
+
+/**
+ * mx_mbox_find_by_name_ac - Find a Mailbox with given name under an Account
+ * @param a    Account to search
+ * @param name Name to find
+ * @retval ptr Mailbox
+ */
+static struct Mailbox *mx_mbox_find_by_name_ac(struct Account *a, const char *name)
+{
+  if (!a || !name)
+    return NULL;
+
+  struct MailboxNode *np = NULL;
+
+  STAILQ_FOREACH(np, &a->mailboxes, entries)
+  {
+    if (mutt_str_equal(np->mailbox->name, name))
+      return np->mailbox;
+  }
+
+  return NULL;
+}
+
+/**
+ * mx_mbox_find_by_name - Find a Mailbox with given name
+ * @param name Name to search
+ * @retval ptr Mailbox
+ */
+static struct Mailbox *mx_mbox_find_by_name(const char *name)
+{
+  if (!name)
+    return NULL;
+
+  struct Account *np = NULL;
+  TAILQ_FOREACH(np, &NeoMutt->accounts, entries)
+  {
+    struct Mailbox *m = mx_mbox_find_by_name_ac(np, name);
+    if (m)
+      return m;
+  }
+
+  return NULL;
+}
+
+/**
+ * mx_resolve - Get a Mailbox from either a path or name
+ * @param path_or_name Mailbox path or name
+ * @retval ptr         Mailbox
+ *
+ * Order of resolving:
+ *  1. Name
+ *  2. Path
+ */
+struct Mailbox *mx_resolve(const char *path_or_name)
+{
+  if (!path_or_name)
+    return NULL;
+
+  // Order is name first because you can create a Mailbox from
+  // a path, but can't from a name. So fallback behavior creates
+  // a new Mailbox for us.
+  struct Mailbox *m = mx_mbox_find_by_name(path_or_name);
+  if (!m)
+    m = mx_path_resolve(path_or_name);
 
   return m;
 }

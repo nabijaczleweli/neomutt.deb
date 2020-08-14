@@ -36,9 +36,9 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "context.h"
-#include "globals.h"
 #include "index.h"
 #include "keymap.h"
+#include "mutt_globals.h"
 #include "mutt_menu.h"
 #include "protos.h"
 #include "sort.h"
@@ -437,9 +437,9 @@ int mutt_change_flag(struct Mailbox *m, struct EmailList *el, bool bf)
   int flag;
   struct KeyEvent event;
 
-  mutt_window_mvprintw(MuttMessageWindow, 0, 0,
+  mutt_window_mvprintw(MessageWindow, 0, 0,
                        "%s? (D/N/O/r/*/!): ", bf ? _("Set flag") : _("Clear flag"));
-  mutt_window_clrtoeol(MuttMessageWindow);
+  mutt_window_clrtoeol(MessageWindow);
   mutt_refresh();
 
   do
@@ -449,11 +449,11 @@ int mutt_change_flag(struct Mailbox *m, struct EmailList *el, bool bf)
   int i = event.ch;
   if (i < 0)
   {
-    mutt_window_clearline(MuttMessageWindow, 0);
+    mutt_window_clearline(MessageWindow, 0);
     return -1;
   }
 
-  mutt_window_clearline(MuttMessageWindow, 0);
+  mutt_window_clearline(MessageWindow, 0);
 
   switch (i)
   {

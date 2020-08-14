@@ -147,11 +147,10 @@ struct MxOps
   /**
    * mbox_check - Check for new mail
    * @param m          Mailbox
-   * @param index_hint Remember our place in the index
    * @retval >0 Success, e.g. #MUTT_REOPENED
    * @retval -1 Error
    */
-  int (*mbox_check)      (struct Mailbox *m, int *index_hint);
+  int (*mbox_check)      (struct Mailbox *m);
 
   /**
    * mbox_check_stats - Check the Mailbox statistics
@@ -166,11 +165,10 @@ struct MxOps
   /**
    * mbox_sync - Save changes to the Mailbox
    * @param m          Mailbox to sync
-   * @param index_hint Remember our place in the index
    * @retval  0 Success
    * @retval -1 Failure
    */
-  int (*mbox_sync)       (struct Mailbox *m, int *index_hint);
+  int (*mbox_sync)       (struct Mailbox *m);
 
   /**
    * mbox_close - Close a Mailbox
@@ -294,11 +292,11 @@ struct MxOps
 };
 
 /* Wrappers for the Mailbox API, see MxOps */
-int             mx_mbox_check      (struct Mailbox *m, int *index_hint);
+int             mx_mbox_check      (struct Mailbox *m);
 int             mx_mbox_check_stats(struct Mailbox *m, int flags);
 int             mx_mbox_close      (struct Context **ptr);
 struct Context *mx_mbox_open       (struct Mailbox *m, OpenMailboxFlags flags);
-int             mx_mbox_sync       (struct Mailbox *m, int *index_hint);
+int             mx_mbox_sync       (struct Mailbox *m);
 int             mx_msg_close       (struct Mailbox *m, struct Message **msg);
 int             mx_msg_commit      (struct Mailbox *m, struct Message *msg);
 struct Message *mx_msg_open_new    (struct Mailbox *m, struct Email *e, MsgOpenFlags flags);
@@ -311,14 +309,16 @@ int             mx_path_parent     (char *buf, size_t buflen);
 int             mx_path_pretty     (char *buf, size_t buflen, const char *folder);
 enum MailboxType mx_path_probe     (const char *path);
 struct Mailbox *mx_path_resolve    (const char *path);
+struct Mailbox *mx_resolve         (const char *path_or_name);
 int             mx_tags_commit     (struct Mailbox *m, struct Email *e, char *tags);
 int             mx_tags_edit       (struct Mailbox *m, const char *tags, char *buf, size_t buflen);
 
-struct Account *mx_ac_find   (struct Mailbox *m);
-struct Mailbox *mx_mbox_find (struct Account *a, const char *path);
-struct Mailbox *mx_mbox_find2(const char *path);
-int             mx_ac_add    (struct Account *a, struct Mailbox *m);
-int             mx_ac_remove (struct Mailbox *m);
+struct Account *mx_ac_find     (struct Mailbox *m);
+struct Mailbox *mx_mbox_find   (struct Account *a, const char *path);
+struct Mailbox *mx_mbox_find2  (const char *path);
+bool            mx_mbox_ac_link(struct Mailbox *m);
+int             mx_ac_add      (struct Account *a, struct Mailbox *m);
+int             mx_ac_remove   (struct Mailbox *m);
 
 int                 mx_access           (const char *path, int flags);
 void                mx_alloc_memory     (struct Mailbox *m);

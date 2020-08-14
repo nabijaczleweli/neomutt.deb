@@ -38,6 +38,7 @@
  */
 struct NotifyCallback
 {
+  struct Notify  *current;       ///< Notify object being observed
   enum NotifyType event_type;    ///< Send: Event type, e.g. #NT_ACCOUNT
   int             event_subtype; ///< Send: Event subtype, e.g. #NT_ACCOUNT_ADD
   void           *event_data;    ///< Data from notify_send()
@@ -57,6 +58,7 @@ typedef int (*observer_t)(struct NotifyCallback *nc);
  */
 struct Observer
 {
+  enum NotifyType type;  ///< Notification type to observe, e.g. #NT_WINDOW
   observer_t callback;   ///< Callback function for events
   void *global_data;     ///< Private data to pass to callback
 };

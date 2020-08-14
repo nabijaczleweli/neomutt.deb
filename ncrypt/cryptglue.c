@@ -38,19 +38,19 @@
 #include "config.h"
 #include <stdbool.h>
 #include <stdio.h>
+#include "private.h"
 #include "mutt/lib.h"
 #include "cryptglue.h"
-#include "crypt_mod.h"
 #include "ncrypt/lib.h"
+#include "crypt_mod.h"
 #ifndef CRYPT_BACKEND_GPGME
 #include "gui/lib.h"
 #endif
 #ifdef USE_AUTOCRYPT
 #include "email/lib.h"
-#include "crypt_gpgme.h"
-#include "globals.h"
-#include "options.h"
 #include "autocrypt/lib.h"
+#include "crypt_gpgme.h"
+#include "options.h"
 #else
 struct Envelope;
 #endif
@@ -59,11 +59,6 @@ struct Address;
 struct AddressList;
 struct Mailbox;
 struct State;
-
-#ifdef CRYPT_BACKEND_GPGME
-/* These Config Variables are only used in ncrypt/cryptglue.c */
-bool C_CryptUseGpgme; ///< Config: Use GPGME crypto backend
-#endif
 
 #ifdef CRYPT_BACKEND_CLASSIC_PGP
 extern struct CryptModuleSpecs CryptModPgpClassic;

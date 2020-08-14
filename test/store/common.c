@@ -25,8 +25,8 @@
 #include "acutest.h"
 #include <stdbool.h>
 #include "mutt/lib.h"
-#include "test_common.h"
 #include "store/lib.h"
+#include "test_common.h"
 
 bool test_store_setup(char *buf, size_t buflen)
 {
@@ -46,7 +46,7 @@ bool test_store_degenerate(const struct StoreOps *sops, const char *name)
   if (!sops)
     return false;
 
-  if (!TEST_CHECK(mutt_str_strcmp(sops->name, name) == 0))
+  if (!TEST_CHECK(mutt_str_equal(sops->name, name)))
     return false;
 
   if (!TEST_CHECK(sops->open(NULL) == NULL))
