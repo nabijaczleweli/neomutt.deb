@@ -1,3 +1,11 @@
+neomutt (20200814+dfsg.1-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version 20200814+dfsg.1
+  * Rebase patches
+
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Fri, 14 Aug 2020 20:04:36 +0200
+
 neomutt (20200626+dfsg.1-0.1) unstable; urgency=medium
 
   * Non-maintainer upload.
