@@ -6,15 +6,29 @@ Even if EDITOR is not set, mutt will always use /usr/bin/editor
 (which is set by update-alternatives), rather than falling back
 to vi.
 ---
+ docs/config.c | 2 +-
  init.c        | 2 ++
  mutt_config.c | 2 +-
- 2 files changed, 3 insertions(+), 1 deletion(-)
+ 3 files changed, 4 insertions(+), 2 deletions(-)
 
+diff --git a/docs/config.c b/docs/config.c
+index 274487d..6783d1e 100644
+--- a/docs/config.c
++++ b/docs/config.c
+@@ -1045,7 +1045,7 @@
+ ** ignored for interoperability reasons.
+ */
+ 
+-{ "editor", DT_COMMAND, "vi" },
++{ "editor", DT_COMMAND, "/usr/bin/editor" },
+ /*
+ ** .pp
+ ** This variable specifies which editor is used by NeoMutt.
 diff --git a/init.c b/init.c
-index 5c3ec1a..62b090a 100644
+index a28bcb4..91bc27c 100644
 --- a/init.c
 +++ b/init.c
-@@ -806,6 +806,8 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
+@@ -803,6 +803,8 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
    const char *env_ed = mutt_str_getenv("VISUAL");
    if (!env_ed)
      env_ed = mutt_str_getenv("EDITOR");
@@ -24,15 +38,15 @@ index 5c3ec1a..62b090a 100644
    {
      cs_str_string_set(cs, "editor", env_ed, NULL);
 diff --git a/mutt_config.c b/mutt_config.c
-index 7037633..c568f93 100644
+index bb8f5ea..cdc17e2 100644
 --- a/mutt_config.c
 +++ b/mutt_config.c
-@@ -1036,7 +1036,7 @@ struct ConfigDef MuttVars[] = {
-   ** .pp
-   ** This variable specifies which editor is used by NeoMutt.
-   ** It defaults to the value of the \fC$$$VISUAL\fP, or \fC$$$EDITOR\fP, environment
--  ** variable, or to the string "vi" if neither of those are set.
-+  ** variable, or to the string "/usr/bin/editor" if neither of those are set.
-   ** .pp
-   ** The \fC$$editor\fP string may contain a \fI%s\fP escape, which will be replaced by the name
-   ** of the file to be edited.  If the \fI%s\fP escape does not appear in \fC$$editor\fP, a
+@@ -219,7 +219,7 @@ struct ConfigDef MainVars[] = {
+   { "edit_headers", DT_BOOL, &C_EditHeaders, false, 0, NULL,
+     "Let the user edit the email headers whilst editing an email"
+   },
+-  { "editor", DT_STRING|DT_NOT_EMPTY|DT_COMMAND, &C_Editor, IP "vi", 0, NULL,
++  { "editor", DT_STRING|DT_NOT_EMPTY|DT_COMMAND, &C_Editor, IP "/usr/bin/editor", 0, NULL,
+     "External command to use as an email editor"
+   },
+   { "flag_chars", DT_MBTABLE|R_INDEX|R_PAGER, &C_FlagChars, IP "*!DdrONon- ", 0, NULL,
