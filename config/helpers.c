@@ -33,6 +33,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "mutt/lib.h"
+#include "helpers.h"
 #include "quad.h"
 #include "subset.h"
 #include "types.h"
@@ -207,6 +208,27 @@ const struct Slist *cs_subset_slist(const struct ConfigSubset *sub, const char *
   assert(value != INT_MIN);
 
   return (const struct Slist *) value;
+}
+
+/**
+ * cs_subset_sort - Get a sort config item by name
+ * @param sub   Config Subset
+ * @param name  Name of config item
+ * @retval num Sort
+ */
+short cs_subset_sort(const struct ConfigSubset *sub, const char *name)
+{
+  assert(sub && name);
+
+  struct HashElem *he = cs_subset_create_inheritance(sub, name);
+  assert(he);
+
+  assert(DTYPE(he->type) == DT_SORT);
+
+  intptr_t value = cs_subset_he_native_get(sub, he, NULL);
+  assert(value != INT_MIN);
+
+  return (short) value;
 }
 
 /**

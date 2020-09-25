@@ -21,7 +21,7 @@
  */
 
 /**
- * @page send SEND: Shared code for sending Emails
+ * @page lib_send SEND: Shared code for sending Emails
 
  * Shared code for sending Emails
  *
@@ -50,7 +50,5 @@
 #include "sendmail.h"
 #include "smtp.h"
 // IWYU pragma: end_exports
-
-struct ConfigSet;
 
 #endif /* MUTT_SEND_LIB_H */

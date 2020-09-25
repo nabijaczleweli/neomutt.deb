@@ -30,6 +30,7 @@
 #include <stddef.h>
 #include <config/lib.h>
 #include <stdbool.h>
+#include "lib.h"
 
 // clang-format off
 bool C_CheckMboxSize; ///< Config: (mbox,mmdf) Use mailbox size as an indicator of new mail
@@ -45,7 +46,7 @@ struct ConfigDef MboxVars[] = {
 };
 
 /**
- * config_init_mbox - Register mbox config variables
+ * config_init_mbox - Register mbox config variables - Implements ::module_init_config_t
  */
 bool config_init_mbox(struct ConfigSet *cs)
 {

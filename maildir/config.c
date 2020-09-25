@@ -31,6 +31,7 @@
 #include <config/lib.h>
 #include <stdbool.h>
 #include "private.h"
+#include "lib.h"
 
 // clang-format off
 bool  C_CheckNew;        ///< Config: (maildir,mh) Check for new mail while the mailbox is open
@@ -70,7 +71,7 @@ struct ConfigDef MaildirVars[] = {
 };
 
 /**
- * config_init_maildir - Register maildir config variables
+ * config_init_maildir - Register maildir config variables - Implements ::module_init_config_t
  */
 bool config_init_maildir(struct ConfigSet *cs)
 {

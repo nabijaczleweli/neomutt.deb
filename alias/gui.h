@@ -24,6 +24,8 @@
 #define MUTT_ALIAS_GUI_H
 
 #include <stdbool.h>
+#include "sort.h"
+#include "mutt/array.h"
 
 struct Alias;
 
@@ -32,31 +34,28 @@ struct Alias;
  */
 struct AliasView
 {
-  int num;             ///< Index number in list
-  bool is_tagged;      ///< Is it tagged?
-  bool is_deleted;     ///< Is it deleted?
-  struct Alias *alias; ///< Alias
+  int num;              ///< Index number in list
+  int orig_seq;         ///< Sequence in alias config file
+  bool is_searched : 1; ///< Alias has been searched
+  bool is_matched  : 1; ///< Search matches this Alias
+  bool is_tagged   : 1; ///< Is it tagged?
+  bool is_deleted  : 1; ///< Is it deleted?
+  struct Alias *alias;  ///< Alias
 };
 
-/**
- * AliasMenuData - GUI data required to maintain the Menu
- */
-struct AliasMenuData
-{
-  struct AliasView **av; ///< An AliasView for each Alias
-  int num_views;         ///< Number of AliasViews used
-  int max_views;         ///< Size of AliasView array
-};
+ARRAY_HEAD(AliasMenuData, struct AliasView);
 
-void                  menu_data_clear(struct AliasMenuData *mdata);
-void                  menu_data_free (struct AliasMenuData **ptr);
-struct AliasMenuData *menu_data_new  (void);
+int alias_config_observer(struct NotifyCallback *nc);
+int alias_color_observer (struct NotifyCallback *nc);
 
 int  menu_data_alias_add   (struct AliasMenuData *mdata, struct Alias *alias);
 int  menu_data_alias_delete(struct AliasMenuData *mdata, struct Alias *alias);
 void menu_data_sort        (struct AliasMenuData *mdata);
 
+sort_t alias_get_sort_function(short sort);
+
 int alias_sort_address(const void *a, const void *b);
 int alias_sort_name   (const void *a, const void *b);
+int alias_sort_unsort (const void *a, const void *b);
 
 #endif /* MUTT_ALIAS_GUI_H */

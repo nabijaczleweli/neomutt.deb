@@ -21,7 +21,7 @@
  */
 
 /**
- * @page config CONFIG: Flexible handling of config items
+ * @page lib_config CONFIG: Flexible handling of config items
  *
  * User configurable variables.
  *
@@ -29,6 +29,7 @@
  * | :------------------ | :------------------------- |
  * | config/address.c    | @subpage config_address    |
  * | config/bool.c       | @subpage config_bool       |
+ * | config/charset.c    | @subpage config_charset    |
  * | config/dump.c       | @subpage config_dump       |
  * | config/enum.c       | @subpage config_enum       |
  * | config/helpers.c    | @subpage config_helpers    |
@@ -51,22 +52,25 @@
 // IWYU pragma: begin_exports
 #include "address.h"
 #include "bool.h"
+#include "charset.h"
 #include "dump.h"
 #include "enum.h"
 #include "helpers.h"
 #include "inheritance.h"
-#include "long.h"
 #include "mbtable.h"
-#include "number.h"
-#include "path.h"
 #include "quad.h"
 #include "regex2.h"
 #include "set.h"
-#include "slist.h"
 #include "sort2.h"
-#include "string3.h"
 #include "subset.h"
 #include "types.h"
 // IWYU pragma: end_exports
+
+/**
+ * module_init_config_t - Prototype for a config definition function
+ * @param cs Config items
+ * @retval bool true if all the config variables were registered
+ */
+typedef bool (*module_init_config_t)(struct ConfigSet *cs);
 
 #endif /* MUTT_CONFIG_LIB_H */

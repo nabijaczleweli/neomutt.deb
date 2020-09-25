@@ -22,7 +22,7 @@
  */
 
 /**
- * @page command_parse Functions to parse commands in a config file
+ * @page neo_command_parse Functions to parse commands in a config file
  *
  * Functions to parse commands in a config file
  */
@@ -58,9 +58,6 @@
 #include "myvar.h"
 #include "options.h"
 #include "version.h"
-#ifdef USE_SIDEBAR
-#include "sidebar/lib.h"
-#endif
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
@@ -908,25 +905,6 @@ bail:
 }
 
 /**
- * notify_sidebar - Notify the sidebar that a mailbox has changed
- * @param m Mailbox that has changed
- * @param e Event that has happened
- */
-static void notify_sidebar(struct Mailbox *m, enum SidebarNotification e)
-{
-  struct MuttWindow *dlg = NULL;
-  TAILQ_FOREACH(dlg, &AllDialogsWindow->children, entries)
-  {
-    struct MuttWindow *win_sidebar = mutt_window_find(dlg, WT_SIDEBAR);
-    if (win_sidebar)
-    {
-      sb_notify_mailbox(win_sidebar, m, e);
-      break;
-    }
-  }
-}
-
-/**
  * parse_mailboxes - Parse the 'mailboxes' command - Implements Command::parse()
  *
  * This is also used by 'virtual-mailboxes'.
@@ -989,12 +967,6 @@ enum CommandResult parse_mailboxes(struct Buffer *buf, struct Buffer *s,
           mutt_str_replace(&m_old->name, m->name);
         }
 
-#ifdef USE_SIDEBAR
-        if (show || rename)
-        {
-          notify_sidebar(m_old, show ? SBN_CREATED : SBN_RENAMED);
-        }
-#endif
         mailbox_free(&m);
         continue;
       }
@@ -1018,9 +990,6 @@ enum CommandResult parse_mailboxes(struct Buffer *buf, struct Buffer *s,
       neomutt_account_add(NeoMutt, a);
     }
 
-#ifdef USE_SIDEBAR
-    notify_sidebar(m, SBN_CREATED);
-#endif
 #ifdef USE_INOTIFY
     mutt_monitor_add(m);
 #endif
@@ -1119,7 +1088,7 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
 
     if (prefix && (data != MUTT_SET_SET))
     {
-      mutt_buffer_printf(err, "ERR22 can't use 'inv', 'no', '&' or '?' with the '%s' command",
+      mutt_buffer_printf(err, _("Can't use 'inv', 'no', '&' or '?' with the '%s' command"),
                          set_commands[data]);
       return MUTT_CMD_WARNING;
     }
@@ -1153,7 +1122,7 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
         }
         else
         {
-          mutt_buffer_printf(err, "ERR01 unknown variable: %s", buf->data);
+          mutt_buffer_printf(err, _("%s: unknown variable"), buf->data);
           return MUTT_CMD_ERROR;
         }
       }
@@ -1166,13 +1135,13 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
       if (prefix)
       {
         mutt_buffer_printf(err,
-                           "ERR02 can't use a prefix when querying a variable");
+                           _("Can't use a prefix when querying a variable"));
         return MUTT_CMD_WARNING;
       }
 
       if (reset || unset || inv)
       {
-        mutt_buffer_printf(err, "ERR03 can't query a variable with the '%s' command",
+        mutt_buffer_printf(err, _("Can't query a variable with the '%s' command"),
                            set_commands[data]);
         return MUTT_CMD_WARNING;
       }
@@ -1184,14 +1153,15 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
     {
       if (prefix)
       {
-        mutt_buffer_printf(err, "ERR04 can't use prefix when incrementing or "
-                                "decrementing a variable");
+        mutt_buffer_printf(
+            err,
+            _("Can't use prefix when incrementing or decrementing a variable"));
         return MUTT_CMD_WARNING;
       }
 
       if (reset || unset || inv)
       {
-        mutt_buffer_printf(err, "ERR05 can't set a variable with the '%s' command",
+        mutt_buffer_printf(err, _("Can't set a variable with the '%s' command"),
                            set_commands[data]);
         return MUTT_CMD_WARNING;
       }
@@ -1211,14 +1181,13 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
     {
       if (prefix)
       {
-        mutt_buffer_printf(err,
-                           "ERR04 can't use prefix when setting a variable");
+        mutt_buffer_printf(err, _("Can't use prefix when setting a variable"));
         return MUTT_CMD_WARNING;
       }
 
       if (reset || unset || inv)
       {
-        mutt_buffer_printf(err, "ERR05 can't set a variable with the '%s' command",
+        mutt_buffer_printf(err, _("Can't set a variable with the '%s' command"),
                            set_commands[data]);
         return MUTT_CMD_WARNING;
       }
@@ -1231,12 +1200,12 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
     {
       if (data == MUTT_SET_SET)
       {
-        mutt_buffer_printf(err, "ERR06 prefixes 'no' and 'inv' may only be "
-                                "used with bool/quad variables");
+        mutt_buffer_printf(err, _("Prefixes 'no' and 'inv' may only be used "
+                                  "with bool/quad variables"));
       }
       else
       {
-        mutt_buffer_printf(err, "ERR07 command '%s' can only be used with bool/quad variables",
+        mutt_buffer_printf(err, _("Command '%s' can only be used with bool/quad variables"),
                            set_commands[data]);
       }
       return MUTT_CMD_WARNING;
@@ -1443,6 +1412,7 @@ enum CommandResult parse_setenv(struct Buffer *buf, struct Buffer *s,
   char **envp = mutt_envlist_getlist();
 
   bool query = false;
+  bool prefix = false;
   bool unset = (data == MUTT_SET_UNSET);
 
   if (!MoreArgs(s))
@@ -1454,11 +1424,37 @@ enum CommandResult parse_setenv(struct Buffer *buf, struct Buffer *s,
   if (*s->dptr == '?')
   {
     query = true;
+    prefix = true;
+
+    if (unset)
+    {
+      mutt_buffer_printf(err, _("Can't query a variable with the '%s' command"), "unsetenv");
+      return MUTT_CMD_WARNING;
+    }
+
     s->dptr++;
   }
 
   /* get variable name */
-  mutt_extract_token(buf, s, MUTT_TOKEN_EQUAL);
+  mutt_extract_token(buf, s, MUTT_TOKEN_EQUAL | MUTT_TOKEN_QUESTION);
+
+  if (*s->dptr == '?')
+  {
+    if (unset)
+    {
+      mutt_buffer_printf(err, _("Can't query a variable with the '%s' command"), "unsetenv");
+      return MUTT_CMD_WARNING;
+    }
+
+    if (prefix)
+    {
+      mutt_buffer_printf(err, _("Can't use a prefix when querying a variable"));
+      return MUTT_CMD_WARNING;
+    }
+
+    query = true;
+    s->dptr++;
+  }
 
   if (query)
   {
@@ -1938,6 +1934,44 @@ enum CommandResult parse_unlists(struct Buffer *buf, struct Buffer *s,
 }
 
 /**
+ * do_unmailboxes - Remove a Mailbox from the Sidebar/notifications
+ * @param m Mailbox to `unmailboxes`
+ */
+static void do_unmailboxes(struct Mailbox *m)
+{
+#ifdef USE_INOTIFY
+  mutt_monitor_remove(m);
+#endif
+  m->flags = MB_HIDDEN;
+  if (Context && (Context->mailbox == m))
+  {
+    struct EventMailbox em = { NULL };
+    notify_send(NeoMutt->notify, NT_MAILBOX, NT_MAILBOX_SWITCH, &em);
+  }
+  else
+  {
+    account_mailbox_remove(m->account, m);
+    mailbox_free(&m);
+  }
+}
+
+/**
+ * do_unmailboxes_star - Remove all Mailboxes from the Sidebar/notifications
+ */
+static void do_unmailboxes_star(void)
+{
+  struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
+  neomutt_mailboxlist_get_all(&ml, NeoMutt, MUTT_MAILBOX_ANY);
+  struct MailboxNode *np = NULL;
+  struct MailboxNode *nptmp = NULL;
+  STAILQ_FOREACH_SAFE(np, &ml, entries, nptmp)
+  {
+    do_unmailboxes(np->mailbox);
+  }
+  neomutt_mailboxlist_clear(&ml);
+}
+
+/**
  * parse_unmailboxes - Parse the 'unmailboxes' command - Implements Command::parse()
  *
  * This is also used by 'unvirtual-mailboxes'
@@ -1945,55 +1979,28 @@ enum CommandResult parse_unlists(struct Buffer *buf, struct Buffer *s,
 enum CommandResult parse_unmailboxes(struct Buffer *buf, struct Buffer *s,
                                      intptr_t data, struct Buffer *err)
 {
-  bool tmp_valid = false;
-  bool clear_all = false;
-
-  while (!clear_all && MoreArgs(s))
+  while (MoreArgs(s))
   {
     mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
 
     if (mutt_str_equal(buf->data, "*"))
     {
-      clear_all = true;
-      tmp_valid = false;
-    }
-    else
-    {
-      mutt_buffer_expand_path(buf);
-      tmp_valid = true;
+      do_unmailboxes_star();
+      return MUTT_CMD_SUCCESS;
     }
 
-    struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
-    neomutt_mailboxlist_get_all(&ml, NeoMutt, MUTT_MAILBOX_ANY);
-    struct MailboxNode *np = NULL;
-    struct MailboxNode *nptmp = NULL;
-    STAILQ_FOREACH_SAFE(np, &ml, entries, nptmp)
-    {
-      /* Compare against path or desc? Ensure 'buf' is valid */
-      if (!clear_all && tmp_valid &&
-          !mutt_istr_equal(mutt_b2s(buf), mailbox_path(np->mailbox)) &&
-          !mutt_istr_equal(mutt_b2s(buf), np->mailbox->name))
-      {
-        continue;
-      }
+    mutt_buffer_expand_path(buf);
 
-#ifdef USE_SIDEBAR
-      notify_sidebar(np->mailbox, SBN_DELETED);
-#endif
-#ifdef USE_INOTIFY
-      mutt_monitor_remove(np->mailbox);
-#endif
-      if (Context && (Context->mailbox == np->mailbox))
+    struct Account *a = NULL;
+    TAILQ_FOREACH(a, &NeoMutt->accounts, entries)
+    {
+      struct Mailbox *m = mx_mbox_find(a, mutt_b2s(buf));
+      if (m)
       {
-        np->mailbox->flags |= MB_HIDDEN;
-      }
-      else
-      {
-        account_mailbox_remove(np->mailbox->account, np->mailbox);
-        mailbox_free(&np->mailbox);
+        do_unmailboxes(m);
+        break;
       }
     }
-    neomutt_mailboxlist_clear(&ml);
   }
   return MUTT_CMD_SUCCESS;
 }

@@ -61,7 +61,9 @@
 #include "lib.h"
 #include "hcache/lib.h"
 #include "maildir/lib.h"
+#include "command_parse.h"
 #include "index.h"
+#include "mutt_commands.h"
 #include "mutt_globals.h"
 #include "mutt_thread.h"
 #include "mx.h"
@@ -70,8 +72,22 @@
 
 struct stat;
 
+const struct Command nm_commands[] = {
+  // clang-format off
+  { "unvirtual-mailboxes", parse_unmailboxes, 0 },
+  { "virtual-mailboxes",   parse_mailboxes,   MUTT_NAMED },
+  // clang-format on
+};
 const char NmUrlProtocol[] = "notmuch://";
 const int NmUrlProtocolLen = sizeof(NmUrlProtocol) - 1;
+
+/**
+ * nm_init - Setup feature commands
+ */
+void nm_init(void)
+{
+  COMMANDS_REGISTER(nm_commands);
+}
 
 /**
  * nm_hcache_open - Open a header cache
@@ -1243,6 +1259,21 @@ static bool nm_message_has_tag(notmuch_message_t *msg, char *tag)
 }
 
 /**
+ * sync_email_path_with_nm - Synchronize Neomutt's Email path with notmuch.
+ * @param e Email in Neomutt
+ * @param msg Email from notmuch
+ */
+static void sync_email_path_with_nm(struct Email *e, notmuch_message_t *msg)
+{
+  const char *new_file = get_message_last_filename(msg);
+  char old_file[PATH_MAX];
+  email_get_fullpath(e, old_file, sizeof(old_file));
+
+  if (!mutt_str_equal(old_file, new_file))
+    update_message_path(e, new_file);
+}
+
+/**
  * update_tags - Update the tags on a message
  * @param msg  Notmuch message
  * @param tags String of tags (space separated)
@@ -2369,6 +2400,7 @@ static int nm_mbox_sync(struct Mailbox *m)
 
   struct HeaderCache *h = nm_hcache_open(m);
 
+  int mh_sync_errors = 0;
   for (int i = 0; i < m->msg_count; i++)
   {
     char old_file[PATH_MAX], new_file[PATH_MAX];
@@ -2396,11 +2428,30 @@ static int nm_mbox_sync(struct Mailbox *m)
     mutt_buffer_strcpy(&m->pathbuf, edata->folder);
     m->type = edata->type;
     rc = mh_sync_mailbox_message(m, i, h);
+
+    // Syncing file failed, query notmuch for new filepath.
+    if (rc)
+    {
+      notmuch_database_t *db = nm_db_get(m, true);
+      if (db)
+      {
+        notmuch_message_t *msg = get_nm_message(db, e);
+
+        sync_email_path_with_nm(e, msg);
+
+        rc = mh_sync_mailbox_message(m, i, h);
+      }
+      nm_db_release(m);
+    }
+
     mutt_buffer_strcpy(&m->pathbuf, url);
     m->type = MUTT_NOTMUCH;
 
     if (rc)
-      break;
+    {
+      mh_sync_errors += 1;
+      continue;
+    }
 
     if (!e->deleted)
       email_get_fullpath(e, new_file, sizeof(new_file));
@@ -2414,6 +2465,15 @@ static int nm_mbox_sync(struct Mailbox *m)
     }
 
     FREE(&edata->oldpath);
+  }
+
+  if (mh_sync_errors > 0)
+  {
+    mutt_error(
+        ngettext(
+            "Unable to sync %d message due to external mailbox modification",
+            "Unable to sync %d messages due to external mailbox modification", mh_sync_errors),
+        mh_sync_errors);
   }
 
   mutt_buffer_strcpy(&m->pathbuf, url);

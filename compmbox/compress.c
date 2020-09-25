@@ -44,12 +44,29 @@
 #include "lib.h"
 #include "format_flags.h"
 #include "hook.h"
+#include "mutt_commands.h"
 #include "mutt_globals.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "protos.h"
 
 struct Email;
+
+const struct Command comp_commands[] = {
+  // clang-format off
+  { "append-hook", mutt_parse_hook, MUTT_APPEND_HOOK },
+  { "close-hook",  mutt_parse_hook, MUTT_CLOSE_HOOK },
+  { "open-hook",   mutt_parse_hook, MUTT_OPEN_HOOK },
+  // clang-format on
+};
+
+/**
+ * mutt_comp_init - Setup feature commands
+ */
+void mutt_comp_init(void)
+{
+  COMMANDS_REGISTER(comp_commands);
+}
 
 /**
  * lock_realpath - Try to lock the ctx->realpath
@@ -556,7 +573,7 @@ cmoa_fail1:
 
 /**
  * comp_mbox_check - Check for new mail - Implements MxOps::mbox_check()
- * @param m          Mailbox
+ * @param m Mailbox
  * @retval 0              Mailbox OK
  * @retval #MUTT_REOPENED The mailbox was closed and reopened
  * @retval -1             Mailbox bad
@@ -740,7 +757,7 @@ static int comp_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
 /**
  * comp_msg_open_new - Open a new message in a Mailbox - Implements MxOps::msg_open_new()
  */
-static int comp_msg_open_new(struct Mailbox *m, struct Message *msg, struct Email *e)
+static int comp_msg_open_new(struct Mailbox *m, struct Message *msg, const struct Email *e)
 {
   if (!m || !m->compress_info)
     return -1;

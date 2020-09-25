@@ -22,7 +22,7 @@
  */
 
 /**
- * @page mutt_config Definitions of config variables
+ * @page neo_mutt_config Definitions of config variables
  *
  * Definitions of config variables
  */
@@ -38,9 +38,9 @@
 #include "alias/lib.h"
 #include "gui/lib.h"
 #include "bcache/lib.h"
+#include "compose/lib.h"
 #include "browser.h"
 #include "commands.h"
-#include "compose.h"
 #include "handler.h"
 #include "hdrline.h"
 #include "hook.h"
@@ -65,13 +65,127 @@
 #include "sort.h"
 #include "status.h"
 
-#ifndef ISPELL
-#define ISPELL "ispell"
-#endif
+#define CONFIG_INIT_TYPE(CS, NAME)                                             \
+  extern const struct ConfigSetType cst_##NAME;                                \
+  cs_register_type(CS, &cst_##NAME)
+
+#define CONFIG_INIT_VARS(CS, NAME)                                             \
+  bool config_init_##NAME(struct ConfigSet *cs);                               \
+  config_init_##NAME(CS)
 
 /* These options are deprecated */
 char *C_Escape = NULL;
 bool C_IgnoreLinearWhiteSpace = false;
+
+/**
+ * SortAuxMethods - Sort methods for '$sort_aux' for the index
+ */
+const struct Mapping SortAuxMethods[] = {
+  // clang-format off
+  { "date",          SORT_DATE },
+  { "date-received", SORT_RECEIVED },
+  { "date-sent",     SORT_DATE },
+  { "from",          SORT_FROM },
+  { "label",         SORT_LABEL },
+  { "mailbox-order", SORT_ORDER },
+  { "score",         SORT_SCORE },
+  { "size",          SORT_SIZE },
+  { "spam",          SORT_SPAM },
+  { "subject",       SORT_SUBJECT },
+  { "threads",       SORT_DATE },
+  { "to",            SORT_TO },
+  { NULL,            0 },
+  // clang-format on
+};
+
+/**
+ * SortMethods - Sort methods for '$sort' for the index
+ */
+const struct Mapping SortMethods[] = {
+  // clang-format off
+  { "date",          SORT_DATE },
+  { "date-received", SORT_RECEIVED },
+  { "date-sent",     SORT_DATE },
+  { "from",          SORT_FROM },
+  { "label",         SORT_LABEL },
+  { "mailbox-order", SORT_ORDER },
+  { "score",         SORT_SCORE },
+  { "size",          SORT_SIZE },
+  { "spam",          SORT_SPAM },
+  { "subject",       SORT_SUBJECT },
+  { "threads",       SORT_THREADS },
+  { "to",            SORT_TO },
+  { NULL,            0 },
+  // clang-format on
+};
+
+/**
+ * SortBrowserMethods - Sort methods for the folder/dir browser
+ */
+const struct Mapping SortBrowserMethods[] = {
+  // clang-format off
+  { "alpha",    SORT_SUBJECT },
+  { "count",    SORT_COUNT },
+  { "date",     SORT_DATE },
+  { "desc",     SORT_DESC },
+  { "new",      SORT_UNREAD },
+  { "unread",   SORT_UNREAD },
+  { "size",     SORT_SIZE },
+  { "unsorted", SORT_ORDER },
+  { NULL,       0 },
+  // clang-format on
+};
+
+/**
+ * multipart_validator - Validate the "show_multipart_alternative" config variable - Implements ConfigDef::validator()
+ */
+int multipart_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
+                        intptr_t value, struct Buffer *err)
+{
+  if (value == 0)
+    return CSR_SUCCESS;
+
+  const char *str = (const char *) value;
+
+  if (mutt_str_equal(str, "inline") || mutt_str_equal(str, "info"))
+    return CSR_SUCCESS;
+
+  mutt_buffer_printf(err, _("Invalid value for option %s: %s"), cdef->name, str);
+  return CSR_ERR_INVALID;
+}
+
+/**
+ * pager_validator - Check for config variables that can't be set from the pager - Implements ConfigDef::validator()
+ */
+int pager_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
+                    intptr_t value, struct Buffer *err)
+{
+  if (CurrentMenu == MENU_PAGER)
+  {
+    mutt_buffer_printf(err, _("Option %s may not be set or reset from the pager"),
+                       cdef->name);
+    return CSR_ERR_INVALID;
+  }
+
+  return CSR_SUCCESS;
+}
+
+/**
+ * reply_validator - Validate the "reply_regex" config variable - Implements ConfigDef::validator()
+ */
+int reply_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
+                    intptr_t value, struct Buffer *err)
+{
+  if (pager_validator(cs, cdef, value, err) != CSR_SUCCESS)
+    return CSR_ERR_INVALID;
+
+  if (!OptAttachMsg)
+    return CSR_SUCCESS;
+
+  mutt_buffer_printf(err, _("Option %s may not be set when in attach-message mode"),
+                     cdef->name);
+  return CSR_ERR_INVALID;
+}
 
 struct ConfigDef MainVars[] = {
   // clang-format off
@@ -80,12 +194,6 @@ struct ConfigDef MainVars[] = {
   },
   { "abort_key", DT_STRING|DT_NOT_EMPTY, &C_AbortKey, IP "\007", 0, NULL,
     "String representation of key to abort prompts"
-  },
-  { "alias_file", DT_PATH|DT_PATH_FILE, &C_AliasFile, IP "~/.neomuttrc", 0, NULL,
-    "Save new aliases to this file"
-  },
-  { "alias_format", DT_STRING|DT_NOT_EMPTY, &C_AliasFormat, IP "%3n %f%t %-15a %-56r | %c", 0, NULL,
-    "printf-like format string for the alias menu"
   },
   { "allow_ansi", DT_BOOL, &C_AllowAnsi, false, 0, NULL,
     "Allow ANSI colour codes in rich text messages"
@@ -156,7 +264,7 @@ struct ConfigDef MainVars[] = {
   { "change_folder_next", DT_BOOL, &C_ChangeFolderNext, false, 0, NULL,
     "Suggest the next folder, rather than the first when using '<change-folder>'"
   },
-  { "charset", DT_STRING|DT_NOT_EMPTY, &C_Charset, 0, 0, charset_validator,
+  { "charset", DT_STRING|DT_NOT_EMPTY|DT_CHARSET_SINGLE, &C_Charset, 0, 0, charset_validator,
     "Default character set for displaying text on screen"
   },
   { "collapse_all", DT_BOOL, &C_CollapseAll, false, 0, NULL,
@@ -168,9 +276,6 @@ struct ConfigDef MainVars[] = {
   { "collapse_unread", DT_BOOL, &C_CollapseUnread, true, 0, NULL,
     "Prevent the collapse of threads with unread emails"
   },
-  { "compose_format", DT_STRING|R_MENU, &C_ComposeFormat, IP "-- NeoMutt: Compose  [Approx. msg size: %l   Atts: %a]%>-", 0, NULL,
-    "printf-like format string for the Compose panel's status bar"
-  },
   { "config_charset", DT_STRING, &C_ConfigCharset, 0, 0, charset_validator,
     "Character set that the config files are in"
   },
@@ -179,9 +284,6 @@ struct ConfigDef MainVars[] = {
   },
   { "confirmcreate", DT_BOOL, &C_Confirmcreate, true, 0, NULL,
     "Confirm before creating a new mailbox"
-  },
-  { "copy", DT_QUAD, &C_Copy, MUTT_YES, 0, NULL,
-    "Save outgoing emails to $record"
   },
   { "copy_decode_weed", DT_BOOL, &C_CopyDecodeWeed, false, 0, NULL,
     "Controls whether to weed headers when copying or saving emails"
@@ -215,9 +317,6 @@ struct ConfigDef MainVars[] = {
   },
   { "duplicate_threads", DT_BOOL|R_RESORT|R_RESORT_INIT|R_INDEX, &C_DuplicateThreads, true, 0, pager_validator,
     "Highlight messages with duplicated message IDs"
-  },
-  { "edit_headers", DT_BOOL, &C_EditHeaders, false, 0, NULL,
-    "Let the user edit the email headers whilst editing an email"
   },
   { "editor", DT_STRING|DT_NOT_EMPTY|DT_COMMAND, &C_Editor, IP "vi", 0, NULL,
     "External command to use as an email editor"
@@ -307,9 +406,6 @@ struct ConfigDef MainVars[] = {
   },
   { "index_format", DT_STRING|DT_NOT_EMPTY|R_INDEX|R_PAGER, &C_IndexFormat, IP "%4C %Z %{%b %d} %-15.15L (%?l?%4l&%4c?) %s", 0, NULL,
     "printf-like format string for the index menu (emails)"
-  },
-  { "ispell", DT_STRING|DT_COMMAND, &C_Ispell, IP ISPELL, 0, NULL,
-    "External command to perform spell-checking"
   },
   { "keep_flagged", DT_BOOL, &C_KeepFlagged, false, 0, NULL,
     "Don't move flagged messages from #C_Spoolfile to #C_Mbox"
@@ -424,9 +520,6 @@ struct ConfigDef MainVars[] = {
   { "pipe_split", DT_BOOL, &C_PipeSplit, false, 0, NULL,
     "Run the pipe command on each message separately"
   },
-  { "postpone", DT_QUAD, &C_Postpone, MUTT_ASKYES, 0, NULL,
-    "Save messages to the #C_Postponed folder"
-  },
   { "postponed", DT_STRING|DT_MAILBOX|R_INDEX, &C_Postponed, IP "~/postponed", 0, NULL,
     "Folder to store postponed messages"
   },
@@ -450,12 +543,6 @@ struct ConfigDef MainVars[] = {
   },
   { "prompt_after", DT_BOOL, &C_PromptAfter, true, 0, NULL,
     "Pause after running an external pager"
-  },
-  { "query_command", DT_STRING|DT_COMMAND, &C_QueryCommand, 0, 0, NULL,
-    "External command to query and external address book"
-  },
-  { "query_format", DT_STRING|DT_NOT_EMPTY, &C_QueryFormat, IP "%3c %t %-25.25n %-25.25a | %e", 0, NULL,
-    "printf-like format string for the query menu (address book)"
   },
   { "quit", DT_QUAD, &C_Quit, MUTT_YES, 0, NULL,
     "Prompt before exiting NeoMutt"
@@ -526,7 +613,7 @@ struct ConfigDef MainVars[] = {
   { "search_context", DT_NUMBER|DT_NOT_NEGATIVE, &C_SearchContext, 0, 0, NULL,
     "Context to display around search matches"
   },
-  { "send_charset", DT_STRING, &C_SendCharset, IP "us-ascii:iso-8859-1:utf-8", 0, charset_validator,
+  { "send_charset", DT_STRING|DT_CHARSET_STRICT, &C_SendCharset, IP "us-ascii:iso-8859-1:utf-8", 0, charset_validator,
     "Character sets for outgoing mail"
   },
   { "shell", DT_STRING|DT_COMMAND, &C_Shell, IP "/bin/sh", 0, NULL,
@@ -562,16 +649,13 @@ struct ConfigDef MainVars[] = {
   { "smileys", DT_REGEX|R_PAGER, &C_Smileys, IP "(>From )|(:[-^]?[][)(><}{|/DP])", 0, NULL,
     "Regex to match smileys to prevent mistakes when quoting text"
   },
-  { "sort", DT_SORT|R_INDEX|R_RESORT, &C_Sort, SORT_DATE, 0, pager_validator,
+  { "sort", DT_SORT|R_INDEX|R_RESORT|DT_SORT_REVERSE, &C_Sort, SORT_DATE, IP SortMethods, pager_validator,
     "Sort method for the index"
   },
-  { "sort_alias", DT_SORT|DT_SORT_ALIAS, &C_SortAlias, SORT_ALIAS, 0, NULL,
-    "Sort method for the alias menu"
-  },
-  { "sort_aux", DT_SORT|DT_SORT_AUX|R_INDEX|R_RESORT|R_RESORT_SUB, &C_SortAux, SORT_DATE, 0, NULL,
+  { "sort_aux", DT_SORT|DT_SORT_REVERSE|DT_SORT_LAST|R_INDEX|R_RESORT|R_RESORT_SUB, &C_SortAux, SORT_DATE, IP SortAuxMethods, NULL,
     "Secondary sort method for the index"
   },
-  { "sort_browser", DT_SORT|DT_SORT_BROWSER, &C_SortBrowser, SORT_ALPHA, 0, NULL,
+  { "sort_browser", DT_SORT|DT_SORT_REVERSE, &C_SortBrowser, SORT_ALPHA, IP SortBrowserMethods, NULL,
     "Sort method for the browser"
   },
   { "sort_re", DT_BOOL|R_INDEX|R_RESORT|R_RESORT_INIT, &C_SortRe, true, 0, pager_validator,
@@ -687,11 +771,74 @@ struct ConfigDef MainVars[] = {
 };
 
 /**
- * config_init_main - Register main config variables
+ * config_init_main - Register main config variables - Implements ::module_init_config_t
  */
-bool config_init_main(struct ConfigSet *cs)
+static bool config_init_main(struct ConfigSet *cs)
 {
   return cs_register_variables(cs, MainVars, 0);
+}
+
+/**
+ * init_types - Create the config types
+ * @param cs Config items
+ *
+ * Define the config types, e.g. #DT_STRING.
+ */
+static void init_types(struct ConfigSet *cs)
+{
+  CONFIG_INIT_TYPE(cs, address);
+  CONFIG_INIT_TYPE(cs, bool);
+  CONFIG_INIT_TYPE(cs, enum);
+  CONFIG_INIT_TYPE(cs, long);
+  CONFIG_INIT_TYPE(cs, mbtable);
+  CONFIG_INIT_TYPE(cs, number);
+  CONFIG_INIT_TYPE(cs, path);
+  CONFIG_INIT_TYPE(cs, quad);
+  CONFIG_INIT_TYPE(cs, regex);
+  CONFIG_INIT_TYPE(cs, slist);
+  CONFIG_INIT_TYPE(cs, sort);
+  CONFIG_INIT_TYPE(cs, string);
+}
+
+/**
+ * init_variables - Define the config variables
+ * @param cs Config items
+ */
+static void init_variables(struct ConfigSet *cs)
+{
+  // Define the config variables
+  config_init_main(cs);
+  CONFIG_INIT_VARS(cs, alias);
+#ifdef USE_AUTOCRYPT
+  CONFIG_INIT_VARS(cs, autocrypt);
+#endif
+  CONFIG_INIT_VARS(cs, compose);
+  CONFIG_INIT_VARS(cs, conn);
+#ifdef USE_HCACHE
+  CONFIG_INIT_VARS(cs, hcache);
+#endif
+  CONFIG_INIT_VARS(cs, helpbar);
+  CONFIG_INIT_VARS(cs, history);
+#ifdef USE_IMAP
+  CONFIG_INIT_VARS(cs, imap);
+#endif
+  CONFIG_INIT_VARS(cs, maildir);
+  CONFIG_INIT_VARS(cs, mbox);
+  CONFIG_INIT_VARS(cs, ncrypt);
+#ifdef USE_NNTP
+  CONFIG_INIT_VARS(cs, nntp);
+#endif
+#ifdef USE_NOTMUCH
+  CONFIG_INIT_VARS(cs, notmuch);
+#endif
+  CONFIG_INIT_VARS(cs, pattern);
+#ifdef USE_POP
+  CONFIG_INIT_VARS(cs, pop);
+#endif
+  CONFIG_INIT_VARS(cs, send);
+#ifdef USE_SIDEBAR
+  CONFIG_INIT_VARS(cs, sidebar);
+#endif
 }
 
 /**
@@ -703,55 +850,8 @@ struct ConfigSet *init_config(size_t size)
 {
   struct ConfigSet *cs = cs_new(size);
 
-  // Define the config types
-  address_init(cs);
-  bool_init(cs);
-  enum_init(cs);
-  long_init(cs);
-  mbtable_init(cs);
-  number_init(cs);
-  path_init(cs);
-  quad_init(cs);
-  regex_init(cs);
-  slist_init(cs);
-  sort_init(cs);
-  string_init(cs);
-
-#define CONFIG_INIT(NAME)                                                      \
-  bool config_init_##NAME(struct ConfigSet *cs);                               \
-  config_init_##NAME(cs)
-
-  // Define the config variables
-  CONFIG_INIT(main);
-#ifdef USE_AUTOCRYPT
-  CONFIG_INIT(autocrypt);
-#endif
-  CONFIG_INIT(conn);
-#ifdef USE_HCACHE
-  CONFIG_INIT(hcache);
-#endif
-  CONFIG_INIT(helpbar);
-  CONFIG_INIT(history);
-#ifdef USE_IMAP
-  CONFIG_INIT(imap);
-#endif
-  CONFIG_INIT(maildir);
-  CONFIG_INIT(mbox);
-  CONFIG_INIT(ncrypt);
-#ifdef USE_NNTP
-  CONFIG_INIT(nntp);
-#endif
-#ifdef USE_NOTMUCH
-  CONFIG_INIT(notmuch);
-#endif
-  CONFIG_INIT(pattern);
-#ifdef USE_POP
-  CONFIG_INIT(pop);
-#endif
-  CONFIG_INIT(send);
-#ifdef USE_SIDEBAR
-  CONFIG_INIT(sidebar);
-#endif
+  init_types(cs);
+  init_variables(cs);
 
   return cs;
 }

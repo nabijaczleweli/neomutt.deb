@@ -31,6 +31,7 @@
 #include <config/lib.h>
 #include <stdbool.h>
 #include "mutt/lib.h"
+#include "lib.h"
 
 // clang-format off
 short         C_ConnectTimeout;         ///< Config: Timeout for making network connections (-1 to wait indefinitely)
@@ -164,7 +165,7 @@ struct ConfigDef ConnVars[] = {
 };
 
 /**
- * config_init_conn - Register conn config variables
+ * config_init_conn - Register conn config variables - Implements ::module_init_config_t
  */
 bool config_init_conn(struct ConfigSet *cs)
 {

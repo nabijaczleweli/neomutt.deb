@@ -22,7 +22,7 @@
  */
 
 /**
- * @page remailer Support of Mixmaster anonymous remailer
+ * @page neo_remailer Support of Mixmaster anonymous remailer
  *
  * Support of Mixmaster anonymous remailer
  */
@@ -864,7 +864,7 @@ int mix_send_message(struct ListHead *chain, const char *tempfile)
   i = mutt_system(cmd->data);
   if (i != 0)
   {
-    fprintf(stderr, _("Error sending message, child exited %d.\n"), i);
+    fprintf(stderr, _("Error sending message, child exited %d\n"), i);
     if (!OptNoCurses)
     {
       mutt_any_key_to_continue(NULL);

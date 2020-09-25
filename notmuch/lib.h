@@ -21,7 +21,7 @@
  */
 
 /**
- * @page notmuch NOTMUCH: Virtual mailbox type
+ * @page lib_notmuch NOTMUCH: Virtual mailbox type
  *
  * Notmuch virtual mailbox type
  *
@@ -53,6 +53,7 @@ extern int   C_NmQueryWindowDuration;
 extern char *C_VfolderFormat;
 extern bool  C_VirtualSpoolfile;
 
+void  nm_init                    (void);
 void  nm_db_debug_check          (struct Mailbox *m);
 void  nm_db_longrun_done         (struct Mailbox *m);
 void  nm_db_longrun_init         (struct Mailbox *m, bool writable);
@@ -67,5 +68,6 @@ int   nm_read_entire_thread      (struct Mailbox *m, struct Email *e);
 int   nm_record_message          (struct Mailbox *m, char *path, struct Email *e);
 int   nm_update_filename         (struct Mailbox *m, const char *old_file, const char *new_file, struct Email *e);
 char *nm_url_from_query          (struct Mailbox *m, char *buf, size_t buflen);
+bool config_init_notmuch(struct ConfigSet *cs);
 
 #endif /* MUTT_NOTMUCH_LIB_H */

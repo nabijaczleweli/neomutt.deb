@@ -21,7 +21,7 @@
  */
 
 /**
- * @page menu GUI present the user with a selectable list
+ * @page neo_menu GUI present the user with a selectable list
  *
  * GUI present the user with a selectable list
  */
@@ -49,9 +49,6 @@
 #include "opcodes.h"
 #include "options.h"
 #include "protos.h"
-#ifdef USE_SIDEBAR
-#include "sidebar/lib.h"
-#endif
 
 /* These Config Variables are only used in menu.c */
 short C_MenuContext; ///< Config: Number of lines of overlap when changing pages in the index
@@ -61,9 +58,7 @@ bool C_MenuScroll; ///< Config: Scroll the menu/index by one line, rather than a
 char *SearchBuffers[MENU_MAX];
 
 /* These are used to track the active menus, for redraw operations. */
-static size_t MenuStackCount = 0;
-static size_t MenuStackLen = 0;
-static struct Menu **MenuStack = NULL;
+ARRAY_HEAD(, struct Menu *) MenuStack = ARRAY_HEAD_INITIALIZER;
 
 #define DIRECTION ((neg * 2) + 1)
 
@@ -316,9 +311,9 @@ static void print_enriched_string(int index, int attr, unsigned char *s, bool do
  */
 static void make_entry(char *buf, size_t buflen, struct Menu *menu, int i)
 {
-  if (menu->dialog)
+  if (!ARRAY_EMPTY(&menu->dialog))
   {
-    mutt_str_copy(buf, NONULL(menu->dialog[i]), buflen);
+    mutt_str_copy(buf, NONULL(*ARRAY_GET(&menu->dialog, i)), buflen);
     menu->current = -1; /* hide menubar */
   }
   else
@@ -362,9 +357,6 @@ void menu_redraw_full(struct Menu *menu)
   mutt_show_error();
 
   menu->redraw = REDRAW_INDEX | REDRAW_STATUS;
-#ifdef USE_SIDEBAR
-  menu->redraw |= REDRAW_SIDEBAR;
-#endif
 }
 
 /**
@@ -382,20 +374,6 @@ void menu_redraw_status(struct Menu *menu)
   mutt_curses_set_color(MT_COLOR_NORMAL);
   menu->redraw &= ~REDRAW_STATUS;
 }
-
-#ifdef USE_SIDEBAR
-/**
- * menu_redraw_sidebar - Force the redraw of the sidebar
- * @param menu Current Menu
- */
-void menu_redraw_sidebar(struct Menu *menu)
-{
-  menu->redraw &= ~REDRAW_SIDEBAR;
-  struct MuttWindow *dlg = dialog_find(menu->win_index);
-  struct MuttWindow *sidebar = mutt_window_find(dlg, WT_SIDEBAR);
-  sb_draw(sidebar);
-}
-#endif
 
 /**
  * menu_redraw_index - Force the redraw of the index
@@ -456,7 +434,7 @@ void menu_redraw_motion(struct Menu *menu)
 {
   char buf[1024];
 
-  if (menu->dialog)
+  if (!ARRAY_EMPTY(&menu->dialog))
   {
     menu->redraw &= ~REDRAW_MOTION;
     return;
@@ -542,7 +520,7 @@ void menu_redraw_current(struct Menu *menu)
  */
 static void menu_redraw_prompt(struct Menu *menu)
 {
-  if (!menu || !menu->dialog)
+  if (!menu || ARRAY_EMPTY(&menu->dialog))
     return;
 
   if (OptMsgErr)
@@ -721,7 +699,7 @@ static void menu_length_jump(struct Menu *menu, int jumplen)
 
       menu->redraw = REDRAW_INDEX;
     }
-    else if ((menu->current != (neg ? 0 : menu->max - 1)) && !menu->dialog)
+    else if ((menu->current != (neg ? 0 : menu->max - 1)) && ARRAY_EMPTY(&menu->dialog))
     {
       menu->current += jumplen;
       menu->redraw = REDRAW_MOTION;
@@ -989,13 +967,12 @@ void mutt_menu_free(struct Menu **ptr)
     return;
 
   struct Menu *m = *ptr;
-  if (m->dialog)
+  char **line = NULL;
+  ARRAY_FOREACH(line, &m->dialog)
   {
-    for (int i = 0; i < m->max; i++)
-      FREE(&m->dialog[i]);
-
-    FREE(&m->dialog);
+    FREE(line);
   }
+  ARRAY_FREE(&m->dialog);
 
   FREE(ptr);
 }
@@ -1007,12 +984,8 @@ void mutt_menu_free(struct Menu **ptr)
  */
 void mutt_menu_add_dialog_row(struct Menu *menu, const char *row)
 {
-  if (menu->dsize <= menu->max)
-  {
-    menu->dsize += 10;
-    mutt_mem_realloc(&menu->dialog, menu->dsize * sizeof(char *));
-  }
-  menu->dialog[menu->max++] = mutt_str_dup(row);
+  ARRAY_SET(&menu->dialog, menu->max, mutt_str_dup(row));
+  menu->max++;
 }
 
 /**
@@ -1021,7 +994,8 @@ void mutt_menu_add_dialog_row(struct Menu *menu, const char *row)
  */
 static struct Menu *get_current_menu(void)
 {
-  return MenuStackCount ? MenuStack[MenuStackCount - 1] : NULL;
+  struct Menu **mp = ARRAY_LAST(&MenuStack);
+  return mp ? *mp : NULL;
 }
 
 /**
@@ -1032,13 +1006,7 @@ static struct Menu *get_current_menu(void)
  */
 void mutt_menu_push_current(struct Menu *menu)
 {
-  if (MenuStackCount >= MenuStackLen)
-  {
-    MenuStackLen += 5;
-    mutt_mem_realloc(&MenuStack, MenuStackLen * sizeof(struct Menu *));
-  }
-
-  MenuStack[MenuStackCount++] = menu;
+  ARRAY_ADD(&MenuStack, menu);
   CurrentMenu = menu->type;
 }
 
@@ -1052,13 +1020,13 @@ void mutt_menu_pop_current(struct Menu *menu)
 {
   struct Menu *prev_menu = NULL;
 
-  if (!MenuStackCount || (MenuStack[MenuStackCount - 1] != menu))
+  if (ARRAY_EMPTY(&MenuStack) || (*ARRAY_LAST(&MenuStack) != menu))
   {
     mutt_debug(LL_DEBUG1, "called with inactive menu\n");
     return;
   }
+  ARRAY_SHRINK(&MenuStack, 1);
 
-  MenuStackCount--;
   prev_menu = get_current_menu();
   if (prev_menu)
   {
@@ -1308,15 +1276,11 @@ int menu_redraw(struct Menu *menu)
     return OP_REDRAW;
   }
 
-  if (!menu->dialog)
+  if (ARRAY_EMPTY(&menu->dialog))
     menu_check_recenter(menu);
 
   if (menu->redraw & REDRAW_STATUS)
     menu_redraw_status(menu);
-#ifdef USE_SIDEBAR
-  if (menu->redraw & REDRAW_SIDEBAR)
-    menu_redraw_sidebar(menu);
-#endif
   if (menu->redraw & REDRAW_INDEX)
     menu_redraw_index(menu);
   else if (menu->redraw & (REDRAW_MOTION | REDRAW_MOTION_RESYNC))
@@ -1324,7 +1288,7 @@ int menu_redraw(struct Menu *menu)
   else if (menu->redraw == REDRAW_CURRENT)
     menu_redraw_current(menu);
 
-  if (menu->dialog)
+  if (!ARRAY_EMPTY(&menu->dialog))
     menu_redraw_prompt(menu);
 
   return OP_NULL;
@@ -1383,7 +1347,7 @@ int mutt_menu_loop(struct Menu *menu)
     mutt_refresh();
 
     /* try to catch dialog keys before ops */
-    if (menu->dialog && (menu_dialog_dokey(menu, &i) == 0))
+    if (!ARRAY_EMPTY(&menu->dialog) && (menu_dialog_dokey(menu, &i) == 0))
       return i;
 
     i = km_dokey(menu->type);
@@ -1432,11 +1396,11 @@ int mutt_menu_loop(struct Menu *menu)
       continue;
     }
 
-    if (!menu->dialog)
+    if (ARRAY_EMPTY(&menu->dialog))
       mutt_clear_error();
 
     /* Convert menubar movement to scrolling */
-    if (menu->dialog)
+    if (!ARRAY_EMPTY(&menu->dialog))
       i = menu_dialog_translate_op(i);
 
     switch (i)
@@ -1495,7 +1459,7 @@ int mutt_menu_loop(struct Menu *menu)
       case OP_SEARCH_OPPOSITE:
         if (menu->custom_search)
           return i;
-        else if (menu->search && !menu->dialog) /* Searching dialogs won't work */
+        else if (menu->search && ARRAY_EMPTY(&menu->dialog)) /* Searching dialogs won't work */
         {
           menu->oldcurrent = menu->current;
           menu->current = search(menu, i);
@@ -1509,7 +1473,7 @@ int mutt_menu_loop(struct Menu *menu)
         break;
 
       case OP_JUMP:
-        if (menu->dialog)
+        if (!ARRAY_EMPTY(&menu->dialog))
           mutt_error(_("Jumping is not implemented for dialogs"));
         else
           menu_jump(menu);
@@ -1522,7 +1486,7 @@ int mutt_menu_loop(struct Menu *menu)
         break;
 
       case OP_TAG:
-        if (menu->tag && !menu->dialog)
+        if (menu->tag && ARRAY_EMPTY(&menu->dialog))
         {
           if (menu->tagprefix && !C_AutoTag)
           {
@@ -1597,24 +1561,24 @@ int mutt_menu_color_observer(struct NotifyCallback *nc)
   if (nc->event_type != NT_CONFIG)
     return 0;
 
-  int s = nc->event_subtype;
+  struct EventColor *ev_c = nc->event_data;
 
-  bool simple = (s == MT_COLOR_INDEX_COLLAPSED) || (s == MT_COLOR_INDEX_DATE) ||
-                (s == MT_COLOR_INDEX_LABEL) || (s == MT_COLOR_INDEX_NUMBER) ||
-                (s == MT_COLOR_INDEX_SIZE) || (s == MT_COLOR_INDEX_TAGS);
-  bool lists = (s == MT_COLOR_ATTACH_HEADERS) || (s == MT_COLOR_BODY) ||
-               (s == MT_COLOR_HEADER) || (s == MT_COLOR_INDEX) ||
-               (s == MT_COLOR_INDEX_AUTHOR) || (s == MT_COLOR_INDEX_FLAGS) ||
-               (s == MT_COLOR_INDEX_SUBJECT) || (s == MT_COLOR_INDEX_TAG);
+  int c = ev_c->color;
+
+  bool simple = (c == MT_COLOR_INDEX_COLLAPSED) || (c == MT_COLOR_INDEX_DATE) ||
+                (c == MT_COLOR_INDEX_LABEL) || (c == MT_COLOR_INDEX_NUMBER) ||
+                (c == MT_COLOR_INDEX_SIZE) || (c == MT_COLOR_INDEX_TAGS);
+  bool lists = (c == MT_COLOR_ATTACH_HEADERS) || (c == MT_COLOR_BODY) ||
+               (c == MT_COLOR_HEADER) || (c == MT_COLOR_INDEX) ||
+               (c == MT_COLOR_INDEX_AUTHOR) || (c == MT_COLOR_INDEX_FLAGS) ||
+               (c == MT_COLOR_INDEX_SUBJECT) || (c == MT_COLOR_INDEX_TAG);
 
   // The changes aren't relevant to the index menu
   if (!simple && !lists)
     return 0;
 
-  struct EventColor *ec = nc->event_data;
-
   // Colour deleted from a list
-  if (!ec->set && lists && Context && Context->mailbox)
+  if ((nc->event_subtype == NT_COLOR_RESET) && lists && Context && Context->mailbox)
   {
     struct Mailbox *m = Context->mailbox;
     // Force re-caching of index colors
@@ -1670,10 +1634,6 @@ int mutt_menu_config_observer(struct NotifyCallback *nc)
 
   if (flags & R_REFLOW)
     mutt_window_reflow(NULL);
-#ifdef USE_SIDEBAR
-  if (flags & R_SIDEBAR)
-    mutt_menu_set_current_redraw(REDRAW_SIDEBAR);
-#endif
   if (flags & R_MENU)
     mutt_menu_set_current_redraw_full();
 

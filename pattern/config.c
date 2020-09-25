@@ -30,6 +30,7 @@
 #include <stddef.h>
 #include <config/lib.h>
 #include <stdbool.h>
+#include "lib.h"
 
 // clang-format off
 char *C_ExternalSearchCommand = NULL; ///< Config: External search command
@@ -53,7 +54,7 @@ struct ConfigDef PatternVars[] = {
 };
 
 /**
- * config_init_pattern - Register pattern config variables
+ * config_init_pattern - Register pattern config variables - Implements ::module_init_config_t
  */
 bool config_init_pattern(struct ConfigSet *cs)
 {

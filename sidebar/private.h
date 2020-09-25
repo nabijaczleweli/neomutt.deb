@@ -20,13 +20,15 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_SIDEBAR_SIDEBAR_PRIVATE_H
-#define MUTT_SIDEBAR_SIDEBAR_PRIVATE_H
+#ifndef MUTT_SIDEBAR_PRIVATE_H
+#define MUTT_SIDEBAR_PRIVATE_H
 
 #include <stdbool.h>
+#include "mutt/lib.h"
+#include "config/lib.h"
 #include "gui/lib.h"
 
-struct NotifyCallback;
+struct Mailbox;
 
 extern struct ListHead SidebarWhitelist;
 
@@ -36,10 +38,12 @@ extern struct ListHead SidebarWhitelist;
 struct SbEntry
 {
   char box[256];           ///< Mailbox path (possibly abbreviated)
+  char display[256];       ///< Formatted string to display
   int depth;               ///< Indentation depth
   struct Mailbox *mailbox; ///< Mailbox this represents
   bool is_hidden;          ///< Don't show, e.g. $sidebar_new_mail_only
   enum ColorId color;      ///< Colour to use
+  int seq_unsorted;        ///< Sequence number of unsorted Mailbox list
 };
 
 /**
@@ -57,19 +61,16 @@ enum DivType
  */
 struct SidebarWindowData
 {
-  struct SbEntry **entries; ///< Items to display in the sidebar
-  int entry_count;          ///< Number of items in entries
-  int entry_max;            ///< Size of the entries array
+  ARRAY_HEAD(, struct SbEntry *) entries; ///< Items to display in the sidebar
 
-  int top_index; ///< First mailbox visible in sidebar
-  int opn_index; ///< Current (open) mailbox
-  int hil_index; ///< Highlighted mailbox
-  int bot_index; ///< Last mailbox visible in sidebar
+  int top_index;             ///< First mailbox visible in sidebar
+  int opn_index;             ///< Current (open) mailbox
+  int hil_index;             ///< Highlighted mailbox
+  int bot_index;             ///< Last mailbox visible in sidebar
 
-  short previous_sort; ///< sidebar_sort_method
-
+  short previous_sort;       ///< Old `$sidebar_sort_method`
+  enum DivType divider_type; ///< Type of divider to use, e.g. #SB_DIV_ASCII
   short divider_width;       ///< Width of the divider in screen columns
-  enum DivType divider_type; ///< Type of divider, e.g. #SB_DIV_UTF8
 };
 
 extern short C_SidebarComponentDepth;
@@ -88,17 +89,28 @@ extern bool  C_SidebarVisible;
 extern short C_SidebarWidth;
 
 // sidebar.c
-void sb_win_init        (struct MuttWindow *dlg);
-void sb_win_shutdown    (struct MuttWindow *dlg);
-bool select_next        (struct SidebarWindowData *wdata);
+void sb_add_mailbox        (struct SidebarWindowData *wdata, struct Mailbox *m);
+void sb_remove_mailbox     (struct SidebarWindowData *wdata, struct Mailbox *m);
+void sb_set_current_mailbox(struct SidebarWindowData *wdata, struct Mailbox *m);
+
+// functions.c
+bool select_next(struct SidebarWindowData *wdata);
+bool select_prev(struct SidebarWindowData *wdata);
 
 // observer.c
 int sb_insertion_observer(struct NotifyCallback *nc);
-int sb_observer(struct NotifyCallback *nc);
+void sb_win_add_observers(struct MuttWindow *win);
+
+// sort.c
+void sb_sort_entries(struct SidebarWindowData *wdata, enum SortType sort);
 
 // wdata.c
 void                      sb_wdata_free(struct MuttWindow *win, void **ptr);
-struct SidebarWindowData *sb_wdata_new(void);
 struct SidebarWindowData *sb_wdata_get(struct MuttWindow *win);
+struct SidebarWindowData *sb_wdata_new(void);
 
-#endif /* MUTT_SIDEBAR_SIDEBAR_PRIVATE_H */
+// window.c
+int sb_recalc(struct MuttWindow *win);
+int sb_repaint(struct MuttWindow *win);
+
+#endif /* MUTT_SIDEBAR_PRIVATE_H */

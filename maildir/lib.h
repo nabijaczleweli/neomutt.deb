@@ -21,7 +21,7 @@
  */
 
 /**
- * @page maildir MAILDIR: Local mailbox type
+ * @page lib_maildir MAILDIR: Local mailbox type
  *
  * Maildir local mailbox type
  *
@@ -52,7 +52,7 @@ extern struct MxOps MxMhOps;
 
 int           maildir_check_empty      (const char *path);
 void          maildir_gen_flags        (char *dest, size_t destlen, struct Email *e);
-int           maildir_msg_open_new     (struct Mailbox *m, struct Message *msg, struct Email *e);
+int           maildir_msg_open_new     (struct Mailbox *m, struct Message *msg, const struct Email *e);
 FILE *        maildir_open_find_message(const char *folder, const char *msg, char **newname);
 void          maildir_parse_flags      (struct Email *e, const char *path);
 struct Email *maildir_parse_message    (enum MailboxType type, const char *fname, bool is_old, struct Email *e);
@@ -64,5 +64,7 @@ int           mh_sync_mailbox_message  (struct Mailbox *m, int msgno, struct Hea
 void                     maildir_edata_free(void **ptr);
 struct MaildirEmailData *maildir_edata_get (struct Email *e);
 struct MaildirEmailData *maildir_edata_new (void);
+
+bool config_init_maildir(struct ConfigSet *cs);
 
 #endif /* MUTT_MAILDIR_LIB_H */

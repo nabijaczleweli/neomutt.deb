@@ -25,7 +25,7 @@
  */
 
 /**
- * @page hcache HCACHE: Header cache API
+ * @page lib_hcache HCACHE: Header cache API
  *
  * The Header Cache saves data from email headers to a local store in order to
  * speed up network mailboxes.
@@ -177,5 +177,7 @@ void mutt_hcache_free_raw(struct HeaderCache *hc, void **data);
  * @retval num Generic or backend-specific error code otherwise
  */
 int mutt_hcache_delete_record(struct HeaderCache *hc, const char *key, size_t keylen);
+
+bool config_init_hcache(struct ConfigSet *cs);
 
 #endif /* MUTT_HCACHE_LIB_H */

@@ -31,6 +31,7 @@
 #include <config/lib.h>
 #include <stdbool.h>
 #include "private.h"
+#include "lib.h"
 
 // clang-format off
 bool          C_PopAuthTryAll;          ///< Config: (pop) Try all available authentication methods
@@ -82,7 +83,7 @@ struct ConfigDef PopVars[] = {
 };
 
 /**
- * config_init_pop - Register pop config variables
+ * config_init_pop - Register pop config variables - Implements ::module_init_config_t
  */
 bool config_init_pop(struct ConfigSet *cs)
 {

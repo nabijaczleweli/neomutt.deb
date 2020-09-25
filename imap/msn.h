@@ -1,9 +1,9 @@
 /**
  * @file
- * Type representing a string
+ * IMAP MSN helper functions
  *
  * @authors
- * Copyright (C) 2017-2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -20,11 +20,21 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_CONFIG_STRING_H
-#define MUTT_CONFIG_STRING_H
+#ifndef MUTT_IMAP_MSN_H
+#define MUTT_IMAP_MSN_H
 
-struct ConfigSet;
+#include "config.h"
+#include <stdlib.h>
 
-void string_init(struct ConfigSet *cs);
+struct MSN;
+struct Email;
 
-#endif /* MUTT_CONFIG_STRING_H */
+void          imap_msn_free   (struct MSN *msn);
+struct Email *imap_msn_get    (const struct MSN *msn, size_t idx);
+size_t        imap_msn_highest(const struct MSN *msn);
+void          imap_msn_remove (struct MSN *msn, size_t idx);
+void          imap_msn_reserve(struct MSN *msn, size_t num);
+void          imap_msn_set    (struct MSN *msn, size_t idx, struct Email *e);
+size_t        imap_msn_shrink (struct MSN *msn, size_t num);
+
+#endif /* !MUTT_IMAP_MSN_H */
