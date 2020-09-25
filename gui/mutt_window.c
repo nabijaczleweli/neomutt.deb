@@ -708,12 +708,12 @@ struct MuttWindow *mutt_window_find(struct MuttWindow *root, enum WindowType typ
  * window_recalc - Recalculate a tree of Windows
  * @param win Window to start at
  */
-void window_recalc(struct MuttWindow *win)
+static void window_recalc(struct MuttWindow *win)
 {
   if (!win)
     return;
 
-  if (win->recalc && (win->actions & WA_RECALC))
+  if (win->recalc)
   {
     win->recalc(win);
     win->actions &= ~WA_RECALC;
@@ -731,7 +731,7 @@ void window_recalc(struct MuttWindow *win)
  * @param win   Window to start at
  * @param force Repaint everything
  */
-void window_repaint(struct MuttWindow *win, bool force)
+static void window_repaint(struct MuttWindow *win, bool force)
 {
   if (!win)
     return;
@@ -788,6 +788,9 @@ void window_set_focus(struct MuttWindow *win)
 
   struct EventWindow ev_w = { win, WN_NO_FLAGS };
   notify_send(win->notify, NT_WINDOW, NT_WINDOW_FOCUS, &ev_w);
+#ifdef USE_DEBUG_WINDOW
+  debug_win_dump();
+#endif
 }
 
 /**

@@ -66,6 +66,9 @@
   NEOMUTT_TEST_ITEM(test_mutt_addrlist_write)                                  \
   NEOMUTT_TEST_ITEM(test_mutt_addrlist_write_list)                             \
                                                                                \
+  /* array */                                                                  \
+  NEOMUTT_TEST_ITEM(test_mutt_array_api)                                       \
+                                                                               \
   /* attach */                                                                 \
   NEOMUTT_TEST_ITEM(test_mutt_actx_add_attach)                                 \
   NEOMUTT_TEST_ITEM(test_mutt_actx_add_body)                                   \
@@ -138,6 +141,7 @@
   NEOMUTT_TEST_ITEM(test_config_bool)                                          \
   NEOMUTT_TEST_ITEM(test_config_dump)                                          \
   NEOMUTT_TEST_ITEM(test_config_enum)                                          \
+  NEOMUTT_TEST_ITEM(test_config_helpers)                                       \
   NEOMUTT_TEST_ITEM(test_config_initial)                                       \
   NEOMUTT_TEST_ITEM(test_config_long)                                          \
   NEOMUTT_TEST_ITEM(test_config_mbtable)                                       \
@@ -488,6 +492,7 @@
   NEOMUTT_TEST_ITEM(test_slist_is_member)                                      \
   NEOMUTT_TEST_ITEM(test_slist_parse)                                          \
   NEOMUTT_TEST_ITEM(test_slist_remove_string)                                  \
+  NEOMUTT_TEST_ITEM(test_slist_to_buffer)                                      \
                                                                                \
   /* string */                                                                 \
   NEOMUTT_TEST_ITEM(test_mutt_istr_equal)                                      \

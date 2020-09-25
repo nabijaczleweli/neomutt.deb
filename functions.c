@@ -21,7 +21,7 @@
  */
 
 /**
- * @page functions Definitions of user functions
+ * @page neo_functions Definitions of user functions
  *
  * Definitions of user functions
  *
@@ -532,6 +532,8 @@ const struct Binding OpPost[] = { /* map: postpone */
  */
 const struct Binding OpAlias[] = { /* map: alias */
   { "delete-entry",          OP_DELETE,                      "d" },
+  { "sort-alias",            OP_SORT,                        "o" },
+  { "sort-alias-reverse",    OP_SORT_REVERSE,                "O" },
   { "undelete-entry",        OP_UNDELETE,                    "u" },
   { NULL,                    0,                              NULL },
 };
@@ -597,6 +599,8 @@ const struct Binding OpQuery[] = { /* map: query */
   { "mail",                  OP_MAIL,                        "m" },
   { "query",                 OP_QUERY,                       "Q" },
   { "query-append",          OP_QUERY_APPEND,                "A" },
+  { "sort",                  OP_SORT,                        "o" },
+  { "sort-reverse",          OP_SORT_REVERSE,                "O" },
   { NULL,                    0,                              NULL },
 };
 

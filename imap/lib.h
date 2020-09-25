@@ -23,7 +23,7 @@
  */
 
 /**
- * @page imap IMAP: Network Mailbox
+ * @page lib_imap IMAP: Network Mailbox
  *
  * IMAP network mailbox
  *
@@ -42,6 +42,7 @@
  * | imap/config.c     | @subpage imap_config     |
  * | imap/imap.c       | @subpage imap_imap       |
  * | imap/message.c    | @subpage imap_message    |
+ * | imap/msn.c        | @subpage imap_msn        |
  * | imap/search.c     | @subpage imap_search     |
  * | imap/utf7.c       | @subpage imap_utf7       |
  * | imap/util.c       | @subpage imap_util       |
@@ -72,6 +73,7 @@ extern bool  C_ImapPassive;
 extern bool  C_ImapPeek;
 
 /* imap.c */
+void imap_init(void);
 int imap_access(const char *path);
 int imap_check_mailbox(struct Mailbox *m, bool force);
 int imap_delete_mailbox(struct Mailbox *m, char *path);
@@ -91,6 +93,9 @@ extern struct MxOps MxImapOps;
 int imap_browse(const char *path, struct BrowserState *state);
 int imap_mailbox_create(const char *folder);
 int imap_mailbox_rename(const char *path);
+
+/* config.c */
+bool config_init_imap(struct ConfigSet *cs);
 
 /* message.c */
 int imap_copy_messages(struct Mailbox *m, struct EmailList *el, const char *dest, bool delete_original);

@@ -41,6 +41,7 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "lib.h"
+#include "pattern/lib.h"
 #include "alias.h"
 #include "format_flags.h"
 #include "gui.h"
@@ -50,18 +51,16 @@
 #include "muttlib.h"
 #include "opcodes.h"
 
-/* These Config Variables are only used in dlgalias.c */
-char *C_AliasFormat; ///< Config: printf-like format string for the alias menu
-short C_SortAlias;   ///< Config: Sort method for the alias menu
-
 /// Help Bar for the Alias dialog (address book)
 static const struct Mapping AliasHelp[] = {
   // clang-format off
-  { N_("Exit"),   OP_EXIT },
-  { N_("Del"),    OP_DELETE },
-  { N_("Undel"),  OP_UNDELETE },
-  { N_("Select"), OP_GENERIC_SELECT_ENTRY },
-  { N_("Help"),   OP_HELP },
+  { N_("Exit"),     OP_EXIT },
+  { N_("Del"),      OP_DELETE },
+  { N_("Undel"),    OP_UNDELETE },
+  { N_("Sort"),     OP_SORT },
+  { N_("Rev-Sort"), OP_SORT_REVERSE },
+  { N_("Select"),   OP_GENERIC_SELECT_ENTRY },
+  { N_("Help"),     OP_HELP },
   { NULL, 0 },
   // clang-format on
 };
@@ -123,7 +122,7 @@ static const char *alias_format_str(char *buf, size_t buflen, size_t col, int co
 static void alias_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
 {
   const struct AliasMenuData *mdata = menu->mdata;
-  const struct AliasView *av = mdata->av[line];
+  const struct AliasView *av = ARRAY_GET(mdata, line);
 
   mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols, NONULL(C_AliasFormat),
                       alias_format_str, IP av, MUTT_FORMAT_ARROWCURSOR);
@@ -135,7 +134,7 @@ static void alias_make_entry(char *buf, size_t buflen, struct Menu *menu, int li
 static int alias_tag(struct Menu *menu, int sel, int act)
 {
   struct AliasMenuData *mdata = (struct AliasMenuData *) menu->mdata;
-  struct AliasView *av = mdata->av[sel];
+  struct AliasView *av = ARRAY_GET(mdata, sel);
 
   bool ot = av->is_tagged;
 
@@ -145,9 +144,9 @@ static int alias_tag(struct Menu *menu, int sel, int act)
 }
 
 /**
- * alias_data_observer - Listen for data changes affecting the Alias menu - Implements ::observer_t
+ * alias_alias_observer - Listen for data changes affecting the Alias menu - Implements ::observer_t
  */
-static int alias_data_observer(struct NotifyCallback *nc)
+static int alias_alias_observer(struct NotifyCallback *nc)
 {
   if (!nc->event_data || !nc->global_data)
     return -1;
@@ -169,7 +168,7 @@ static int alias_data_observer(struct NotifyCallback *nc)
   }
   menu_data_sort(mdata);
 
-  menu->max = mdata->num_views;
+  menu->max = ARRAY_SIZE(mdata);
   menu->redraw = REDRAW_FULL;
   return 0;
 }
@@ -182,7 +181,7 @@ static int alias_data_observer(struct NotifyCallback *nc)
  */
 static void dlg_select_alias(char *buf, size_t buflen, struct AliasMenuData *mdata)
 {
-  if (mdata->num_views == 0)
+  if (ARRAY_EMPTY(mdata))
   {
     mutt_warning(_("You have no aliases"));
     return;
@@ -197,22 +196,25 @@ static void dlg_select_alias(char *buf, size_t buflen, struct AliasMenuData *mda
   dlg->help_menu = MENU_ALIAS;
 
   menu->make_entry = alias_make_entry;
+  menu->custom_search = true;
   menu->tag = alias_tag;
   menu->title = _("Aliases");
-  menu->max = mdata->num_views;
+  menu->max = ARRAY_SIZE(mdata);
   menu->mdata = mdata;
 
-  notify_observer_add(NeoMutt->notify, NT_ALIAS, alias_data_observer, menu);
+  notify_observer_add(NeoMutt->notify, NT_ALIAS, alias_alias_observer, menu);
+  notify_observer_add(NeoMutt->notify, NT_CONFIG, alias_config_observer, mdata);
+  notify_observer_add(NeoMutt->notify, NT_COLOR, alias_color_observer, menu);
+
   mutt_menu_push_current(menu);
 
-  if ((C_SortAlias & SORT_MASK) != SORT_ORDER)
-  {
-    qsort(mdata->av, mdata->num_views, sizeof(struct AliasView *),
-          ((C_SortAlias & SORT_MASK) == SORT_ADDRESS) ? alias_sort_address : alias_sort_name);
-  }
+  ARRAY_SORT(mdata, alias_get_sort_function(C_SortAlias));
 
-  for (int i = 0; i < menu->max; i++)
-    mdata->av[i]->num = i;
+  struct AliasView *avp = NULL;
+  ARRAY_FOREACH(avp, mdata)
+  {
+    avp->num = ARRAY_FOREACH_IDX;
+  }
 
   while (!done)
   {
@@ -223,14 +225,16 @@ static void dlg_select_alias(char *buf, size_t buflen, struct AliasMenuData *mda
       case OP_UNDELETE:
         if (menu->tagprefix)
         {
-          for (int i = 0; i < menu->max; i++)
-            if (mdata->av[i]->is_tagged)
-              mdata->av[i]->is_deleted = (op == OP_DELETE);
+          ARRAY_FOREACH(avp, mdata)
+          {
+            if (avp->is_tagged)
+              avp->is_deleted = (op == OP_DELETE);
+          }
           menu->redraw |= REDRAW_INDEX;
         }
         else
         {
-          mdata->av[menu->current]->is_deleted = (op == OP_DELETE);
+          ARRAY_GET(mdata, menu->current)->is_deleted = (op == OP_DELETE);
           menu->redraw |= REDRAW_CURRENT;
           if (C_Resolve && (menu->current < menu->max - 1))
           {
@@ -239,9 +243,63 @@ static void dlg_select_alias(char *buf, size_t buflen, struct AliasMenuData *mda
           }
         }
         break;
+      case OP_SORT:
+      case OP_SORT_REVERSE:
+      {
+        int sort = C_SortAlias;
+        bool resort = true;
+        bool reverse = (op == OP_SORT_REVERSE);
+
+        switch (mutt_multi_choice(
+            reverse ?
+                /* L10N: The highlighted letters must match the "Sort" options */
+                _("Rev-Sort (a)lias, a(d)dress or (u)nsorted?") :
+                /* L10N: The highlighted letters must match the "Rev-Sort" options */
+                _("Sort (a)lias, a(d)dress or (u)nsorted?"),
+            /* L10N: These must match the highlighted letters from "Sort" and "Rev-Sort" */
+            _("adu")))
+        {
+          case -1: /* abort */
+            resort = false;
+            break;
+
+          case 1: /* (a)lias */
+            sort = SORT_ALIAS;
+            break;
+
+          case 2: /* a(d)dress */
+            sort = SORT_ADDRESS;
+            break;
+
+          case 3: /* (u)nsorted */
+            sort = SORT_ORDER;
+            break;
+        }
+
+        if (resort)
+        {
+          sort |= reverse ? SORT_REVERSE : 0;
+
+          cs_subset_str_native_set(NeoMutt->sub, "sort_alias", sort, NULL);
+          menu->redraw = REDRAW_FULL;
+        }
+
+        break;
+      }
+      case OP_SEARCH_REVERSE:
+      case OP_SEARCH_NEXT:
+      case OP_SEARCH_OPPOSITE:
+      case OP_SEARCH:
+        menu->current = mutt_search_alias_command(menu, menu->current, op);
+        if (menu->current == -1)
+          menu->current = menu->oldcurrent;
+        else
+          menu->redraw |= REDRAW_MOTION;
+        break;
+
       case OP_GENERIC_SELECT_ENTRY:
         t = menu->current;
-        if (t >= mdata->num_views)
+        if (t >= ARRAY_SIZE(mdata))
           t = -1;
         done = true;
         break;
@@ -251,21 +309,24 @@ static void dlg_select_alias(char *buf, size_t buflen, struct AliasMenuData *mda
     }
   }
 
-  for (int i = 0; i < menu->max; i++)
+  ARRAY_FOREACH(avp, mdata)
   {
-    if (mdata->av[i]->is_tagged)
+    if (avp->is_tagged)
     {
-      mutt_addrlist_write(&mdata->av[i]->alias->addr, buf, buflen, true);
+      mutt_addrlist_write(&avp->alias->addr, buf, buflen, true);
       t = -1;
     }
   }
 
   if (t != -1)
   {
-    mutt_addrlist_write(&mdata->av[t]->alias->addr, buf, buflen, true);
+    mutt_addrlist_write(&ARRAY_GET(mdata, t)->alias->addr, buf, buflen, true);
   }
 
-  notify_observer_remove(NeoMutt->notify, alias_data_observer, menu);
+  notify_observer_remove(NeoMutt->notify, alias_alias_observer, menu);
+  notify_observer_remove(NeoMutt->notify, alias_config_observer, mdata);
+  notify_observer_remove(NeoMutt->notify, alias_color_observer, menu);
+
   mutt_menu_pop_current(menu);
   mutt_menu_free(&menu);
   dialog_destroy_simple_index(&dlg);
@@ -286,7 +347,7 @@ int alias_complete(char *buf, size_t buflen)
 {
   struct Alias *np = NULL;
   char bestname[8192] = { 0 };
-  struct AliasMenuData *mdata = NULL;
+  struct AliasMenuData mdata = ARRAY_HEAD_INITIALIZER;
 
   if (buf[0] != '\0')
   {
@@ -320,43 +381,41 @@ int alias_complete(char *buf, size_t buflen)
       }
 
       /* build alias list and show it */
-      mdata = menu_data_new();
       TAILQ_FOREACH(np, &Aliases, entries)
       {
         if (np->name && mutt_strn_equal(np->name, buf, strlen(buf)))
         {
-          menu_data_alias_add(mdata, np);
+          menu_data_alias_add(&mdata, np);
         }
       }
     }
   }
 
-  if (!mdata)
+  if (ARRAY_EMPTY(&mdata))
   {
-    mdata = menu_data_new();
     TAILQ_FOREACH(np, &Aliases, entries)
     {
-      menu_data_alias_add(mdata, np);
+      menu_data_alias_add(&mdata, np);
     }
   }
-  menu_data_sort(mdata);
+  menu_data_sort(&mdata);
 
   bestname[0] = '\0';
-  dlg_select_alias(bestname, sizeof(bestname), mdata);
+  dlg_select_alias(bestname, sizeof(bestname), &mdata);
   if (bestname[0] != '\0')
     mutt_str_copy(buf, bestname, buflen);
 
-  for (int i = 0; i < mdata->num_views; i++)
+  struct AliasView *avp = NULL;
+  ARRAY_FOREACH(avp, &mdata)
   {
-    struct AliasView *av = mdata->av[i];
-    if (!av->is_deleted)
+    if (!avp->is_deleted)
       continue;
 
-    TAILQ_REMOVE(&Aliases, av->alias, entries);
-    alias_free(&av->alias);
+    TAILQ_REMOVE(&Aliases, avp->alias, entries);
+    alias_free(&avp->alias);
   }
 
-  menu_data_free(&mdata);
+  ARRAY_FREE(&mdata);
 
   return 0;
 }

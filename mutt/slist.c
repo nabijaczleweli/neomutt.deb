@@ -21,7 +21,7 @@
  */
 
 /**
- * @page slist A separated list of strings
+ * @page mutt_slist A separated list of strings
  *
  * A separated list of strings
  */
@@ -29,10 +29,25 @@
 #include "config.h"
 #include <stddef.h>
 #include "slist.h"
+#include "buffer.h"
 #include "list.h"
 #include "memory.h"
 #include "queue.h"
 #include "string2.h"
+
+/**
+ * slist_new - Create a new string list
+ * @param flags Flag to set, e.g. #SLIST_SEP_COMMA
+ * @retval ptr New string list
+ */
+struct Slist *slist_new(int flags)
+{
+  struct Slist *list = mutt_mem_calloc(1, sizeof(*list));
+  list->flags = flags;
+  STAILQ_INIT(&list->head);
+
+  return list;
+}
 
 /**
  * slist_add_list - Add a list to another list
@@ -107,16 +122,15 @@ struct Slist *slist_dup(const struct Slist *list)
   if (!list)
     return NULL;
 
-  struct Slist *l = mutt_mem_calloc(1, sizeof(*l));
-  l->flags = list->flags;
-  STAILQ_INIT(&l->head);
+  struct Slist *list_new = slist_new(list->flags);
 
   struct ListNode *np = NULL;
   STAILQ_FOREACH(np, &list->head, entries)
   {
-    mutt_list_insert_tail(&l->head, mutt_str_dup(np->data));
+    mutt_list_insert_tail(&list_new->head, mutt_str_dup(np->data));
   }
-  return l;
+  list_new->count = list->count;
+  return list_new;
 }
 
 /**
@@ -214,14 +228,22 @@ struct Slist *slist_parse(const char *str, int flags)
     if (p[0] == sep)
     {
       p[0] = '\0';
+      if (slist_is_member(list, start))
+      {
+        start = p + 1;
+        continue;
+      }
       mutt_list_insert_tail(&list->head, mutt_str_dup(start));
       list->count++;
       start = p + 1;
     }
   }
 
-  mutt_list_insert_tail(&list->head, mutt_str_dup(start));
-  list->count++;
+  if (!slist_is_member(list, start))
+  {
+    mutt_list_insert_tail(&list->head, mutt_str_dup(start));
+    list->count++;
+  }
 
   FREE(&src);
   return list;
@@ -259,4 +281,34 @@ struct Slist *slist_remove_string(struct Slist *list, const char *str)
     prev = np;
   }
   return list;
+}
+
+/**
+ * slist_to_buffer - Export an Slist to a Buffer
+ * @param list List to export
+ * @param buf  Buffer for the results
+ * @retval num Number of strings written to Buffer
+ */
+int slist_to_buffer(const struct Slist *list, struct Buffer *buf)
+{
+  if (!list || !buf || (list->count == 0))
+    return 0;
+
+  struct ListNode *np = NULL;
+  STAILQ_FOREACH(np, &list->head, entries)
+  {
+    mutt_buffer_addstr(buf, np->data);
+    if (STAILQ_NEXT(np, entries))
+    {
+      const int sep = (list->flags & SLIST_SEP_MASK);
+      if (sep == SLIST_SEP_COMMA)
+        mutt_buffer_addch(buf, ',');
+      else if (sep == SLIST_SEP_COLON)
+        mutt_buffer_addch(buf, ':');
+      else
+        mutt_buffer_addch(buf, ' ');
+    }
+  }
+
+  return list->count;
 }

@@ -21,7 +21,7 @@
  */
 
 /**
- * @page random Random number/string functions
+ * @page mutt_random Random number/string functions
  *
  * Random number/string functions
  */
@@ -32,6 +32,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include "random.h"
 #include "exit.h"
 #include "logging.h"
 #include "message.h"

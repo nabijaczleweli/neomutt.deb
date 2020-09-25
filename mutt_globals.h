@@ -82,7 +82,6 @@ WHERE struct Address *C_From;                ///< Config: Default 'From' address
 
 WHERE bool C_AbortBackspace;                 ///< Config: Hitting backspace against an empty prompt aborts the prompt
 WHERE char *C_AbortKey;                      ///< Config: String representation of key to abort prompts
-WHERE char *C_AliasFile;                     ///< Config: Save new aliases to this file
 WHERE char *C_Attribution;                   ///< Config: Message to start a reply, "On DATE, PERSON wrote:"
 WHERE char *C_AttributionLocale;             ///< Config: Locale for dates in the attribution message
 WHERE char *C_AttachFormat;                  ///< Config: printf-like format string for the attachment menu
@@ -123,7 +122,6 @@ WHERE int C_ToggleQuotedShowLevels;          ///< Config: Number of quote levels
 
 /* Quad-options */
 WHERE unsigned char C_Bounce;                ///< Config: Confirm before bouncing a message
-WHERE unsigned char C_Copy;                  ///< Config: Save outgoing emails to $record
 WHERE unsigned char C_Delete;                ///< Config: Really delete messages, when the mailbox is closed
 WHERE unsigned char C_ForwardAttachments;    ///< Config: Forward attachments when forwarding a message
 WHERE unsigned char C_MimeForward;           ///< Config: Forward a message as a 'message/RFC822' MIME part
@@ -144,7 +142,6 @@ WHERE bool C_Confirmappend;                  ///< Config: Confirm before appendi
 WHERE bool C_Confirmcreate;                  ///< Config: Confirm before creating a new mailbox
 WHERE bool C_CopyDecodeWeed;                 ///< Config: Controls whether to weed headers when copying or saving emails
 WHERE bool C_DeleteUntag;                    ///< Config: Untag messages when they are marked for deletion
-WHERE bool C_EditHeaders;                    ///< Config: Let the user edit the email headers whilst editing an email
 WHERE bool C_FlagSafe;                       ///< Config: Protect flagged messages from deletion
 WHERE bool C_ForwardDecode;                  ///< Config: Decode the message when forwarding it
 WHERE bool C_ForwardQuote;                   ///< Config: Automatically quote a forwarded message using #C_IndentString

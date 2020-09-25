@@ -30,6 +30,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "config/lib.h"
+#include "lib.h"
 
 struct ConfigDef HelpbarVars[] = {
   // clang-format off
@@ -41,7 +42,7 @@ struct ConfigDef HelpbarVars[] = {
 };
 
 /**
- * config_init_helpbar - Register helpbar config variables
+ * config_init_helpbar - Register helpbar config variables - Implements ::module_init_config_t
  */
 bool config_init_helpbar(struct ConfigSet *cs)
 {

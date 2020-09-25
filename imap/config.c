@@ -30,6 +30,7 @@
 #include <stddef.h>
 #include <config/lib.h>
 #include <stdbool.h>
+#include "lib.h"
 #include "init.h"
 
 // clang-format off
@@ -130,7 +131,7 @@ struct ConfigDef ImapVars[] = {
 };
 
 /**
- * config_init_imap - Register imap config variables
+ * config_init_imap - Register imap config variables - Implements ::module_init_config_t
  */
 bool config_init_imap(struct ConfigSet *cs)
 {

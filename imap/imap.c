@@ -47,10 +47,12 @@
 #include "bcache/lib.h"
 #include "pattern/lib.h"
 #include "auth.h"
+#include "command_parse.h"
 #include "commands.h"
 #include "hook.h"
 #include "init.h"
 #include "message.h"
+#include "msn.h"
 #include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "mutt_socket.h"
@@ -63,6 +65,21 @@
 #endif
 
 struct stat;
+
+const struct Command imap_commands[] = {
+  // clang-format off
+  { "subscribe-to",     parse_subscribe_to,     0 },
+  { "unsubscribe-from", parse_unsubscribe_from, 0 },
+  // clang-format on
+};
+
+/**
+ * imap_init - Setup feature commands
+ */
+void imap_init(void)
+{
+  COMMANDS_REGISTER(imap_commands);
+}
 
 /**
  * check_capabilities - Make sure we can log in to this server
@@ -633,16 +650,7 @@ void imap_notify_delete_email(struct Mailbox *m, struct Email *e)
   if (!mdata || !edata)
     return;
 
-  int msn = edata->msn;
-  if ((msn < 1) || (msn > mdata->max_msn))
-  {
-    mutt_debug(LL_DEBUG3, "MSN %d out of range (max %d)\n", msn, mdata->max_msn);
-    return;
-  }
-
-  mutt_debug(LL_DEBUG3, "Clearing msn_index: value = %p, email = %p\n",
-             mdata->msn_index[msn - 1], e);
-  mdata->msn_index[msn - 1] = NULL;
+  imap_msn_remove(&mdata->msn, edata->msn - 1);
   edata->msn = 0;
 }
 
@@ -690,7 +698,6 @@ void imap_expunge_mailbox(struct Mailbox *m)
     }
     else
     {
-      e->index = i;
       /* NeoMutt has several places where it turns off e->active as a
        * hack.  For example to avoid FLAG updates, or to exclude from
        * imap_exec_msgset.
@@ -2130,7 +2137,7 @@ static int imap_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
 
 /**
  * imap_mbox_check - Check for new mail - Implements MxOps::mbox_check()
- * @param m           Mailbox
+ * @param m Mailbox
  * @retval >0 Success, e.g. #MUTT_REOPENED
  * @retval -1 Failure
  */
@@ -2196,7 +2203,7 @@ static int imap_mbox_close(struct Mailbox *m)
 /**
  * imap_msg_open_new - Open a new message in a Mailbox - Implements MxOps::msg_open_new()
  */
-static int imap_msg_open_new(struct Mailbox *m, struct Message *msg, struct Email *e)
+static int imap_msg_open_new(struct Mailbox *m, struct Message *msg, const struct Email *e)
 {
   int rc = -1;
 

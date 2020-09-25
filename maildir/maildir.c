@@ -171,9 +171,11 @@ void maildir_gen_flags(char *dest, size_t destlen, struct Email *e)
 {
   *dest = '\0';
 
+  const char *flags = NULL;
+
   struct MaildirEmailData *edata = maildir_edata_get(e);
-  if (!edata)
-    return;
+  if (edata)
+    flags = edata->maildir_flags;
 
   /* The maildir specification requires that all files in the cur
    * subdirectory have the :unique string appended, regardless of whether
@@ -181,13 +183,12 @@ void maildir_gen_flags(char *dest, size_t destlen, struct Email *e)
    * will end up in the cur directory, so we include it in the following
    * test even though there is no associated flag.  */
 
-  if (e->flagged || e->replied || e->read || e->deleted || e->old || edata->maildir_flags)
+  if (e->flagged || e->replied || e->read || e->deleted || e->old || flags)
   {
     char tmp[1024];
-    snprintf(tmp, sizeof(tmp), "%s%s%s%s%s", e->flagged ? "F" : "",
-             e->replied ? "R" : "", e->read ? "S" : "", e->deleted ? "T" : "",
-             NONULL(edata->maildir_flags));
-    if (edata->maildir_flags)
+    snprintf(tmp, sizeof(tmp), "%s%s%s%s%s", e->flagged ? "F" : "", e->replied ? "R" : "",
+             e->read ? "S" : "", e->deleted ? "T" : "", NONULL(flags));
+    if (flags)
       qsort(tmp, strlen(tmp), 1, ch_compare);
     snprintf(dest, destlen, ":2,%s", tmp);
   }
@@ -589,7 +590,7 @@ static int maildir_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
  * @note This uses _almost_ the maildir file name format,
  * but with a {cur,new} prefix.
  */
-int maildir_msg_open_new(struct Mailbox *m, struct Message *msg, struct Email *e)
+int maildir_msg_open_new(struct Mailbox *m, struct Message *msg, const struct Email *e)
 {
   if (!m)
     return -1;
@@ -601,12 +602,10 @@ int maildir_msg_open_new(struct Mailbox *m, struct Message *msg, struct Email *e
 
   if (e)
   {
-    bool deleted = e->deleted;
-    e->deleted = false;
-
-    maildir_gen_flags(suffix, sizeof(suffix), e);
-
-    e->deleted = deleted;
+    struct Email tmp = *e;
+    tmp.deleted = false;
+    tmp.edata = NULL;
+    maildir_gen_flags(suffix, sizeof(suffix), &tmp);
   }
   else
     *suffix = '\0';

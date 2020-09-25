@@ -1,9 +1,9 @@
 /**
  * @file
- * GUI editor for an email's headers
+ * Test code for slist_to_buffer()
  *
  * @authors
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -20,20 +20,12 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_COMPOSE_H
-#define MUTT_COMPOSE_H
+#define TEST_NO_MAIN
+#include "config.h"
+#include "acutest.h"
+#include "mutt/lib.h"
 
-struct Buffer;
-struct Email;
-
-/* These Config Variables are only used in compose.c */
-extern char *        C_ComposeFormat;
-extern char *        C_Ispell;
-extern unsigned char C_Postpone;
-
-/* flags for mutt_compose_menu() */
-#define MUTT_COMPOSE_NOFREEHEADER (1 << 0)
-
-int mutt_compose_menu(struct Email *e, struct Buffer *fcc, struct Email *e_cur, int flags);
-
-#endif /* MUTT_COMPOSE_H */
+void test_slist_to_buffer(void)
+{
+  // int slist_to_buffer(const struct Slist *list, struct Buffer *buf);
+}

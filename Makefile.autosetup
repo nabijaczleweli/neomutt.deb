@@ -64,7 +64,7 @@ default:	all
 # neomutt
 NEOMUTT=	neomutt$(EXEEXT)
 NEOMUTTOBJS=	browser.o commands.o command_parse.o \
-		complete.o compose.o conststrings.o context.o copy.o \
+		complete.o conststrings.o context.o copy.o \
 		editmsg.o enriched.o enter.o flags.o functions.o git_ver.o \
 		handler.o hdrline.o help.o hook.o icommands.o index.o init.o \
 		keymap.o mailcap.o maillist.o main.o menu.o muttlib.o mutt_account.o \
@@ -107,7 +107,7 @@ $(PWD)/address:
 ###############################################################################
 # libalias
 LIBALIAS=	libalias.a
-LIBALIASOBJS=	alias/alias.o alias/commands.o alias/dlgalias.o \
+LIBALIASOBJS=	alias/alias.o alias/commands.o alias/config.o alias/dlgalias.o \
 		alias/dlgquery.o alias/gui.o alias/reverse.o
 CLEANFILES+=	$(LIBALIAS) $(LIBALIASOBJS)
 ALLOBJS+=	$(LIBALIASOBJS)
@@ -162,6 +162,19 @@ $(PWD)/compmbox:
 	$(MKDIR_P) $(PWD)/compmbox
 
 ###############################################################################
+# libcompose
+LIBCOMPOSE=	libcompose.a
+LIBCOMPOSEOBJS=	compose/config.o compose/compose.o
+CLEANFILES+=	$(LIBCOMPOSE) $(LIBCOMPOSEOBJS)
+ALLOBJS+=	$(LIBCOMPOSEOBJS)
+
+$(LIBCOMPOSE): $(PWD)/compose $(LIBCOMPOSEOBJS)
+	$(AR) cr $@ $(LIBCOMPOSEOBJS)
+	$(RANLIB) $@
+$(PWD)/compose:
+	$(MKDIR_P) $(PWD)/compose
+
+###############################################################################
 # libcompress
 @if USE_LZ4
 LIBCOMPRESSOBJS+=compress/lz4.o
@@ -188,7 +201,8 @@ $(PWD)/compress:
 ###############################################################################
 # libconfig
 LIBCONFIG=	libconfig.a
-LIBCONFIGOBJS=	config/address.o config/bool.o config/dump.o config/enum.o config/helpers.o \
+LIBCONFIGOBJS=	config/address.o config/bool.o config/charset.o config/dump.o \
+		config/enum.o config/helpers.o \
 		config/long.o config/mbtable.o config/number.o config/path.o config/quad.o \
 		config/regex.o config/set.o config/slist.o config/sort.o \
 		config/string.o config/subset.o
@@ -352,7 +366,8 @@ $(PWD)/history:
 LIBIMAP=	libimap.a
 LIBIMAPOBJS=	imap/auth.o imap/auth_login.o imap/auth_oauth.o \
 		imap/auth_plain.o imap/browse.o imap/command.o imap/config.o \
-		imap/imap.o imap/message.o imap/search.o imap/utf7.o imap/util.o
+		imap/imap.o imap/message.o imap/msn.o imap/search.o \
+		imap/utf7.o imap/util.o
 @if USE_GSS
 LIBIMAPOBJS+=	imap/auth_gss.o
 @endif
@@ -514,7 +529,8 @@ $(PWD)/send:
 @if USE_SIDEBAR
 LIBSIDEBAR=	libsidebar.a
 LIBSIDEBAROBJS=	sidebar/config.o sidebar/sidebar.o sidebar/commands.o \
-		sidebar/functions.o sidebar/observer.o sidebar/wdata.o
+		sidebar/functions.o sidebar/observer.o sidebar/sort.o \
+		sidebar/wdata.o sidebar/window.o
 CLEANFILES+=	$(LIBSIDEBAR) $(LIBSIDEBAROBJS)
 ALLOBJS+=	$(LIBSIDEBAROBJS)
 
@@ -591,7 +607,7 @@ MUTTLIBS+=	$(LIBAUTOCRYPT) $(LIBPOP) $(LIBNNTP) $(LIBCOMPMBOX) \
 		$(LIBSTORE) $(LIBPATTERN) $(LIBGUI) $(LIBHELPBAR) $(LIBDEBUG) $(LIBMBOX) \
 		$(LIBNOTMUCH) $(LIBMAILDIR) $(LIBNCRYPT) $(LIBIMAP) $(LIBCONN) \
 		$(LIBHCACHE)  $(LIBCOMPRESS) $(LIBSIDEBAR) $(LIBBCACHE) \
-		$(LIBHISTORY) $(LIBALIAS) $(LIBSEND) $(LIBCORE) $(LIBCONFIG) \
+		$(LIBHISTORY) $(LIBALIAS) $(LIBSEND) $(LIBCOMPOSE) $(LIBCORE) $(LIBCONFIG) \
 		$(LIBEMAIL) $(LIBADDRESS) $(LIBMUTT)
 
 # neomutt

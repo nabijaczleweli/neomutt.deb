@@ -36,7 +36,6 @@
 #include <limits.h>
 #include <stdint.h>
 #include "mutt/lib.h"
-#include "slist.h"
 #include "set.h"
 #include "types.h"
 
@@ -121,21 +120,7 @@ static int slist_string_get(const struct ConfigSet *cs, void *var,
     if (!list)
       return (CSR_SUCCESS | CSR_SUC_EMPTY); /* empty string */
 
-    struct ListNode *np = NULL;
-    STAILQ_FOREACH(np, &list->head, entries)
-    {
-      mutt_buffer_addstr(result, np->data);
-      if (STAILQ_NEXT(np, entries))
-      {
-        int sep = (cdef->type & SLIST_SEP_MASK);
-        if (sep == SLIST_SEP_COMMA)
-          mutt_buffer_addch(result, ',');
-        else if (sep == SLIST_SEP_COLON)
-          mutt_buffer_addch(result, ':');
-        else
-          mutt_buffer_addch(result, ' ');
-      }
-    }
+    slist_to_buffer(list, result);
   }
   else
   {
@@ -195,6 +180,87 @@ static intptr_t slist_native_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
+ * slist_string_plus_equals - Add to a Slist by string - Implements ConfigSetType::string_plus_equals()
+ */
+static int slist_string_plus_equals(const struct ConfigSet *cs, void *var,
+                                    const struct ConfigDef *cdef,
+                                    const char *value, struct Buffer *err)
+{
+  if (!cs || !cdef)
+    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
+
+  int rc = CSR_SUCCESS;
+
+  /* Store empty strings as NULL */
+  if (value && (value[0] == '\0'))
+    return rc |= CSR_SUC_NO_CHANGE;
+
+  struct Slist *orig = *(struct Slist **) var;
+  if (slist_is_member(orig, value))
+    return rc |= CSR_SUC_NO_CHANGE;
+
+  struct Slist *copy = slist_dup(orig);
+  if (!copy)
+    copy = slist_new(cdef->type & SLIST_SEP_MASK);
+
+  slist_add_string(copy, value);
+
+  if (cdef->validator)
+  {
+    rc = cdef->validator(cs, cdef, (intptr_t) copy, err);
+    if (CSR_RESULT(rc) != CSR_SUCCESS)
+    {
+      slist_free(&copy);
+      return (rc | CSR_INV_VALIDATOR);
+    }
+  }
+
+  slist_free(&orig);
+  *(struct Slist **) var = copy;
+
+  return rc;
+}
+
+/**
+ * slist_string_minus_equals - Remove from a Slist by string - Implements ConfigSetType::string_plus_equals()
+ */
+static int slist_string_minus_equals(const struct ConfigSet *cs, void *var,
+                                     const struct ConfigDef *cdef,
+                                     const char *value, struct Buffer *err)
+{
+  if (!cs || !cdef)
+    return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
+
+  int rc = CSR_SUCCESS;
+
+  /* Store empty strings as NULL */
+  if (value && (value[0] == '\0'))
+    return rc |= CSR_SUC_NO_CHANGE;
+
+  struct Slist *orig = *(struct Slist **) var;
+  if (!slist_is_member(orig, value))
+    return rc |= CSR_SUC_NO_CHANGE;
+
+  struct Slist *copy = slist_dup(orig);
+  slist_remove_string(copy, value);
+
+  if (cdef->validator)
+  {
+    rc = cdef->validator(cs, cdef, (intptr_t) copy, err);
+    if (CSR_RESULT(rc) != CSR_SUCCESS)
+    {
+      slist_free(&copy);
+      return (rc | CSR_INV_VALIDATOR);
+    }
+  }
+
+  slist_free(&orig);
+  *(struct Slist **) var = copy;
+
+  return rc;
+}
+
+/**
  * slist_reset - Reset a Slist to its initial value - Implements ConfigSetType::reset()
  */
 static int slist_reset(const struct ConfigSet *cs, void *var,
@@ -232,21 +298,17 @@ static int slist_reset(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * slist_init - Register the Slist config type
- * @param cs Config items
+ * cst_slist - Config type representing a list of strings
  */
-void slist_init(struct ConfigSet *cs)
-{
-  const struct ConfigSetType cst_slist = {
-    "slist",
-    slist_string_set,
-    slist_string_get,
-    slist_native_set,
-    slist_native_get,
-    NULL, // string_plus_equals
-    NULL, // string_minus_equals
-    slist_reset,
-    slist_destroy,
-  };
-  cs_register_type(cs, DT_SLIST, &cst_slist);
-}
+const struct ConfigSetType cst_slist = {
+  DT_SLIST,
+  "slist",
+  slist_string_set,
+  slist_string_get,
+  slist_native_set,
+  slist_native_get,
+  slist_string_plus_equals,
+  slist_string_minus_equals,
+  slist_reset,
+  slist_destroy,
+};

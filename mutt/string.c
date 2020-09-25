@@ -22,7 +22,7 @@
  */
 
 /**
- * @page string String manipulation functions
+ * @page mutt_string String manipulation functions
  *
  * Lots of commonly-used string manipulation routines.
  */
@@ -45,11 +45,6 @@
 #ifdef HAVE_SYSEXITS_H
 #include <sysexits.h>
 #endif
-
-/**
- * typedef char_cmp - Pointer to a function taking two characters and returning bool
- */
-typedef bool (*char_cmp)(char, char);
 
 /**
  * struct SysExits - Lookup table of error messages

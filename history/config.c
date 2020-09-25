@@ -31,6 +31,7 @@
 #include <config/lib.h>
 #include <stdbool.h>
 #include "mutt/lib.h"
+#include "lib.h"
 
 // clang-format off
 short C_History;            ///< Config: Number of history entries to keep in memory per category
@@ -58,7 +59,7 @@ struct ConfigDef HistoryVars[] = {
 };
 
 /**
- * config_init_history - Register history config variables
+ * config_init_history - Register history config variables - Implements ::module_init_config_t
  */
 bool config_init_history(struct ConfigSet *cs)
 {

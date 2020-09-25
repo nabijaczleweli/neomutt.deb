@@ -32,6 +32,8 @@ ADDRESS_OBJS	= test/address/mutt_addr_cat.o \
 		  test/address/mutt_addrlist_write.o \
 		  test/address/mutt_addrlist_write_list.o
 
+ARRAY_OBJS	= test/array/mutt_array_api.o
+
 ATTACH_OBJS	= test/attach/mutt_actx_add_attach.o \
 		  test/attach/mutt_actx_add_body.o \
 		  test/attach/mutt_actx_add_fp.o \
@@ -109,6 +111,7 @@ CONFIG_OBJS	= test/config/account.o \
 		  test/config/common.o \
 		  test/config/dump.o \
 		  test/config/enum.o \
+		  test/config/helpers.o \
 		  test/config/initial.o \
 		  test/config/long.o \
 		  test/config/mbtable.o \
@@ -439,7 +442,8 @@ SLIST_OBJS	= test/slist/slist_add_list.o \
 		  test/slist/slist_free.o \
 		  test/slist/slist_is_member.o \
 		  test/slist/slist_parse.o \
-		  test/slist/slist_remove_string.o
+		  test/slist/slist_remove_string.o \
+		  test/slist/slist_to_buffer.o
 
 @if HAVE_BDB || HAVE_GDBM || HAVE_KC || HAVE_LMDB || HAVE_QDBM || HAVE_ROCKSDB || HAVE_TDB || HAVE_TC
 STORE_OBJS	+= test/store/common.o test/store/store.o
@@ -534,26 +538,27 @@ URL_OBJS	= test/url/url_check_scheme.o \
 		  test/url/url_tobuffer.o \
 		  test/url/url_tostring.o
 
-BUILD_DIRS	= $(PWD)/test/account $(PWD)/test/address $(PWD)/test/attach \
-		  $(PWD)/test/base64 $(PWD)/test/body $(PWD)/test/buffer \
-		  $(PWD)/test/charset $(PWD)/test/compress $(PWD)/test/config \
-		  $(PWD)/test/date $(PWD)/test/email $(PWD)/test/envelope \
-		  $(PWD)/test/envlist $(PWD)/test/file $(PWD)/test/filter \
-		  $(PWD)/test/from $(PWD)/test/group $(PWD)/test/gui \
-		  $(PWD)/test/hash $(PWD)/test/history $(PWD)/test/idna \
-		  $(PWD)/test/list $(PWD)/test/logging $(PWD)/test/mailbox \
-		  $(PWD)/test/mapping $(PWD)/test/mbyte $(PWD)/test/md5 \
-		  $(PWD)/test/memory $(PWD)/test/neo $(PWD)/test/notify \
-		  $(PWD)/test/parameter $(PWD)/test/parse $(PWD)/test/path \
-		  $(PWD)/test/pattern $(PWD)/test/pool $(PWD)/test/prex \
-		  $(PWD)/test/regex $(PWD)/test/rfc2047 $(PWD)/test/rfc2231 \
-		  $(PWD)/test/signal $(PWD)/test/slist $(PWD)/test/store \
-		  $(PWD)/test/string $(PWD)/test/tags $(PWD)/test/thread \
-		  $(PWD)/test/url
+BUILD_DIRS	= $(PWD)/test/account $(PWD)/test/address $(PWD)/test/array \
+		  $(PWD)/test/attach $(PWD)/test/base64 $(PWD)/test/body \
+		  $(PWD)/test/buffer $(PWD)/test/charset $(PWD)/test/compress \
+		  $(PWD)/test/config $(PWD)/test/date $(PWD)/test/email \
+		  $(PWD)/test/envelope $(PWD)/test/envlist $(PWD)/test/file \
+		  $(PWD)/test/filter $(PWD)/test/from $(PWD)/test/group \
+		  $(PWD)/test/gui $(PWD)/test/hash $(PWD)/test/history \
+		  $(PWD)/test/idna $(PWD)/test/list $(PWD)/test/logging \
+		  $(PWD)/test/mailbox $(PWD)/test/mapping $(PWD)/test/mbyte \
+		  $(PWD)/test/md5 $(PWD)/test/memory $(PWD)/test/neo \
+		  $(PWD)/test/notify $(PWD)/test/parameter $(PWD)/test/parse \
+		  $(PWD)/test/path $(PWD)/test/pattern $(PWD)/test/pool \
+		  $(PWD)/test/prex $(PWD)/test/regex $(PWD)/test/rfc2047 \
+		  $(PWD)/test/rfc2231 $(PWD)/test/signal $(PWD)/test/slist \
+		  $(PWD)/test/store $(PWD)/test/string $(PWD)/test/tags \
+		  $(PWD)/test/thread $(PWD)/test/url
 
 TEST_OBJS	= test/main.o test/common.o \
 		  $(ACCOUNT_OBJS) \
 		  $(ADDRESS_OBJS) \
+		  $(ARRAY_OBJS) \
 		  $(ATTACH_OBJS) \
 		  $(BASE64_OBJS) \
 		  $(BODY_OBJS) \

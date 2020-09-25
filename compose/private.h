@@ -1,6 +1,6 @@
 /**
  * @file
- * Type representing a path
+ * GUI editor for an email's headers
  *
  * @authors
  * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
@@ -20,11 +20,14 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_CONFIG_PATH_H
-#define MUTT_CONFIG_PATH_H
+#ifndef MUTT_COMPOSE_PRIVATE_H
+#define MUTT_COMPOSE_PRIVATE_H
 
-struct ConfigSet;
+extern char *        C_ComposeFormat;
+extern bool          C_ComposeShowUserHeaders;
+extern unsigned char C_Copy;
+extern bool          C_EditHeaders;
+extern char *        C_Ispell;
+extern unsigned char C_Postpone;
 
-void path_init(struct ConfigSet *cs);
-
-#endif /* MUTT_CONFIG_PATH_H */
+#endif /* MUTT_COMPOSE_PRIVATE_H */

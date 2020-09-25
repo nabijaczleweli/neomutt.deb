@@ -1,9 +1,9 @@
 /**
  * @file
- * Type representing a long
+ * Validator for the "charset" config variables
  *
  * @authors
- * Copyright (C) 2017-2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -20,11 +20,18 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_CONFIG_LONG_H
-#define MUTT_CONFIG_LONG_H
+#ifndef MUTT_CONFIG_CHARSET_H
+#define MUTT_CONFIG_CHARSET_H
 
+#include <stdint.h>
+
+#define DT_CHARSET_SINGLE    0x0800 ///< Flag for charset_validator to allow only one charset
+#define DT_CHARSET_STRICT    0x1000 ///< Flag for charset_validator to use strict char check
+
+struct Buffer;
+struct ConfigDef;
 struct ConfigSet;
 
-void long_init(struct ConfigSet *cs);
+int charset_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef, intptr_t value, struct Buffer *err);
 
-#endif /* MUTT_CONFIG_LONG_H */
+#endif /* MUTT_CONFIG_CHARSET_H */
