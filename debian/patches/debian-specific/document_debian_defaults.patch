@@ -9,7 +9,7 @@ from the default only on Debian systems.
  1 file changed, 19 insertions(+)
 
 diff --git a/docs/config.c b/docs/config.c
-index 6783d1e..be998f1 100644
+index 2baa874..b1c5be3 100644
 --- a/docs/config.c
 +++ b/docs/config.c
 @@ -420,6 +420,9 @@
@@ -22,7 +22,7 @@ index 6783d1e..be998f1 100644
  */
  
  { "braille_friendly", DT_BOOL, false },
-@@ -1632,6 +1635,9 @@
+@@ -1639,6 +1642,9 @@
  ** Optionally, NeoMutt can be compiled with a fixed domain name.
  ** .pp
  ** Also see $$use_domain and $$hidden_host.
@@ -32,7 +32,7 @@ index 6783d1e..be998f1 100644
  */
  
  #ifdef HAVE_LIBIDN
-@@ -2439,6 +2445,9 @@
+@@ -2446,6 +2452,9 @@
  ** system.  It is used with various sets of parameters to gather the
  ** list of known remailers, and to finally send a message through the
  ** mixmaster chain.
@@ -42,7 +42,7 @@ index 6783d1e..be998f1 100644
  */
  #endif
  
-@@ -4356,6 +4365,10 @@
+@@ -4363,6 +4372,10 @@
  ** .pp
  ** Encrypt the message to $$smime_default_key too.
  ** (S/MIME only)
@@ -53,7 +53,7 @@ index 6783d1e..be998f1 100644
  */
  #endif
  
-@@ -4715,6 +4728,9 @@
+@@ -4722,6 +4735,9 @@
  ** .ts
  ** set ssl_ca_certificates_file=/etc/ssl/certs/ca-certificates.crt
  ** .te
@@ -63,7 +63,7 @@ index 6783d1e..be998f1 100644
  */
  #endif
  
-@@ -5344,6 +5360,9 @@
+@@ -5351,6 +5367,9 @@
  ** Note this option only affects the sending of messages.  Fcc'ed
  ** copies of a message will always contain the "Bcc:" header if
  ** one exists.
