@@ -1,3 +1,10 @@
+neomutt (20200925+dfsg.1-0.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Add upstream patch from PR 2617 to fix <sidebar-{next,prev}-new>
+
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Sat, 26 Sep 2020 13:40:40 +0200
+
 neomutt (20200925+dfsg.1-0.1) unstable; urgency=medium
 
   * Non-maintainer upload.
