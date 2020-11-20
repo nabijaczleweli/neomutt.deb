@@ -8,8 +8,8 @@ debian/extra/lib/debian-ldap-query	usr/libexec/neomutt
 debian/extra/lib/mailto-neomutt		usr/libexec/neomutt
 
 debian/tmp/neomuttrc		etc
-contrib/gpg.rc				etc/neomuttrc.d
-contrib/smime.rc			etc/neomuttrc.d
+contrib/samples/gpg.rc				etc/neomuttrc.d
+contrib/samples/smime.rc			etc/neomuttrc.d
 debian/extra/rc/*.rc			etc/neomuttrc.d
 debian/extra/neomutt.xpm			usr/share/pixmaps
 debian/extra/neomutt.desktop		usr/share/applications
