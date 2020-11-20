@@ -228,7 +228,7 @@ static bool check_acl(struct Mailbox *m, AclFlags acl, const char *msg)
  * @param toggle toggle collapsed state
  *
  * This function is called by the OP_MAIN_COLLAPSE_ALL command and on folder
- * enter if the #C_CollapseAll option is set. In the first case, the @a toggle
+ * enter if the `$collapse_all` option is set. In the first case, the @a toggle
  * parameter is 1 to actually toggle collapsed/uncollapsed state on all
  * threads. In the second case, the @a toggle parameter is 0, actually turning
  * this function into a one-way collapse.
@@ -357,9 +357,9 @@ static int ci_first_message(struct Mailbox *m)
   if (old != -1)
     return old;
 
-  /* If C_Sort is reverse and not threaded, the latest message is first.
-   * If C_Sort is threaded, the latest message is first if exactly one
-   * of C_Sort and C_SortAux are reverse.  */
+  /* If `$sort` is reverse and not threaded, the latest message is first.
+   * If `$sort` is threaded, the latest message is first if exactly one
+   * of `$sort` and `$sort_aux` are reverse.  */
   if (((C_Sort & SORT_REVERSE) && ((C_Sort & SORT_MASK) != SORT_THREADS)) ||
       (((C_Sort & SORT_MASK) == SORT_THREADS) && ((C_Sort ^ C_SortAux) & SORT_REVERSE)))
   {
@@ -479,8 +479,8 @@ static void update_index_threaded(struct Context *ctx, int check, int oldcount)
     for (int i = 0; i < ctx->mailbox->msg_count; i++)
     {
       struct Email *e = ctx->mailbox->emails[i];
-      if (mutt_pattern_exec(SLIST_FIRST(ctx->limit_pattern),
-                            MUTT_MATCH_FULL_ADDRESS, ctx->mailbox, e, NULL))
+      if ((e->vnum != -1) || mutt_pattern_exec(SLIST_FIRST(ctx->limit_pattern), MUTT_MATCH_FULL_ADDRESS,
+                                               ctx->mailbox, e, NULL))
       {
         /* vnum will get properly set by mutt_set_vnum(), which
          * is called by mutt_sort_headers() just below. */
@@ -489,6 +489,7 @@ static void update_index_threaded(struct Context *ctx, int check, int oldcount)
       }
       else
       {
+        e->vnum = -1;
         e->visible = false;
       }
     }
@@ -731,8 +732,9 @@ static void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *old
   // TODO: Refactor this function to avoid the need for an observer
   notify_observer_add(m->notify, NT_MAILBOX, mailbox_index_observer, &m);
   char *dup_path = mutt_str_dup(mailbox_path(m));
+  char *dup_name = mutt_str_dup(m->name);
 
-  mutt_folder_hook(mailbox_path(m), m ? m->name : NULL);
+  mutt_folder_hook(dup_path, dup_name);
   if (m)
   {
     /* `m` is still valid, but we won't need the observer again before the end
@@ -745,6 +747,7 @@ static void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *old
     m = mx_path_resolve(dup_path);
   }
   FREE(&dup_path);
+  FREE(&dup_name);
 
   if (!m)
     return;
@@ -1855,6 +1858,9 @@ int mutt_index_menu(struct MuttWindow *dlg)
 
           oldcount = (Context && Context->mailbox) ? Context->mailbox->msg_count : 0;
 
+          mutt_startup_shutdown_hook(MUTT_SHUTDOWN_HOOK);
+          notify_send(NeoMutt->notify, NT_GLOBAL, NT_GLOBAL_SHUTDOWN, NULL);
+
           if (!Context || ((check = mx_mbox_close(&Context)) == 0))
           {
             done = true;
@@ -2156,7 +2162,7 @@ int mutt_index_menu(struct MuttWindow *dlg)
         }
         oldcount = Context->mailbox->msg_count;
         struct Email *e_oldcur = mutt_get_virt_email(Context->mailbox, menu->current);
-        if (nm_read_entire_thread(Context->mailbox, cur.e) < 0)
+        if (nm_read_entire_thread(Context->mailbox, e_oldcur) < 0)
         {
           mutt_message(_("Failed to read thread, aborting"));
           break;
@@ -3243,7 +3249,7 @@ int mutt_index_menu(struct MuttWindow *dlg)
         struct AddressList *al = NULL;
         if (cur.e && cur.e->env)
           al = mutt_get_address(cur.e->env, NULL);
-        alias_create(al);
+        alias_create(al, NeoMutt->sub);
         menu->redraw |= REDRAW_CURRENT;
         break;
       }
@@ -3251,7 +3257,7 @@ int mutt_index_menu(struct MuttWindow *dlg)
       case OP_QUERY:
         if (!prereq(Context, menu, CHECK_ATTACH))
           break;
-        query_index();
+        query_index(NeoMutt->sub);
         break;
 
       case OP_PURGE_MESSAGE:

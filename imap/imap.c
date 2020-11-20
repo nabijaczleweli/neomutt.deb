@@ -66,7 +66,7 @@
 
 struct stat;
 
-const struct Command imap_commands[] = {
+static const struct Command imap_commands[] = {
   // clang-format off
   { "subscribe-to",     parse_subscribe_to,     0 },
   { "unsubscribe-from", parse_unsubscribe_from, 0 },
@@ -761,7 +761,7 @@ int imap_open_connection(struct ImapAccountData *adata)
       else if ((ans = query_quadoption(C_SslStarttls,
                                        _("Secure connection with TLS?"))) == MUTT_ABORT)
       {
-        goto err_close_conn;
+        goto bail;
       }
       if (ans == MUTT_YES)
       {
@@ -776,7 +776,7 @@ int imap_open_connection(struct ImapAccountData *adata)
           if (mutt_ssl_starttls(adata->conn))
           {
             mutt_error(_("Could not negotiate TLS connection"));
-            goto err_close_conn;
+            goto bail;
           }
           else
           {
@@ -791,7 +791,7 @@ int imap_open_connection(struct ImapAccountData *adata)
     if (C_SslForceTls && (adata->conn->ssf == 0))
     {
       mutt_error(_("Encrypted connection unavailable"));
-      goto err_close_conn;
+      goto bail;
     }
 #endif
   }
@@ -807,7 +807,7 @@ int imap_open_connection(struct ImapAccountData *adata)
     if ((adata->conn->ssf == 0) && C_SslForceTls)
     {
       mutt_error(_("Encrypted connection unavailable"));
-      goto err_close_conn;
+      goto bail;
     }
 #endif
 
@@ -824,11 +824,8 @@ int imap_open_connection(struct ImapAccountData *adata)
 
   return 0;
 
-#ifdef USE_SSL
-err_close_conn:
-  imap_close_connection(adata);
-#endif
 bail:
+  imap_close_connection(adata);
   FREE(&adata->capstr);
   return -1;
 }
@@ -1718,9 +1715,6 @@ int imap_sync_mailbox(struct Mailbox *m, bool expunge, bool close)
  */
 static struct Account *imap_ac_find(struct Account *a, const char *path)
 {
-  if (!a || (a->type != MUTT_IMAP) || !path)
-    return NULL;
-
   struct Url *url = url_parse(path);
   if (!url)
     return NULL;
@@ -1742,9 +1736,6 @@ static struct Account *imap_ac_find(struct Account *a, const char *path)
  */
 static int imap_ac_add(struct Account *a, struct Mailbox *m)
 {
-  if (!a || !m || (m->type != MUTT_IMAP))
-    return -1;
-
   struct ImapAccountData *adata = a->adata;
 
   if (!adata)
@@ -1908,7 +1899,7 @@ int imap_login(struct ImapAccountData *adata)
  */
 static int imap_mbox_open(struct Mailbox *m)
 {
-  if (!m || !m->account || !m->mdata)
+  if (!m->account || !m->mdata)
     return -1;
 
   char buf[PATH_MAX];
@@ -2110,7 +2101,7 @@ fail:
  */
 static int imap_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
 {
-  if (!m || !m->account)
+  if (!m->account)
     return -1;
 
   /* in APPEND mode, we appear to hijack an existing IMAP connection -
@@ -2143,9 +2134,6 @@ static int imap_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
  */
 static int imap_mbox_check(struct Mailbox *m)
 {
-  if (!m)
-    return -1;
-
   imap_allow_reopen(m);
   int rc = imap_check_mailbox(m, false);
   /* NOTE - ctx might have been changed at this point. In particular,
@@ -2160,9 +2148,6 @@ static int imap_mbox_check(struct Mailbox *m)
  */
 static int imap_mbox_close(struct Mailbox *m)
 {
-  if (!m)
-    return -1;
-
   struct ImapAccountData *adata = imap_adata_get(m);
   struct ImapMboxData *mdata = imap_mdata_get(m);
 
@@ -2317,9 +2302,6 @@ static int imap_tags_edit(struct Mailbox *m, const char *tags, char *buf, size_t
  */
 static int imap_tags_commit(struct Mailbox *m, struct Email *e, char *buf)
 {
-  if (!m)
-    return -1;
-
   char uid[11];
 
   struct ImapAccountData *adata = imap_adata_get(m);
@@ -2384,9 +2366,6 @@ static int imap_tags_commit(struct Mailbox *m, struct Email *e, char *buf)
  */
 enum MailboxType imap_path_probe(const char *path, const struct stat *st)
 {
-  if (!path)
-    return MUTT_UNKNOWN;
-
   if (mutt_istr_startswith(path, "imap://"))
     return MUTT_IMAP;
 
@@ -2401,9 +2380,6 @@ enum MailboxType imap_path_probe(const char *path, const struct stat *st)
  */
 int imap_path_canon(char *buf, size_t buflen)
 {
-  if (!buf)
-    return -1;
-
   struct Url *url = url_parse(buf);
   if (!url)
     return 0;
@@ -2439,7 +2415,7 @@ int imap_expand_path(struct Buffer *buf)
  */
 static int imap_path_pretty(char *buf, size_t buflen, const char *folder)
 {
-  if (!buf || !folder)
+  if (!folder)
     return -1;
 
   imap_pretty_mailbox(buf, buflen, folder);
@@ -2455,6 +2431,19 @@ static int imap_path_parent(char *buf, size_t buflen)
 
   imap_get_parent_path(buf, tmp, sizeof(tmp));
   mutt_str_copy(buf, tmp, buflen);
+  return 0;
+}
+
+/**
+ * imap_path_is_empty - Is the mailbox empty - Implements MxOps::path_is_empty()
+ */
+static int imap_path_is_empty(const char *path)
+{
+  int rc = imap_path_status(path, false);
+  if (rc < 0)
+    return -1;
+  if (rc == 0)
+    return 1;
   return 0;
 }
 
@@ -2486,5 +2475,6 @@ struct MxOps MxImapOps = {
   .path_canon       = imap_path_canon,
   .path_pretty      = imap_path_pretty,
   .path_parent      = imap_path_parent,
+  .path_is_empty    = imap_path_is_empty,
 };
 // clang-format on

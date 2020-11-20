@@ -25,6 +25,7 @@
 
 #include <stdbool.h>
 #include "sort.h"
+#include "core/neomutt.h"
 #include "mutt/array.h"
 
 struct Alias;
@@ -40,22 +41,30 @@ struct AliasView
   bool is_matched  : 1; ///< Search matches this Alias
   bool is_tagged   : 1; ///< Is it tagged?
   bool is_deleted  : 1; ///< Is it deleted?
+  bool is_visible  : 1; ///< Is visible?
   struct Alias *alias;  ///< Alias
 };
 
-ARRAY_HEAD(AliasMenuData, struct AliasView);
+ARRAY_HEAD(AliasViewArray, struct AliasView);
+
+/**
+ *  AliasMenuData - AliasView array wrapper with Pattern information
+ */
+struct AliasMenuData
+{
+  char *str;                 ///< String representing the limit being used
+  struct Pattern *pat;       ///< Pattern object
+  struct AliasViewArray ava; ///< Array of AliasView
+  struct ConfigSubset *sub;  ///< Config items
+};
 
 int alias_config_observer(struct NotifyCallback *nc);
 int alias_color_observer (struct NotifyCallback *nc);
 
-int  menu_data_alias_add   (struct AliasMenuData *mdata, struct Alias *alias);
-int  menu_data_alias_delete(struct AliasMenuData *mdata, struct Alias *alias);
-void menu_data_sort        (struct AliasMenuData *mdata);
+int  alias_array_alias_add    (struct AliasViewArray *ava, struct Alias *alias);
+int  alias_array_alias_delete (struct AliasViewArray *ava, struct Alias *alias);
+int  alias_array_count_visible(struct AliasViewArray *ava);
 
-sort_t alias_get_sort_function(short sort);
-
-int alias_sort_address(const void *a, const void *b);
-int alias_sort_name   (const void *a, const void *b);
-int alias_sort_unsort (const void *a, const void *b);
+char *menu_create_alias_title(char *menu_name, char *limit);
 
 #endif /* MUTT_ALIAS_GUI_H */

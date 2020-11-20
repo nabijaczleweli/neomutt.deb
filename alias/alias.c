@@ -361,8 +361,9 @@ struct AddressList *mutt_get_address(struct Envelope *env, const char **prefix)
 /**
  * alias_create - Create a new Alias from an Address
  * @param al Address to use
+ * @param sub Config items
  */
-void alias_create(struct AddressList *al)
+void alias_create(struct AddressList *al, const struct ConfigSubset *sub)
 {
   struct Address *addr = NULL;
   char buf[1024], tmp[1024] = { 0 }, prompt[2048];
@@ -481,7 +482,9 @@ retry_name:
   alias_reverse_add(alias);
   TAILQ_INSERT_TAIL(&Aliases, alias, entries);
 
-  mutt_str_copy(buf, C_AliasFile, sizeof(buf));
+  const char *alias_file = cs_subset_string(sub, "alias_file");
+  mutt_str_copy(buf, NONULL(alias_file), sizeof(buf));
+
   if (mutt_get_field(_("Save to file: "), buf, sizeof(buf), MUTT_FILE | MUTT_CLEAR) != 0)
     return;
   mutt_expand_path(buf, sizeof(buf));
@@ -649,9 +652,7 @@ void aliaslist_free(struct AliasList *al)
  */
 void alias_init(void)
 {
-  /* reverse alias keys need to be strdup'ed because of idna conversions */
-  ReverseAliases = mutt_hash_new(1031, MUTT_HASH_STRCASECMP | MUTT_HASH_STRDUP_KEYS |
-                                           MUTT_HASH_ALLOW_DUPS);
+  alias_reverse_init();
 }
 
 /**
@@ -665,5 +666,5 @@ void alias_shutdown(void)
     alias_reverse_delete(np);
   }
   aliaslist_free(&Aliases);
-  mutt_hash_free(&ReverseAliases);
+  alias_reverse_shutdown();
 }

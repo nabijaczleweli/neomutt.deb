@@ -83,16 +83,17 @@ bool C_IgnoreLinearWhiteSpace = false;
 const struct Mapping SortAuxMethods[] = {
   // clang-format off
   { "date",          SORT_DATE },
-  { "date-received", SORT_RECEIVED },
   { "date-sent",     SORT_DATE },
+  { "threads",       SORT_DATE },
+  { "date-received", SORT_RECEIVED },
   { "from",          SORT_FROM },
   { "label",         SORT_LABEL },
+  { "unsorted",      SORT_ORDER },
   { "mailbox-order", SORT_ORDER },
   { "score",         SORT_SCORE },
   { "size",          SORT_SIZE },
   { "spam",          SORT_SPAM },
   { "subject",       SORT_SUBJECT },
-  { "threads",       SORT_DATE },
   { "to",            SORT_TO },
   { NULL,            0 },
   // clang-format on
@@ -104,10 +105,11 @@ const struct Mapping SortAuxMethods[] = {
 const struct Mapping SortMethods[] = {
   // clang-format off
   { "date",          SORT_DATE },
-  { "date-received", SORT_RECEIVED },
   { "date-sent",     SORT_DATE },
+  { "date-received", SORT_RECEIVED },
   { "from",          SORT_FROM },
   { "label",         SORT_LABEL },
+  { "unsorted",      SORT_ORDER },
   { "mailbox-order", SORT_ORDER },
   { "score",         SORT_SCORE },
   { "size",          SORT_SIZE },
@@ -288,6 +290,9 @@ struct ConfigDef MainVars[] = {
   { "copy_decode_weed", DT_BOOL, &C_CopyDecodeWeed, false, 0, NULL,
     "Controls whether to weed headers when copying or saving emails"
   },
+  { "count_alternatives", DT_BOOL, &C_CountAlternatives, false, 0, NULL,
+    "Recurse inside multipart/alternatives while counting attachments"
+  },
   { "crypt_chars", DT_MBTABLE|R_INDEX|R_PAGER, &C_CryptChars, IP "SPsK ", 0, NULL,
     "User-configurable crypto flags: signed, encrypted etc."
   },
@@ -343,7 +348,7 @@ struct ConfigDef MainVars[] = {
     "Decode the message when forwarding it"
   },
   { "forward_quote", DT_BOOL, &C_ForwardQuote, false, 0, NULL,
-    "Automatically quote a forwarded message using #C_IndentString"
+    "Automatically quote a forwarded message using `$indent_string`"
   },
   { "from", DT_ADDRESS, &C_From, 0, 0, NULL,
     "Default 'From' address to use, if isn't otherwise set"
@@ -408,7 +413,7 @@ struct ConfigDef MainVars[] = {
     "printf-like format string for the index menu (emails)"
   },
   { "keep_flagged", DT_BOOL, &C_KeepFlagged, false, 0, NULL,
-    "Don't move flagged messages from #C_Spoolfile to #C_Mbox"
+    "Don't move flagged messages from `$spoolfile` to `$mbox`"
   },
   { "mail_check", DT_NUMBER|DT_NOT_NEGATIVE, &C_MailCheck, 5, 0, NULL,
     "Number of seconds before NeoMutt checks for new mail"
@@ -482,7 +487,7 @@ struct ConfigDef MainVars[] = {
   },
 #endif
   { "move", DT_QUAD, &C_Move, MUTT_NO, 0, NULL,
-    "Move emails from #C_Spoolfile to #C_Mbox when read"
+    "Move emails from `$spoolfile` to `$mbox` when read"
   },
   { "narrow_tree", DT_BOOL|R_TREE|R_INDEX, &C_NarrowTree, false, 0, NULL,
     "Draw a narrower thread tree in the index"

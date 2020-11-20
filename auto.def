@@ -16,7 +16,7 @@ use system cc cc-lib mutt-gettext mutt-iconv pkg-config
 ###############################################################################
 # Names and versions
 define PACKAGE          "neomutt"
-define PACKAGE_VERSION  "20200925"
+define PACKAGE_VERSION  "20201120"
 define BUGS_ADDRESS     "neomutt-devel@neomutt.org"
 
 # Subdirectories that contain additional Makefile.autosetup files
@@ -370,7 +370,7 @@ set prefix [opt-val with-sysroot][get-define prefix]
 # Everything
 if {[get-define want-everything]} {
   foreach opt {bdb gdbm gpgme kyotocabinet lmdb lua lz4 notmuch pgp rocksdb
-               qdbm smime tokyocabinet tdb zlib zstd} {
+               qdbm sasl smime ssl tokyocabinet tdb zlib zstd} {
     define want-$opt
     append conf_options "--$opt "
   }
@@ -1214,7 +1214,7 @@ if {[get-define want-asan]} {
     user-error "Unable to compile with -fsanitize=address"
   }
   msg-result "yes"
-  define-append CFLAGS -fsanitize=address
+  define-append CFLAGS -fsanitize=address -O0 -fno-omit-frame-pointer -fno-common
   define-append LDFLAGS -fsanitize=address
 }
 

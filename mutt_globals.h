@@ -141,10 +141,11 @@ WHERE bool C_BrailleFriendly;                ///< Config: Move the cursor to the
 WHERE bool C_Confirmappend;                  ///< Config: Confirm before appending emails to a mailbox
 WHERE bool C_Confirmcreate;                  ///< Config: Confirm before creating a new mailbox
 WHERE bool C_CopyDecodeWeed;                 ///< Config: Controls whether to weed headers when copying or saving emails
+WHERE bool C_CountAlternatives;              ///< Config: Recurse inside multipart/alternatives while counting attachments
 WHERE bool C_DeleteUntag;                    ///< Config: Untag messages when they are marked for deletion
 WHERE bool C_FlagSafe;                       ///< Config: Protect flagged messages from deletion
 WHERE bool C_ForwardDecode;                  ///< Config: Decode the message when forwarding it
-WHERE bool C_ForwardQuote;                   ///< Config: Automatically quote a forwarded message using #C_IndentString
+WHERE bool C_ForwardQuote;                   ///< Config: Automatically quote a forwarded message using `$indent_string`
 WHERE bool C_Header;                         ///< Config: Include the message headers in the reply email (Weed applies)
 WHERE bool C_MailCheckRecent;                ///< Config: Notify the user about new mail since the last time the mailbox was opened
 WHERE bool C_Markers;                        ///< Config: Display a '+' at the beginning of wrapped lines in the pager

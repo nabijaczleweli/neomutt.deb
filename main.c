@@ -777,7 +777,7 @@ int main(int argc, char *argv[], char *envp[])
     mutt_autocrypt_init(!(sendflags & SEND_BATCH));
 #endif
 
-  /* Create the C_Folder directory if it doesn't exist. */
+  /* Create the `$folder` directory if it doesn't exist. */
   if (!OptNoCurses && C_Folder)
   {
     struct stat sb;
@@ -987,7 +987,7 @@ int main(int argc, char *argv[], char *envp[])
           goto main_curses;
         }
 
-        /* Scan for neomutt header to set C_ResumeDraftFiles */
+        /* Scan for neomutt header to set `$resume_draft_files` */
         struct ListNode *np = NULL, *tmp = NULL;
         STAILQ_FOREACH_SAFE(np, &e->env->userhdrs, entries, tmp)
         {
@@ -1169,7 +1169,7 @@ int main(int argc, char *argv[], char *envp[])
     {
       if (C_Spoolfile)
       {
-        // Check if C_Spoolfile corresponds a mailboxes' description.
+        // Check if `$spoolfile` corresponds a mailboxes' description.
         struct Mailbox *m_desc = mailbox_find_name(C_Spoolfile);
         if (m_desc)
           mutt_buffer_strcpy(&folder, m_desc->realpath);
@@ -1198,7 +1198,7 @@ int main(int argc, char *argv[], char *envp[])
     if (flags & MUTT_CLI_IGNORE)
     {
       /* check to see if there are any messages in the folder */
-      switch (mx_check_empty(mutt_b2s(&folder)))
+      switch (mx_path_is_empty(mutt_b2s(&folder)))
       {
         case -1:
           mutt_perror(mutt_b2s(&folder));

@@ -148,12 +148,7 @@ static void destroy_state(struct BrowserState *state)
 }
 
 /**
- * browser_compare_subject - Compare the subject of two browser entries
- * @param a First browser entry
- * @param b Second browser entry
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * browser_compare_subject - Compare the subject of two browser entries - Implements ::sort_t
  */
 static int browser_compare_subject(const void *a, const void *b)
 {
@@ -168,12 +163,20 @@ static int browser_compare_subject(const void *a, const void *b)
 }
 
 /**
- * browser_compare_desc - Compare the descriptions of two browser entries
- * @param a First browser entry
- * @param b Second browser entry
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * browser_compare_order - Compare the order of creation of two browser entries - Implements ::sort_t
+ *
+ * @note This only affects browsing mailboxes and is a no-op for folders.
+ */
+static int browser_compare_order(const void *a, const void *b)
+{
+  const struct FolderFile *pa = (const struct FolderFile *) a;
+  const struct FolderFile *pb = (const struct FolderFile *) b;
+
+  return ((C_SortBrowser & SORT_REVERSE) ? -1 : 1) * (pa->gen - pb->gen);
+}
+
+/**
+ * browser_compare_desc - Compare the descriptions of two browser entries - Implements ::sort_t
  */
 static int browser_compare_desc(const void *a, const void *b)
 {
@@ -186,12 +189,7 @@ static int browser_compare_desc(const void *a, const void *b)
 }
 
 /**
- * browser_compare_date - Compare the date of two browser entries
- * @param a First browser entry
- * @param b Second browser entry
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * browser_compare_date - Compare the date of two browser entries - Implements ::sort_t
  */
 static int browser_compare_date(const void *a, const void *b)
 {
@@ -204,12 +202,7 @@ static int browser_compare_date(const void *a, const void *b)
 }
 
 /**
- * browser_compare_size - Compare the size of two browser entries
- * @param a First browser entry
- * @param b Second browser entry
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * browser_compare_size - Compare the size of two browser entries - Implements ::sort_t
  */
 static int browser_compare_size(const void *a, const void *b)
 {
@@ -222,12 +215,7 @@ static int browser_compare_size(const void *a, const void *b)
 }
 
 /**
- * browser_compare_count - Compare the message count of two browser entries
- * @param a First browser entry
- * @param b Second browser entry
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * browser_compare_count - Compare the message count of two browser entries - Implements ::sort_t
  */
 static int browser_compare_count(const void *a, const void *b)
 {
@@ -246,12 +234,7 @@ static int browser_compare_count(const void *a, const void *b)
 }
 
 /**
- * browser_compare_count_new - Compare the new count of two browser entries
- * @param a First browser entry
- * @param b Second browser entry
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * browser_compare_count_new - Compare the new count of two browser entries - Implements ::sort_t
  */
 static int browser_compare_count_new(const void *a, const void *b)
 {
@@ -270,12 +253,7 @@ static int browser_compare_count_new(const void *a, const void *b)
 }
 
 /**
- * browser_compare - Sort the items in the browser
- * @param a First item
- * @param b Second item
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * browser_compare - Sort the items in the browser - Implements ::sort_t
  *
  * Wild compare function that calls the others. It's useful because it provides
  * a way to tell "../" is always on the top of the list, independently of the
@@ -304,8 +282,10 @@ static int browser_compare(const void *a, const void *b)
     case SORT_UNREAD:
       return browser_compare_count_new(a, b);
     case SORT_SUBJECT:
-    default:
       return browser_compare_subject(a, b);
+    default:
+    case SORT_ORDER:
+      return browser_compare_order(a, b);
   }
 }
 
@@ -320,9 +300,6 @@ static void browser_sort(struct BrowserState *state)
 {
   switch (C_SortBrowser & SORT_MASK)
   {
-    /* Also called "I don't care"-sort-method. */
-    case SORT_ORDER:
-      return;
 #ifdef USE_NNTP
     case SORT_SIZE:
     case SORT_DATE:
@@ -660,6 +637,7 @@ static void add_folder(struct Menu *menu, struct BrowserState *state,
   if (m)
   {
     ff.has_mailbox = true;
+    ff.gen = m->gen;
     ff.has_new_mail = m->has_new;
     ff.msg_count = m->msg_count;
     ff.msg_unread = m->msg_unread;
@@ -1158,7 +1136,7 @@ void mutt_buffer_select_file(struct Buffer *file, SelectFileFlags flags,
                              char ***files, int *numfiles)
 {
   char title[256];
-  struct BrowserState state = { 0 };
+  struct BrowserState state = { { 0 } };
   struct Menu *menu = NULL;
   bool kill_prefix = false;
   bool multiple = (flags & MUTT_SEL_MULTI);
@@ -1166,7 +1144,7 @@ void mutt_buffer_select_file(struct Buffer *file, SelectFileFlags flags,
   bool mailbox = (flags & MUTT_SEL_MAILBOX);
 
   /* Keeps in memory the directory we were in when hitting '='
-   * to go directly to $folder (#C_Folder) */
+   * to go directly to $folder (`$folder`) */
   char goto_swapper[PATH_MAX] = { 0 };
 
   mailbox = mailbox && folder;
@@ -1872,7 +1850,6 @@ void mutt_buffer_select_file(struct Buffer *file, SelectFileFlags flags,
 
           case 7: /* do(n)'t sort */
             sort = SORT_ORDER;
-            resort = false;
             break;
         }
         if (resort)
@@ -1910,7 +1887,7 @@ void mutt_buffer_select_file(struct Buffer *file, SelectFileFlags flags,
             {
               if (!mutt_str_equal(mutt_b2s(&LastDir), C_Folder))
               {
-                /* Stores into goto_swapper LastDir, and swaps to C_Folder */
+                /* Stores into goto_swapper LastDir, and swaps to `$folder` */
                 mutt_str_copy(goto_swapper, mutt_b2s(&LastDir), sizeof(goto_swapper));
                 mutt_buffer_copy(&LastDirBackup, &LastDir);
                 mutt_buffer_strcpy(&LastDir, C_Folder);

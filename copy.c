@@ -77,6 +77,7 @@ static void add_one_header(struct Headers *headers, size_t pos, char *value)
   {
     char *new_value = NULL;
     mutt_str_asprintf(&new_value, "%s%s", *old, value);
+    FREE(old);
     FREE(&value);
     value = new_value;
   }
@@ -162,15 +163,21 @@ int mutt_copy_hdr(FILE *fp_in, FILE *fp_out, LOFF_T off_start, LOFF_T off_end,
         }
         if ((chflags & CH_UPDATE_REFS) &&
             mutt_istr_startswith(buf, "References:"))
+        {
           continue;
+        }
         if ((chflags & CH_UPDATE_IRT) &&
             mutt_istr_startswith(buf, "In-Reply-To:"))
+        {
           continue;
+        }
         if (chflags & CH_UPDATE_LABEL && mutt_istr_startswith(buf, "X-Label:"))
           continue;
         if ((chflags & CH_UPDATE_SUBJECT) &&
             mutt_istr_startswith(buf, "Subject:"))
+        {
           continue;
+        }
 
         ignore = false;
       }

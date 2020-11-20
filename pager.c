@@ -958,7 +958,7 @@ static int check_protected_header_marker(const char *p)
  * @param[out] pmatch Regex sub-matches
  * @retval true Line is quoted
  *
- * Checks if line matches the #C_QuoteRegex and doesn't match #C_Smileys.
+ * Checks if line matches the `$quote_regex` and doesn't match `$smileys`.
  * This is used by the pager for calling classify_quote.
  */
 int mutt_is_quote_line(char *line, regmatch_t *pmatch)
@@ -1992,9 +1992,7 @@ static void pager_custom_redraw(struct Menu *pager_menu)
   if (pager_menu->redraw & REDRAW_FULL)
   {
     mutt_curses_set_color(MT_COLOR_NORMAL);
-    /* clear() doesn't optimize screen redraws */
-    mutt_window_move_abs(0, 0);
-    mutt_window_clrtobot();
+    mutt_window_clear(rd->extra->win_pager);
 
     if (IsEmail(rd->extra) && Context && Context->mailbox &&
         ((Context->mailbox->vcount + 1) < C_PagerIndexLines))
@@ -3019,7 +3017,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
           al = mutt_get_address(extra->body->email->env, NULL);
         else
           al = mutt_get_address(extra->email->env, NULL);
-        alias_create(al);
+        alias_create(al, NeoMutt->sub);
         break;
 
       case OP_PURGE_MESSAGE:

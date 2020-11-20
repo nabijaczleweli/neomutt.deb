@@ -96,6 +96,18 @@ struct SaslSockData
   int (*close)(struct Connection *conn);
 };
 
+/**
+ * sasl_authenticators - Authenticaion methods supported by Cyrus SASL
+ */
+static const char *const sasl_authenticators[] = {
+  "ANONYMOUS",     "CRAM-MD5",       "DIGEST-MD5",    "EXTERNAL",
+  "GS2-IAKERB",    "GS2-KRB5",       "GSS-SPNEGO",    "GSSAPI",
+  "LOGIN",         "NTLM",           "OTP-MD4",       "OTP-MD5",
+  "OTP-SHA1",      "PASSDSS-3DES-1", "PLAIN",         "SCRAM-SHA-1",
+  "SCRAM-SHA-224", "SCRAM-SHA-256",  "SCRAM-SHA-384", "SCRAM-SHA-512",
+  "SRP",
+};
+
 /* arbitrary. SASL will probably use a smaller buffer anyway. OTOH it's
  * been a while since I've had access to an SASL server which negotiated
  * a protection buffer. */
@@ -106,6 +118,23 @@ struct SaslSockData
 static sasl_callback_t MuttSaslCallbacks[5];
 
 static sasl_secret_t *secret_ptr = NULL;
+
+/**
+ * sasl_auth_validator - Validate an auth method against Cyrus SASL methods
+ * @param authenticator Name of the authenticator to validate
+ * @retval bool True if argument matches an accepted auth method
+ */
+bool sasl_auth_validator(const char *authenticator)
+{
+  for (size_t i = 0; i < mutt_array_size(sasl_authenticators); i++)
+  {
+    const char *auth = sasl_authenticators[i];
+    if (mutt_istr_equal(auth, authenticator))
+      return true;
+  }
+
+  return false;
+}
 
 /**
  * getnameinfo_err - Convert a getaddrinfo() error code into an SASL error code
