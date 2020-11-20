@@ -7,13 +7,13 @@ distributed by the default installation of Mutt.
 
 Signed-off-by: Matteo F. Vescovi <mfv@debian.org>
 ---
- contrib/smime.rc | 20 +++++++++++---------
+ contrib/samples/smime.rc | 20 +++++++++++---------
  1 file changed, 11 insertions(+), 9 deletions(-)
 
-diff --git a/contrib/smime.rc b/contrib/smime.rc
+diff --git a/contrib/samples/smime.rc b/contrib/samples/smime.rc
 index 0450a04..5a5ff5e 100644
---- a/contrib/smime.rc
-+++ b/contrib/smime.rc
+--- a/contrib/samples/smime.rc
++++ b/contrib/samples/smime.rc
 @@ -4,20 +4,20 @@
  
  # If you compiled neomutt with support for both PGP and S/MIME, PGP

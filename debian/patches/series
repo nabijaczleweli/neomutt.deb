@@ -3,4 +3,3 @@ debian-specific/use_usr_bin_editor.patch
 debian-specific/document_debian_defaults.patch
 misc/smime.rc.patch
 misc/fix_ALL_FILES.patch
-upstream/2671.patch

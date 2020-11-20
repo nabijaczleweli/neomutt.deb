@@ -12,10 +12,10 @@ to vi.
  3 files changed, 4 insertions(+), 2 deletions(-)
 
 diff --git a/docs/config.c b/docs/config.c
-index 6ec5e07..2baa874 100644
+index cd5d1ec..2cb1f11 100644
 --- a/docs/config.c
 +++ b/docs/config.c
-@@ -1052,7 +1052,7 @@
+@@ -1066,7 +1066,7 @@
  ** ignored for interoperability reasons.
  */
  
@@ -25,7 +25,7 @@ index 6ec5e07..2baa874 100644
  ** .pp
  ** This variable specifies which editor is used by NeoMutt.
 diff --git a/init.c b/init.c
-index 53f0ac7..20892ad 100644
+index 458b07a..56758a1 100644
 --- a/init.c
 +++ b/init.c
 @@ -798,6 +798,8 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
@@ -38,10 +38,10 @@ index 53f0ac7..20892ad 100644
    {
      cs_str_string_set(cs, "editor", env_ed, NULL);
 diff --git a/mutt_config.c b/mutt_config.c
-index 284f26e..120af60 100644
+index 2ae7819..67b4bf4 100644
 --- a/mutt_config.c
 +++ b/mutt_config.c
-@@ -318,7 +318,7 @@ struct ConfigDef MainVars[] = {
+@@ -323,7 +323,7 @@ struct ConfigDef MainVars[] = {
    { "duplicate_threads", DT_BOOL|R_RESORT|R_RESORT_INIT|R_INDEX, &C_DuplicateThreads, true, 0, pager_validator,
      "Highlight messages with duplicated message IDs"
    },
