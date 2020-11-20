@@ -1,6 +1,6 @@
 /**
  * @file
- * GUI editor for an email's headers
+ * Maildir-specific Email data
  *
  * @authors
  * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
@@ -20,14 +20,23 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_COMPOSE_PRIVATE_H
-#define MUTT_COMPOSE_PRIVATE_H
+#ifndef MUTT_MAILDIR_EDATA_H
+#define MUTT_MAILDIR_EDATA_H
 
-extern char *        C_ComposeFormat;
-extern bool          C_ComposeShowUserHeaders;
-extern unsigned char C_Copy;
-extern bool          C_EditHeaders;
-extern char *        C_Ispell;
-extern unsigned char C_Postpone;
+struct Email;
 
-#endif /* MUTT_COMPOSE_PRIVATE_H */
+/**
+ * struct MaildirEmailData - Maildir-specific Email data - @extends Email
+ *
+ * @note Also used by MH Mailboxes
+ */
+struct MaildirEmailData
+{
+  char *maildir_flags; ///< Unknown Maildir flags
+};
+
+void                     maildir_edata_free(void **ptr);
+struct MaildirEmailData *maildir_edata_get(struct Email *e);
+struct MaildirEmailData *maildir_edata_new(void);
+
+#endif /* MUTT_MAILDIR_EDATA_H */

@@ -107,8 +107,9 @@ $(PWD)/address:
 ###############################################################################
 # libalias
 LIBALIAS=	libalias.a
-LIBALIASOBJS=	alias/alias.o alias/commands.o alias/config.o alias/dlgalias.o \
-		alias/dlgquery.o alias/gui.o alias/reverse.o
+LIBALIASOBJS=	alias/alias.o alias/array.o alias/commands.o alias/config.o \
+		alias/dlgalias.o alias/dlgquery.o alias/gui.o alias/reverse.o \
+		alias/sort.o
 CLEANFILES+=	$(LIBALIAS) $(LIBALIASOBJS)
 ALLOBJS+=	$(LIBALIASOBJS)
 
@@ -388,7 +389,9 @@ $(PWD)/imap:
 ###############################################################################
 # libmaildir
 LIBMAILDIR=	libmaildir.a
-LIBMAILDIROBJS=	maildir/config.o maildir/maildir.o maildir/mh.o maildir/shared.o
+LIBMAILDIROBJS=	maildir/config.o maildir/edata.o maildir/maildir.o \
+		maildir/mdata.o maildir/mdemail.o maildir/mh.o \
+		maildir/sequence.o maildir/shared.o
 CLEANFILES+=	$(LIBMAILDIR) $(LIBMAILDIROBJS)
 ALLOBJS+=	$(LIBMAILDIROBJS)
 

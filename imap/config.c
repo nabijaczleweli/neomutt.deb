@@ -30,7 +30,9 @@
 #include <stddef.h>
 #include <config/lib.h>
 #include <stdbool.h>
+#include "conn/lib.h"
 #include "lib.h"
+#include "auth.h"
 #include "init.h"
 
 // clang-format off
@@ -46,7 +48,7 @@ char *        C_ImapHeaders;             ///< Config: (imap) Additional email he
 bool          C_ImapIdle;                ///< Config: (imap) Use the IMAP IDLE extension to check for new mail
 short         C_ImapKeepalive;           ///< Config: (imap) Time to wait before polling an open IMAP connection
 bool          C_ImapListSubscribed;      ///< Config: (imap) When browsing a mailbox, only display subscribed folders
-char *        C_ImapLogin;               ///< Config: (imap) Login name for the IMAP server (defaults to #C_ImapUser)
+char *        C_ImapLogin;               ///< Config: (imap) Login name for the IMAP server (defaults to `$imap_user`)
 char *        C_ImapOauthRefreshCommand; ///< Config: (imap) External command to generate OAUTH refresh token
 char *        C_ImapPass;                ///< Config: (imap) Password for the IMAP server
 bool          C_ImapPassive;             ///< Config: (imap) Reuse an existing IMAP connection to check for new mail
@@ -58,6 +60,33 @@ bool          C_ImapRfc5161;             ///< Config: (imap) Use the IMAP ENABLE
 bool          C_ImapServernoise;         ///< Config: (imap) Display server warnings as error messages
 char *        C_ImapUser;                ///< Config: (imap) Username for the IMAP server
 // clang-format on
+
+/**
+ * imap_auth_validator - Validate the "imap_authenticators" config variable - Implements ConfigDef::validator()
+ */
+static int imap_auth_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
+                               intptr_t value, struct Buffer *err)
+{
+  const struct Slist *imap_auth_methods = (const struct Slist *) value;
+  if (!imap_auth_methods || (imap_auth_methods->count == 0))
+    return CSR_SUCCESS;
+
+  struct ListNode *np = NULL;
+  STAILQ_FOREACH(np, &imap_auth_methods->head, entries)
+  {
+    if (imap_auth_is_valid(np->data))
+      continue;
+#ifdef USE_SASL
+    if (sasl_auth_validator(np->data))
+      continue;
+#endif
+    mutt_buffer_printf(err, _("Option %s: %s is not a valid authenticator"),
+                       cdef->name, np->data);
+    return CSR_ERR_INVALID;
+  }
+
+  return CSR_SUCCESS;
+}
 
 struct ConfigDef ImapVars[] = {
   // clang-format off
@@ -72,7 +101,7 @@ struct ConfigDef ImapVars[] = {
     "(imap) Compress network traffic"
   },
 #endif
-  { "imap_authenticators", DT_SLIST|SLIST_SEP_COLON, &C_ImapAuthenticators, 0, 0, NULL,
+  { "imap_authenticators", DT_SLIST|SLIST_SEP_COLON, &C_ImapAuthenticators, 0, 0, imap_auth_validator,
     "(imap) List of allowed IMAP authentication methods"
   },
   { "imap_delim_chars", DT_STRING, &C_ImapDelimChars, IP "/.", 0, NULL,
@@ -88,7 +117,7 @@ struct ConfigDef ImapVars[] = {
     "(imap) Use the IMAP IDLE extension to check for new mail"
   },
   { "imap_login", DT_STRING|DT_SENSITIVE, &C_ImapLogin, 0, 0, NULL,
-    "(imap) Login name for the IMAP server (defaults to #C_ImapUser)"
+    "(imap) Login name for the IMAP server (defaults to `$imap_user`)"
   },
   { "imap_oauth_refresh_command", DT_STRING|DT_COMMAND|DT_SENSITIVE, &C_ImapOauthRefreshCommand, 0, 0, NULL,
     "(imap) External command to generate OAUTH refresh token"

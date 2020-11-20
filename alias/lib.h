@@ -28,12 +28,14 @@
  * | File                | Description                |
  * | :------------------ | :------------------------- |
  * | alias/alias.c       | @subpage alias_alias       |
+ * | alias/array.c       | @subpage alias_array       |
  * | alias/commands.c    | @subpage alias_commands    |
  * | alias/config.c      | @subpage alias_config      |
  * | alias/dlgalias.c    | @subpage alias_dlgalias    |
  * | alias/dlgquery.c    | @subpage alias_dlgquery    |
  * | alias/gui.c         | @subpage alias_gui         |
  * | alias/reverse.c     | @subpage alias_reverse     |
+ * | alias/sort.c        | @subpage alias_sort        |
  */
 
 #ifndef MUTT_ALIAS_LIB_H
@@ -43,29 +45,20 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "mutt_commands.h"
+#include "sort.h"
+#include "gui.h"
 
 struct Address;
 struct AddressList;
+struct AliasViewArray;
 struct Buffer;
 struct ConfigSet;
 struct Envelope;
 
-extern char *C_AliasFile;
-
-/* These Config Variables are only used in dlgalias.c */
-extern char *C_AliasFormat;
-extern short C_SortAlias;
-
-/* These Config Variables are only used in dlgquery.c */
-extern char *C_QueryCommand;
-extern char *C_QueryFormat;
-
-extern struct HashTable *ReverseAliases;
-
 void alias_init    (void);
 void alias_shutdown(void);
 
-void                alias_create           (struct AddressList *al);
+void                alias_create           (struct AddressList *al, const struct ConfigSubset *sub);
 struct AddressList *alias_lookup           (const char *name);
 
 bool                mutt_addr_is_user      (const struct Address *addr);
@@ -76,13 +69,15 @@ struct AddressList *mutt_get_address       (struct Envelope *env, const char **p
 enum CommandResult parse_alias  (struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
 enum CommandResult parse_unalias(struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
 
-int  alias_complete(char *buf, size_t buflen);
+int  alias_complete(char *buf, size_t buflen, struct ConfigSubset *sub);
 
-int  query_complete(char *buf, size_t buflen);
-void query_index   (void);
+int  query_complete(char *buf, size_t buflen, struct ConfigSubset *sub);
+void query_index   (struct ConfigSubset *sub);
 
 struct Address *alias_reverse_lookup(const struct Address *addr);
 
 bool config_init_alias(struct ConfigSet *cs);
+
+void alias_array_sort(struct AliasViewArray *ava, const struct ConfigSubset *sub);
 
 #endif /* MUTT_ALIAS_LIB_H */
