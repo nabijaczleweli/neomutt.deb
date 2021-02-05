@@ -247,10 +247,10 @@ static int query_run(char *s, bool verbose, struct AliasList *al,
   const char *query_command = cs_subset_string(sub, "query_command");
   mutt_buffer_file_expand_fmt_quote(cmd, query_command, s);
 
-  pid_t pid = filter_create(mutt_b2s(cmd), NULL, &fp, NULL);
+  pid_t pid = filter_create(mutt_buffer_string(cmd), NULL, &fp, NULL);
   if (pid < 0)
   {
-    mutt_debug(LL_DEBUG1, "unable to fork command: %s\n", mutt_b2s(cmd));
+    mutt_debug(LL_DEBUG1, "unable to fork command: %s\n", mutt_buffer_string(cmd));
     mutt_buffer_pool_release(&cmd);
     return -1;
   }
@@ -261,8 +261,8 @@ static int query_run(char *s, bool verbose, struct AliasList *al,
 
   /* The query protocol first reads one NL-terminated line. If an error
    * occurs, this is assumed to be an error message. Otherwise it's ignored. */
-  msg = mutt_file_read_line(msg, &msglen, fp, NULL, 0);
-  while ((buf = mutt_file_read_line(buf, &buflen, fp, NULL, 0)))
+  msg = mutt_file_read_line(msg, &msglen, fp, NULL, MUTT_RL_NO_FLAGS);
+  while ((buf = mutt_file_read_line(buf, &buflen, fp, NULL, MUTT_RL_NO_FLAGS)))
   {
     p = strtok(buf, "\t\n");
     if (p)

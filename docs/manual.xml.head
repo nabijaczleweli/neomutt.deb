@@ -2525,18 +2525,12 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
           </varlistentry>
           <varlistentry>
             <term>
-              <literal>&lt;toggle-quoted&gt;</literal> (default: T)
-              <anchor id="toggle-quoted" />
+              <literal>&lt;skip-headers&gt;</literal> (default: H)
+              <anchor id="skip-headers"/>
             </term>
             <listitem>
               <para>
-                The pager uses the
-                <link linkend="quote-regex">$quote_regex</link> variable to
-                detect quoted text when displaying the body of the message.
-                This function toggles the display of the quoted material in the
-                message. It is particularly useful when being interested in
-                just the response and there is a large amount of quoted text in
-                the way.
+                This function will skip past the headers of the current message.
               </para>
               <para>
                 The variable
@@ -2575,6 +2569,21 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
               <para>
                 This function will go to the next line of non-quoted text which
                 comes after a line of quoted text in the internal pager.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>
+              <literal>&lt;toggle-quoted&gt;</literal><anchor id="toggle-quoted"/>
+              (default: T)
+            </term>
+            <listitem>
+              <para>
+                The pager uses the <link linkend="quote-regex">$quote_regex</link>
+                variable to detect quoted text when displaying the body of the message.
+                This function toggles the display of the quoted material in the message.
+                It is particularly useful when being interested in just the response and
+                there is a large amount of quoted text in the way.
               </para>
             </listitem>
           </varlistentry>
@@ -3688,7 +3697,7 @@ set crypt_use_gpgme
         configurability can make it difficult when just getting started.  A few
         sample neomuttrc files come with NeoMutt, under
         <literal>doc/neomutt/samples/</literal>.  Among them,
-        <ulink url="https://github.com/neomutt/neomutt/blob/master/contrib/sample.neomuttrc-starter">sample.neomuttrc-starter</ulink>
+        <ulink url="https://github.com/neomutt/neomutt/blob/master/contrib/samples/sample.neomuttrc-starter">sample.neomuttrc-starter</ulink>
         is a basic example config with a few suggested settings and pointers to
         useful programs.
       </para>
@@ -9048,11 +9057,14 @@ Limit to messages matching: ~d 19950120-19951031
         save messages to a mailing list to a separate folder, or to delete all
         messages with a given subject. To tag all messages matching a pattern,
         use the <literal>&lt;tag-pattern&gt;</literal> function, which is bound
-        to <quote>shift-T</quote> by default. Or you can select individual
-        messages by hand using the <literal>&lt;tag-message&gt;</literal>
-        function, which is bound to <quote>t</quote> by default. See
-        <link linkend="patterns">patterns</link> for NeoMutt's pattern matching
-        syntax.
+        to <quote>shift-T</quote> by default. Patterns are completable in the
+        editor menu. Invoke the <literal>&lt;complete&gt;</literal> function
+        (by default bound to <quote>Tab</quote>) after typing <quote>~</quote>
+        to get a selectable list. Or you can select individual messages by hand
+        using the <literal>&lt;tag-message&gt;</literal> function, which is
+        bound to <quote>t</quote> by default.
+        See <link linkend="patterns">patterns</link> for NeoMutt's pattern
+        matching syntax.
       </para>
       <para>
         Once you have tagged the desired messages, you can use the
@@ -10248,6 +10260,87 @@ macro index ,a "&lt;save-message&gt;=archive&lt;enter&gt;&lt;enter-command&gt;ec
           See table <xref linkend="tab-attachment-bindings" /> for all
           available functions.
         </para>
+
+        <sect3 id="attach-viewers">
+          <title>Viewing Attachments</title>
+
+          <para>
+          There are four(!) ways of viewing attachments, so the functions
+          deserve some extra explanation.
+          </para>
+
+          <variablelist>
+            <varlistentry>
+              <term>
+                <literal>&lt;view-mailcap&gt;</literal>
+                (default keybinding: m)
+              </term>
+              <listitem>
+                <para>
+                  This will use the first matching mailcap entry.
+                </para>
+                <para>
+                  If no matching mailcap entries are found, it will abort with an
+                  error message.
+                </para>
+              </listitem>
+            </varlistentry>
+
+            <varlistentry>
+              <term>
+                <literal>&lt;view-attach&gt;</literal>
+                (default keybinding: &lt;Enter&gt;)
+              </term>
+              <listitem>
+                <para>
+                  Mutt will display internally supported MIME types (see <xref
+                  linkend="mime-pager"/>) in the pager.  This will respect
+                  <link linkend="auto-view">auto_view</link> settings, to determine
+                  whether to use a <literal>copiousoutput</literal> mailcap entry or
+                  just directly display the attachment.
+                </para>
+                <para>
+                  Other MIME types will use the first matching mailcap entry.
+                </para>
+                <para>
+                  If no matching mailcap entries are found, the attachment will
+                  be displayed in the pager as raw text.
+                </para>
+              </listitem>
+            </varlistentry>
+
+            <varlistentry>
+              <term>
+                <literal>&lt;view-pager&gt;</literal>
+              </term>
+              <listitem>
+                <para>
+                  Mutt will use the first matching
+                  <literal>copiousoutput</literal> mailcap entry to display the
+                  attachment in the pager (regardless of <link
+                  linkend="auto-view">auto_view</link> settings).
+                </para>
+                <para>
+                  If no matching mailcap entries are found, the attachment will
+                  be displayed in the pager as raw text.
+                </para>
+              </listitem>
+            </varlistentry>
+
+            <varlistentry>
+              <term>
+                <literal>&lt;view-text&gt;</literal>
+                (default keybinding: T)
+              </term>
+              <listitem>
+                <para>
+                  The attachment will always be displayed in the pager as raw
+                  text.
+                </para>
+              </listitem>
+            </varlistentry>
+          </variablelist>
+        </sect3>
       </sect2>
 
       <sect2 id="compose-menu">
@@ -11459,6 +11552,8 @@ attachments  +I text/plain
 <emphasis role="comment"># course. These are off by default! The MIME elements contained</emphasis>
 <emphasis role="comment"># within a message/* or multipart/* are still examined, even if the</emphasis>
 <emphasis role="comment"># containers themselves don't qualify.</emphasis>
+<emphasis role="comment"># Recursion into multipart/alternatives containers is controlled by the</emphasis>
+<emphasis role="comment"># $count_alternatives setting.</emphasis>
 
 <emphasis role="comment">#attachments  +A message/.* multipart/.*</emphasis>
 <emphasis role="comment">#attachments  +I message/.* multipart/.*</emphasis>

@@ -182,7 +182,7 @@ int mh_check_empty(const char *path)
 /**
  * mh_mbox_check_stats - Check the Mailbox statistics - Implements MxOps::mbox_check_stats()
  */
-static int mh_mbox_check_stats(struct Mailbox *m, int flags)
+static int mh_mbox_check_stats(struct Mailbox *m, uint8_t flags)
 {
   struct MhSequences mhs = { 0 };
   bool check_new = true;
@@ -501,14 +501,13 @@ int mh_parse_dir(struct Mailbox *m, struct MdEmailArray *mda, struct Progress *p
 {
   struct dirent *de = NULL;
   int rc = 0;
-  bool is_old = false;
   struct MdEmail *entry = NULL;
   struct Email *e = NULL;
 
   struct Buffer *buf = mutt_buffer_pool_get();
   mutt_buffer_strcpy(buf, mailbox_path(m));
 
-  DIR *dirp = opendir(mutt_b2s(buf));
+  DIR *dirp = opendir(mutt_buffer_string(buf));
   if (!dirp)
   {
     rc = -1;
@@ -526,8 +525,6 @@ int mh_parse_dir(struct Mailbox *m, struct MdEmailArray *mda, struct Progress *p
     e = email_new();
     e->edata = maildir_edata_new();
     e->edata_free = maildir_edata_free;
-
-    e->old = is_old;
 
     if (m->verbose && progress)
       mutt_progress_update(progress, ARRAY_SIZE(mda) + 1, -1);
@@ -844,11 +841,11 @@ int mh_msg_save_hcache(struct Mailbox *m, struct Email *e)
 }
 
 /**
- * mh_ac_find - Find an Account that matches a Mailbox path - Implements MxOps::ac_find()
+ * mh_ac_owns_path - Check whether an Account own a Mailbox path - Implements MxOps::ac_owns_path()
  */
-struct Account *mh_ac_find(struct Account *a, const char *path)
+bool mh_ac_owns_path(struct Account *a, const char *path)
 {
-  return a;
+  return true;
 }
 
 /**
@@ -1246,7 +1243,7 @@ struct MxOps MxMhOps = {
   .type            = MUTT_MH,
   .name             = "mh",
   .is_local         = true,
-  .ac_find          = mh_ac_find,
+  .ac_owns_path     = mh_ac_owns_path,
   .ac_add           = mh_ac_add,
   .mbox_open        = mh_mbox_open,
   .mbox_open_append = mh_mbox_open_append,

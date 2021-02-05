@@ -42,6 +42,7 @@
 #define OPS_CORE(_fmt) \
   _fmt(OP_ATTACH_COLLAPSE,                N_("toggle display of subparts")) \
   _fmt(OP_ATTACH_VIEW_MAILCAP,            N_("force viewing of attachment using mailcap")) \
+  _fmt(OP_ATTACH_VIEW_PAGER,              N_("view attachment in pager using copiousoutput mailcap")) \
   _fmt(OP_ATTACH_VIEW_TEXT,               N_("view attachment as text")) \
   _fmt(OP_BOTTOM_PAGE,                    N_("move to the bottom of the page")) \
   _fmt(OP_BOUNCE_MESSAGE,                 N_("remail a message to another user")) \
@@ -212,6 +213,7 @@
   _fmt(OP_PAGER_BOTTOM,                   N_("jump to the bottom of the message")) \
   _fmt(OP_PAGER_HIDE_QUOTED,              N_("toggle display of quoted text")) \
   _fmt(OP_PAGER_SKIP_QUOTED,              N_("skip beyond quoted text")) \
+  _fmt(OP_PAGER_SKIP_HEADERS,             N_("skip beyond headers")) \
   _fmt(OP_PAGER_TOP,                      N_("jump to the top of the message")) \
   _fmt(OP_PIPE,                           N_("pipe message/attachment to a shell command")) \
   _fmt(OP_POST,                           N_("post message to newsgroup")) \

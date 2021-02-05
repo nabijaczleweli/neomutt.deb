@@ -198,7 +198,7 @@ static int tls_check_stored_hostname(const gnutls_datum_t *cert, const char *hos
   char buf[80];
   buf[0] = '\0';
   tls_fingerprint(GNUTLS_DIG_MD5, buf, sizeof(buf), cert);
-  while ((linestr = mutt_file_read_line(linestr, &linestrsize, fp, NULL, 0)))
+  while ((linestr = mutt_file_read_line(linestr, &linestrsize, fp, NULL, MUTT_RL_NO_FLAGS)))
   {
     regmatch_t *match = mutt_prex_capture(PREX_GNUTLS_CERT_HOST_HASH, linestr);
     if (match)
@@ -793,11 +793,11 @@ static int tls_set_priority(struct TlsSockData *data)
     goto cleanup;
   }
 
-  int err = gnutls_priority_set_direct(data->state, mutt_b2s(priority), NULL);
+  int err = gnutls_priority_set_direct(data->state, mutt_buffer_string(priority), NULL);
   if (err < 0)
   {
-    mutt_error("gnutls_priority_set_direct(%s): %s", mutt_b2s(priority),
-               gnutls_strerror(err));
+    mutt_error("gnutls_priority_set_direct(%s): %s",
+               mutt_buffer_string(priority), gnutls_strerror(err));
     goto cleanup;
   }
 

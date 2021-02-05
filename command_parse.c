@@ -5,6 +5,7 @@
  * @authors
  * Copyright (C) 1996-2002,2007,2010,2012-2013,2016 Michael R. Elkins <me@mutt.org>
  * Copyright (C) 2004 g10 Code GmbH
+ * Copyright (C) 2020 R Primus <rprimus@gmail.com>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -109,10 +110,10 @@ static enum CommandResult parse_unreplace_list(struct Buffer *buf, struct Buffer
  */
 static void attachments_clean(void)
 {
-  if (!Context || !Context->mailbox)
+  struct Mailbox *m = ctx_mailbox(Context);
+  if (!m)
     return;
 
-  struct Mailbox *m = Context->mailbox;
   for (int i = 0; i < m->msg_count; i++)
   {
     struct Email *e = m->emails[i];
@@ -190,10 +191,10 @@ static enum CommandResult parse_unattach_list(struct Buffer *buf, struct Buffer 
  */
 static void clear_subject_mods(void)
 {
-  if (!Context || !Context->mailbox)
+  struct Mailbox *m = ctx_mailbox(Context);
+  if (!m)
     return;
 
-  struct Mailbox *m = Context->mailbox;
   for (int i = 0; i < m->msg_count; i++)
   {
     struct Email *e = m->emails[i];
@@ -367,10 +368,10 @@ static int print_attach_list(struct ListHead *h, const char op, const char *name
  */
 static void alternates_clean(void)
 {
-  if (!Context || !Context->mailbox)
+  struct Mailbox *m = ctx_mailbox(Context);
+  if (!m)
     return;
 
-  struct Mailbox *m = Context->mailbox;
   for (int i = 0; i < m->msg_count; i++)
   {
     struct Email *e = m->emails[i];
@@ -478,7 +479,7 @@ int source_rc(const char *rcfile_path, struct Buffer *err)
   token = mutt_buffer_pool_get();
   linebuf = mutt_buffer_pool_get();
 
-  while ((line = mutt_file_read_line(line, &linelen, fp, &lineno, MUTT_CONT)) != NULL)
+  while ((line = mutt_file_read_line(line, &linelen, fp, &lineno, MUTT_RL_CONT)) != NULL)
   {
     const bool conv = C_ConfigCharset && C_Charset;
     if (conv)
@@ -486,7 +487,7 @@ int source_rc(const char *rcfile_path, struct Buffer *err)
       currentline = mutt_str_dup(line);
       if (!currentline)
         continue;
-      mutt_ch_convert_string(&currentline, C_ConfigCharset, C_Charset, 0);
+      mutt_ch_convert_string(&currentline, C_ConfigCharset, C_Charset, MUTT_ICONV_NO_FLAGS);
     }
     else
       currentline = line;
@@ -675,7 +676,7 @@ enum CommandResult parse_cd(struct Buffer *buf, struct Buffer *s, intptr_t data,
     }
   }
 
-  if (chdir(mutt_b2s(buf)) != 0)
+  if (chdir(mutt_buffer_string(buf)) != 0)
   {
     mutt_buffer_printf(err, "cd: %s", strerror(errno));
     return MUTT_CMD_ERROR;
@@ -959,6 +960,7 @@ enum CommandResult parse_mailboxes(struct Buffer *buf, struct Buffer *s,
         if (show)
         {
           m_old->flags = MB_NORMAL;
+          m_old->gen = mailbox_gen();
         }
 
         const bool rename = (data & MUTT_NAMED) && !mutt_str_equal(m_old->name, m->name);
@@ -1289,7 +1291,7 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
               mutt_buffer_expand_path(&scratch);
             }
             mutt_buffer_reset(buf);
-            mutt_buffer_addstr(buf, mutt_b2s(&scratch));
+            mutt_buffer_addstr(buf, mutt_buffer_string(&scratch));
             mutt_buffer_dealloc(&scratch);
           }
           if (increment)
@@ -1931,6 +1933,7 @@ static void do_unmailboxes(struct Mailbox *m)
   mutt_monitor_remove(m);
 #endif
   m->flags = MB_HIDDEN;
+  m->gen = -1;
   if (Context && (Context->mailbox == m))
   {
     struct EventMailbox em = { NULL };
@@ -1982,7 +1985,7 @@ enum CommandResult parse_unmailboxes(struct Buffer *buf, struct Buffer *s,
     struct Account *a = NULL;
     TAILQ_FOREACH(a, &NeoMutt->accounts, entries)
     {
-      struct Mailbox *m = mx_mbox_find(a, mutt_b2s(buf));
+      struct Mailbox *m = mx_mbox_find(a, mutt_buffer_string(buf));
       if (m)
       {
         do_unmailboxes(m);

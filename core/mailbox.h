@@ -131,7 +131,7 @@ struct Mailbox
   struct Account *account;            ///< Account that owns this Mailbox
   int opened;                         ///< Number of times mailbox is opened
 
-  int flags;                          ///< e.g. #MB_NORMAL
+  uint8_t flags;                      ///< e.g. #MB_NORMAL
 
   void *mdata;                        ///< Driver specific data
 
@@ -189,6 +189,7 @@ void            mailbox_changed   (struct Mailbox *m, enum NotifyMailbox action)
 struct Mailbox *mailbox_find      (const char *path);
 struct Mailbox *mailbox_find_name (const char *name);
 void            mailbox_free      (struct Mailbox **ptr);
+int             mailbox_gen       (void);
 struct Mailbox *mailbox_new       (void);
 bool            mailbox_set_subset(struct Mailbox *m, struct ConfigSubset *sub);
 void            mailbox_size_add  (struct Mailbox *m, const struct Email *e);
@@ -202,7 +203,7 @@ void            mailbox_update    (struct Mailbox *m);
  */
 static inline const char *mailbox_path(const struct Mailbox *m) // LCOV_EXCL_LINE
 {
-  return mutt_b2s(&m->pathbuf); // LCOV_EXCL_LINE
+  return mutt_buffer_string(&m->pathbuf); // LCOV_EXCL_LINE
 }
 
 #endif /* MUTT_CORE_MAILBOX_H */

@@ -334,7 +334,7 @@ static int cmp_version_strings(const char *a, const char *b, int level)
     return positive;
   return negative;
 }
-#endif                                   /* GPGME >= 1.9.0 */
+#endif /* GPGME >= 1.9.0 */
 
 /**
  * crypt_keyid - Find the ID for the key
@@ -668,10 +668,10 @@ static gpgme_data_t body_to_data_object(struct Body *a, bool convert)
 
   struct Buffer *tempfile = mutt_buffer_pool_get();
   mutt_buffer_mktemp(tempfile);
-  FILE *fp_tmp = mutt_file_fopen(mutt_b2s(tempfile), "w+");
+  FILE *fp_tmp = mutt_file_fopen(mutt_buffer_string(tempfile), "w+");
   if (!fp_tmp)
   {
-    mutt_perror(mutt_b2s(tempfile));
+    mutt_perror(mutt_buffer_string(tempfile));
     goto cleanup;
   }
 
@@ -710,7 +710,7 @@ static gpgme_data_t body_to_data_object(struct Body *a, bool convert)
   else
   {
     mutt_file_fclose(&fp_tmp);
-    err = gpgme_data_new_from_file(&data, mutt_b2s(tempfile), 1);
+    err = gpgme_data_new_from_file(&data, mutt_buffer_string(tempfile), 1);
     if (err != 0)
     {
       mutt_error(_("error allocating data object: %s"), gpgme_strerror(err));
@@ -719,7 +719,7 @@ static gpgme_data_t body_to_data_object(struct Body *a, bool convert)
       /* fall through to unlink the tempfile */
     }
   }
-  unlink(mutt_b2s(tempfile));
+  unlink(mutt_buffer_string(tempfile));
 
 cleanup:
   mutt_buffer_pool_release(&tempfile);
@@ -809,7 +809,7 @@ static char *data_object_to_tempfile(gpgme_data_t data, FILE **fp_ret)
 
   mutt_buffer_mktemp(tempf);
 
-  FILE *fp = mutt_file_fopen(mutt_b2s(tempf), "w+");
+  FILE *fp = mutt_file_fopen(mutt_buffer_string(tempf), "w+");
   if (!fp)
   {
     mutt_perror(_("Can't create temporary file"));
@@ -825,9 +825,9 @@ static char *data_object_to_tempfile(gpgme_data_t data, FILE **fp_ret)
     {
       if (fwrite(buf, nread, 1, fp) != 1)
       {
-        mutt_perror(mutt_b2s(tempf));
+        mutt_perror(mutt_buffer_string(tempf));
         mutt_file_fclose(&fp);
-        unlink(mutt_b2s(tempf));
+        unlink(mutt_buffer_string(tempf));
         goto cleanup;
       }
     }
@@ -839,7 +839,7 @@ static char *data_object_to_tempfile(gpgme_data_t data, FILE **fp_ret)
   if (nread == -1)
   {
     mutt_error(_("error reading data object: %s"), gpgme_strerror(err));
-    unlink(mutt_b2s(tempf));
+    unlink(mutt_buffer_string(tempf));
     mutt_file_fclose(&fp);
     goto cleanup;
   }
@@ -1141,7 +1141,7 @@ static char *encrypt_gpgme_object(gpgme_data_t plaintext, char *keylist, bool us
     }
 
 #if (GPGME_VERSION_NUMBER >= 0x010b00) /* GPGME >= 1.11.0 */
-    err = gpgme_op_encrypt_sign_ext(ctx, NULL, mutt_b2s(recpstring),
+    err = gpgme_op_encrypt_sign_ext(ctx, NULL, mutt_buffer_string(recpstring),
                                     GPGME_ENCRYPT_ALWAYS_TRUST, plaintext, ciphertext);
 #else
     err = gpgme_op_encrypt_sign(ctx, rset, GPGME_ENCRYPT_ALWAYS_TRUST, plaintext, ciphertext);
@@ -1150,7 +1150,7 @@ static char *encrypt_gpgme_object(gpgme_data_t plaintext, char *keylist, bool us
   else
   {
 #if (GPGME_VERSION_NUMBER >= 0x010b00) /* GPGME >= 1.11.0 */
-    err = gpgme_op_encrypt_ext(ctx, NULL, mutt_b2s(recpstring),
+    err = gpgme_op_encrypt_ext(ctx, NULL, mutt_buffer_string(recpstring),
                                GPGME_ENCRYPT_ALWAYS_TRUST, plaintext, ciphertext);
 #else
     err = gpgme_op_encrypt(ctx, rset, GPGME_ENCRYPT_ALWAYS_TRUST, plaintext, ciphertext);
@@ -2450,8 +2450,8 @@ static int pgp_gpgme_extract_keys(gpgme_data_t keydata, FILE **fp)
       goto err_tmpdir;
     }
 
-    err = gpgme_ctx_set_engine_info(tmpctx, GPGME_PROTOCOL_OpenPGP,
-                                    engineinfo->file_name, mutt_b2s(tmpdir));
+    err = gpgme_ctx_set_engine_info(tmpctx, GPGME_PROTOCOL_OpenPGP, engineinfo->file_name,
+                                    mutt_buffer_string(tmpdir));
     if (err != GPG_ERR_NO_ERROR)
     {
       mutt_debug(LL_DEBUG1, "Error setting GPGME context home\n");
@@ -2519,7 +2519,7 @@ err_fp:
     mutt_file_fclose(fp);
 err_tmpdir:
   if (legacy_api)
-    mutt_file_rmtree(mutt_b2s(tmpdir));
+    mutt_file_rmtree(mutt_buffer_string(tmpdir));
 err_ctx:
   gpgme_release(tmpctx);
 
@@ -2570,16 +2570,17 @@ static int pgp_check_traditional_one_body(FILE *fp, struct Body *b)
 
   struct Buffer *tempfile = mutt_buffer_pool_get();
   mutt_buffer_mktemp(tempfile);
-  if (mutt_decode_save_attachment(fp, b, mutt_b2s(tempfile), 0, MUTT_SAVE_NO_FLAGS) != 0)
+  if (mutt_decode_save_attachment(fp, b, mutt_buffer_string(tempfile), 0,
+                                  MUTT_SAVE_NO_FLAGS) != 0)
   {
-    unlink(mutt_b2s(tempfile));
+    unlink(mutt_buffer_string(tempfile));
     goto cleanup;
   }
 
-  FILE *fp_tmp = fopen(mutt_b2s(tempfile), "r");
+  FILE *fp_tmp = fopen(mutt_buffer_string(tempfile), "r");
   if (!fp_tmp)
   {
-    unlink(mutt_b2s(tempfile));
+    unlink(mutt_buffer_string(tempfile));
     goto cleanup;
   }
 
@@ -2601,7 +2602,7 @@ static int pgp_check_traditional_one_body(FILE *fp, struct Body *b)
     }
   }
   mutt_file_fclose(&fp_tmp);
-  unlink(mutt_b2s(tempfile));
+  unlink(mutt_buffer_string(tempfile));
 
   if (!enc && !sgn)
     goto cleanup;
@@ -2986,7 +2987,8 @@ int pgp_gpgme_application_handler(struct Body *m, struct State *s)
       {
         int c;
         rewind(fp_out);
-        struct FgetConv *fc = mutt_ch_fgetconv_open(fp_out, "utf-8", C_Charset, 0);
+        struct FgetConv *fc =
+            mutt_ch_fgetconv_open(fp_out, "utf-8", C_Charset, MUTT_ICONV_NO_FLAGS);
         while ((c = mutt_ch_fgetconv(fc)) != EOF)
         {
           state_putc(s, c);
@@ -4148,7 +4150,7 @@ void smime_gpgme_init(void)
  * @param is_smime True if an SMIME message
  * @retval num Flags, e.g. #APPLICATION_SMIME | #SEC_ENCRYPT
  */
-static int gpgme_send_menu(struct Email *e, bool is_smime)
+static SecurityFlags gpgme_send_menu(struct Email *e, bool is_smime)
 {
   struct CryptKeyInfo *p = NULL;
   const char *prompt = NULL;
@@ -4309,7 +4311,7 @@ static int gpgme_send_menu(struct Email *e, bool is_smime)
 /**
  * pgp_gpgme_send_menu - Implements CryptModuleSpecs::send_menu()
  */
-int pgp_gpgme_send_menu(struct Email *e)
+SecurityFlags pgp_gpgme_send_menu(struct Email *e)
 {
   return gpgme_send_menu(e, false);
 }
@@ -4317,7 +4319,7 @@ int pgp_gpgme_send_menu(struct Email *e)
 /**
  * smime_gpgme_send_menu - Implements CryptModuleSpecs::send_menu()
  */
-int smime_gpgme_send_menu(struct Email *e)
+SecurityFlags smime_gpgme_send_menu(struct Email *e)
 {
   return gpgme_send_menu(e, true);
 }

@@ -332,7 +332,7 @@ int rfc3676_handler(struct Body *a, struct State *s)
 
   mutt_debug(LL_DEBUG3, "f=f: DelSp: %s\n", delsp ? "yes" : "no");
 
-  while ((buf = mutt_file_read_line(buf, &sz, s->fp_in, NULL, 0)))
+  while ((buf = mutt_file_read_line(buf, &sz, s->fp_in, NULL, MUTT_RL_NO_FLAGS)))
   {
     const size_t buf_len = mutt_str_len(buf);
     const unsigned int newql = get_quote_level(buf);
@@ -422,11 +422,11 @@ static void rfc3676_space_stuff(const char *filename, bool unstuff)
     goto bail;
 
   mutt_buffer_mktemp(tmpfile);
-  fp_out = mutt_file_fopen(mutt_b2s(tmpfile), "w+");
+  fp_out = mutt_file_fopen(mutt_buffer_string(tmpfile), "w+");
   if (!fp_out)
     goto bail;
 
-  while ((buf = mutt_file_read_line(buf, &blen, fp_in, NULL, 0)) != NULL)
+  while ((buf = mutt_file_read_line(buf, &blen, fp_in, NULL, MUTT_RL_NO_FLAGS)) != NULL)
   {
     if (unstuff)
     {
@@ -446,9 +446,9 @@ static void rfc3676_space_stuff(const char *filename, bool unstuff)
   FREE(&buf);
   mutt_file_fclose(&fp_in);
   mutt_file_fclose(&fp_out);
-  mutt_file_set_mtime(filename, mutt_b2s(tmpfile));
+  mutt_file_set_mtime(filename, mutt_buffer_string(tmpfile));
 
-  fp_in = mutt_file_fopen(mutt_b2s(tmpfile), "r");
+  fp_in = mutt_file_fopen(mutt_buffer_string(tmpfile), "r");
   if (!fp_in)
     goto bail;
 
@@ -459,8 +459,8 @@ static void rfc3676_space_stuff(const char *filename, bool unstuff)
   }
 
   mutt_file_copy_stream(fp_in, fp_out);
-  mutt_file_set_mtime(mutt_b2s(tmpfile), filename);
-  unlink(mutt_b2s(tmpfile));
+  mutt_file_set_mtime(mutt_buffer_string(tmpfile), filename);
+  unlink(mutt_buffer_string(tmpfile));
 
 bail:
   mutt_file_fclose(&fp_in);

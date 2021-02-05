@@ -219,9 +219,9 @@ static int execute_commands(struct ListHead *p)
   {
     enum CommandResult rc2 = mutt_parse_rc_line(np->data, err);
     if (rc2 == MUTT_CMD_ERROR)
-      mutt_error(_("Error in command line: %s"), mutt_b2s(err));
+      mutt_error(_("Error in command line: %s"), mutt_buffer_string(err));
     else if (rc2 == MUTT_CMD_WARNING)
-      mutt_warning(_("Warning in command line: %s"), mutt_b2s(err));
+      mutt_warning(_("Warning in command line: %s"), mutt_buffer_string(err));
 
     if ((rc2 == MUTT_CMD_ERROR) || (rc2 == MUTT_CMD_WARNING))
     {
@@ -294,7 +294,7 @@ static char *getmailname(void)
       continue;
 
     size_t len = 0;
-    mailname = mutt_file_read_line(NULL, &len, fp, NULL, 0);
+    mailname = mutt_file_read_line(NULL, &len, fp, NULL, MUTT_RL_NO_FLAGS);
     mutt_file_fclose(&fp);
     if (mailname && *mailname)
       break;
@@ -360,7 +360,8 @@ static bool get_hostname(struct ConfigSet *cs)
       {
         C_Hostname =
             mutt_mem_malloc(mutt_buffer_len(domain) + mutt_str_len(ShortHostname) + 2);
-        sprintf((char *) C_Hostname, "%s.%s", NONULL(ShortHostname), mutt_b2s(domain));
+        sprintf((char *) C_Hostname, "%s.%s", NONULL(ShortHostname),
+                mutt_buffer_string(domain));
       }
       else
       {
@@ -399,6 +400,12 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
   char ch;
   char qc = '\0'; /* quote char */
   char *pc = NULL;
+
+  /* Some callers used to rely on the (bad) assumption that dest->data would be
+   * non-NULL after calling this function.  Perhaps I've missed a few cases, or
+   * a future caller might make the same mistake.  */
+  if (!dest->data)
+    mutt_buffer_alloc(dest, 256);
 
   mutt_buffer_reset(dest);
 
@@ -531,7 +538,7 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
 
       /* read line */
       struct Buffer expn = mutt_buffer_make(0);
-      expn.data = mutt_file_read_line(NULL, &expn.dsize, fp, NULL, 0);
+      expn.data = mutt_file_read_line(NULL, &expn.dsize, fp, NULL, MUTT_RL_NO_FLAGS);
       mutt_file_fclose(&fp);
       filter_wait(pid);
 
@@ -552,7 +559,7 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
           mutt_buffer_copy(copy, &expn);
           mutt_buffer_addstr(copy, tok->dptr);
           mutt_buffer_copy(tok, copy);
-          tok->dptr = tok->data;
+          mutt_buffer_seek(tok, 0);
           mutt_buffer_pool_release(&copy);
         }
         FREE(&expn.data);
@@ -761,7 +768,7 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
 #else
     mutt_buffer_concat_path(&buf, MAILPATH, NONULL(Username));
 #endif
-    p = mutt_b2s(&buf);
+    p = mutt_buffer_string(&buf);
   }
   cs_str_initial_set(cs, "spoolfile", p, NULL);
   cs_str_reset(cs, "spoolfile", NULL);
@@ -839,7 +846,7 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
     if (!xdg_cfg_home && HomeDir)
     {
       mutt_buffer_printf(&buf, "%s/.config", HomeDir);
-      xdg_cfg_home = mutt_b2s(&buf);
+      xdg_cfg_home = mutt_buffer_string(&buf);
     }
 
     char *config = find_cfg(HomeDir, xdg_cfg_home);
@@ -880,23 +887,23 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
         break;
 
       mutt_buffer_printf(&buf, "%s/neomuttrc", SYSCONFDIR);
-      if (access(mutt_b2s(&buf), F_OK) == 0)
+      if (access(mutt_buffer_string(&buf), F_OK) == 0)
         break;
 
       mutt_buffer_printf(&buf, "%s/Muttrc", SYSCONFDIR);
-      if (access(mutt_b2s(&buf), F_OK) == 0)
+      if (access(mutt_buffer_string(&buf), F_OK) == 0)
         break;
 
       mutt_buffer_printf(&buf, "%s/neomuttrc", PKGDATADIR);
-      if (access(mutt_b2s(&buf), F_OK) == 0)
+      if (access(mutt_buffer_string(&buf), F_OK) == 0)
         break;
 
       mutt_buffer_printf(&buf, "%s/Muttrc", PKGDATADIR);
     } while (false);
 
-    if (access(mutt_b2s(&buf), F_OK) == 0)
+    if (access(mutt_buffer_string(&buf), F_OK) == 0)
     {
-      if (source_rc(mutt_b2s(&buf), &err) != 0)
+      if (source_rc(mutt_buffer_string(&buf), &err) != 0)
       {
         mutt_error("%s", err.data);
         need_pause = 1; // TEST11: neomutt (error in /etc/neomuttrc)
@@ -989,7 +996,7 @@ enum CommandResult mutt_parse_rc_buffer(struct Buffer *line,
   mutt_buffer_reset(err);
 
   /* Read from the beginning of line->data */
-  line->dptr = line->data;
+  mutt_buffer_seek(line, 0);
 
   SKIPWS(line->dptr);
   while (*line->dptr)

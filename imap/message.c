@@ -122,7 +122,8 @@ static struct BodyCache *msg_cache_open(struct Mailbox *m)
   struct Buffer *mailbox = mutt_buffer_pool_get();
   imap_cachepath(adata->delim, mdata->name, mailbox);
 
-  struct BodyCache *bc = mutt_bcache_open(&adata->conn->account, mutt_b2s(mailbox));
+  struct BodyCache *bc =
+      mutt_bcache_open(&adata->conn->account, mutt_buffer_string(mailbox));
   mutt_buffer_pool_release(&mailbox);
 
   return bc;
@@ -647,7 +648,7 @@ static unsigned int imap_fetch_msn_seqset(struct Buffer *buf, struct ImapAccount
  * made.
  */
 static void set_changed_flag(struct Mailbox *m, struct Email *e, int local_changes,
-                             bool *server_changes, int flag_name,
+                             bool *server_changes, enum MessageType flag_name,
                              bool old_hd_flag, bool new_hd_flag, bool h_flag)
 {
   /* If there are local_changes, we only want to note if the server
@@ -954,6 +955,9 @@ static int read_headers_condstore_qresync_updates(struct ImapAccountData *adata,
     imap_hcache_put(mdata, imap_msn_get(&mdata->msn, header_msn - 1));
   }
 
+  if (rc != IMAP_RES_OK)
+    return -1;
+
   /* The IMAP flag setting as part of cmd_parse_fetch() ends up
    * flipping these on. */
   mdata->check_status &= ~IMAP_FLAGS_PENDING;
@@ -1035,11 +1039,11 @@ static int read_headers_fetch_new(struct Mailbox *m, unsigned int msn_begin,
 
   if (adata->capabilities & IMAP_CAP_IMAP4REV1)
   {
-    mutt_str_asprintf(&hdrreq, "BODY.PEEK[HEADER.FIELDS (%s)]", mutt_b2s(hdr_list));
+    mutt_str_asprintf(&hdrreq, "BODY.PEEK[HEADER.FIELDS (%s)]", mutt_buffer_string(hdr_list));
   }
   else if (adata->capabilities & IMAP_CAP_IMAP4)
   {
-    mutt_str_asprintf(&hdrreq, "RFC822.HEADER.LINES (%s)", mutt_b2s(hdr_list));
+    mutt_str_asprintf(&hdrreq, "RFC822.HEADER.LINES (%s)", mutt_buffer_string(hdr_list));
   }
   else
   { /* Unable to fetch headers for lower versions */
@@ -1053,13 +1057,13 @@ static int read_headers_fetch_new(struct Mailbox *m, unsigned int msn_begin,
    * as they come in. */
   tempfile = mutt_buffer_pool_get();
   mutt_buffer_mktemp(tempfile);
-  fp = mutt_file_fopen(mutt_b2s(tempfile), "w+");
+  fp = mutt_file_fopen(mutt_buffer_string(tempfile), "w+");
   if (!fp)
   {
-    mutt_error(_("Could not create temporary file %s"), mutt_b2s(tempfile));
+    mutt_error(_("Could not create temporary file %s"), mutt_buffer_string(tempfile));
     goto bail;
   }
-  unlink(mutt_b2s(tempfile));
+  unlink(mutt_buffer_string(tempfile));
   mutt_buffer_pool_release(&tempfile);
 
   if (m->verbose)
@@ -1085,7 +1089,7 @@ static int read_headers_fetch_new(struct Mailbox *m, unsigned int msn_begin,
   {
     char *cmd = NULL;
     mutt_str_asprintf(&cmd, "FETCH %s (UID FLAGS INTERNALDATE RFC822.SIZE %s)",
-                      mutt_b2s(buf), hdrreq);
+                      mutt_buffer_string(buf), hdrreq);
     imap_cmd_start(adata, cmd);
     FREE(&cmd);
 
@@ -1881,8 +1885,8 @@ int imap_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
   {
     struct Buffer *path = mutt_buffer_pool_get();
     mutt_buffer_mktemp(path);
-    msg->fp = mutt_file_fopen(mutt_b2s(path), "w+");
-    unlink(mutt_b2s(path));
+    msg->fp = mutt_file_fopen(mutt_buffer_string(path), "w+");
+    unlink(mutt_buffer_string(path));
     mutt_buffer_pool_release(&path);
 
     if (!msg->fp)

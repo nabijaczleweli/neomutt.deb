@@ -664,10 +664,10 @@ static int msg_search_sendmode(struct Email *e, struct Pattern *pat)
   {
     struct Buffer *tempfile = mutt_buffer_pool_get();
     mutt_buffer_mktemp(tempfile);
-    fp = mutt_file_fopen(mutt_b2s(tempfile), "w+");
+    fp = mutt_file_fopen(mutt_buffer_string(tempfile), "w+");
     if (!fp)
     {
-      mutt_perror(mutt_b2s(tempfile));
+      mutt_perror(mutt_buffer_string(tempfile));
       mutt_buffer_pool_release(&tempfile);
       return 0;
     }
@@ -677,7 +677,7 @@ static int msg_search_sendmode(struct Email *e, struct Pattern *pat)
     fflush(fp);
     fseek(fp, 0, 0);
 
-    while ((buf = mutt_file_read_line(buf, &blen, fp, NULL, 0)) != NULL)
+    while ((buf = mutt_file_read_line(buf, &blen, fp, NULL, MUTT_RL_NO_FLAGS)) != NULL)
     {
       if (patmatch(pat, buf) == 0)
       {
@@ -688,7 +688,7 @@ static int msg_search_sendmode(struct Email *e, struct Pattern *pat)
 
     FREE(&buf);
     mutt_file_fclose(&fp);
-    unlink(mutt_b2s(tempfile));
+    unlink(mutt_buffer_string(tempfile));
     mutt_buffer_pool_release(&tempfile);
 
     if (match)
@@ -704,7 +704,7 @@ static int msg_search_sendmode(struct Email *e, struct Pattern *pat)
       return 0;
     }
 
-    while ((buf = mutt_file_read_line(buf, &blen, fp, NULL, 0)) != NULL)
+    while ((buf = mutt_file_read_line(buf, &blen, fp, NULL, MUTT_RL_NO_FLAGS)) != NULL)
     {
       if (patmatch(pat, buf) == 0)
       {

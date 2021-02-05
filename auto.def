@@ -16,7 +16,7 @@ use system cc cc-lib mutt-gettext mutt-iconv pkg-config
 ###############################################################################
 # Names and versions
 define PACKAGE          "neomutt"
-define PACKAGE_VERSION  "20201127"
+define PACKAGE_VERSION  "20210205"
 define BUGS_ADDRESS     "neomutt-devel@neomutt.org"
 
 # Subdirectories that contain additional Makefile.autosetup files
@@ -110,6 +110,7 @@ options {
   with-zstd:path            => "Location of Zstandard"
 # System
   with-sysroot:path         => "Target system root"
+  with-tmpdir:=/tmp         => "location of the tmp directory"
 # Misc
   include-path-in-cflags=1  => "Remove include paths from CFLAGS in the output of neomutt -v"
 # Testing
@@ -123,6 +124,7 @@ options {
 # Debug options
   debug-backtrace=0         => "DEBUG: Enable backtrace support with libunwind"
   with-backtrace:path       => "Location of libunwind"
+  debug-email=0             => "DEBUG: Enable Email dump"
   debug-graphviz=0          => "DEBUG: Enable Graphviz dump"
   debug-notify=0            => "DEBUG: Enable Notifications dump"
   debug-parse-test=0        => "DEBUG: Enable 'neomutt -T' for config testing"
@@ -137,7 +139,7 @@ options {
 if {1} {
   # Keep sorted, please.
   foreach opt {
-    asan autocrypt bdb coverage debug-backtrace debug-graphviz debug-notify
+    asan autocrypt bdb coverage debug-backtrace debug-email debug-graphviz debug-notify
     debug-parse-test debug-window doc everything fmemopen full-doc gdbm gnutls
     gpgme gss homespool idn idn2 include-path-in-cflags inotify kyotocabinet
     lmdb locales-fix lua lz4 mixmaster nls notmuch pcre2 pgp pkgconf qdbm
@@ -173,6 +175,7 @@ define MUTTLOCALEDIR    [get-define datadir]/locale
 define PKGDATADIR       [get-define datadir]/neomutt
 define PKGDOCDIR        [opt-val docdir [get-define datadir]/doc/neomutt]
 define SYSCONFDIR       [get-define sysconfdir]
+define TMPDIR           [opt-val with-tmpdir /tmp]
 ###############################################################################
 
 ###############################################################################
@@ -1186,6 +1189,11 @@ if {[get-define want-debug-backtrace]} {
   define LIBS "-lunwind-generic [get-define LIBS]"
 }
 
+# Email dump
+if {[get-define want-debug-email]} {
+  define USE_DEBUG_EMAIL 1
+}
+
 # Graphviz dump
 if {[get-define want-debug-graphviz]} {
   define USE_DEBUG_GRAPHVIZ 1
@@ -1268,6 +1276,7 @@ set auto_rep {
   SUN_ATTACHMENT
   SYSCONFDIR
   TEST_CASE_MAXSIZE
+  TMPDIR
   USE_*
   VPATH
   WORDS_BIGENDIAN

@@ -169,7 +169,7 @@ static char *get_flags(struct ListHead *hflags, char *s)
  * @param[out] flags   Buffer for server command
  * @param[in]  flsize  Length of buffer
  */
-static void set_flag(struct Mailbox *m, AclFlags aclflag, int flag,
+static void set_flag(struct Mailbox *m, AclFlags aclflag, bool flag,
                      const char *str, char *flags, size_t flsize)
 {
   if (m->rights & aclflag)
@@ -190,8 +190,8 @@ static void set_flag(struct Mailbox *m, AclFlags aclflag, int flag,
  * @note Headers must be in #SORT_ORDER. See imap_exec_msgset() for args.
  * Pos is an opaque pointer a la strtok(). It should be 0 at first call.
  */
-static int make_msg_set(struct Mailbox *m, struct Buffer *buf, int flag,
-                        bool changed, bool invert, int *pos)
+static int make_msg_set(struct Mailbox *m, struct Buffer *buf,
+                        enum MessageType flag, bool changed, bool invert, int *pos)
 {
   int count = 0;             /* number of messages in message set */
   unsigned int setstart = 0; /* start of current message range */
@@ -243,6 +243,8 @@ static int make_msg_set(struct Mailbox *m, struct Buffer *buf, int flag,
         case MUTT_TRASH:
           if (e->deleted && !e->purge)
             match = true;
+          break;
+        default:
           break;
       }
     }
@@ -315,7 +317,8 @@ static bool compare_flags_for_copy(struct Email *e)
  * @retval >=0 Success, number of messages
  * @retval  -1 Failure
  */
-static int sync_helper(struct Mailbox *m, AclFlags right, int flag, const char *name)
+static int sync_helper(struct Mailbox *m, AclFlags right, enum MessageType flag,
+                       const char *name)
 {
   int count = 0;
   int rc;
@@ -414,7 +417,7 @@ static int complete_hosts(char *buf, size_t buflen)
     /* FIXME: how to handle multiple users on the same host? */
     url.user = NULL;
     url.path = NULL;
-    url_tostring(&url, urlstr, sizeof(urlstr), 0);
+    url_tostring(&url, urlstr, sizeof(urlstr), U_NO_FLAGS);
     if (mutt_strn_equal(buf, urlstr, matchlen))
     {
       if (rc)
@@ -491,7 +494,7 @@ int imap_rename_mailbox(struct ImapAccountData *adata, char *oldname, const char
   struct Buffer *buf = mutt_buffer_pool_get();
   mutt_buffer_printf(buf, "RENAME %s %s", oldmbox, newmbox);
 
-  if (imap_exec(adata, mutt_b2s(buf), IMAP_CMD_NO_FLAGS) != IMAP_EXEC_SUCCESS)
+  if (imap_exec(adata, mutt_buffer_string(buf), IMAP_CMD_NO_FLAGS) != IMAP_EXEC_SUCCESS)
     rc = -1;
 
   mutt_buffer_pool_release(&buf);
@@ -909,7 +912,7 @@ static int compare_uid(const void *a, const void *b)
  * (must be flushed with imap_exec)
  */
 int imap_exec_msgset(struct Mailbox *m, const char *pre, const char *post,
-                     int flag, bool changed, bool invert)
+                     enum MessageType flag, bool changed, bool invert)
 {
   struct ImapAccountData *adata = imap_adata_get(m);
   if (!adata || (adata->mailbox != m))
@@ -1038,10 +1041,10 @@ int imap_sync_message_for_copy(struct Mailbox *m, struct Email *e,
    * explicitly revoke all system flags (if we have permission) */
   if (*flags == '\0')
   {
-    set_flag(m, MUTT_ACL_SEEN, 1, "\\Seen ", flags, sizeof(flags));
-    set_flag(m, MUTT_ACL_WRITE, 1, "Old ", flags, sizeof(flags));
-    set_flag(m, MUTT_ACL_WRITE, 1, "\\Flagged ", flags, sizeof(flags));
-    set_flag(m, MUTT_ACL_WRITE, 1, "\\Answered ", flags, sizeof(flags));
+    set_flag(m, MUTT_ACL_SEEN, true, "\\Seen ", flags, sizeof(flags));
+    set_flag(m, MUTT_ACL_WRITE, true, "Old ", flags, sizeof(flags));
+    set_flag(m, MUTT_ACL_WRITE, true, "\\Flagged ", flags, sizeof(flags));
+    set_flag(m, MUTT_ACL_WRITE, true, "\\Answered ", flags, sizeof(flags));
     set_flag(m, MUTT_ACL_DELETE, !imap_edata_get(e)->deleted, "\\Deleted ",
              flags, sizeof(flags));
 
@@ -1197,7 +1200,7 @@ static int imap_status(struct ImapAccountData *adata, struct ImapMboxData *mdata
 /**
  * imap_mbox_check_stats - Check the Mailbox statistics - Implements MxOps::mbox_check_stats()
  */
-static int imap_mbox_check_stats(struct Mailbox *m, int flags)
+static int imap_mbox_check_stats(struct Mailbox *m, uint8_t flags)
 {
   return imap_mailbox_status(m, true);
 }
@@ -1711,24 +1714,21 @@ int imap_sync_mailbox(struct Mailbox *m, bool expunge, bool close)
 }
 
 /**
- * imap_ac_find - Find an Account that matches a Mailbox path - Implements MxOps::ac_find()
+ * imap_ac_owns_path - Check whether an Account owns a Mailbox path - Implements MxOps::ac_owns_path()
  */
-static struct Account *imap_ac_find(struct Account *a, const char *path)
+static bool imap_ac_owns_path(struct Account *a, const char *path)
 {
   struct Url *url = url_parse(path);
   if (!url)
-    return NULL;
+    return false;
 
   struct ImapAccountData *adata = a->adata;
   struct ConnAccount *cac = &adata->conn->account;
 
-  if (!mutt_istr_equal(url->host, cac->host))
-    a = NULL;
-  else if (url->user && !mutt_istr_equal(url->user, cac->user))
-    a = NULL;
-
+  const bool ret = mutt_istr_equal(url->host, cac->host) &&
+                   (!url->user || mutt_istr_equal(url->user, cac->user));
   url_free(&url);
-  return a;
+  return ret;
 }
 
 /**
@@ -2195,10 +2195,10 @@ static int imap_msg_open_new(struct Mailbox *m, struct Message *msg, const struc
   struct Buffer *tmp = mutt_buffer_pool_get();
   mutt_buffer_mktemp(tmp);
 
-  msg->fp = mutt_file_fopen(mutt_b2s(tmp), "w");
+  msg->fp = mutt_file_fopen(mutt_buffer_string(tmp), "w");
   if (!msg->fp)
   {
-    mutt_perror(mutt_b2s(tmp));
+    mutt_perror(mutt_buffer_string(tmp));
     goto cleanup;
   }
 
@@ -2389,7 +2389,7 @@ int imap_path_canon(char *buf, size_t buflen)
 
   imap_fix_path('\0', url->path, tmp, sizeof(tmp));
   url->path = tmp;
-  url_tostring(url, tmp2, sizeof(tmp2), 0);
+  url_tostring(url, tmp2, sizeof(tmp2), U_NO_FLAGS);
   mutt_str_copy(buf, tmp2, buflen);
   url_free(&url);
 
@@ -2455,7 +2455,7 @@ struct MxOps MxImapOps = {
   .type            = MUTT_IMAP,
   .name             = "imap",
   .is_local         = false,
-  .ac_find          = imap_ac_find,
+  .ac_owns_path     = imap_ac_owns_path,
   .ac_add           = imap_ac_add,
   .mbox_open        = imap_mbox_open,
   .mbox_open_append = imap_mbox_open_append,

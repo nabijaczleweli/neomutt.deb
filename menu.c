@@ -4,6 +4,7 @@
  *
  * @authors
  * Copyright (C) 1996-2000,2002,2012 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2020 R Primus <rprimus@gmail.com>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -43,6 +44,7 @@
 #include "keymap.h"
 #include "mutt_globals.h"
 #include "mutt_logging.h"
+#include "mutt_mailbox.h"
 #include "mutt_menu.h"
 #include "mutt_thread.h"
 #include "muttlib.h"
@@ -139,9 +141,8 @@ static void print_enriched_string(int index, int attr, unsigned char *s, bool do
     {
       if (do_color)
 #if defined(HAVE_COLOR) && defined(HAVE_USE_DEFAULT_COLORS)
-        /* Combining tree fg color and another bg color requires
-         * having use_default_colors, because the other bg color
-         * may be undefined. */
+        /* Combining tree fg color and another bg color requires having
+         * use_default_colors, because the other bg color may be undefined. */
         mutt_curses_set_attr(mutt_color_combine(Colors, Colors->defs[MT_COLOR_TREE], attr));
 #else
         mutt_curses_set_color(MT_COLOR_TREE);
@@ -383,7 +384,7 @@ void menu_redraw_index(struct Menu *menu)
   bool do_color;
   int attr;
 
-  for (int i = menu->top; i < menu->top + menu->pagelen; i++)
+  for (int i = menu->top; i < (menu->top + menu->pagelen); i++)
   {
     if (i < menu->max)
     {
@@ -409,8 +410,10 @@ void menu_redraw_index(struct Menu *menu)
           do_color = false;
       }
       else if (C_ArrowCursor)
+      {
         /* Print space chars to match the screen width of `$arrow_string` */
         mutt_window_printf("%*s", mutt_strwidth(C_ArrowString) + 1, "");
+      }
 
       print_enriched_string(i, attr, (unsigned char *) buf, do_color);
     }
@@ -540,7 +543,7 @@ static void menu_redraw_prompt(struct Menu *menu)
  */
 void menu_check_recenter(struct Menu *menu)
 {
-  int c = MIN(C_MenuContext, menu->pagelen / 2);
+  int c = MIN(C_MenuContext, (menu->pagelen / 2));
   int old_top = menu->top;
 
   if (!C_MenuMoveOff && (menu->max <= menu->pagelen)) /* less entries than lines */
@@ -555,9 +558,9 @@ void menu_check_recenter(struct Menu *menu)
   {
     if (C_MenuScroll || (menu->pagelen <= 0) || (c < C_MenuContext))
     {
-      if (menu->current < menu->top + c)
+      if (menu->current < (menu->top + c))
         menu->top = menu->current - c;
-      else if (menu->current >= menu->top + menu->pagelen - c)
+      else if (menu->current >= (menu->top + menu->pagelen - c))
         menu->top = menu->current - menu->pagelen + c + 1;
     }
     else
@@ -568,7 +571,7 @@ void menu_check_recenter(struct Menu *menu)
                                             (menu->pagelen - c)) -
                      c;
       }
-      else if ((menu->current >= menu->top + menu->pagelen - c))
+      else if ((menu->current >= (menu->top + menu->pagelen - c)))
       {
         menu->top +=
             (menu->pagelen - c) * ((menu->current - menu->top) / (menu->pagelen - c)) - c;
@@ -592,27 +595,26 @@ void menu_check_recenter(struct Menu *menu)
  */
 static void menu_jump(struct Menu *menu)
 {
-  int n;
-
-  if (menu->max)
+  if (menu->max == 0)
   {
-    mutt_unget_event(LastKey, 0);
-    char buf[128];
-    buf[0] = '\0';
-    if ((mutt_get_field(_("Jump to: "), buf, sizeof(buf), MUTT_COMP_NO_FLAGS) == 0) && buf[0])
-    {
-      if ((mutt_str_atoi(buf, &n) == 0) && (n > 0) && (n < menu->max + 1))
-      {
-        n--; /* msg numbers are 0-based */
-        menu->current = n;
-        menu->redraw = REDRAW_MOTION;
-      }
-      else
-        mutt_error(_("Invalid index number"));
-    }
-  }
-  else
     mutt_error(_("No entries"));
+    return;
+  }
+
+  mutt_unget_event(LastKey, 0);
+  char buf[128] = { 0 };
+  if ((mutt_get_field(_("Jump to: "), buf, sizeof(buf), MUTT_COMP_NO_FLAGS) == 0) &&
+      (buf[0] != '\0'))
+  {
+    int n = 0;
+    if ((mutt_str_atoi(buf, &n) == 0) && (n > 0) && (n < (menu->max + 1)))
+    {
+      menu->current = n - 1; // msg numbers are 0-based
+      menu->redraw = REDRAW_MOTION;
+    }
+    else
+      mutt_error(_("Invalid index number"));
+  }
 }
 
 /**
@@ -621,24 +623,25 @@ static void menu_jump(struct Menu *menu)
  */
 void menu_next_line(struct Menu *menu)
 {
-  if (menu->max)
+  if (menu->max == 0)
   {
-    int c = MIN(C_MenuContext, menu->pagelen / 2);
+    mutt_error(_("No entries"));
+    return;
+  }
 
-    if ((menu->top + 1 < menu->max - c) &&
-        (C_MenuMoveOff ||
-         ((menu->max > menu->pagelen) && (menu->top < menu->max - menu->pagelen))))
-    {
-      menu->top++;
-      if ((menu->current < menu->top + c) && (menu->current < menu->max - 1))
-        menu->current++;
-      menu->redraw = REDRAW_INDEX;
-    }
-    else
-      mutt_message(_("You can't scroll down farther"));
+  int c = MIN(C_MenuContext, (menu->pagelen / 2));
+
+  if (((menu->top + 1) < (menu->max - c)) &&
+      (C_MenuMoveOff ||
+       ((menu->max > menu->pagelen) && (menu->top < (menu->max - menu->pagelen)))))
+  {
+    menu->top++;
+    if ((menu->current < (menu->top + c)) && (menu->current < (menu->max - 1)))
+      menu->current++;
+    menu->redraw = REDRAW_INDEX;
   }
   else
-    mutt_error(_("No entries"));
+    mutt_message(_("You can't scroll down farther"));
 }
 
 /**
@@ -647,17 +650,18 @@ void menu_next_line(struct Menu *menu)
  */
 void menu_prev_line(struct Menu *menu)
 {
-  if (menu->top > 0)
+  if (menu->top < 1)
   {
-    int c = MIN(C_MenuContext, menu->pagelen / 2);
-
-    menu->top--;
-    if ((menu->current >= menu->top + menu->pagelen - c) && (menu->current > 1))
-      menu->current--;
-    menu->redraw = REDRAW_INDEX;
-  }
-  else
     mutt_message(_("You can't scroll up farther"));
+    return;
+  }
+
+  int c = MIN(C_MenuContext, (menu->pagelen / 2));
+
+  menu->top--;
+  if ((menu->current >= (menu->top + menu->pagelen - c)) && (menu->current > 1))
+    menu->current--;
+  menu->redraw = REDRAW_INDEX;
 }
 
 /**
@@ -672,46 +676,47 @@ void menu_prev_line(struct Menu *menu)
  */
 static void menu_length_jump(struct Menu *menu, int jumplen)
 {
-  const int neg = (jumplen >= 0) ? 0 : -1;
-  const int c = MIN(C_MenuContext, menu->pagelen / 2);
-
-  if (menu->max)
+  if (menu->max == 0)
   {
-    /* possible to scroll? */
-    int tmp;
-    if (DIRECTION * menu->top <
-        (tmp = (neg ? 0 : (menu->max /* -1 */) - (menu->pagelen /* -1 */))))
-    {
-      menu->top += jumplen;
+    mutt_error(_("No entries"));
+    return;
+  }
 
-      /* jumped too long? */
-      if ((neg || !C_MenuMoveOff) && (DIRECTION * menu->top > tmp))
-        menu->top = tmp;
+  const int neg = (jumplen >= 0) ? 0 : -1;
+  const int c = MIN(C_MenuContext, (menu->pagelen / 2));
 
-      /* need to move the cursor? */
-      if ((DIRECTION *
-           (tmp = (menu->current - (menu->top + (neg ? (menu->pagelen - 1) - c : c))))) < 0)
-      {
-        menu->current -= tmp;
-      }
+  /* possible to scroll? */
+  int tmp;
+  if ((DIRECTION * menu->top) <
+      (tmp = (neg ? 0 : (menu->max /* -1 */) - (menu->pagelen /* -1 */))))
+  {
+    menu->top += jumplen;
 
-      menu->redraw = REDRAW_INDEX;
-    }
-    else if ((menu->current != (neg ? 0 : menu->max - 1)) && ARRAY_EMPTY(&menu->dialog))
+    /* jumped too long? */
+    if ((neg || !C_MenuMoveOff) && ((DIRECTION * menu->top) > tmp))
+      menu->top = tmp;
+
+    /* need to move the cursor? */
+    if ((DIRECTION *
+         (tmp = (menu->current - (menu->top + (neg ? (menu->pagelen - 1) - c : c))))) < 0)
     {
-      menu->current += jumplen;
-      menu->redraw = REDRAW_MOTION;
-    }
-    else
-    {
-      mutt_message(neg ? _("You are on the first page") : _("You are on the last page"));
+      menu->current -= tmp;
     }
 
-    menu->current = MIN(menu->current, menu->max - 1);
-    menu->current = MAX(menu->current, 0);
+    menu->redraw = REDRAW_INDEX;
+  }
+  else if ((menu->current != (neg ? 0 : menu->max - 1)) && ARRAY_EMPTY(&menu->dialog))
+  {
+    menu->current += jumplen;
+    menu->redraw = REDRAW_MOTION;
   }
   else
-    mutt_error(_("No entries"));
+  {
+    mutt_message(neg ? _("You are on the first page") : _("You are on the last page"));
+  }
+
+  menu->current = MIN(menu->current, menu->max - 1);
+  menu->current = MAX(menu->current, 0);
 }
 
 /**
@@ -738,7 +743,7 @@ void menu_prev_page(struct Menu *menu)
  */
 void menu_half_down(struct Menu *menu)
 {
-  menu_length_jump(menu, menu->pagelen / 2);
+  menu_length_jump(menu, (menu->pagelen / 2));
 }
 
 /**
@@ -747,7 +752,7 @@ void menu_half_down(struct Menu *menu)
  */
 void menu_half_up(struct Menu *menu)
 {
-  menu_length_jump(menu, 0 - menu->pagelen / 2);
+  menu_length_jump(menu, 0 - (menu->pagelen / 2));
 }
 
 /**
@@ -769,15 +774,16 @@ void menu_top_page(struct Menu *menu)
  */
 void menu_bottom_page(struct Menu *menu)
 {
-  if (menu->max)
+  if (menu->max == 0)
   {
-    menu->current = menu->top + menu->pagelen - 1;
-    if (menu->current > menu->max - 1)
-      menu->current = menu->max - 1;
-    menu->redraw = REDRAW_MOTION;
-  }
-  else
     mutt_error(_("No entries"));
+    return;
+  }
+
+  menu->current = menu->top + menu->pagelen - 1;
+  if (menu->current > (menu->max - 1))
+    menu->current = menu->max - 1;
+  menu->redraw = REDRAW_MOTION;
 }
 
 /**
@@ -786,16 +792,17 @@ void menu_bottom_page(struct Menu *menu)
  */
 void menu_middle_page(struct Menu *menu)
 {
-  if (menu->max)
+  if (menu->max == 0)
   {
-    int i = menu->top + menu->pagelen;
-    if (i > menu->max - 1)
-      i = menu->max - 1;
-    menu->current = menu->top + (i - menu->top) / 2;
-    menu->redraw = REDRAW_MOTION;
-  }
-  else
     mutt_error(_("No entries"));
+    return;
+  }
+
+  int i = menu->top + menu->pagelen;
+  if (i > (menu->max - 1))
+    i = menu->max - 1;
+  menu->current = menu->top + (i - menu->top) / 2;
+  menu->redraw = REDRAW_MOTION;
 }
 
 /**
@@ -804,13 +811,14 @@ void menu_middle_page(struct Menu *menu)
  */
 void menu_first_entry(struct Menu *menu)
 {
-  if (menu->max)
+  if (menu->max == 0)
   {
-    menu->current = 0;
-    menu->redraw = REDRAW_MOTION;
-  }
-  else
     mutt_error(_("No entries"));
+    return;
+  }
+
+  menu->current = 0;
+  menu->redraw = REDRAW_MOTION;
 }
 
 /**
@@ -819,13 +827,14 @@ void menu_first_entry(struct Menu *menu)
  */
 void menu_last_entry(struct Menu *menu)
 {
-  if (menu->max)
+  if (menu->max == 0)
   {
-    menu->current = menu->max - 1;
-    menu->redraw = REDRAW_MOTION;
-  }
-  else
     mutt_error(_("No entries"));
+    return;
+  }
+
+  menu->current = menu->max - 1;
+  menu->redraw = REDRAW_MOTION;
 }
 
 /**
@@ -834,13 +843,14 @@ void menu_last_entry(struct Menu *menu)
  */
 void menu_current_top(struct Menu *menu)
 {
-  if (menu->max)
+  if (menu->max == 0)
   {
-    menu->top = menu->current;
-    menu->redraw = REDRAW_INDEX;
-  }
-  else
     mutt_error(_("No entries"));
+    return;
+  }
+
+  menu->top = menu->current;
+  menu->redraw = REDRAW_INDEX;
 }
 
 /**
@@ -849,15 +859,16 @@ void menu_current_top(struct Menu *menu)
  */
 void menu_current_middle(struct Menu *menu)
 {
-  if (menu->max)
+  if (menu->max == 0)
   {
-    menu->top = menu->current - menu->pagelen / 2;
-    if (menu->top < 0)
-      menu->top = 0;
-    menu->redraw = REDRAW_INDEX;
-  }
-  else
     mutt_error(_("No entries"));
+    return;
+  }
+
+  menu->top = menu->current - (menu->pagelen / 2);
+  if (menu->top < 0)
+    menu->top = 0;
+  menu->redraw = REDRAW_INDEX;
 }
 
 /**
@@ -866,15 +877,16 @@ void menu_current_middle(struct Menu *menu)
  */
 void menu_current_bottom(struct Menu *menu)
 {
-  if (menu->max)
+  if (menu->max == 0)
   {
-    menu->top = menu->current - menu->pagelen + 1;
-    if (menu->top < 0)
-      menu->top = 0;
-    menu->redraw = REDRAW_INDEX;
-  }
-  else
     mutt_error(_("No entries"));
+    return;
+  }
+
+  menu->top = menu->current - menu->pagelen + 1;
+  if (menu->top < 0)
+    menu->top = 0;
+  menu->redraw = REDRAW_INDEX;
 }
 
 /**
@@ -883,7 +895,7 @@ void menu_current_bottom(struct Menu *menu)
  */
 static void menu_next_entry(struct Menu *menu)
 {
-  if (menu->current < menu->max - 1)
+  if (menu->current < (menu->max - 1))
   {
     menu->current++;
     menu->redraw = REDRAW_MOTION;
@@ -945,12 +957,9 @@ struct Menu *mutt_menu_new(enum MenuType type)
   struct Menu *menu = mutt_mem_calloc(1, sizeof(struct Menu));
 
   menu->type = type;
-  menu->current = 0;
-  menu->top = 0;
   menu->redraw = REDRAW_FULL;
   menu->color = default_color;
   menu->search = generic_search;
-  menu->custom_search = false;
 
   return menu;
 }
@@ -964,13 +973,13 @@ void mutt_menu_free(struct Menu **ptr)
   if (!ptr || !*ptr)
     return;
 
-  struct Menu *m = *ptr;
+  struct Menu *menu = *ptr;
   char **line = NULL;
-  ARRAY_FOREACH(line, &m->dialog)
+  ARRAY_FOREACH(line, &menu->dialog)
   {
     FREE(line);
   }
-  ARRAY_FREE(&m->dialog);
+  ARRAY_FREE(&menu->dialog);
 
   FREE(ptr);
 }
@@ -1151,7 +1160,7 @@ static int search(struct Menu *menu, int op)
 
   if (search_buf)
   {
-    int flags = mutt_mb_is_lower(search_buf) ? REG_ICASE : 0;
+    uint16_t flags = mutt_mb_is_lower(search_buf) ? REG_ICASE : 0;
     rc = REG_COMP(&re, search_buf, REG_NOSUB | flags);
   }
 
@@ -1494,11 +1503,11 @@ int mutt_menu_loop(struct Menu *menu)
               menu->tagged += menu->tag(menu, i, 0);
             menu->redraw |= REDRAW_INDEX;
           }
-          else if (menu->max)
+          else if (menu->max != 0)
           {
             int j = menu->tag(menu, menu->current, -1);
             menu->tagged += j;
-            if (j && C_Resolve && (menu->current < menu->max - 1))
+            if (j && C_Resolve && (menu->current < (menu->max - 1)))
             {
               menu->current++;
               menu->redraw |= REDRAW_MOTION_RESYNC;
@@ -1514,7 +1523,10 @@ int mutt_menu_loop(struct Menu *menu)
         break;
 
       case OP_SHELL_ESCAPE:
-        mutt_shell_escape();
+        if (mutt_shell_escape())
+        {
+          mutt_mailbox_check(ctx_mailbox(Context), MUTT_MAILBOX_CHECK_FORCE);
+        }
         break;
 
       case OP_WHAT_KEY:
@@ -1578,9 +1590,9 @@ int mutt_menu_color_observer(struct NotifyCallback *nc)
     return 0;
 
   // Colour deleted from a list
-  if ((nc->event_subtype == NT_COLOR_RESET) && lists && Context && Context->mailbox)
+  struct Mailbox *m = ctx_mailbox(Context);
+  if ((nc->event_subtype == NT_COLOR_RESET) && lists && m)
   {
-    struct Mailbox *m = Context->mailbox;
     // Force re-caching of index colors
     for (int i = 0; i < m->msg_count; i++)
     {

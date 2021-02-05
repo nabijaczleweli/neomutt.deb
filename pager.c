@@ -4,6 +4,7 @@
  *
  * @authors
  * Copyright (C) 1996-2002,2007,2010,2012-2013 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2020 R Primus <rprimus@gmail.com>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -1445,7 +1446,7 @@ static int fill_buffer(FILE *fp, LOFF_T *last_pos, LOFF_T offset, unsigned char 
     if (offset != *last_pos)
       fseeko(fp, offset, SEEK_SET);
 
-    *buf = (unsigned char *) mutt_file_read_line((char *) *buf, blen, fp, NULL, MUTT_EOL);
+    *buf = (unsigned char *) mutt_file_read_line((char *) *buf, blen, fp, NULL, MUTT_RL_EOL);
     if (!*buf)
     {
       fmt[0] = NULL;
@@ -1984,6 +1985,7 @@ void mutt_clear_pager_position(void)
 static void pager_custom_redraw(struct Menu *pager_menu)
 {
   struct PagerRedrawData *rd = pager_menu->redraw_data;
+  struct Mailbox *m = ctx_mailbox(Context);
   char buf[1024];
 
   if (!rd)
@@ -1994,10 +1996,9 @@ static void pager_custom_redraw(struct Menu *pager_menu)
     mutt_curses_set_color(MT_COLOR_NORMAL);
     mutt_window_clear(rd->extra->win_pager);
 
-    if (IsEmail(rd->extra) && Context && Context->mailbox &&
-        ((Context->mailbox->vcount + 1) < C_PagerIndexLines))
+    if (IsEmail(rd->extra) && m && ((m->vcount + 1) < C_PagerIndexLines))
     {
-      rd->indexlen = Context->mailbox->vcount + 1;
+      rd->indexlen = m->vcount + 1;
     }
     else
       rd->indexlen = C_PagerIndexLines;
@@ -2009,7 +2010,7 @@ static void pager_custom_redraw(struct Menu *pager_menu)
       rd->search_compiled = Resize->search_compiled;
       if (rd->search_compiled)
       {
-        int flags = mutt_mb_is_lower(rd->searchbuf) ? REG_ICASE : 0;
+        uint16_t flags = mutt_mb_is_lower(rd->searchbuf) ? REG_ICASE : 0;
         const int err = REG_COMP(&rd->search_re, rd->searchbuf, REG_NEWLINE | flags);
         if (err == 0)
         {
@@ -2038,7 +2039,7 @@ static void pager_custom_redraw(struct Menu *pager_menu)
         rd->menu = mutt_menu_new(MENU_MAIN);
         rd->menu->make_entry = index_make_entry;
         rd->menu->color = index_color;
-        rd->menu->max = Context ? Context->mailbox->vcount : 0;
+        rd->menu->max = Context ? m->vcount : 0;
         rd->menu->current = rd->extra->email->vnum;
         rd->menu->win_index = rd->extra->win_index;
         rd->menu->win_ibar = rd->extra->win_ibar;
@@ -2148,7 +2149,6 @@ static void pager_custom_redraw(struct Menu *pager_menu)
     pager_menu->redraw |= REDRAW_STATUS; /* need to update the % seen */
   }
 
-  struct Mailbox *m = Context ? Context->mailbox : NULL;
   if (pager_menu->redraw & REDRAW_STATUS)
   {
     struct HdrFormatInfo hfi;
@@ -2251,7 +2251,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
   char *followup_to = NULL;
 #endif
 
-  struct Mailbox *m = Context ? Context->mailbox : NULL;
+  struct Mailbox *m = ctx_mailbox(Context);
 
   if (!(flags & MUTT_SHOWCOLOR))
     flags |= MUTT_SHOWFLAT;
@@ -2376,14 +2376,6 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
     else
       OldEmail = NULL;
 
-    ch = km_dokey(MENU_PAGER);
-    if (ch >= 0)
-    {
-      mutt_clear_error();
-      mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", OpStrings[ch][0], ch);
-    }
-    mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
-
     bool do_new_mail = false;
 
     if (m && !OptAttachMsg)
@@ -2473,6 +2465,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
       SigWinch = 0;
       mutt_resize_screen();
       clearok(stdscr, true); /* force complete redraw */
+      mutt_window_clearline(MessageWindow, 0);
 
       if (flags & MUTT_PAGER_RETWINCH)
       {
@@ -2499,6 +2492,14 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
       }
       continue;
     }
+
+    ch = km_dokey(MENU_PAGER);
+    if (ch >= 0)
+    {
+      mutt_clear_error();
+      mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", OpStrings[ch][0], ch);
+    }
+    mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
 
     if (ch < 0)
     {
@@ -2739,7 +2740,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
           }
         }
 
-        int rflags = mutt_mb_is_lower(searchbuf) ? REG_ICASE : 0;
+        uint16_t rflags = mutt_mb_is_lower(searchbuf) ? REG_ICASE : 0;
         int err = REG_COMP(&rd.search_re, searchbuf, REG_NEWLINE | rflags);
         if (err != 0)
         {
@@ -2866,6 +2867,7 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
         break;
 
       case OP_PAGER_SKIP_QUOTED:
+      {
         if (!rd.has_types)
           break;
 
@@ -2924,6 +2926,47 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
         }
         rd.topline = new_topline;
         break;
+      }
+
+      case OP_PAGER_SKIP_HEADERS:
+      {
+        if (!rd.has_types)
+          break;
+
+        int dretval = 0;
+        int new_topline = rd.topline;
+
+        if (!IS_HEADER(rd.line_info[new_topline].type))
+        {
+          /* L10N: Displayed if <skip-headers> is invoked in the pager, but we
+             are already past the headers */
+          mutt_message(_("Already skipped past headers"));
+          break;
+        }
+
+        while (((new_topline < rd.last_line) ||
+                (0 == (dretval = display_line(
+                           rd.fp, &rd.last_pos, &rd.line_info, new_topline, &rd.last_line,
+                           &rd.max_line, MUTT_TYPES | (flags & MUTT_PAGER_NOWRAP),
+                           &rd.quote_list, &rd.q_level, &rd.force_redraw,
+                           &rd.search_re, rd.extra->win_pager)))) &&
+               IS_HEADER(rd.line_info[new_topline].type))
+        {
+          new_topline++;
+        }
+
+        if (dretval < 0)
+        {
+          /* L10N: Displayed if <skip-headers> is invoked in the pager, but
+             there is no text past the headers.
+             (I don't think this is actually possible in Mutt's code, but
+             display some kind of message in case it somehow occurs.) */
+          mutt_warning(_("No text past headers"));
+          break;
+        }
+        rd.topline = new_topline;
+        break;
+      }
 
       case OP_PAGER_BOTTOM: /* move to the end of the file */
         if (rd.line_info[rd.curline].offset < (rd.sb.st_size - 1))
@@ -3359,7 +3402,10 @@ int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct P
       }
 
       case OP_SHELL_ESCAPE:
-        mutt_shell_escape();
+        if (mutt_shell_escape())
+        {
+          mutt_mailbox_check(ctx_mailbox(Context), MUTT_MAILBOX_CHECK_FORCE);
+        }
         break;
 
       case OP_TAG:

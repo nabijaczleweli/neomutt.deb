@@ -350,7 +350,7 @@ err:
  * @retval  0 Success
  * @retval -1 Error
  */
-int url_tobuffer(struct Url *url, struct Buffer *buf, int flags)
+int url_tobuffer(struct Url *url, struct Buffer *buf, uint8_t flags)
 {
   if (!url || !buf)
     return -1;
@@ -415,7 +415,7 @@ int url_tobuffer(struct Url *url, struct Buffer *buf, int flags)
  * @retval  0 Success
  * @retval -1 Error
  */
-int url_tostring(struct Url *url, char *dest, size_t len, int flags)
+int url_tostring(struct Url *url, char *dest, size_t len, uint8_t flags)
 {
   if (!url || !dest)
     return -1;
@@ -424,7 +424,7 @@ int url_tostring(struct Url *url, char *dest, size_t len, int flags)
 
   int retval = url_tobuffer(url, dest_buf, flags);
   if (retval == 0)
-    mutt_str_copy(dest, mutt_b2s(dest_buf), len);
+    mutt_str_copy(dest, mutt_buffer_string(dest_buf), len);
 
   mutt_buffer_pool_release(&dest_buf);
 
