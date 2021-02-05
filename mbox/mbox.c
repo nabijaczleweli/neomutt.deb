@@ -860,21 +860,18 @@ void mbox_reset_atime(struct Mailbox *m, struct stat *st)
 }
 
 /**
- * mbox_ac_find - Find an Account that matches a Mailbox path - Implements MxOps::ac_find()
+ * mbox_ac_owns_path - Check whether an Account owns a Mailbox path - Implements MxOps::ac_owns_path()
  */
-static struct Account *mbox_ac_find(struct Account *a, const char *path)
+static bool mbox_ac_owns_path(struct Account *a, const char *path)
 {
   if ((a->type != MUTT_MBOX) && (a->type != MUTT_MMDF))
-    return NULL;
+    return false;
 
   struct MailboxNode *np = STAILQ_FIRST(&a->mailboxes);
   if (!np)
-    return NULL;
+    return false;
 
-  if (!mutt_str_equal(mailbox_path(np->mailbox), path))
-    return NULL;
-
-  return a;
+  return mutt_str_equal(mailbox_path(np->mailbox), path);
 }
 
 /**
@@ -1207,7 +1204,7 @@ static int mbox_mbox_sync(struct Mailbox *m)
   /* Create a temporary file to write the new version of the mailbox in. */
   tempfile = mutt_buffer_pool_get();
   mutt_buffer_mktemp(tempfile);
-  int fd = open(mutt_b2s(tempfile), O_WRONLY | O_EXCL | O_CREAT, 0600);
+  int fd = open(mutt_buffer_string(tempfile), O_WRONLY | O_EXCL | O_CREAT, 0600);
   if ((fd == -1) || !(fp = fdopen(fd, "w")))
   {
     if (fd != -1)
@@ -1280,7 +1277,7 @@ static int mbox_mbox_sync(struct Mailbox *m)
       {
         if (fputs(MMDF_SEP, fp) == EOF)
         {
-          mutt_perror(mutt_b2s(tempfile));
+          mutt_perror(mutt_buffer_string(tempfile));
           goto bail;
         }
       }
@@ -1293,7 +1290,7 @@ static int mbox_mbox_sync(struct Mailbox *m)
       if (mutt_copy_message(fp, m, m->emails[i], MUTT_CM_UPDATE,
                             CH_FROM | CH_UPDATE | CH_UPDATE_LEN, 0) != 0)
       {
-        mutt_perror(mutt_b2s(tempfile));
+        mutt_perror(mutt_buffer_string(tempfile));
         goto bail;
       }
 
@@ -1310,14 +1307,14 @@ static int mbox_mbox_sync(struct Mailbox *m)
         case MUTT_MMDF:
           if (fputs(MMDF_SEP, fp) == EOF)
           {
-            mutt_perror(mutt_b2s(tempfile));
+            mutt_perror(mutt_buffer_string(tempfile));
             goto bail;
           }
           break;
         default:
           if (fputs("\n", fp) == EOF)
           {
-            mutt_perror(mutt_b2s(tempfile));
+            mutt_perror(mutt_buffer_string(tempfile));
             goto bail;
           }
       }
@@ -1327,7 +1324,7 @@ static int mbox_mbox_sync(struct Mailbox *m)
   if (mutt_file_fclose(&fp) != 0)
   {
     mutt_debug(LL_DEBUG1, "mutt_file_fclose (&) returned non-zero\n");
-    mutt_perror(mutt_b2s(tempfile));
+    mutt_perror(mutt_buffer_string(tempfile));
     goto bail;
   }
 
@@ -1340,13 +1337,13 @@ static int mbox_mbox_sync(struct Mailbox *m)
 
   unlink_tempfile = false;
 
-  fp = fopen(mutt_b2s(tempfile), "r");
+  fp = fopen(mutt_buffer_string(tempfile), "r");
   if (!fp)
   {
     mutt_sig_unblock();
     mx_fastclose_mailbox(m);
     mutt_debug(LL_DEBUG1, "unable to reopen temp copy of mailbox!\n");
-    mutt_perror(mutt_b2s(tempfile));
+    mutt_perror(mutt_buffer_string(tempfile));
     FREE(&new_offset);
     FREE(&old_offset);
     goto fatal;
@@ -1403,11 +1400,11 @@ static int mbox_mbox_sync(struct Mailbox *m)
 
     mutt_buffer_printf(savefile, "%s/neomutt.%s-%s-%u", NONULL(C_Tmpdir), NONULL(Username),
                        NONULL(ShortHostname), (unsigned int) getpid());
-    rename(mutt_b2s(tempfile), mutt_b2s(savefile));
+    rename(mutt_buffer_string(tempfile), mutt_buffer_string(savefile));
     mutt_sig_unblock();
     mx_fastclose_mailbox(m);
     mutt_buffer_pretty_mailbox(savefile);
-    mutt_error(_("Write failed!  Saved partial mailbox to %s"), mutt_b2s(savefile));
+    mutt_error(_("Write failed!  Saved partial mailbox to %s"), mutt_buffer_string(savefile));
     mutt_buffer_pool_release(&savefile);
     FREE(&new_offset);
     FREE(&old_offset);
@@ -1425,7 +1422,7 @@ static int mbox_mbox_sync(struct Mailbox *m)
   }
   if (!adata->fp)
   {
-    unlink(mutt_b2s(tempfile));
+    unlink(mutt_buffer_string(tempfile));
     mutt_sig_unblock();
     mx_fastclose_mailbox(m);
     mutt_error(_("Fatal error!  Could not reopen mailbox!"));
@@ -1447,7 +1444,7 @@ static int mbox_mbox_sync(struct Mailbox *m)
   }
   FREE(&new_offset);
   FREE(&old_offset);
-  unlink(mutt_b2s(tempfile)); /* remove partial copy of the mailbox */
+  unlink(mutt_buffer_string(tempfile)); /* remove partial copy of the mailbox */
   mutt_buffer_pool_release(&tempfile);
   mutt_sig_unblock();
 
@@ -1465,7 +1462,7 @@ bail: /* Come here in case of disaster */
   mutt_file_fclose(&fp);
 
   if (tempfile && unlink_tempfile)
-    unlink(mutt_b2s(tempfile));
+    unlink(mutt_buffer_string(tempfile));
 
   /* restore offsets, as far as they are valid */
   if ((first >= 0) && old_offset)
@@ -1758,7 +1755,7 @@ static int mmdf_msg_padding_size(struct Mailbox *m)
 /**
  * mbox_mbox_check_stats - Check the Mailbox statistics - Implements MxOps::mbox_check_stats()
  */
-static int mbox_mbox_check_stats(struct Mailbox *m, int flags)
+static int mbox_mbox_check_stats(struct Mailbox *m, uint8_t flags)
 {
   struct stat sb = { 0 };
   if (stat(mailbox_path(m), &sb) != 0)
@@ -1794,15 +1791,17 @@ static int mbox_mbox_check_stats(struct Mailbox *m, int flags)
   if (m->newly_created && ((sb.st_ctime != sb.st_mtime) || (sb.st_ctime != sb.st_atime)))
     m->newly_created = false;
 
-  if (flags && mutt_file_stat_timespec_compare(&sb, MUTT_STAT_MTIME, &m->stats_last_checked) > 0)
+  if ((flags != 0) && mutt_file_stat_timespec_compare(&sb, MUTT_STAT_MTIME,
+                                                      &m->stats_last_checked) > 0)
   {
     bool old_peek = m->peekonly;
     struct Context *ctx = mx_mbox_open(m, MUTT_QUIET | MUTT_NOSORT | MUTT_PEEK);
     mx_mbox_close(&ctx);
     m->peekonly = old_peek;
   }
-  if (m->msg_new == 0)
-    m->has_new = false;
+
+  if (m->msg_new == 0 && m->has_new)
+    return 1;
 
   return m->msg_new;
 }
@@ -1815,7 +1814,7 @@ struct MxOps MxMboxOps = {
   .type            = MUTT_MBOX,
   .name             = "mbox",
   .is_local         = true,
-  .ac_find          = mbox_ac_find,
+  .ac_owns_path     = mbox_ac_owns_path,
   .ac_add           = mbox_ac_add,
   .mbox_open        = mbox_mbox_open,
   .mbox_open_append = mbox_mbox_open_append,
@@ -1845,7 +1844,7 @@ struct MxOps MxMmdfOps = {
   .type            = MUTT_MMDF,
   .name             = "mmdf",
   .is_local         = true,
-  .ac_find          = mbox_ac_find,
+  .ac_owns_path     = mbox_ac_owns_path,
   .ac_add           = mbox_ac_add,
   .mbox_open        = mbox_mbox_open,
   .mbox_open_append = mbox_mbox_open_append,

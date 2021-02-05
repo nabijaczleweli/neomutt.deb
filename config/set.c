@@ -283,7 +283,7 @@ bool cs_register_type(struct ConfigSet *cs, const struct ConfigSetType *cst)
  * @param flags Flags, e.g. #DT_NO_VARIABLE
  * @retval bool True, if all variables were registered successfully
  */
-bool cs_register_variables(const struct ConfigSet *cs, struct ConfigDef vars[], int flags)
+bool cs_register_variables(const struct ConfigSet *cs, struct ConfigDef vars[], uint32_t flags)
 {
   if (!cs || !vars)
     return false;
@@ -297,7 +297,7 @@ bool cs_register_variables(const struct ConfigSet *cs, struct ConfigDef vars[], 
     vars[i].type |= flags;
     if (!reg_one_var(cs, &vars[i], &err))
     {
-      mutt_debug(LL_DEBUG1, "%s\n", mutt_b2s(&err));
+      mutt_debug(LL_DEBUG1, "%s\n", mutt_buffer_string(&err));
       rc = false;
     }
   }

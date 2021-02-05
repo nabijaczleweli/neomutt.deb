@@ -5,6 +5,7 @@
  * @authors
  * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
  * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 R Primus <rprimus@gmail.com>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -76,7 +77,8 @@ enum EatRangeError
 /**
  * eat_regex - Parse a regex - Implements ::eat_arg_t
  */
-static bool eat_regex(struct Pattern *pat, int flags, struct Buffer *s, struct Buffer *err)
+static bool eat_regex(struct Pattern *pat, PatternCompFlags flags,
+                      struct Buffer *s, struct Buffer *err)
 {
   struct Buffer buf;
 
@@ -109,7 +111,7 @@ static bool eat_regex(struct Pattern *pat, int flags, struct Buffer *s, struct B
   else
   {
     pat->p.regex = mutt_mem_malloc(sizeof(regex_t));
-    int case_flags = mutt_mb_is_lower(buf.data) ? REG_ICASE : 0;
+    uint16_t case_flags = mutt_mb_is_lower(buf.data) ? REG_ICASE : 0;
     int rc = REG_COMP(pat->p.regex, buf.data, REG_NEWLINE | REG_NOSUB | case_flags);
     if (rc != 0)
     {
@@ -144,7 +146,8 @@ static bool add_query_msgid(char *line, int line_num, void *user_data)
 /**
  * eat_query - Parse a query for an external search program - Implements ::eat_arg_t
  */
-static bool eat_query(struct Pattern *pat, int flags, struct Buffer *s, struct Buffer *err)
+static bool eat_query(struct Pattern *pat, PatternCompFlags flags,
+                      struct Buffer *s, struct Buffer *err)
 {
   struct Buffer cmd_buf;
   struct Buffer tok_buf;
@@ -174,13 +177,15 @@ static bool eat_query(struct Pattern *pat, int flags, struct Buffer *s, struct B
   mutt_buffer_init(&cmd_buf);
   mutt_buffer_addstr(&cmd_buf, C_ExternalSearchCommand);
   mutt_buffer_addch(&cmd_buf, ' ');
-  if (!Context || !Context->mailbox)
+
+  struct Mailbox *m = ctx_mailbox(Context);
+  if (!m)
   {
     mutt_buffer_addch(&cmd_buf, '/');
   }
   else
   {
-    char *escaped_folder = mutt_path_escape(mailbox_path(Context->mailbox));
+    char *escaped_folder = mutt_path_escape(mailbox_path(m));
     mutt_debug(LL_DEBUG2, "escaped folder path: %s\n", escaped_folder);
     mutt_buffer_addch(&cmd_buf, '\'');
     mutt_buffer_addstr(&cmd_buf, escaped_folder);
@@ -201,7 +206,7 @@ static bool eat_query(struct Pattern *pat, int flags, struct Buffer *s, struct B
     return false;
   }
 
-  mutt_file_map_lines(add_query_msgid, &pat->p.multi_cases, fp, 0);
+  mutt_file_map_lines(add_query_msgid, &pat->p.multi_cases, fp, MUTT_RL_NO_FLAGS);
   mutt_file_fclose(&fp);
   filter_wait(pid);
   FREE(&cmd_buf.data);
@@ -612,7 +617,8 @@ bool eval_date_minmax(struct Pattern *pat, const char *s, struct Buffer *err)
 /**
  * eat_range - Parse a number range - Implements ::eat_arg_t
  */
-static bool eat_range(struct Pattern *pat, int flags, struct Buffer *s, struct Buffer *err)
+static bool eat_range(struct Pattern *pat, PatternCompFlags flags,
+                      struct Buffer *s, struct Buffer *err)
 {
   char *tmp = NULL;
   bool do_exclusive = false;
@@ -896,8 +902,8 @@ static int eat_range_by_regex(struct Pattern *pat, struct Buffer *s, int kind,
 /**
  * eat_message_range - Parse a range of message numbers - Implements ::eat_arg_t
  */
-static bool eat_message_range(struct Pattern *pat, int flags, struct Buffer *s,
-                              struct Buffer *err)
+static bool eat_message_range(struct Pattern *pat, PatternCompFlags flags,
+                              struct Buffer *s, struct Buffer *err)
 {
   bool skip_quote = false;
 
@@ -940,7 +946,8 @@ static bool eat_message_range(struct Pattern *pat, int flags, struct Buffer *s,
 /**
  * eat_date - Parse a date pattern - Implements ::eat_arg_t
  */
-static bool eat_date(struct Pattern *pat, int flags, struct Buffer *s, struct Buffer *err)
+static bool eat_date(struct Pattern *pat, PatternCompFlags flags,
+                     struct Buffer *s, struct Buffer *err)
 {
   struct Buffer *tmp = mutt_buffer_pool_get();
   bool rc = false;

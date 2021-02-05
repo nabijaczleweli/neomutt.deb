@@ -135,7 +135,7 @@ unsigned char *serial_dump_char_size(char *c, ssize_t size, unsigned char *d,
   if (convert && !mutt_str_is_ascii(c, size))
   {
     p = mutt_strn_dup(c, size);
-    if (mutt_ch_convert_string(&p, C_Charset, "utf-8", 0) == 0)
+    if (mutt_ch_convert_string(&p, C_Charset, "utf-8", MUTT_ICONV_NO_FLAGS) == 0)
     {
       size = mutt_str_len(p) + 1;
     }
@@ -188,7 +188,7 @@ void serial_restore_char(char **c, const unsigned char *d, int *off, bool conver
   if (convert && !mutt_str_is_ascii(*c, size))
   {
     char *tmp = mutt_str_dup(*c);
-    if (mutt_ch_convert_string(&tmp, "utf-8", C_Charset, 0) == 0)
+    if (mutt_ch_convert_string(&tmp, "utf-8", C_Charset, MUTT_ICONV_NO_FLAGS) == 0)
     {
       FREE(c);
       *c = tmp;
@@ -351,7 +351,7 @@ void serial_restore_buffer(struct Buffer *buf, const unsigned char *d, int *off,
 
   serial_restore_char(&buf->data, d, off, convert);
   serial_restore_int(&offset, d, off);
-  buf->dptr = buf->data + offset;
+  mutt_buffer_seek(buf, offset);
   serial_restore_int(&used, d, off);
   buf->dsize = used;
 }

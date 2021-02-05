@@ -169,7 +169,7 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
 
       /* read line */
       struct Buffer expn = mutt_buffer_make(0);
-      expn.data = mutt_file_read_line(NULL, &expn.dsize, fp, NULL, 0);
+      expn.data = mutt_file_read_line(NULL, &expn.dsize, fp, NULL, MUTT_RL_NO_FLAGS);
       mutt_file_fclose(&fp);
       filter_wait(pid);
 
@@ -190,7 +190,7 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
           mutt_buffer_copy(copy, &expn);
           mutt_buffer_addstr(copy, tok->dptr);
           mutt_buffer_copy(tok, copy);
-          tok->dptr = tok->data;
+          mutt_buffer_seek(tok, 0);
           mutt_buffer_pool_release(&copy);
         }
         FREE(&expn.data);

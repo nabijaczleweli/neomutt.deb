@@ -4,6 +4,7 @@
  *
  * @authors
  * Copyright (C) 2018 Gero Treuer <gero@70t.de>
+ * Copyright (C) 2020 R Primus <rprimus@gmail.com>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -156,29 +157,30 @@ static int mutt_poll_fd_remove(int fd)
  */
 static int monitor_init(void)
 {
+  if (INotifyFd != -1)
+    return 0;
+
+#ifdef HAVE_INOTIFY_INIT1
+  INotifyFd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
   if (INotifyFd == -1)
   {
-#ifdef HAVE_INOTIFY_INIT1
-    INotifyFd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
-    if (INotifyFd == -1)
-    {
-      mutt_debug(LL_DEBUG2, "inotify_init1 failed, errno=%d %s\n", errno, strerror(errno));
-      return -1;
-    }
-#else
-    INotifyFd = inotify_init();
-    if (INotifyFd == -1)
-    {
-      mutt_debug(LL_DEBUG2, "monitor: inotify_init failed, errno=%d %s\n",
-                 errno, strerror(errno));
-      return -1;
-    }
-    fcntl(INotifyFd, F_SETFL, O_NONBLOCK);
-    fcntl(INotifyFd, F_SETFD, FD_CLOEXEC);
-#endif
-    mutt_poll_fd_add(0, POLLIN);
-    mutt_poll_fd_add(INotifyFd, POLLIN);
+    mutt_debug(LL_DEBUG2, "inotify_init1 failed, errno=%d %s\n", errno, strerror(errno));
+    return -1;
   }
+#else
+  INotifyFd = inotify_init();
+  if (INotifyFd == -1)
+  {
+    mutt_debug(LL_DEBUG2, "monitor: inotify_init failed, errno=%d %s\n", errno,
+               strerror(errno));
+    return -1;
+  }
+  fcntl(INotifyFd, F_SETFL, O_NONBLOCK);
+  fcntl(INotifyFd, F_SETFD, FD_CLOEXEC);
+#endif
+  mutt_poll_fd_add(0, POLLIN);
+  mutt_poll_fd_add(INotifyFd, POLLIN);
+
   return 0;
 }
 
@@ -336,7 +338,7 @@ static enum ResolveResult monitor_resolve(struct MonitorInfo *info, struct Mailb
     info->type = m->type;
     info->path = m->realpath;
   }
-  else if (Context && Context->mailbox)
+  else if (ctx_mailbox(Context))
   {
     info->type = Context->mailbox->type;
     info->path = Context->mailbox->realpath;
@@ -364,7 +366,7 @@ static enum ResolveResult monitor_resolve(struct MonitorInfo *info, struct Mailb
   if (fmt)
   {
     mutt_buffer_printf(&info->path_buf, fmt, info->path);
-    info->path = mutt_b2s(&info->path_buf);
+    info->path = mutt_buffer_string(&info->path_buf);
   }
   if (stat(info->path, &sb) != 0)
     return RESOLVE_RES_FAIL_STAT;
@@ -541,7 +543,8 @@ int mutt_monitor_remove(struct Mailbox *m)
     goto cleanup;
   }
 
-  if (Context && Context->mailbox)
+  struct Mailbox *m_ctx = ctx_mailbox(Context);
+  if (m_ctx)
   {
     if (m)
     {
@@ -554,7 +557,7 @@ int mutt_monitor_remove(struct Mailbox *m)
     }
     else
     {
-      if (mailbox_find(Context->mailbox->realpath))
+      if (mailbox_find(m_ctx->realpath))
       {
         rc = 1;
         goto cleanup;

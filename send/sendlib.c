@@ -5,6 +5,7 @@
  * @authors
  * Copyright (C) 1996-2002,2009-2012 Michael R. Elkins <me@mutt.org>
  * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2020 R Primus <rprimus@gmail.com>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -230,7 +231,7 @@ static size_t convert_file_to(FILE *fp, const char *fromcode, int ncodes,
   char bufi[256], bufu[512], bufo[4 * sizeof(bufi)];
   size_t ret;
 
-  const iconv_t cd1 = mutt_ch_iconv_open("utf-8", fromcode, 0);
+  const iconv_t cd1 = mutt_ch_iconv_open("utf-8", fromcode, MUTT_ICONV_NO_FLAGS);
   if (cd1 == (iconv_t)(-1))
     return -1;
 
@@ -242,7 +243,7 @@ static size_t convert_file_to(FILE *fp, const char *fromcode, int ncodes,
   for (int i = 0; i < ncodes; i++)
   {
     if (!mutt_istr_equal(tocodes[i], "utf-8"))
-      cd[i] = mutt_ch_iconv_open(tocodes[i], "utf-8", 0);
+      cd[i] = mutt_ch_iconv_open(tocodes[i], "utf-8", MUTT_ICONV_NO_FLAGS);
     else
     {
       /* Special case for conversion to UTF-8 */
@@ -540,9 +541,10 @@ struct Content *mutt_get_content_info(const char *fname, struct Body *b,
   if (b && (b->type == TYPE_TEXT) && (!b->noconv && !b->force_charset))
   {
     mutt_param_set(&b->parameter, "charset",
-                   (!info->hibin ?
-                        "us-ascii" :
-                        c_charset && !mutt_ch_is_us_ascii(c_charset) ? c_charset : "unknown-8bit"));
+                   (!info->hibin ? "us-ascii" :
+                    c_charset && !mutt_ch_is_us_ascii(c_charset) ?
+                                   c_charset :
+                                   "unknown-8bit"));
   }
 
   return info;
@@ -661,7 +663,7 @@ bye:
   /* no mime.types file found */
   if (!found_mimetypes)
   {
-    mutt_error(_("Could not find any mime.types file."));
+    mutt_error(_("Could not find any mime.types file"));
   }
 
   if ((type != TYPE_OTHER) || (*xtype != '\0'))
@@ -706,7 +708,7 @@ static void transform_to_7bit(struct Body *a, FILE *fp_in, struct ConfigSubset *
        * restrict the lifetime of the buffer tightly */
       buf = mutt_buffer_pool_get();
       mutt_buffer_mktemp(buf);
-      s.fp_out = mutt_file_fopen(mutt_b2s(buf), "w");
+      s.fp_out = mutt_file_fopen(mutt_buffer_string(buf), "w");
       if (!s.fp_out)
       {
         mutt_perror("fopen");
@@ -771,7 +773,7 @@ void mutt_message_to_7bit(struct Body *a, FILE *fp, struct ConfigSubset *sub)
 
   /* Avoid buffer pool due to recursion */
   mutt_buffer_mktemp(&temp);
-  fp_out = mutt_file_fopen(mutt_b2s(&temp), "w+");
+  fp_out = mutt_file_fopen(mutt_buffer_string(&temp), "w+");
   if (!fp_out)
   {
     mutt_perror("fopen");
@@ -818,7 +820,7 @@ cleanup:
   if (fp_out)
   {
     mutt_file_fclose(&fp_out);
-    mutt_file_unlink(mutt_b2s(&temp));
+    mutt_file_unlink(mutt_buffer_string(&temp));
   }
 
   mutt_buffer_dealloc(&temp);
@@ -953,7 +955,7 @@ struct Body *mutt_make_message_attach(struct Mailbox *m, struct Email *e,
 
   struct Buffer *buf = mutt_buffer_pool_get();
   mutt_buffer_mktemp(buf);
-  fp = mutt_file_fopen(mutt_b2s(buf), "w+");
+  fp = mutt_file_fopen(mutt_buffer_string(buf), "w+");
   if (!fp)
   {
     mutt_buffer_pool_release(&buf);
@@ -963,7 +965,7 @@ struct Body *mutt_make_message_attach(struct Mailbox *m, struct Email *e,
   body = mutt_body_new();
   body->type = TYPE_MESSAGE;
   body->subtype = mutt_str_dup("rfc822");
-  body->filename = mutt_str_dup(mutt_b2s(buf));
+  body->filename = mutt_str_dup(mutt_buffer_string(buf));
   body->unlink = true;
   body->use_disp = false;
   body->disposition = DISP_INLINE;
@@ -976,9 +978,8 @@ struct Body *mutt_make_message_attach(struct Mailbox *m, struct Email *e,
   CopyHeaderFlags chflags = CH_XMIT;
   cmflags = MUTT_CM_NO_FLAGS;
 
-  const bool c_forward_decode = cs_subset_bool(sub, "forward_decode");
   /* If we are attaching a message, ignore `$mime_forward_decode` */
-  if (!attach_msg && c_forward_decode)
+  if (!attach_msg && c_mime_forward_decode)
   {
     chflags |= CH_MIME | CH_TXTPLAIN;
     cmflags = MUTT_CM_DECODE | MUTT_CM_CHARCONV;
@@ -1050,16 +1051,16 @@ static void run_mime_type_query(struct Body *att, struct ConfigSubset *sub)
 
   mutt_buffer_file_expand_fmt_quote(cmd, c_mime_type_query_command, att->filename);
 
-  pid = filter_create(mutt_b2s(cmd), NULL, &fp, &fp_err);
+  pid = filter_create(mutt_buffer_string(cmd), NULL, &fp, &fp_err);
   if (pid < 0)
   {
-    mutt_error(_("Error running \"%s\""), mutt_b2s(cmd));
+    mutt_error(_("Error running \"%s\""), mutt_buffer_string(cmd));
     mutt_buffer_pool_release(&cmd);
     return;
   }
   mutt_buffer_pool_release(&cmd);
 
-  buf = mutt_file_read_line(buf, &buflen, fp, NULL, 0);
+  buf = mutt_file_read_line(buf, &buflen, fp, NULL, MUTT_RL_NO_FLAGS);
   if (buf)
   {
     if (strchr(buf, '/'))
@@ -1309,7 +1310,7 @@ static int bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
 
   struct Buffer *tempfile = mutt_buffer_pool_get();
   mutt_buffer_mktemp(tempfile);
-  FILE *fp_tmp = mutt_file_fopen(mutt_b2s(tempfile), "w");
+  FILE *fp_tmp = mutt_file_fopen(mutt_buffer_string(tempfile), "w");
   if (fp_tmp)
   {
     CopyHeaderFlags chflags = CH_XMIT | CH_NONEWLINE | CH_NOQFROM;
@@ -1323,7 +1324,7 @@ static int bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
 
     struct Buffer *date = mutt_buffer_pool_get();
     mutt_date_make_date(date);
-    fprintf(fp_tmp, "Resent-Date: %s\n", mutt_b2s(date));
+    fprintf(fp_tmp, "Resent-Date: %s\n", mutt_buffer_string(date));
     mutt_buffer_pool_release(&date);
 
     char *msgid_str = gen_msgid(sub);
@@ -1336,21 +1337,21 @@ static int bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
     mutt_file_copy_bytes(fp, fp_tmp, e->body->length);
     if (mutt_file_fclose(&fp_tmp) != 0)
     {
-      mutt_perror(mutt_b2s(tempfile));
-      unlink(mutt_b2s(tempfile));
+      mutt_perror(mutt_buffer_string(tempfile));
+      unlink(mutt_buffer_string(tempfile));
       return -1;
     }
 #ifdef USE_SMTP
     const char *c_smtp_url = cs_subset_string(sub, "smtp_url");
     if (c_smtp_url)
     {
-      rc = mutt_smtp_send(env_from, to, NULL, NULL, mutt_b2s(tempfile),
+      rc = mutt_smtp_send(env_from, to, NULL, NULL, mutt_buffer_string(tempfile),
                           (e->body->encoding == ENC_8BIT), sub);
     }
     else
 #endif
     {
-      rc = mutt_invoke_sendmail(env_from, to, NULL, NULL, mutt_b2s(tempfile),
+      rc = mutt_invoke_sendmail(env_from, to, NULL, NULL, mutt_buffer_string(tempfile),
                                 (e->body->encoding == ENC_8BIT), sub);
     }
   }
@@ -1537,10 +1538,10 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
   {
     tempfile = mutt_buffer_pool_get();
     mutt_buffer_mktemp(tempfile);
-    fp_tmp = mutt_file_fopen(mutt_b2s(tempfile), "w+");
+    fp_tmp = mutt_file_fopen(mutt_buffer_string(tempfile), "w+");
     if (!fp_tmp)
     {
-      mutt_perror(mutt_b2s(tempfile));
+      mutt_perror(mutt_buffer_string(tempfile));
       mx_mbox_close(&ctx_fcc);
       goto done;
     }
@@ -1675,9 +1676,9 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
     fflush(fp_tmp);
     if (ferror(fp_tmp))
     {
-      mutt_debug(LL_DEBUG1, "%s: write failed\n", mutt_b2s(tempfile));
+      mutt_debug(LL_DEBUG1, "%s: write failed\n", mutt_buffer_string(tempfile));
       mutt_file_fclose(&fp_tmp);
-      unlink(mutt_b2s(tempfile));
+      unlink(mutt_buffer_string(tempfile));
       mx_msg_commit(ctx_fcc->mailbox, msg); /* XXX really? */
       mx_msg_close(ctx_fcc->mailbox, &msg);
       mx_mbox_close(&ctx_fcc);
@@ -1701,7 +1702,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
     /* if there was an error, leave the temp version */
     if (rc >= 0)
     {
-      unlink(mutt_b2s(tempfile));
+      unlink(mutt_buffer_string(tempfile));
       rc = 0;
     }
   }
@@ -1730,14 +1731,15 @@ done:
 #ifdef RECORD_FOLDER_HOOK
   /* We ran a folder hook for the destination mailbox,
    * now we run it for the user's current mailbox */
-  if (Context && Context->mailbox->path)
-    mutt_folder_hook(Context->mailbox->path, Context->mailbox->desc);
+  const struct Mailbox *m = ctx_mailbox(Context);
+  if (m)
+    mutt_folder_hook(m->path, m->desc);
 #endif
 
   if (fp_tmp)
   {
     mutt_file_fclose(&fp_tmp);
-    unlink(mutt_b2s(tempfile));
+    unlink(mutt_buffer_string(tempfile));
   }
   mutt_buffer_pool_release(&tempfile);
 

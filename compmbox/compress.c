@@ -152,7 +152,7 @@ static int setup_paths(struct Mailbox *m)
   /* Setup the right paths */
   mutt_str_replace(&m->realpath, mailbox_path(m));
 
-  /* We will uncompress to /tmp */
+  /* We will uncompress to TMPDIR */
   struct Buffer *buf = mutt_buffer_pool_get();
   mutt_buffer_mktemp(buf);
   mutt_buffer_copy(&m->pathbuf, buf);
@@ -263,12 +263,12 @@ static const char *compress_format_str(char *buf, size_t buflen, size_t col, int
     case 'f':
       /* Compressed file */
       mutt_buffer_quote_filename(quoted, m->realpath, false);
-      snprintf(buf, buflen, "%s", mutt_b2s(quoted));
+      snprintf(buf, buflen, "%s", mutt_buffer_string(quoted));
       break;
     case 't':
       /* Plaintext, temporary file */
       mutt_buffer_quote_filename(quoted, mailbox_path(m), false);
-      snprintf(buf, buflen, "%s", mutt_b2s(quoted));
+      snprintf(buf, buflen, "%s", mutt_buffer_string(quoted));
       break;
   }
 
@@ -411,11 +411,11 @@ int mutt_comp_valid_command(const char *cmd)
 }
 
 /**
- * comp_ac_find - Find an Account that matches a Mailbox path - Implements MxOps::ac_find()
+ * comp_ac_owns_path - Check whether an Account owns a Mailbox path - Implements MxOps::ac_owns_path()
  */
-static struct Account *comp_ac_find(struct Account *a, const char *path)
+static bool comp_ac_owns_path(struct Account *a, const char *path)
 {
-  return NULL;
+  return false;
 }
 
 /**
@@ -933,7 +933,7 @@ struct MxOps MxCompOps = {
   .type            = MUTT_COMPRESSED,
   .name             = "compressed",
   .is_local         = true,
-  .ac_find          = comp_ac_find,
+  .ac_owns_path     = comp_ac_owns_path,
   .ac_add           = comp_ac_add,
   .mbox_open        = comp_mbox_open,
   .mbox_open_append = comp_mbox_open_append,

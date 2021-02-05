@@ -67,7 +67,7 @@ struct BodyCache;
 struct stat;
 
 #define HC_FNAME "neomutt" /* filename for hcache as POP lacks paths */
-#define HC_FEXT "hcache"   /* extension for hcache as POP lacks paths */
+#define HC_FEXT "hcache" /* extension for hcache as POP lacks paths */
 
 /**
  * cache_id - Make a message-cache-compatible id
@@ -736,24 +736,21 @@ fail:
 }
 
 /**
- * pop_ac_find - Find an Account that matches a Mailbox path - Implements MxOps::ac_find()
+ * pop_ac_owns_path - Check whether an Account owns a Mailbox path - Implements MxOps::ac_owns_path()
  */
-static struct Account *pop_ac_find(struct Account *a, const char *path)
+static bool pop_ac_owns_path(struct Account *a, const char *path)
 {
   struct Url *url = url_parse(path);
   if (!url)
-    return NULL;
+    return false;
 
   struct PopAccountData *adata = a->adata;
   struct ConnAccount *cac = &adata->conn->account;
 
-  if (!mutt_istr_equal(url->host, cac->host) || !mutt_istr_equal(url->user, cac->user))
-  {
-    a = NULL;
-  }
-
+  const bool ret = mutt_istr_equal(url->host, cac->host) &&
+                   mutt_istr_equal(url->user, cac->user);
   url_free(&url);
-  return a;
+  return ret;
 }
 
 /**
@@ -807,7 +804,7 @@ static int pop_mbox_open(struct Mailbox *m)
 
   mutt_account_tourl(&cac, &url);
   url.path = NULL;
-  url_tostring(&url, buf, sizeof(buf), 0);
+  url_tostring(&url, buf, sizeof(buf), U_NO_FLAGS);
 
   mutt_buffer_strcpy(&m->pathbuf, buf);
   mutt_str_replace(&m->realpath, mailbox_path(m));
@@ -1084,10 +1081,10 @@ static int pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
       /* no */
       bcache = false;
       mutt_buffer_mktemp(path);
-      msg->fp = mutt_file_fopen(mutt_b2s(path), "w+");
+      msg->fp = mutt_file_fopen(mutt_buffer_string(path), "w+");
       if (!msg->fp)
       {
-        mutt_perror(mutt_b2s(path));
+        mutt_perror(mutt_buffer_string(path));
         goto cleanup;
       }
     }
@@ -1104,7 +1101,7 @@ static int pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
      * the file in bcache or from POP's own cache since the next iteration
      * of the loop will re-attempt to put() the message */
     if (!bcache)
-      unlink(mutt_b2s(path));
+      unlink(mutt_buffer_string(path));
 
     if (ret == -2)
     {
@@ -1246,7 +1243,7 @@ struct MxOps MxPopOps = {
   .type            = MUTT_POP,
   .name             = "pop",
   .is_local         = false,
-  .ac_find          = pop_ac_find,
+  .ac_owns_path     = pop_ac_owns_path,
   .ac_add           = pop_ac_add,
   .mbox_open        = pop_mbox_open,
   .mbox_open_append = NULL,
