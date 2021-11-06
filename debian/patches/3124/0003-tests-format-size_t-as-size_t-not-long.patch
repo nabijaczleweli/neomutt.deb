@@ -1,0 +1,74 @@
+From a585a9695f0c36dbcb06537a81fa11b02e62c7e9 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=D0=BD=D0=B0=D0=B1?= <nabijaczleweli@nabijaczleweli.xyz>
+Date: Sat, 6 Nov 2021 18:22:36 +0100
+Subject: [PATCH 3/4] tests: format size_t as size_t, not long
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+x32 warnings:
+test/hash/mutt_hash_new.c: In function ‘test_mutt_hash_new’:
+test/hash/mutt_hash_new.c:46:42: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 4 has type ‘size_t’ {aka ‘unsigned int’} [-Wformat=]
+   46 |       snprintf(buf, sizeof(buf), "apple%ld", i);
+      |                                        ~~^   ~
+      |                                          |   |
+      |                                          |   size_t {aka unsigned int}
+      |                                          long int
+      |                                        %d
+
+../test/compress/common.c: In function ‘compress_data_tests’:
+../test/compress/common.c:148:58: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 4 has type ‘size_t’ {aka ‘unsigned int’} [-Wformat=]
+  148 |       snprintf(case_name, sizeof(case_name), "    size %ld", size);
+      |                                                        ~~^   ~~~~
+      |                                                          |   |
+      |                                                          |   size_t {aka unsigned int}
+      |                                                          long int
+      |                                                        %d
+../test/compress/common.c:155:58: warning: format ‘%ld’ expects argument of type ‘long int’, but argument 4 has type ‘size_t’ {aka ‘unsigned int’} [-Wformat=]
+  155 |       snprintf(case_name, sizeof(case_name), "    size %ld", sizes[i]);
+      |                                                        ~~^   ~~~~~~~~
+      |                                                          |        |
+      |                                                          long int size_t {aka unsigned int}
+      |                                                        %d
+---
+ test/compress/common.c    | 4 ++--
+ test/hash/mutt_hash_new.c | 2 +-
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/test/compress/common.c b/test/compress/common.c
+index 120c92e9d..431c46faa 100644
+--- a/test/compress/common.c
++++ b/test/compress/common.c
+@@ -145,14 +145,14 @@ void compress_data_tests(const struct ComprOps *cops, short min_level, short max
+     TEST_CASE(case_name);
+     for (size_t size = 1; size < 33; size++)
+     {
+-      snprintf(case_name, sizeof(case_name), "    size %ld", size);
++      snprintf(case_name, sizeof(case_name), "    size %zu", size);
+       TEST_CASE(case_name);
+       one_test(cops, level, size);
+     }
+ 
+     for (size_t i = 0; i < mutt_array_size(sizes); i++)
+     {
+-      snprintf(case_name, sizeof(case_name), "    size %ld", sizes[i]);
++      snprintf(case_name, sizeof(case_name), "    size %zu", sizes[i]);
+       TEST_CASE(case_name);
+       one_test(cops, level, sizes[i]);
+     }
+diff --git a/test/hash/mutt_hash_new.c b/test/hash/mutt_hash_new.c
+index 582c54321..237d9372d 100644
+--- a/test/hash/mutt_hash_new.c
++++ b/test/hash/mutt_hash_new.c
+@@ -43,7 +43,7 @@ void test_mutt_hash_new(void)
+     char buf[32];
+     for (size_t i = 0; i < 50; i++)
+     {
+-      snprintf(buf, sizeof(buf), "apple%ld", i);
++      snprintf(buf, sizeof(buf), "apple%zu", i);
+       mutt_hash_insert(table, buf, &dummy1);
+     }
+     mutt_hash_free(&table);
+-- 
+2.33.1
+

@@ -1,0 +1,49 @@
+From 9074026705e2a98e9068046f819a191471cf7bb6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=D0=BD=D0=B0=D0=B1?= <nabijaczleweli@nabijaczleweli.xyz>
+Date: Sat, 6 Nov 2021 18:17:49 +0100
+Subject: [PATCH 1/4] nntp/newsrc.c: sscanf() time_t as i64, not long
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+x32 warning:
+../nntp/newsrc.c: In function ‘active_get_cache’:
+../nntp/newsrc.c:628:55: warning: format ‘%ld’ expects argument of type ‘long int *’, but argument 3 has type ‘time_t *’ {aka ‘long long int *’} [-Wformat=]
+  628 |   if (!fgets(buf, sizeof(buf), fp) || (sscanf(buf, "%ld%4095s", &t, file) != 1) || (t == 0))
+      |                                                     ~~^         ~~
+      |                                                       |         |
+      |                                                       |         time_t * {aka long long int *}
+      |                                                       long int *
+      |                                                     %lld
+
+sscanf() will write 4 bytes into an 8-byte time_t,
+then use the next 4 uninitialised bytes of the time_t
+as the scan destination. Not good!
+---
+ nntp/newsrc.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/nntp/newsrc.c b/nntp/newsrc.c
+index 7d30d316c..2162a0037 100644
+--- a/nntp/newsrc.c
++++ b/nntp/newsrc.c
+@@ -38,6 +38,7 @@
+ #include <sys/stat.h>
+ #include <time.h>
+ #include <unistd.h>
++#include <inttypes.h>
+ #include "private.h"
+ #include "mutt/lib.h"
+ #include "config/lib.h"
+@@ -625,7 +626,7 @@ static int active_get_cache(struct NntpAccountData *adata)
+   if (!fp)
+     return -1;
+ 
+-  if (!fgets(buf, sizeof(buf), fp) || (sscanf(buf, "%ld%4095s", &t, file) != 1) || (t == 0))
++  if (!fgets(buf, sizeof(buf), fp) || (sscanf(buf, "%" SCNd64 "%4095s", &t, file) != 1) || (t == 0))
+   {
+     mutt_file_fclose(&fp);
+     return -1;
+-- 
+2.33.1
+
