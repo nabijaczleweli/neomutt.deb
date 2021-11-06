@@ -31,7 +31,6 @@
 
 struct Buffer;
 struct stat;
-extern char *C_Tmpdir;
 extern const char filename_safe_chars[];
 
 /* Flags for mutt_file_read_line() */
@@ -48,8 +47,8 @@ struct timespec;
  */
 struct timespec
 {
-  time_t tv_sec;
-  long tv_nsec;
+  time_t tv_sec; ///< Number of seconds since the epoch
+  long tv_nsec;  ///< Number of nanosecond, on top
 };
 #endif
 
@@ -76,7 +75,10 @@ struct MuttFileIter
 };
 
 /**
- * typedef mutt_file_map_t - Callback function for mutt_file_map_lines()
+ * @defgroup mutt_file_map_api File Mapping API
+ *
+ * Prototype for a text handler function for mutt_file_map_lines()
+ *
  * @param line      Line of text read
  * @param line_num  Line number
  * @param user_data Data to pass to the callback function
@@ -100,7 +102,8 @@ int         mutt_file_fclose(FILE **fp);
 FILE *      mutt_file_fopen(const char *path, const char *mode);
 int         mutt_file_fsync_close(FILE **fp);
 long        mutt_file_get_size(const char *path);
-void        mutt_file_get_stat_timespec(struct timespec *dest, struct stat *sb, enum MuttStatType type);
+long        mutt_file_get_size_fp(FILE* fp);
+void        mutt_file_get_stat_timespec(struct timespec *dest, struct stat *st, enum MuttStatType type);
 bool        mutt_file_iter_line(struct MuttFileIter *iter, FILE *fp, ReadLineFlags flags);
 int         mutt_file_lock(int fd, bool excl, bool timeout);
 bool        mutt_file_map_lines(mutt_file_map_t func, void *user_data, FILE *fp, ReadLineFlags flags);
@@ -117,8 +120,8 @@ int         mutt_file_safe_rename(const char *src, const char *target);
 void        mutt_file_sanitize_filename(char *path, bool slash);
 int         mutt_file_sanitize_regex(struct Buffer *dest, const char *src);
 void        mutt_file_set_mtime(const char *from, const char *to);
-int         mutt_file_stat_compare(struct stat *sba, enum MuttStatType sba_type, struct stat *sbb, enum MuttStatType sbb_type);
-int         mutt_file_stat_timespec_compare(struct stat *sba, enum MuttStatType type, struct timespec *b);
+int         mutt_file_stat_compare(struct stat *st1, enum MuttStatType st1_type, struct stat *st2, enum MuttStatType st2_type);
+int         mutt_file_stat_timespec_compare(struct stat *st, enum MuttStatType type, struct timespec *b);
 int         mutt_file_symlink(const char *oldpath, const char *newpath);
 int         mutt_file_timespec_compare(struct timespec *a, struct timespec *b);
 void        mutt_file_touch_atime(int fd);

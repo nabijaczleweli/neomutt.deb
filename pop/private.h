@@ -26,11 +26,10 @@
 
 #include <stdbool.h>
 #include <time.h>
-#include "mutt/lib.h"
 #include "conn/lib.h"
 
-struct Email;
 struct Mailbox;
+struct PopAccountData;
 struct Progress;
 
 #define POP_PORT 110
@@ -73,42 +72,6 @@ struct PopCache
 };
 
 /**
- * struct PopAccountData - POP-specific Account data - @extends Account
- */
-struct PopAccountData
-{
-  struct Connection *conn;
-  unsigned int status : 2;
-  bool capabilities : 1;
-  unsigned int use_stls : 2;
-  bool cmd_capa : 1;         ///< optional command CAPA
-  bool cmd_stls : 1;         ///< optional command STLS
-  unsigned int cmd_user : 2; ///< optional command USER
-  unsigned int cmd_uidl : 2; ///< optional command UIDL
-  unsigned int cmd_top : 2;  ///< optional command TOP
-  bool resp_codes : 1;       ///< server supports extended response codes
-  bool expire : 1;           ///< expire is greater than 0
-  bool clear_cache : 1;
-  size_t size;
-  time_t check_time;
-  time_t login_delay; ///< minimal login delay  capability
-  struct Buffer auth_list; ///< list of auth mechanisms
-  char *timestamp;
-  struct BodyCache *bcache; ///< body cache
-  char err_msg[POP_CMD_RESPONSE];
-  struct PopCache cache[POP_CACHE_LEN];
-};
-
-/**
- * struct PopEmailData - POP-specific Email data - @extends Email
- */
-struct PopEmailData
-{
-  const char *uid;
-  int refno;                   ///< Message number on server
-};
-
-/**
  * struct PopAuth - POP authentication multiplexor
  */
 struct PopAuth
@@ -125,25 +88,17 @@ struct PopAuth
                       ///< If this is not null, authenticate may ignore the second parameter.
 };
 
-extern bool          C_PopAuthTryAll;
-extern struct Slist *C_PopAuthenticators;
-extern short         C_PopCheckinterval;
-extern unsigned char C_PopDelete;
-extern char *        C_PopHost;
-extern bool          C_PopLast;
-extern char *        C_PopOauthRefreshCommand;
-extern char *        C_PopPass;
-extern unsigned char C_PopReconnect;
-extern char *        C_PopUser;
-
 /* pop_auth.c */
 bool pop_auth_is_valid(const char *authenticator);
 int pop_authenticate(struct PopAccountData *adata);
 void pop_apop_timestamp(struct PopAccountData *adata, char *buf);
 
 /**
- * typedef pop_fetch_t - Callback function to handle POP server responses
- * @param line String to parse
+ * @defgroup pop_fetch_api POP Response Parser API
+ *
+ * Prototype for a function to handle POP server responses
+ *
+ * @param str  String to parse
  * @param data Private data passed to pop_fetch_data()
  * @retval  0 Success
  * @retval -1 Failure
@@ -160,8 +115,6 @@ int pop_fetch_data(struct PopAccountData *adata, const char *query,
                    struct Progress *progress, pop_fetch_t callback, void *data);
 int pop_reconnect(struct Mailbox *m);
 void pop_logout(struct Mailbox *m);
-struct PopAccountData *pop_adata_get(struct Mailbox *m);
-struct PopEmailData *pop_edata_get(struct Email *e);
 const char *pop_get_field(enum ConnAccountField field, void *gf_data);
 
 #endif /* MUTT_POP_PRIVATE_H */

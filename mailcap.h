@@ -29,9 +29,6 @@
 struct Body;
 struct Buffer;
 
-/* These Config Variables are only used in rfc1524.c */
-extern bool C_MailcapSanitize;
-
 /**
  * struct MailcapEntry - A mailcap entry
  */
@@ -48,6 +45,7 @@ struct MailcapEntry
   bool needsterminal : 1; ///< endwin() and system
   bool copiousoutput : 1; ///< needs pager, basically
   bool xneomuttkeep  : 1; ///< do not remove the file on command exit
+  bool xneomuttnowrap: 1; ///< do not wrap the output in the pager
 };
 
 /**

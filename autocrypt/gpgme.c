@@ -34,9 +34,9 @@
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
-#include "gui/lib.h"
-#include "lib.h"
+#include "core/lib.h"
 #include "ncrypt/lib.h"
+#include "question/lib.h"
 #include "options.h"
 
 /**
@@ -47,9 +47,11 @@
  */
 static int create_gpgme_context(gpgme_ctx_t *ctx)
 {
+  const char *const c_autocrypt_dir =
+      cs_subset_path(NeoMutt->sub, "autocrypt_dir");
   gpgme_error_t err = gpgme_new(ctx);
   if (!err)
-    err = gpgme_ctx_set_engine_info(*ctx, GPGME_PROTOCOL_OpenPGP, NULL, C_AutocryptDir);
+    err = gpgme_ctx_set_engine_info(*ctx, GPGME_PROTOCOL_OpenPGP, NULL, c_autocrypt_dir);
   if (err)
   {
     mutt_error(_("error creating GPGME context: %s"), gpgme_strerror(err));
@@ -293,7 +295,7 @@ int mutt_autocrypt_gpgme_select_or_create_key(struct Address *addr, struct Buffe
 
       /* L10N: During autocrypt account creation, if selecting an existing key fails
          for some reason, we prompt to see if they want to create a key instead.  */
-      if (mutt_yesorno(_("Create a new GPG key for this account, instead?"), MUTT_YES) == MUTT_NO)
+      if (mutt_yesorno(_("Create a new GPG key for this account, instead?"), MUTT_YES) != MUTT_YES)
         break;
       /* fallthrough */
 
@@ -350,7 +352,7 @@ cleanup:
 /**
  * mutt_autocrypt_gpgme_is_valid_key - Is a key id valid?
  * @param keyid Key id to check
- * @retval true If key id is valid
+ * @retval true Key id is valid
  */
 bool mutt_autocrypt_gpgme_is_valid_key(const char *keyid)
 {

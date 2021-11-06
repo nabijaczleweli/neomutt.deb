@@ -21,7 +21,7 @@
  */
 
 /**
- * @page imap_auth_gss IMAP GSS authentication method
+ * @page imap_auth_gss GSS authentication
  *
  * IMAP GSS authentication method
  *
@@ -39,9 +39,11 @@
 #include <string.h>
 #include "private.h"
 #include "mutt/lib.h"
+#include "config/lib.h"
+#include "core/lib.h"
 #include "conn/lib.h"
+#include "adata.h"
 #include "auth.h"
-#include "mutt_logging.h"
 #include "mutt_socket.h"
 #ifdef HAVE_HEIMDAL
 #include <gssapi/gssapi.h>
@@ -128,6 +130,7 @@ enum ImapAuthRes imap_auth_gss(struct ImapAccountData *adata, const char *method
   request_buf.value = buf1->data;
   request_buf.length = mutt_buffer_len(buf1);
 
+  const short c_debug_level = cs_subset_number(NeoMutt->sub, "debug_level");
   maj_stat = gss_import_name(&min_stat, &request_buf, gss_nt_service_name, &target_name);
   if (maj_stat != GSS_S_COMPLETE)
   {
@@ -135,7 +138,7 @@ enum ImapAuthRes imap_auth_gss(struct ImapAccountData *adata, const char *method
     retval = IMAP_AUTH_UNAVAIL;
     goto cleanup;
   }
-  else if (C_DebugLevel >= 2)
+  else if (c_debug_level >= 2)
   {
     gss_display_name(&min_stat, target_name, &request_buf, &mech_name);
     mutt_debug(LL_DEBUG2, "Using service name [%s]\n", (char *) request_buf.value);

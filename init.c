@@ -29,7 +29,6 @@
 
 #include "config.h"
 #include <ctype.h>
-#include <inttypes.h>
 #include <pwd.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -44,15 +43,13 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "alias/lib.h"
-#include "conn/lib.h"
+#include "conn/lib.h" // IWYU pragma: keep
 #include "gui/lib.h"
 #include "mutt.h"
 #include "init.h"
-#include "compress/lib.h"
-#include "hcache/lib.h"
+#include "color/lib.h"
 #include "history/lib.h"
 #include "notmuch/lib.h"
-#include "store/lib.h"
 #include "command_parse.h"
 #include "context.h"
 #include "functions.h"
@@ -62,8 +59,7 @@
 #ifdef USE_LUA
 #include "mutt_lua.h"
 #endif
-#include "mutt_menu.h"
-#include "mutt_parse.h"
+#include "menu/lib.h"
 #include "muttlib.h"
 #include "myvar.h"
 #include "options.h"
@@ -94,8 +90,6 @@ static int MatchesListsize = 512; // Enough space for all of the config items
 static char **nm_tags;
 #endif
 
-bool config_init_main(struct ConfigSet *cs);
-
 /**
  * matches_ensure_morespace - Allocate more space for auto-completion
  * @param current Current allocation
@@ -115,7 +109,7 @@ static void matches_ensure_morespace(int current)
 }
 
 /**
- * candidate - helper function for completion
+ * candidate - Helper function for completion
  * @param user User entered data for completion
  * @param src  Candidate for completion
  * @param dest Completion result gets here
@@ -154,6 +148,7 @@ static void candidate(char *user, const char *src, char *dest, size_t dlen)
  */
 static int complete_all_nm_tags(const char *pt)
 {
+  struct Mailbox *m = ctx_mailbox(Context);
   int tag_count_1 = 0;
   int tag_count_2 = 0;
 
@@ -162,10 +157,10 @@ static int complete_all_nm_tags(const char *pt)
   memset(Matches, 0, MatchesListsize);
   memset(Completed, 0, sizeof(Completed));
 
-  nm_db_longrun_init(Context->mailbox, false);
+  nm_db_longrun_init(m, false);
 
   /* Work out how many tags there are. */
-  if (nm_get_all_tags(Context->mailbox, NULL, &tag_count_1) || (tag_count_1 == 0))
+  if (nm_get_all_tags(m, NULL, &tag_count_1) || (tag_count_1 == 0))
     goto done;
 
   /* Free the old list, if any. */
@@ -180,11 +175,11 @@ static int complete_all_nm_tags(const char *pt)
   nm_tags[tag_count_1] = NULL;
 
   /* Get all the tags. */
-  if (nm_get_all_tags(Context->mailbox, nm_tags, &tag_count_2) || (tag_count_1 != tag_count_2))
+  if (nm_get_all_tags(m, nm_tags, &tag_count_2) || (tag_count_1 != tag_count_2))
   {
     FREE(&nm_tags);
     nm_tags = NULL;
-    nm_db_longrun_done(Context->mailbox);
+    nm_db_longrun_done(m);
     return -1;
   }
 
@@ -198,7 +193,7 @@ static int complete_all_nm_tags(const char *pt)
   Matches[NumMatched++] = UserTyped;
 
 done:
-  nm_db_longrun_done(Context->mailbox);
+  nm_db_longrun_done(m);
   return 0;
 }
 #endif
@@ -280,7 +275,7 @@ static char *find_cfg(const char *home, const char *xdg_cfg_home)
 /**
  * getmailname - Try to retrieve the FQDN from mailname files
  * @retval ptr Heap allocated string with the FQDN
- * @retval NULL if no valid mailname file could be read
+ * @retval NULL No valid mailname file could be read
  */
 static char *getmailname(void)
 {
@@ -316,12 +311,13 @@ static char *getmailname(void)
  */
 static bool get_hostname(struct ConfigSet *cs)
 {
-  char *str = NULL;
+  const char *short_host = NULL;
   struct utsname utsname;
 
-  if (C_Hostname)
+  const char *const c_hostname = cs_subset_string(NeoMutt->sub, "hostname");
+  if (c_hostname)
   {
-    str = C_Hostname;
+    short_host = c_hostname;
   }
   else
   {
@@ -334,34 +330,35 @@ static bool get_hostname(struct ConfigSet *cs)
       return false; // TEST09: can't test
     }
 
-    str = utsname.nodename;
+    short_host = utsname.nodename;
   }
 
   /* some systems report the FQDN instead of just the hostname */
-  char *dot = strchr(str, '.');
+  char *dot = strchr(short_host, '.');
   if (dot)
-    ShortHostname = mutt_strn_dup(str, dot - str);
+    ShortHostname = mutt_strn_dup(short_host, dot - short_host);
   else
-    ShortHostname = mutt_str_dup(str);
+    ShortHostname = mutt_str_dup(short_host);
 
-  if (!C_Hostname)
+  // All the code paths from here alloc memory for the fqdn
+  char *fqdn = mutt_str_dup(c_hostname);
+  if (!fqdn)
   {
+    mutt_debug(LL_DEBUG1, "Setting $hostname\n");
     /* now get FQDN.  Use configured domain first, DNS next, then uname */
 #ifdef DOMAIN
     /* we have a compile-time domain name, use that for `$hostname` */
-    C_Hostname = mutt_mem_malloc(mutt_str_len(DOMAIN) + mutt_str_len(ShortHostname) + 2);
-    sprintf((char *) C_Hostname, "%s.%s", NONULL(ShortHostname), DOMAIN);
+    fqdn = mutt_mem_malloc(mutt_str_len(DOMAIN) + mutt_str_len(ShortHostname) + 2);
+    sprintf((char *) fqdn, "%s.%s", NONULL(ShortHostname), DOMAIN);
 #else
-    C_Hostname = getmailname();
-    if (!C_Hostname)
+    fqdn = getmailname();
+    if (!fqdn)
     {
       struct Buffer *domain = mutt_buffer_pool_get();
       if (getdnsdomainname(domain) == 0)
       {
-        C_Hostname =
-            mutt_mem_malloc(mutt_buffer_len(domain) + mutt_str_len(ShortHostname) + 2);
-        sprintf((char *) C_Hostname, "%s.%s", NONULL(ShortHostname),
-                mutt_buffer_string(domain));
+        fqdn = mutt_mem_malloc(mutt_buffer_len(domain) + mutt_str_len(ShortHostname) + 2);
+        sprintf((char *) fqdn, "%s.%s", NONULL(ShortHostname), mutt_buffer_string(domain));
       }
       else
       {
@@ -372,14 +369,20 @@ static bool get_hostname(struct ConfigSet *cs)
          * It could be wrong, but we've done the best we can, at this point the
          * onus is on the user to provide the correct hostname if the nodename
          * won't work in their network.  */
-        C_Hostname = mutt_str_dup(utsname.nodename);
+        fqdn = mutt_str_dup(utsname.nodename);
       }
       mutt_buffer_pool_release(&domain);
+      mutt_debug(LL_DEBUG1, "Hostname: %s\n", NONULL(fqdn));
     }
 #endif
   }
-  if (C_Hostname)
-    cs_str_initial_set(cs, "hostname", C_Hostname, NULL);
+
+  if (fqdn)
+  {
+    cs_str_initial_set(cs, "hostname", fqdn, NULL);
+    cs_str_reset(cs, "hostname", NULL);
+    FREE(&fqdn);
+  }
 
   return true;
 }
@@ -532,7 +535,6 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
         FREE(&cmd.data);
         return -1;
       }
-      FREE(&cmd.data);
 
       tok->dptr = pc + 1;
 
@@ -540,7 +542,10 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
       struct Buffer expn = mutt_buffer_make(0);
       expn.data = mutt_file_read_line(NULL, &expn.dsize, fp, NULL, MUTT_RL_NO_FLAGS);
       mutt_file_fclose(&fp);
-      filter_wait(pid);
+      int rc = filter_wait(pid);
+      if (rc != 0)
+        mutt_debug(LL_DEBUG1, "backticks exited code %d for command: %s\n", rc, cmd);
+      FREE(&cmd.data);
 
       /* if we got output, make a new string consisting of the shell output
        * plus whatever else was left on the original line */
@@ -633,7 +638,7 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
 }
 
 /**
- * mutt_opts_free - clean up before quitting
+ * mutt_opts_free - Clean up before quitting
  */
 void mutt_opts_free(void)
 {
@@ -644,11 +649,9 @@ void mutt_opts_free(void)
   sb_shutdown();
 #endif
 
-  mutt_regexlist_free(&Alternates);
   mutt_regexlist_free(&MailLists);
   mutt_regexlist_free(&NoSpamList);
   mutt_regexlist_free(&SubscribedLists);
-  mutt_regexlist_free(&UnAlternates);
   mutt_regexlist_free(&UnMailLists);
   mutt_regexlist_free(&UnSubscribedLists);
 
@@ -667,13 +670,7 @@ void mutt_opts_free(void)
   mutt_list_free(&UnIgnore);
   mutt_list_free(&UserHeader);
 
-  /* Lists of AttachMatch */
-  mutt_list_free_type(&AttachAllow, (list_free_t) mutt_attachmatch_free);
-  mutt_list_free_type(&AttachExclude, (list_free_t) mutt_attachmatch_free);
-  mutt_list_free_type(&InlineAllow, (list_free_t) mutt_attachmatch_free);
-  mutt_list_free_type(&InlineExclude, (list_free_t) mutt_attachmatch_free);
-
-  mutt_colors_free(&Colors);
+  mutt_colors_cleanup();
 
   FREE(&CurrentFolder);
   FREE(&HomeDir);
@@ -682,7 +679,6 @@ void mutt_opts_free(void)
   FREE(&Username);
 
   mutt_replacelist_free(&SpamList);
-  mutt_replacelist_free(&SubjectRegexList);
 
   mutt_delete_hooks(MUTT_HOOK_NO_FLAGS);
 
@@ -743,7 +739,7 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
   TagTransforms = mutt_hash_new(64, MUTT_HASH_STRCASECMP);
   TagFormats = mutt_hash_new(64, MUTT_HASH_NO_FLAGS);
 
-  mutt_menu_init();
+  menu_init();
 #ifdef USE_SIDEBAR
   sb_init();
 #endif
@@ -751,13 +747,7 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
   nm_init();
 #endif
 
-  snprintf(AttachmentMarker, sizeof(AttachmentMarker), "\033]9;%" PRIu64 "\a", // Escape
-           mutt_rand64());
-
-  snprintf(ProtectedHeaderMarker, sizeof(ProtectedHeaderMarker), "\033]8;%lld\a", // Escape
-           (long long) mutt_date_epoch());
-
-  /* "$spoolfile" precedence: config file, environment */
+  /* "$spool_file" precedence: config file, environment */
   const char *p = mutt_str_getenv("MAIL");
   if (!p)
     p = mutt_str_getenv("MAILDIR");
@@ -770,8 +760,8 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
 #endif
     p = mutt_buffer_string(&buf);
   }
-  cs_str_initial_set(cs, "spoolfile", p, NULL);
-  cs_str_reset(cs, "spoolfile", NULL);
+  cs_str_initial_set(cs, "spool_file", p, NULL);
+  cs_str_reset(cs, "spool_file", NULL);
 
   p = mutt_str_getenv("REPLYTO");
   if (p)
@@ -805,24 +795,26 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
   const char *env_ed = mutt_str_getenv("VISUAL");
   if (!env_ed)
     env_ed = mutt_str_getenv("EDITOR");
-  if (env_ed)
-  {
-    cs_str_string_set(cs, "editor", env_ed, NULL);
-    cs_str_string_set(cs, "visual", env_ed, NULL);
-  }
+  if (!env_ed)
+    env_ed = "vi";
+  cs_str_initial_set(cs, "editor", env_ed, NULL);
 
-  C_Charset = mutt_ch_get_langinfo_charset();
-  cs_str_initial_set(cs, "charset", C_Charset, NULL);
-  mutt_ch_set_charset(C_Charset);
+  const char *const c_editor = cs_subset_string(NeoMutt->sub, "editor");
+  if (!c_editor)
+    cs_str_reset(cs, "editor", NULL);
+
+  const char *charset = mutt_ch_get_langinfo_charset();
+  cs_str_initial_set(cs, "charset", charset, NULL);
+  cs_str_reset(cs, "charset", NULL);
+  mutt_ch_set_charset(charset);
+  FREE(&charset);
 
   Matches = mutt_mem_calloc(MatchesListsize, sizeof(char *));
-
-  CurrentMenu = MENU_MAIN;
 
 #ifdef HAVE_GETSID
   /* Unset suspend by default if we're the session leader */
   if (getsid(0) == getpid())
-    C_Suspend = false;
+    cs_subset_str_native_set(NeoMutt->sub, "suspend", false, NULL);
 #endif
 
   /* RFC2368, "4. Unsafe headers"
@@ -931,16 +923,18 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
   if (!get_hostname(cs))
     goto done;
 
-  if (!C_Realname)
   {
-    struct passwd *pw = getpwuid(getuid());
-    if (pw)
+    char name[256] = { 0 };
+    const char *c_real_name = cs_subset_string(NeoMutt->sub, "real_name");
+    if (!c_real_name)
     {
-      char name[256];
-      C_Realname = mutt_str_dup(mutt_gecos_name(name, sizeof(name), pw));
+      struct passwd *pw = getpwuid(getuid());
+      if (pw)
+        c_real_name = mutt_gecos_name(name, sizeof(name), pw);
     }
+    cs_str_initial_set(cs, "real_name", c_real_name, NULL);
+    cs_str_reset(cs, "real_name", NULL);
   }
-  cs_str_initial_set(cs, "realname", C_Realname, NULL);
 
   if (need_pause && !OptNoCurses)
   {
@@ -949,20 +943,23 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
       goto done; // TEST14: neomutt -e broken (press 'q')
   }
 
-  mutt_file_mkdir(C_Tmpdir, S_IRWXU);
+  const char *const c_tmpdir = cs_subset_path(NeoMutt->sub, "tmpdir");
+  mutt_file_mkdir(c_tmpdir, S_IRWXU);
 
   mutt_hist_init();
   mutt_hist_read_file();
 
 #ifdef USE_NOTMUCH
-  if (C_VirtualSpoolfile)
+  const bool c_virtual_spool_file =
+      cs_subset_bool(NeoMutt->sub, "virtual_spool_file");
+  if (c_virtual_spool_file)
   {
     /* Find the first virtual folder and open it */
     struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
     neomutt_mailboxlist_get_all(&ml, NeoMutt, MUTT_NOTMUCH);
     struct MailboxNode *mp = STAILQ_FIRST(&ml);
     if (mp)
-      cs_str_string_set(cs, "spoolfile", mailbox_path(mp->mailbox), NULL);
+      cs_str_string_set(cs, "spool_file", mailbox_path(mp->mailbox), NULL);
     neomutt_mailboxlist_clear(&ml);
   }
 #endif
@@ -1017,11 +1014,11 @@ enum CommandResult mutt_parse_rc_buffer(struct Buffer *line,
     {
       if (mutt_str_equal(token->data, cmd[i].name))
       {
+        mutt_debug(LL_NOTIFY, "NT_COMMAND: %s\n", cmd[i].name);
         rc = cmd[i].parse(token, line, cmd[i].data, err);
-        if (rc != MUTT_CMD_SUCCESS)
-        {              /* -1 Error, +1 Finish */
+        if ((rc == MUTT_CMD_ERROR) || (rc == MUTT_CMD_FINISH))
           goto finish; /* Propagate return code */
-        }
+
         notify_send(NeoMutt->notify, NT_COMMAND, i, (void *) cmd);
         break; /* Continue with next command */
       }
@@ -1252,9 +1249,9 @@ int mutt_command_complete(char *buf, size_t buflen, int pos, int numtabs)
   }
   else if (mutt_str_startswith(buf, "exec"))
   {
-    const struct Binding *menu = km_get_table(CurrentMenu);
-
-    if (!menu && (CurrentMenu != MENU_PAGER))
+    const enum MenuType mtype = menu_get_current_type();
+    const struct Binding *menu = km_get_table(mtype);
+    if (!menu && (mtype != MENU_PAGER))
       menu = OpGeneric;
 
     pt++;
@@ -1268,7 +1265,7 @@ int mutt_command_complete(char *buf, size_t buflen, int pos, int numtabs)
       for (int num = 0; menu[num].name; num++)
         candidate(UserTyped, menu[num].name, Completed, sizeof(Completed));
       /* try the generic menu */
-      if ((Completed[0] == '\0') && (CurrentMenu != MENU_PAGER))
+      if ((Completed[0] == '\0') && (mtype != MENU_PAGER))
       {
         menu = OpGeneric;
         for (int num = 0; menu[num].name; num++)

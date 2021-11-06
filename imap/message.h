@@ -24,29 +24,7 @@
 #ifndef MUTT_IMAP_MESSAGE_H
 #define MUTT_IMAP_MESSAGE_H
 
-#include <stdbool.h>
 #include <time.h>
-
-/**
- * struct ImapEmailData - IMAP-specific Email data - @extends Email
- */
-struct ImapEmailData
-{
-  /* server-side flags */
-  bool read : 1;
-  bool old : 1;
-  bool deleted : 1;
-  bool flagged : 1;
-  bool replied : 1;
-
-  bool parsed : 1;
-
-  unsigned int uid; ///< 32-bit Message UID
-  unsigned int msn; ///< Message Sequence Number
-
-  char *flags_system;
-  char *flags_remote;
-};
 
 /**
  * struct ImapHeader - IMAP-specific header

@@ -1,6 +1,6 @@
 /**
  * @file
- * Define wrapper functions around Curses/Slang
+ * Define wrapper functions around Curses
  *
  * @authors
  * Copyright (C) 1996-2000,2012 Michael R. Elkins <me@mutt.org>
@@ -23,15 +23,14 @@
  */
 
 /**
- * @page gui_curses Wrapper functions around Curses/Slang
+ * @page gui_curses Wrapper around Curses
  *
- * Wrapper functions around Curses/Slang
+ * Wrapper functions around Curses
  */
 
 #include "config.h"
 #include "mutt_curses.h"
-#include "color.h"
-#include "mutt_globals.h"
+#include "color/lib.h"
 
 /**
  * mutt_curses_set_attr - Set the attributes for text
@@ -39,36 +38,22 @@
  */
 void mutt_curses_set_attr(int attr)
 {
-#ifdef HAVE_BKGDSET
   bkgdset(attr | ' ');
-#else
-  attrset(attr);
-#endif
 }
 
 /**
- * mutt_curses_set_color - Set the current colour for text
+ * mutt_curses_set_color_by_id - Set the current colour for text
  * @param color Colour to set, e.g. #MT_COLOR_HEADER
  *
  * If the system has bkgdset() use it rather than attrset() so that the clr*()
  * functions will properly set the background attributes all the way to the
  * right column.
  */
-void mutt_curses_set_color(enum ColorId color)
+void mutt_curses_set_color_by_id(enum ColorId color)
 {
-  if (!Colors)
-    return;
-#ifdef HAVE_BKGDSET
-  if (Colors->defs[color] != 0)
-    bkgdset(Colors->defs[color] | ' ');
-  else
-    bkgdset(Colors->defs[MT_COLOR_NORMAL] | ' ');
-#else
-  if (Colors->defs[color] != 0)
-    attrset(Colors->defs[color]);
-  else
-    attrset(Colors->defs[MT_COLOR_NORMAL]);
-#endif
+  const int chosen = simple_colors_get(color);
+  const int normal = simple_colors_get(MT_COLOR_NORMAL);
+  bkgdset((chosen ? chosen : normal) | ' ');
 }
 
 /**
@@ -77,7 +62,6 @@ void mutt_curses_set_color(enum ColorId color)
  */
 void mutt_curses_set_cursor(enum MuttCursorState state)
 {
-#if (defined(USE_SLANG_CURSES) || defined(HAVE_CURS_SET))
   static int SavedCursor = MUTT_CURSOR_VISIBLE;
 
   if (state == MUTT_CURSOR_RESTORE_LAST)
@@ -90,5 +74,4 @@ void mutt_curses_set_cursor(enum MuttCursorState state)
     if (state == MUTT_CURSOR_VISIBLE)
       curs_set(MUTT_CURSOR_VERY_VISIBLE);
   }
-#endif
 }

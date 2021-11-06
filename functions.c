@@ -93,7 +93,7 @@ const struct Binding OpGeneric[] = { /* map: generic */
   { "tag-prefix-cond", OP_TAG_PREFIX_COND,      NULL },
   { "top-page",        OP_TOP_PAGE,             "H" },
   { "what-key",        OP_WHAT_KEY,             NULL },
-  { NULL,              0,                       NULL },
+  { NULL, 0, NULL },
 };
 
 /**
@@ -170,6 +170,8 @@ const struct Binding OpMain[] = { /* map: index */
   { "limit-current-thread",      OP_LIMIT_CURRENT_THREAD,           NULL },
   { "link-threads",              OP_MAIN_LINK_THREADS,              "&" },
   { "list-reply",                OP_LIST_REPLY,                     "L" },
+  { "list-subscribe",            OP_LIST_SUBSCRIBE,                 NULL },
+  { "list-unsubscribe",          OP_LIST_UNSUBSCRIBE,               NULL },
   { "mail",                      OP_MAIL,                           "m" },
   { "mail-key",                  OP_MAIL_KEY,                       "\033k" },  // <Alt-k>
   { "mailbox-list",              OP_MAILBOX_LIST,                   "." },
@@ -248,12 +250,13 @@ const struct Binding OpMain[] = { /* map: index */
   { "vfolder-from-query-readonly", OP_MAIN_VFOLDER_FROM_QUERY_READONLY, NULL },
   { "vfolder-window-backward",   OP_MAIN_WINDOWED_VFOLDER_BACKWARD, NULL },
   { "vfolder-window-forward",    OP_MAIN_WINDOWED_VFOLDER_FORWARD,  NULL },
+  { "vfolder-window-reset",      OP_MAIN_WINDOWED_VFOLDER_RESET,    NULL },
 #endif
   { "view-attachments",          OP_VIEW_ATTACHMENTS,               "v" },
   { "view-raw-message",          OP_VIEW_RAW_MESSAGE,               NULL },
   /* This is deprecated.  Leave it last so it doesn't show up in the help. */
   { "buffy-list",                OP_MAILBOX_LIST,                   NULL },
-  { NULL,                        0,                                 NULL },
+  { NULL, 0, NULL },
 };
 
 /**
@@ -319,6 +322,8 @@ const struct Binding OpPager[] = { /* map: pager */
   { "jump",                      OP_JUMP,                         NULL },
   { "link-threads",              OP_MAIN_LINK_THREADS,            "&" },
   { "list-reply",                OP_LIST_REPLY,                   "L" },
+  { "list-subscribe",            OP_LIST_SUBSCRIBE,               NULL },
+  { "list-unsubscribe",          OP_LIST_UNSUBSCRIBE,             NULL },
   { "mail",                      OP_MAIL,                         "m" },
   { "mail-key",                  OP_MAIL_KEY,                     "\033k" },    // <Alt-k>
   { "mailbox-list",              OP_MAILBOX_LIST,                 "." },
@@ -332,7 +337,7 @@ const struct Binding OpPager[] = { /* map: pager */
   { "next-line",                 OP_NEXT_LINE,                    "\r" },       // <Return>
   { "next-new",                  OP_MAIN_NEXT_NEW,                NULL },
   { "next-new-then-unread",      OP_MAIN_NEXT_NEW_THEN_UNREAD,    "\t" },       // <Tab>
-  { "next-page",                 OP_NEXT_PAGE,                    " " },
+  { "next-page",                 OP_NEXT_PAGE,                    " " },        // <Space>
   { "next-subthread",            OP_MAIN_NEXT_SUBTHREAD,          "\033n" },    // <Alt-n>
   { "next-thread",               OP_MAIN_NEXT_THREAD,             "\016" },     // <Ctrl-N>
   { "next-undeleted",            OP_MAIN_NEXT_UNDELETED,          "j" },
@@ -410,7 +415,7 @@ const struct Binding OpPager[] = { /* map: pager */
   { "what-key",                  OP_WHAT_KEY,                     NULL },
   /* This is deprecated.  Leave it last so it doesn't show up in the help. */
   { "buffy-list",                OP_MAILBOX_LIST,                 NULL },
-  { NULL,                        0,                               NULL },
+  { NULL, 0, NULL },
 };
 
 /**
@@ -436,6 +441,8 @@ const struct Binding OpAttach[] = { /* map: attachment */
   { "group-chat-reply",      OP_GROUP_CHAT_REPLY,            NULL },
   { "group-reply",           OP_GROUP_REPLY,                 "g" },
   { "list-reply",            OP_LIST_REPLY,                  "L" },
+  { "list-subscribe",        OP_LIST_SUBSCRIBE,              NULL },
+  { "list-unsubscribe",      OP_LIST_UNSUBSCRIBE,            NULL },
   { "pipe-entry",            OP_PIPE,                        "|" },
   { "print-entry",           OP_PRINT,                       "p" },
   { "reply",                 OP_REPLY,                       "r" },
@@ -447,7 +454,7 @@ const struct Binding OpAttach[] = { /* map: attachment */
   { "view-mailcap",          OP_ATTACH_VIEW_MAILCAP,         "m" },
   { "view-pager",            OP_ATTACH_VIEW_PAGER,           NULL },
   { "view-text",             OP_ATTACH_VIEW_TEXT,            "T" },
-  { NULL,                    0,                              NULL },
+  { NULL, 0, NULL },
 };
 
 /**
@@ -517,7 +524,7 @@ const struct Binding OpCompose[] = { /* map: compose */
   { "view-attach",           OP_VIEW_ATTACH,                 "\n" },            // <Enter>
   { "view-attach",           OP_VIEW_ATTACH,                 "\r" },            // <Return>
   { "write-fcc",             OP_COMPOSE_WRITE_MESSAGE,       "w" },
-  { NULL,                    0,                              NULL },
+  { NULL, 0, NULL },
 };
 
 /**
@@ -526,7 +533,7 @@ const struct Binding OpCompose[] = { /* map: compose */
 const struct Binding OpPost[] = { /* map: postpone */
   { "delete-entry",          OP_DELETE,                      "d" },
   { "undelete-entry",        OP_UNDELETE,                    "u" },
-  { NULL,                    0,                              NULL },
+  { NULL, 0, NULL },
 };
 
 /**
@@ -538,7 +545,7 @@ const struct Binding OpAlias[] = { /* map: alias */
   { "sort-alias",            OP_SORT,                        "o" },
   { "sort-alias-reverse",    OP_SORT_REVERSE,                "O" },
   { "undelete-entry",        OP_UNDELETE,                    "u" },
-  { NULL,                    0,                              NULL },
+  { NULL, 0, NULL },
 };
 
 /**
@@ -588,10 +595,10 @@ const struct Binding OpBrowser[] = { /* map: browser */
 #ifdef USE_NNTP
   { "unsubscribe-pattern",   OP_UNSUBSCRIBE_PATTERN,         NULL },
 #endif
-  { "view-file",             OP_BROWSER_VIEW_FILE,           " " },
+  { "view-file",             OP_BROWSER_VIEW_FILE,           " " },             // <Space>
   /* This is deprecated.  Leave it last so it doesn't show up in the help. */
   { "buffy-list",            OP_MAILBOX_LIST,                NULL },
-  { NULL,                    0,                              NULL },
+  { NULL, 0, NULL },
 };
 
 /**
@@ -605,7 +612,7 @@ const struct Binding OpQuery[] = { /* map: query */
   { "query-append",          OP_QUERY_APPEND,                "A" },
   { "sort",                  OP_SORT,                        "o" },
   { "sort-reverse",          OP_SORT_REVERSE,                "O" },
-  { NULL,                    0,                              NULL },
+  { NULL, 0, NULL },
 };
 
 /**
@@ -631,13 +638,13 @@ const struct Binding OpEditor[] = { /* map: editor */
   { "kill-eow",              OP_EDITOR_KILL_EOW,             "\033d" },         // <Alt-d>
   { "kill-line",             OP_EDITOR_KILL_LINE,            "\025" },          // <Ctrl-U>
   { "kill-word",             OP_EDITOR_KILL_WORD,            "\027" },          // <Ctrl-W>
-  { "mailbox-cycle",         OP_EDITOR_MAILBOX_CYCLE,        " " },
+  { "mailbox-cycle",         OP_EDITOR_MAILBOX_CYCLE,        " " },             // <Space>
   { "quote-char",            OP_EDITOR_QUOTE_CHAR,           "\026" },          // <Ctrl-V>
   { "transpose-chars",       OP_EDITOR_TRANSPOSE_CHARS,      NULL },
   { "upcase-word",           OP_EDITOR_UPCASE_WORD,          "\033u" },         // <Alt-u>
   /* This is deprecated.  Leave it last so it doesn't show up in the help. */
   { "buffy-cycle",           OP_EDITOR_MAILBOX_CYCLE,        NULL },
-  { NULL,                    0,                              NULL },
+  { NULL, 0, NULL },
 };
 
 /**
@@ -646,7 +653,7 @@ const struct Binding OpEditor[] = { /* map: editor */
 const struct Binding OpPgp[] = { /* map: pgp */
   { "verify-key",            OP_VERIFY_KEY,                  "c" },
   { "view-name",             OP_VIEW_ID,                     "%" },
-  { NULL,                    0,                              NULL },
+  { NULL, 0, NULL },
 };
 
 /**
@@ -657,7 +664,7 @@ const struct Binding OpSmime[] = { /* map: smime */
   { "verify-key",            OP_VERIFY_KEY,                  "c" },
   { "view-name",             OP_VIEW_ID,                     "%" },
 #endif
-  { NULL,                    0,                              NULL },
+  { NULL, 0, NULL },
 };
 
 #ifdef MIXMASTER
@@ -672,7 +679,7 @@ const struct Binding OpMix[] = { /* map: mixmaster */
   { "chain-prev",            OP_MIX_CHAIN_PREV,              "<left>" },
   { "delete",                OP_MIX_DELETE,                  "d" },
   { "insert",                OP_MIX_INSERT,                  "i" },
-  { NULL,                    0,                              NULL },
+  { NULL, 0, NULL },
 };
 #endif /* MIXMASTER */
 
@@ -685,7 +692,7 @@ const struct Binding OpAutocryptAcct[] = { /* map: autocrypt account */
   { "delete-account",        OP_AUTOCRYPT_DELETE_ACCT,       "D" },
   { "toggle-active",         OP_AUTOCRYPT_TOGGLE_ACTIVE,     "a" },
   { "toggle-prefer-encrypt", OP_AUTOCRYPT_TOGGLE_PREFER,     "p" },
-  { NULL,                    0,                              NULL }
+  { NULL, 0, NULL }
 };
 #endif
 

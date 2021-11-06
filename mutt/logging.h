@@ -48,7 +48,10 @@ enum LogLevel
 };
 
 /**
- * typedef log_dispatcher_t - Prototype for a logging function
+ * @defgroup logging_api Logging API
+ *
+ * Prototype for a Logging Function
+ *
  * @param stamp    Unix time (optional)
  * @param file     Source file
  * @param line     Source line
@@ -78,11 +81,11 @@ struct LogLine
 };
 STAILQ_HEAD(LogLineList, LogLine);
 
-#define mutt_debug(LEVEL, ...) MuttLogger(0, __FILE__, __LINE__, __func__, LEVEL,      __VA_ARGS__)
-#define mutt_warning(...)      MuttLogger(0, __FILE__, __LINE__, __func__, LL_WARNING, __VA_ARGS__)
-#define mutt_message(...)      MuttLogger(0, __FILE__, __LINE__, __func__, LL_MESSAGE, __VA_ARGS__)
-#define mutt_error(...)        MuttLogger(0, __FILE__, __LINE__, __func__, LL_ERROR,   __VA_ARGS__)
-#define mutt_perror(...)       MuttLogger(0, __FILE__, __LINE__, __func__, LL_PERROR,  __VA_ARGS__)
+#define mutt_debug(LEVEL, ...) MuttLogger(0, __FILE__, __LINE__, __func__, LEVEL,      __VA_ARGS__) ///< @ingroup logging_api
+#define mutt_warning(...)      MuttLogger(0, __FILE__, __LINE__, __func__, LL_WARNING, __VA_ARGS__) ///< @ingroup logging_api
+#define mutt_message(...)      MuttLogger(0, __FILE__, __LINE__, __func__, LL_MESSAGE, __VA_ARGS__) ///< @ingroup logging_api
+#define mutt_error(...)        MuttLogger(0, __FILE__, __LINE__, __func__, LL_ERROR,   __VA_ARGS__) ///< @ingroup logging_api
+#define mutt_perror(...)       MuttLogger(0, __FILE__, __LINE__, __func__, LL_PERROR,  __VA_ARGS__) ///< @ingroup logging_api
 
 int  log_disp_file    (time_t stamp, const char *file, int line, const char *function, enum LogLevel level, ...);
 int  log_disp_null    (time_t stamp, const char *file, int line, const char *function, enum LogLevel level, ...);

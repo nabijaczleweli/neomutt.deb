@@ -21,7 +21,7 @@
  */
 
 /**
- * @page email_tags Driver based email tags
+ * @page email_tags Email tags
  *
  * Driver based email tags
  */
@@ -30,10 +30,9 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
+#include "core/lib.h"
 #include "tags.h"
-
-/* These Config Variables are only used in email/tags.c */
-struct Slist *C_HiddenTags; ///< Config: Tags that shouldn't be displayed on screen
 
 struct HashTable *TagTransforms; ///< Lookup table of alternative tag names
 
@@ -72,24 +71,28 @@ static char *driver_tags_getter(struct TagList *head, bool show_hidden,
 
 /**
  * driver_tags_add - Add a tag to header
- * @param[in] list List of tags
- * @param[in] new_tag string representing the new tag
+ * @param[in] list    List of tags
+ * @param[in] new_tag String representing the new tag
  *
  * Add a tag to the header tags
+ *
+ * @note The ownership of the string is passed to the TagList structure
  */
-static void driver_tags_add(struct TagList *list, char *new_tag)
+void driver_tags_add(struct TagList *list, char *new_tag)
 {
   char *new_tag_transformed = mutt_hash_find(TagTransforms, new_tag);
 
   struct Tag *tn = mutt_mem_calloc(1, sizeof(struct Tag));
-  tn->name = mutt_str_dup(new_tag);
+  tn->name = new_tag;
   tn->hidden = false;
   if (new_tag_transformed)
     tn->transformed = mutt_str_dup(new_tag_transformed);
 
   /* filter out hidden tags */
-  if (C_HiddenTags)
-    if (mutt_list_find(&C_HiddenTags->head, new_tag))
+  const struct Slist *c_hidden_tags =
+      cs_subset_slist(NeoMutt->sub, "hidden_tags");
+  if (c_hidden_tags)
+    if (mutt_list_find(&c_hidden_tags->head, new_tag))
       tn->hidden = true;
 
   STAILQ_INSERT_TAIL(list, tn, entries);
@@ -196,7 +199,7 @@ bool driver_tags_replace(struct TagList *head, char *tags)
     {
       driver_tags_add(head, np->data);
     }
-    mutt_list_free(&hsplit);
+    mutt_list_clear(&hsplit);
   }
   return true;
 }

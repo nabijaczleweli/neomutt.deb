@@ -161,6 +161,8 @@
   _fmt(OP_LAST_ENTRY,                     N_("move to the last entry")) \
   _fmt(OP_LIMIT_CURRENT_THREAD,           N_("limit view to current thread")) \
   _fmt(OP_LIST_REPLY,                     N_("reply to specified mailing list")) \
+  _fmt(OP_LIST_SUBSCRIBE,                 N_("subscribe to a mailing list")) \
+  _fmt(OP_LIST_UNSUBSCRIBE,               N_("unsubscribe from a mailing list")) \
   _fmt(OP_LOAD_ACTIVE,                    N_("load list of all newsgroups from NNTP server")) \
   _fmt(OP_MACRO,                          N_("execute a macro")) \
   _fmt(OP_MAIL,                           N_("compose a new mail message")) \
@@ -213,7 +215,7 @@
   _fmt(OP_PAGER_BOTTOM,                   N_("jump to the bottom of the message")) \
   _fmt(OP_PAGER_HIDE_QUOTED,              N_("toggle display of quoted text")) \
   _fmt(OP_PAGER_SKIP_QUOTED,              N_("skip beyond quoted text")) \
-  _fmt(OP_PAGER_SKIP_HEADERS,             N_("skip beyond headers")) \
+  _fmt(OP_PAGER_SKIP_HEADERS,             N_("jump to first line after headers")) \
   _fmt(OP_PAGER_TOP,                      N_("jump to the top of the message")) \
   _fmt(OP_PIPE,                           N_("pipe message/attachment to a shell command")) \
   _fmt(OP_POST,                           N_("post message to newsgroup")) \
@@ -291,7 +293,8 @@
   _fmt(OP_MAIN_VFOLDER_FROM_QUERY,        N_("generate virtual folder from query")) \
   _fmt(OP_MAIN_VFOLDER_FROM_QUERY_READONLY, N_("generate a read-only virtual folder from query")) \
   _fmt(OP_MAIN_WINDOWED_VFOLDER_BACKWARD, N_("shifts virtual folder time window backwards")) \
-  _fmt(OP_MAIN_WINDOWED_VFOLDER_FORWARD,  N_("shifts virtual folder time window forwards"))
+  _fmt(OP_MAIN_WINDOWED_VFOLDER_FORWARD,  N_("shifts virtual folder time window forwards")) \
+  _fmt(OP_MAIN_WINDOWED_VFOLDER_RESET,    N_("resets virtual folder time window to the present"))
 #else
 #define OPS_NOTMUCH(_)
 #endif
@@ -331,6 +334,11 @@
   OPS_SMIME(_fmt) \
   OPS_CRYPT(_fmt) \
 
+/**
+ * enum MuttOps - All NeoMutt Opcodes
+ *
+ * Opcodes, e.g. OP_TOGGLE_NEW
+ */
 enum MuttOps {
 #define DEFINE_OPS(opcode, help_string) opcode,
   OPS(DEFINE_OPS)

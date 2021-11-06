@@ -34,115 +34,93 @@
 #include <string.h>
 #include "mutt/lib.h"
 #include "address/lib.h"
+#include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
 #include "alias/lib.h"
 #include "sort.h"
-#include "context.h"
-#include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "mutt_thread.h"
+#include "mx.h"
 #include "options.h"
 #include "score.h"
 #ifdef USE_NNTP
 #include "nntp/lib.h"
 #endif
 
-/* These Config Variables are only used in sort.c */
-bool C_ReverseAlias; ///< Config: Display the alias in the index, rather than the message's sender
-
-/* function to use as discriminator when normal sort method is equal */
-static sort_t AuxSort = NULL;
+/**
+ * struct EmailCompare - Context for compare_email_shim()
+ */
+struct EmailCompare
+{
+  enum MailboxType type; ///< Current mailbox type
+  short sort;            ///< Primary sort
+  short sort_aux;        ///< Secondary sort
+};
 
 /**
- * perform_auxsort - Compare two emails using the auxiliary sort method
- * @param retval Result of normal sort method
- * @param a      First email
- * @param b      Second email
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * compare_email_shim - qsort_r() comparator to drive mutt_compare_emails
+ * @param a   Pointer to first email
+ * @param b   Pointer to second email
+ * @param arg EmailCompare with needed context
+ * @retval <0 a precedes b
+ * @retval  0 a identical to b (should not happen in practice)
+ * @retval >0 b precedes a
  */
-int perform_auxsort(int retval, const void *a, const void *b)
+static int compare_email_shim(const void *a, const void *b, void *arg)
 {
-  /* If the items compared equal by the main sort
-   * and we're not already doing an 'aux' sort...  */
-  if ((retval == 0) && AuxSort && !OptAuxSort)
-  {
-    OptAuxSort = true;
-    retval = AuxSort(a, b);
-    OptAuxSort = false;
-    if (retval != 0)
-      return retval;
-  }
-  /* If the items still match, use their index positions
-   * to maintain a stable sort order */
-  if (retval == 0)
-  {
-    retval = (*((struct Email const *const *) a))->index -
-             (*((struct Email const *const *) b))->index;
-  }
-  return retval;
+  const struct Email *ea = *(struct Email const *const *) a;
+  const struct Email *eb = *(struct Email const *const *) b;
+  const struct EmailCompare *cmp = arg;
+  return mutt_compare_emails(ea, eb, cmp->type, cmp->sort, cmp->sort_aux);
 }
 
 /**
- * compare_score - Compare two emails using their scores - Implements ::sort_t
+ * compare_score - Compare two emails using their scores - Implements ::sort_mail_t - @ingroup sort_mail_api
  */
-static int compare_score(const void *a, const void *b)
+static int compare_score(const struct Email *a, const struct Email *b, bool reverse)
 {
-  struct Email const *const *pa = (struct Email const *const *) a;
-  struct Email const *const *pb = (struct Email const *const *) b;
-  int result = (*pb)->score - (*pa)->score; /* note that this is reverse */
-  result = perform_auxsort(result, a, b);
-  return SORT_CODE(result);
+  int result = b->score - a->score; /* note that this is reverse */
+  return reverse ? -result : result;
 }
 
 /**
- * compare_size - Compare the size of two emails - Implements ::sort_t
+ * compare_size - Compare the size of two emails - Implements ::sort_mail_t - @ingroup sort_mail_api
  */
-static int compare_size(const void *a, const void *b)
+static int compare_size(const struct Email *a, const struct Email *b, bool reverse)
 {
-  struct Email const *const *pa = (struct Email const *const *) a;
-  struct Email const *const *pb = (struct Email const *const *) b;
-  int result = (*pa)->body->length - (*pb)->body->length;
-  result = perform_auxsort(result, a, b);
-  return SORT_CODE(result);
+  int result = a->body->length - b->body->length;
+  return reverse ? -result : result;
 }
 
 /**
- * compare_date_sent - Compare the sent date of two emails - Implements ::sort_t
+ * compare_date_sent - Compare the sent date of two emails - Implements ::sort_mail_t - @ingroup sort_mail_api
  */
-static int compare_date_sent(const void *a, const void *b)
+static int compare_date_sent(const struct Email *a, const struct Email *b, bool reverse)
 {
-  struct Email const *const *pa = (struct Email const *const *) a;
-  struct Email const *const *pb = (struct Email const *const *) b;
-  int result = (*pa)->date_sent - (*pb)->date_sent;
-  result = perform_auxsort(result, a, b);
-  return SORT_CODE(result);
+  int result = a->date_sent - b->date_sent;
+  return reverse ? -result : result;
 }
 
 /**
- * compare_subject - Compare the subject of two emails - Implements ::sort_t
+ * compare_subject - Compare the subject of two emails - Implements ::sort_mail_t - @ingroup sort_mail_api
  */
-static int compare_subject(const void *a, const void *b)
+static int compare_subject(const struct Email *a, const struct Email *b, bool reverse)
 {
-  struct Email const *const *pa = (struct Email const *const *) a;
-  struct Email const *const *pb = (struct Email const *const *) b;
   int rc;
 
-  if (!(*pa)->env->real_subj)
+  if (!a->env->real_subj)
   {
-    if (!(*pb)->env->real_subj)
-      rc = compare_date_sent(pa, pb);
+    if (!b->env->real_subj)
+      rc = compare_date_sent(a, b, false);
     else
       rc = -1;
   }
-  else if (!(*pb)->env->real_subj)
+  else if (!b->env->real_subj)
     rc = 1;
   else
-    rc = mutt_istr_cmp((*pa)->env->real_subj, (*pb)->env->real_subj);
-  rc = perform_auxsort(rc, a, b);
-  return SORT_CODE(rc);
+    rc = mutt_istr_cmp(a->env->real_subj, b->env->real_subj);
+  return reverse ? -rc : rc;
 }
 
 /**
@@ -161,7 +139,8 @@ const char *mutt_get_name(const struct Address *a)
 
   if (a)
   {
-    if (C_ReverseAlias && (ali = alias_reverse_lookup(a)) && ali->personal)
+    const bool c_reverse_alias = cs_subset_bool(NeoMutt->sub, "reverse_alias");
+    if (c_reverse_alias && (ali = alias_reverse_lookup(a)) && ali->personal)
       return ali->personal;
     if (a->personal)
       return a->personal;
@@ -173,68 +152,54 @@ const char *mutt_get_name(const struct Address *a)
 }
 
 /**
- * compare_to - Compare the 'to' fields of two emails - Implements ::sort_t
+ * compare_to - Compare the 'to' fields of two emails - Implements ::sort_mail_t - @ingroup sort_mail_api
  */
-static int compare_to(const void *a, const void *b)
+static int compare_to(const struct Email *a, const struct Email *b, bool reverse)
 {
-  struct Email const *const *ppa = (struct Email const *const *) a;
-  struct Email const *const *ppb = (struct Email const *const *) b;
   char fa[128];
 
-  mutt_str_copy(fa, mutt_get_name(TAILQ_FIRST(&(*ppa)->env->to)), sizeof(fa));
-  const char *fb = mutt_get_name(TAILQ_FIRST(&(*ppb)->env->to));
+  mutt_str_copy(fa, mutt_get_name(TAILQ_FIRST(&a->env->to)), sizeof(fa));
+  const char *fb = mutt_get_name(TAILQ_FIRST(&b->env->to));
   int result = mutt_istrn_cmp(fa, fb, sizeof(fa));
-  result = perform_auxsort(result, a, b);
-  return SORT_CODE(result);
+  return reverse ? -result : result;
 }
 
 /**
- * compare_from - Compare the 'from' fields of two emails - Implements ::sort_t
+ * compare_from - Compare the 'from' fields of two emails - Implements ::sort_mail_t - @ingroup sort_mail_api
  */
-static int compare_from(const void *a, const void *b)
+static int compare_from(const struct Email *a, const struct Email *b, bool reverse)
 {
-  struct Email const *const *ppa = (struct Email const *const *) a;
-  struct Email const *const *ppb = (struct Email const *const *) b;
   char fa[128];
 
-  mutt_str_copy(fa, mutt_get_name(TAILQ_FIRST(&(*ppa)->env->from)), sizeof(fa));
-  const char *fb = mutt_get_name(TAILQ_FIRST(&(*ppb)->env->from));
+  mutt_str_copy(fa, mutt_get_name(TAILQ_FIRST(&a->env->from)), sizeof(fa));
+  const char *fb = mutt_get_name(TAILQ_FIRST(&b->env->from));
   int result = mutt_istrn_cmp(fa, fb, sizeof(fa));
-  result = perform_auxsort(result, a, b);
-  return SORT_CODE(result);
+  return reverse ? -result : result;
 }
 
 /**
- * compare_date_received - Compare the date received of two emails - Implements ::sort_t
+ * compare_date_received - Compare the date received of two emails - Implements ::sort_mail_t - @ingroup sort_mail_api
  */
-static int compare_date_received(const void *a, const void *b)
+static int compare_date_received(const struct Email *a, const struct Email *b, bool reverse)
 {
-  struct Email const *const *pa = (struct Email const *const *) a;
-  struct Email const *const *pb = (struct Email const *const *) b;
-  int result = (*pa)->received - (*pb)->received;
-  result = perform_auxsort(result, a, b);
-  return SORT_CODE(result);
+  int result = a->received - b->received;
+  return reverse ? -result : result;
 }
 
 /**
- * compare_order - Restore the 'unsorted' order of emails - Implements ::sort_t
+ * compare_order - Restore the 'unsorted' order of emails - Implements ::sort_mail_t - @ingroup sort_mail_api
  */
-static int compare_order(const void *a, const void *b)
+static int compare_order(const struct Email *a, const struct Email *b, bool reverse)
 {
-  struct Email const *const *ea = (struct Email const *const *) a;
-  struct Email const *const *eb = (struct Email const *const *) b;
-
-  /* no need to auxsort because you will never have equality here */
-  return SORT_CODE((*ea)->index - (*eb)->index);
+  int result = a->index - b->index;
+  return reverse ? -result : result;
 }
 
 /**
- * compare_spam - Compare the spam values of two emails - Implements ::sort_t
+ * compare_spam - Compare the spam values of two emails - Implements ::sort_mail_t - @ingroup sort_mail_api
  */
-static int compare_spam(const void *a, const void *b)
+static int compare_spam(const struct Email *a, const struct Email *b, bool reverse)
 {
-  struct Email const *const *ppa = (struct Email const *const *) a;
-  struct Email const *const *ppb = (struct Email const *const *) b;
   char *aptr = NULL, *bptr = NULL;
   int ahas, bhas;
   int result = 0;
@@ -242,87 +207,78 @@ static int compare_spam(const void *a, const void *b)
 
   /* Firstly, require spam attributes for both msgs */
   /* to compare. Determine which msgs have one.     */
-  ahas = (*ppa)->env && !mutt_buffer_is_empty(&(*ppa)->env->spam);
-  bhas = (*ppb)->env && !mutt_buffer_is_empty(&(*ppb)->env->spam);
+  ahas = a->env && !mutt_buffer_is_empty(&a->env->spam);
+  bhas = b->env && !mutt_buffer_is_empty(&b->env->spam);
 
   /* If one msg has spam attr but other does not, sort the one with first. */
   if (ahas && !bhas)
-    return SORT_CODE(1);
+    return reverse ? -1 : 1;
   if (!ahas && bhas)
-    return SORT_CODE(-1);
+    return reverse ? 1 : -1;
 
   /* Else, if neither has a spam attr, presume equality. Fall back on aux. */
   if (!ahas && !bhas)
-  {
-    result = perform_auxsort(result, a, b);
-    return SORT_CODE(result);
-  }
+    return 0;
 
   /* Both have spam attrs. */
 
   /* preliminary numeric examination */
-  difference =
-      (strtod((*ppa)->env->spam.data, &aptr) - strtod((*ppb)->env->spam.data, &bptr));
+  difference = (strtod(a->env->spam.data, &aptr) - strtod(b->env->spam.data, &bptr));
 
   /* map double into comparison (-1, 0, or 1) */
   result = ((difference < 0.0) ? -1 : (difference > 0.0) ? 1 : 0);
 
   /* If either aptr or bptr is equal to data, there is no numeric    */
   /* value for that spam attribute. In this case, compare lexically. */
-  if ((aptr == (*ppa)->env->spam.data) || (bptr == (*ppb)->env->spam.data))
-    return SORT_CODE(strcmp(aptr, bptr));
+  if ((aptr == a->env->spam.data) || (bptr == b->env->spam.data))
+  {
+    result = strcmp(aptr, bptr);
+    return reverse ? -result : result;
+  }
 
   /* Otherwise, we have numeric value for both attrs. If these values */
   /* are equal, then we first fall back upon string comparison, then  */
   /* upon auxiliary sort.                                             */
   if (result == 0)
-  {
     result = strcmp(aptr, bptr);
-    result = perform_auxsort(result, a, b);
-  }
-
-  return SORT_CODE(result);
+  return reverse ? -result : result;
 }
 
 /**
- * compare_label - Compare the labels of two emails - Implements ::sort_t
+ * compare_label - Compare the labels of two emails - Implements ::sort_mail_t - @ingroup sort_mail_api
  */
-static int compare_label(const void *a, const void *b)
+static int compare_label(const struct Email *a, const struct Email *b, bool reverse)
 {
-  struct Email const *const *ppa = (struct Email const *const *) a;
-  struct Email const *const *ppb = (struct Email const *const *) b;
   int ahas, bhas, result = 0;
 
   /* As with compare_spam, not all messages will have the x-label
    * property.  Blank X-Labels are treated as null in the index
    * display, so we'll consider them as null for sort, too.       */
-  ahas = (*ppa)->env && (*ppa)->env->x_label && *((*ppa)->env->x_label);
-  bhas = (*ppb)->env && (*ppb)->env->x_label && *((*ppb)->env->x_label);
+  ahas = a->env && a->env->x_label && *(a->env->x_label);
+  bhas = b->env && b->env->x_label && *(b->env->x_label);
 
   /* First we bias toward a message with a label, if the other does not. */
   if (ahas && !bhas)
-    return SORT_CODE(-1);
+    return reverse ? 1 : -1;
   if (!ahas && bhas)
-    return SORT_CODE(1);
+    return reverse ? -1 : 1;
 
   /* If neither has a label, use aux sort. */
   if (!ahas && !bhas)
-  {
-    result = perform_auxsort(result, a, b);
-    return SORT_CODE(result);
-  }
+    return 0;
 
   /* If both have a label, we just do a lexical compare. */
-  result = mutt_istr_cmp((*ppa)->env->x_label, (*ppb)->env->x_label);
-  return SORT_CODE(result);
+  result = mutt_istr_cmp(a->env->x_label, b->env->x_label);
+  return reverse ? -result : result;
 }
 
 /**
- * mutt_get_sort_func - Get the sort function for a given sort id
+ * get_sort_func - Get the sort function for a given sort id
  * @param method Sort type, see #SortType
- * @retval ptr sort function - Implements ::sort_t
+ * @param type   The Mailbox type
+ * @retval ptr sort function - Implements ::sort_mail_t
  */
-sort_t mutt_get_sort_func(enum SortType method)
+static sort_mail_t get_sort_func(enum SortType method, enum MailboxType type)
 {
   switch (method)
   {
@@ -334,7 +290,7 @@ sort_t mutt_get_sort_func(enum SortType method)
       return compare_label;
     case SORT_ORDER:
 #ifdef USE_NNTP
-      if (ctx_mailbox(Context) && (Context->mailbox->type == MUTT_NNTP))
+      if (type == MUTT_NNTP)
         return nntp_compare_order;
       else
 #endif
@@ -352,9 +308,42 @@ sort_t mutt_get_sort_func(enum SortType method)
     case SORT_TO:
       return compare_to;
     default:
+      mutt_error(_("Could not find sorting function [report this bug]"));
       return NULL;
   }
   /* not reached */
+}
+
+/**
+ * mutt_compare_emails - Compare two emails using up to two sort methods
+ * @param a        First email
+ * @param b        Second email
+ * @param type     Mailbox type
+ * @param sort     Primary sort to use (generally $sort)
+ * @param sort_aux Secondary sort (generally $sort_aux or SORT_ORDER)
+ * @retval <0 a precedes b
+ * @retval  0 a and b are identical (should not happen in practice)
+ * @retval >0 b precedes a
+ */
+int mutt_compare_emails(const struct Email *a, const struct Email *b,
+                        enum MailboxType type, short sort, short sort_aux)
+{
+  sort_mail_t func = get_sort_func(sort & SORT_MASK, type);
+  int retval = func(a, b, (sort & SORT_REVERSE) != 0);
+  if (retval == 0)
+  {
+    func = get_sort_func(sort_aux & SORT_MASK, type);
+    retval = func(a, b, (sort_aux & SORT_REVERSE) != 0);
+  }
+  if (retval == 0)
+  {
+    /* Fallback of last resort to preserve stable order; will only
+     * return 0 if a and b have the same index, which is probably a
+     * bug in the code. */
+    func = compare_order;
+    retval = func(a, b, false);
+  }
+  return retval;
 }
 
 /**
@@ -369,8 +358,6 @@ void mutt_sort_headers(struct Mailbox *m, struct ThreadsContext *threads,
 {
   if (!m || !m->emails[0])
     return;
-
-  sort_t sortfunc = NULL;
 
   OptNeedResort = false;
 
@@ -388,7 +375,8 @@ void mutt_sort_headers(struct Mailbox *m, struct ThreadsContext *threads,
   if (m->verbose)
     mutt_message(_("Sorting mailbox..."));
 
-  if (OptNeedRescore && C_Score)
+  const bool c_score = cs_subset_bool(NeoMutt->sub, "score");
+  if (OptNeedRescore && c_score)
   {
     for (int i = 0; i < m->msg_count; i++)
     {
@@ -409,30 +397,19 @@ void mutt_sort_headers(struct Mailbox *m, struct ThreadsContext *threads,
   if (init)
     mutt_clear_threads(threads);
 
-  if ((C_Sort & SORT_MASK) == SORT_THREADS)
+  const bool threaded = mutt_using_threads();
+  if (threaded)
   {
-    AuxSort = NULL;
-    /* if $sort_aux changed after the mailbox is sorted, then all the
-     * subthreads need to be resorted */
-    if (OptSortSubthreads)
-    {
-      int i = C_Sort;
-      C_Sort = C_SortAux;
-      mutt_sort_subthreads(threads, true);
-      C_Sort = i;
-      OptSortSubthreads = false;
-    }
     mutt_sort_threads(threads, init);
-  }
-  else if (!(sortfunc = mutt_get_sort_func(C_Sort & SORT_MASK)) ||
-           !(AuxSort = mutt_get_sort_func(C_SortAux & SORT_MASK)))
-  {
-    mutt_error(_("Could not find sorting function [report this bug]"));
-    return;
   }
   else
   {
-    qsort((void *) m->emails, m->msg_count, sizeof(struct Email *), sortfunc);
+    struct EmailCompare cmp;
+    cmp.type = mx_type(m);
+    cmp.sort = cs_subset_sort(NeoMutt->sub, "sort");
+    cmp.sort_aux = cs_subset_sort(NeoMutt->sub, "sort_aux");
+    mutt_qsort_r((void *) m->emails, m->msg_count, sizeof(struct Email *),
+                 compare_email_shim, &cmp);
   }
 
   /* adjust the virtual message numbers */
@@ -453,7 +430,7 @@ void mutt_sort_headers(struct Mailbox *m, struct ThreadsContext *threads,
   }
 
   /* re-collapse threads marked as collapsed */
-  if ((C_Sort & SORT_MASK) == SORT_THREADS)
+  if (threaded)
   {
     mutt_thread_collapse_collapsed(threads);
     *vsize = mutt_set_vnum(m);

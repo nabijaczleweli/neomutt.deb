@@ -40,9 +40,9 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "mutt_header.h"
+#include "index/lib.h"
 #include "ncrypt/lib.h"
 #include "send/lib.h"
-#include "index.h"
 #include "muttlib.h"
 #include "options.h"
 #include "protos.h"
@@ -92,11 +92,11 @@ static void label_ref_inc(struct Mailbox *m, char *label)
 }
 
 /**
- * label_message - add an X-Label: field
+ * label_message - Add an X-Label: field
  * @param[in]  m         Mailbox
  * @param[in]  e         Email
  * @param[out] new_label Set to true if this is a new label
- * @retval true If the label was added
+ * @retval true The label was added
  */
 static bool label_message(struct Mailbox *m, struct Email *e, char *new_label)
 {
@@ -136,8 +136,11 @@ int mutt_label_message(struct Mailbox *m, struct EmailList *el)
       mutt_str_copy(buf, en->email->env->x_label, sizeof(buf));
   }
 
-  if (mutt_get_field("Label: ", buf, sizeof(buf), MUTT_LABEL /* | MUTT_CLEAR */) != 0)
+  if (mutt_get_field("Label: ", buf, sizeof(buf), MUTT_LABEL /* | MUTT_CLEAR */,
+                     false, NULL, NULL) != 0)
+  {
     return 0;
+  }
 
   char *new_label = buf;
   SKIPWS(new_label);
@@ -172,7 +175,7 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
   int i;
   struct Envelope *n = NULL;
   time_t mtime;
-  struct stat st;
+  struct stat st = { 0 };
 
   struct Buffer *path = mutt_buffer_pool_get();
   mutt_buffer_mktemp(path);
@@ -216,8 +219,7 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
   }
 
   mutt_edit_file(editor, mutt_buffer_string(path));
-  stat(mutt_buffer_string(path), &st);
-  if (mtime == st.st_mtime)
+  if ((stat(mutt_buffer_string(path), &st) != 0) || (mtime == st.st_mtime))
   {
     mutt_debug(LL_DEBUG1, "temp file was not modified\n");
     /* the file has not changed! */

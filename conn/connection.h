@@ -29,12 +29,26 @@
 #include "connaccount.h"
 
 /**
- * struct Connection - An open network connection (socket)
+ * @defgroup connection_api Connection API
+ *
+ * The Connection API
+ *
+ * An open network connection (socket)
+ *
+ * Note about ssf: in actuality, NeoMutt uses this as a boolean to determine
+ * if the connection is "secure" using TLS or $tunnel if $tunnel_is_secure is
+ * set.
+ *
+ * The value is passed to SASL, but since no min_ssf is also passed to SASL
+ * I don't believe it makes any difference.
+ *
+ * The GnuTLS code currently even puts bytes in here, so I doubt the exact
+ * value has significance for NeoMutt purposes.
  */
 struct Connection
 {
   struct ConnAccount account; ///< Account details: username, password, etc
-  unsigned int ssf;           ///< Security strength factor, in bits (see below)
+  unsigned int ssf;           ///< Security strength factor, in bits (see notes)
   char inbuf[1024];           ///< Buffer for incoming traffic
   int bufpos;                 ///< Current position in the buffer
   int fd;                     ///< Socket file descriptor
@@ -42,18 +56,9 @@ struct Connection
   void *sockdata;             ///< Backend-specific socket data
 
   /**
-   * Note about ssf: in actuality, NeoMutt uses this as a boolean to determine
-   * if the connection is "secure" using TLS or $tunnel if $tunnel_is_secure is
-   * set.
+   * @defgroup connection_open open()
+   * @ingroup connection_api
    *
-   * The value is passed to SASL, but since no min_ssf is also passed to SASL
-   * I don't believe it makes any difference.
-   *
-   * The GnuTLS code currently even puts bytes in here, so I doubt the exact
-   * value has significance for NeoMutt purposes.
-   */
-
-  /**
    * open - Open a socket Connection
    * @param conn Connection to a server
    * @retval  0 Success
@@ -62,6 +67,9 @@ struct Connection
   int (*open)(struct Connection *conn);
 
   /**
+   * @defgroup connection_read read()
+   * @ingroup connection_api
+   *
    * read - Read from a socket Connection
    * @param conn  Connection to a server
    * @param buf   Buffer to store the data
@@ -72,6 +80,9 @@ struct Connection
   int (*read)(struct Connection *conn, char *buf, size_t count);
 
   /**
+   * @defgroup connection_write write()
+   * @ingroup connection_api
+   *
    * write - Write to a socket Connection
    * @param conn  Connection to a server
    * @param buf   Buffer to read into
@@ -82,6 +93,9 @@ struct Connection
   int (*write)(struct Connection *conn, const char *buf, size_t count);
 
   /**
+   * @defgroup connection_poll poll()
+   * @ingroup connection_api
+   *
    * poll - Check whether a socket read would block
    * @param conn Connection to a server
    * @param wait_secs How long to wait for a response
@@ -92,6 +106,9 @@ struct Connection
   int (*poll)(struct Connection *conn, time_t wait_secs);
 
   /**
+   * @defgroup connection_close close()
+   * @ingroup connection_api
+   *
    * close - Close a socket Connection
    * @param conn Connection to a server
    * @retval  0 Success

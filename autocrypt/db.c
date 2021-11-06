@@ -34,7 +34,9 @@
 #include "private.h"
 #include "mutt/lib.h"
 #include "address/lib.h"
-#include "autocrypt/lib.h"
+#include "config/lib.h"
+#include "core/lib.h"
+#include "lib.h"
 
 /* Prepared statements */
 static sqlite3_stmt *AccountGetStmt;
@@ -81,14 +83,17 @@ int mutt_autocrypt_db_init(bool can_create)
   if (AutocryptDB)
     return 0;
 
-  if (!C_Autocrypt || !C_AutocryptDir)
+  const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
+  const char *const c_autocrypt_dir =
+      cs_subset_path(NeoMutt->sub, "autocrypt_dir");
+  if (!c_autocrypt || !c_autocrypt_dir)
     return -1;
 
   struct Buffer *db_path = mutt_buffer_pool_get();
-  mutt_buffer_concat_path(db_path, C_AutocryptDir, "autocrypt.db");
+  mutt_buffer_concat_path(db_path, c_autocrypt_dir, "autocrypt.db");
 
-  struct stat sb;
-  if (stat(mutt_buffer_string(db_path), &sb) == 0)
+  struct stat st = { 0 };
+  if (stat(mutt_buffer_string(db_path), &st) == 0)
   {
     if (sqlite3_open_v2(mutt_buffer_string(db_path), &AutocryptDB,
                         SQLITE_OPEN_READWRITE, NULL) != SQLITE_OK)
@@ -782,7 +787,9 @@ int mutt_autocrypt_db_peer_history_insert(struct Address *addr,
     goto cleanup;
   if (sqlite3_bind_text(PeerHistoryInsertStmt, 2, peerhist->email_msgid, -1,
                         SQLITE_STATIC) != SQLITE_OK)
+  {
     goto cleanup;
+  }
   if (sqlite3_bind_int64(PeerHistoryInsertStmt, 3, peerhist->timestamp) != SQLITE_OK)
     goto cleanup;
   if (sqlite3_bind_text(PeerHistoryInsertStmt, 4, peerhist->keydata, -1, SQLITE_STATIC) != SQLITE_OK)

@@ -34,13 +34,15 @@
 #include <string.h>
 #include <wchar.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
+#include "core/lib.h"
 #include "gui/lib.h"
+#include "menu/lib.h"
+#include "pager/lib.h"
 #include "functions.h"
 #include "keymap.h"
-#include "mutt_globals.h"
 #include "muttlib.h"
 #include "opcodes.h"
-#include "pager.h"
 #include "protos.h" // IWYU pragma: keep
 
 /**
@@ -48,7 +50,7 @@
  * @param op   Operation, e.g. OP_DELETE
  * @param menu Current Menu, e.g. #MENU_PAGER
  * @retval ptr  Key binding
- * @retval NULL If none
+ * @retval NULL No key binding found
  */
 static const struct Binding *help_lookup_function(int op, enum MenuType menu)
 {
@@ -94,11 +96,11 @@ static int print_macro(FILE *fp, int maxwidth, const char **macro)
   memset(&mbstate2, 0, sizeof(mbstate2));
   for (; len && (k = mbrtowc(&wc, *macro, len, &mbstate1)); *macro += k, len -= k)
   {
-    if ((k == (size_t)(-1)) || (k == (size_t)(-2)))
+    if ((k == (size_t) (-1)) || (k == (size_t) (-2)))
     {
-      if (k == (size_t)(-1))
+      if (k == (size_t) (-1))
         memset(&mbstate1, 0, sizeof(mbstate1));
-      k = (k == (size_t)(-1)) ? 1 : len;
+      k = (k == (size_t) (-1)) ? 1 : len;
       wc = ReplacementChar;
     }
     /* glibc-2.1.3's wcwidth() returns 1 for unprintable chars! */
@@ -111,8 +113,8 @@ static int print_macro(FILE *fp, int maxwidth, const char **macro)
       {
         char buf[MB_LEN_MAX * 2];
         size_t n1, n2;
-        if (((n1 = wcrtomb(buf, wc, &mbstate2)) != (size_t)(-1)) &&
-            ((n2 = wcrtomb(buf + n1, 0, &mbstate2)) != (size_t)(-1)))
+        if (((n1 = wcrtomb(buf, wc, &mbstate2)) != (size_t) (-1)) &&
+            ((n2 = wcrtomb(buf + n1, 0, &mbstate2)) != (size_t) (-1)))
         {
           fputs(buf, fp);
         }
@@ -168,11 +170,11 @@ static int get_wrapped_width(const char *t, size_t wid)
   {
     if (*s == ' ')
       m = n;
-    if ((k == (size_t)(-1)) || (k == (size_t)(-2)))
+    if ((k == (size_t) (-1)) || (k == (size_t) (-2)))
     {
-      if (k == (size_t)(-1))
+      if (k == (size_t) (-1))
         memset(&mbstate, 0, sizeof(mbstate));
-      k = (k == (size_t)(-1)) ? 1 : len;
+      k = (k == (size_t) (-1)) ? 1 : len;
       wc = ReplacementChar;
     }
     if (!IsWPrint(wc))
@@ -247,9 +249,10 @@ static void format_line(FILE *fp, int ismacro, const char *t1, const char *t2,
     col = pad(fp, mutt_strwidth(t1), col_a);
   }
 
+  const char *const c_pager = cs_subset_string(NeoMutt->sub, "pager");
   if (ismacro > 0)
   {
-    if (!C_Pager || mutt_str_equal(C_Pager, "builtin"))
+    if (!c_pager || mutt_str_equal(c_pager, "builtin"))
       fputs("_\010", fp); // Ctrl-H (backspace)
     fputs("M ", fp);
     col += 2;
@@ -289,10 +292,11 @@ static void format_line(FILE *fp, int ismacro, const char *t1, const char *t2,
 
       if (*t3)
       {
-        if (mutt_str_equal(C_Pager, "builtin"))
+        if (mutt_str_equal(c_pager, "builtin"))
         {
           n += col - wraplen;
-          if (C_Markers)
+          const bool c_markers = cs_subset_bool(NeoMutt->sub, "markers");
+          if (c_markers)
             n++;
         }
         else
@@ -347,7 +351,7 @@ static void dump_menu(FILE *fp, enum MenuType menu, int wraplen)
  * is_bound - Does a function have a keybinding?
  * @param km_list Keymap to examine
  * @param op      Operation, e.g. OP_DELETE
- * @retval true If a key is bound to that operation
+ * @retval true A key is bound to that operation
  */
 static bool is_bound(struct KeymapList *km_list, int op)
 {
@@ -381,11 +385,11 @@ static void dump_unbound(FILE *fp, const struct Binding *funcs,
 /**
  * mutt_help - Display the help menu
  * @param menu    Current Menu
- * @param wraplen Width to wrap to
  */
-void mutt_help(enum MenuType menu, int wraplen)
+void mutt_help(enum MenuType menu)
 {
-  char buf[128];
+  const int wraplen = AllDialogsWindow->state.cols;
+  char banner[128];
   FILE *fp = NULL;
 
   /* We don't use the buffer pool because of the extended lifetime of t */
@@ -393,9 +397,15 @@ void mutt_help(enum MenuType menu, int wraplen)
   mutt_buffer_mktemp(&t);
 
   const struct Binding *funcs = km_get_table(menu);
-  const char *desc = mutt_map_get_name(menu, Menus);
+  const char *desc = mutt_map_get_name(menu, MenuNames);
   if (!desc)
     desc = _("<UNKNOWN>");
+
+  struct PagerData pdata = { 0 };
+  struct PagerView pview = { &pdata };
+
+  pview.mode = PAGER_MODE_HELP;
+  pview.flags = MUTT_PAGER_RETWINCH | MUTT_PAGER_MARKER | MUTT_PAGER_NSKIP | MUTT_PAGER_NOWRAP;
 
   do
   {
@@ -421,10 +431,10 @@ void mutt_help(enum MenuType menu, int wraplen)
 
     mutt_file_fclose(&fp);
 
-    snprintf(buf, sizeof(buf), _("Help for %s"), desc);
-  } while (mutt_do_pager(buf, mutt_buffer_string(&t),
-                         MUTT_PAGER_RETWINCH | MUTT_PAGER_MARKER | MUTT_PAGER_NSKIP | MUTT_PAGER_NOWRAP,
-                         NULL) == OP_REFORMAT_WINCH);
+    snprintf(banner, sizeof(banner), _("Help for %s"), desc);
+    pdata.fname = mutt_buffer_string(&t);
+    pview.banner = banner;
+  } while (mutt_do_pager(&pview, NULL) == OP_REFORMAT_WINCH);
 
 cleanup:
   mutt_buffer_dealloc(&t);

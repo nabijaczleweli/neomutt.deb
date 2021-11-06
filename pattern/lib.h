@@ -22,7 +22,7 @@
  */
 
 /**
- * @page lib_pattern PATTERN: Match patterns to emails
+ * @page lib_pattern Pattern
  *
  * Match patterns to emails
  *
@@ -48,7 +48,7 @@
 
 struct AliasMenuData;
 struct AliasView;
-struct ConfigSet;
+struct Context;
 struct Email;
 struct Envelope;
 struct Mailbox;
@@ -56,14 +56,11 @@ struct Menu;
 
 #define MUTT_ALIAS_SIMPLESEARCH "~f %s | ~t %s | ~c %s"
 
-/* These Config Variables are only used in pattern.c */
-extern bool C_ThoroughSearch;
-
-typedef uint8_t PatternCompFlags;       ///< Flags for mutt_pattern_comp(), e.g. #MUTT_PC_FULL_MSG
-#define MUTT_PC_NO_FLAGS            0   ///< No flags are set
-#define MUTT_PC_FULL_MSG        (1<<0)  ///< Enable body and header matching
-#define MUTT_PC_PATTERN_DYNAMIC (1<<1)  ///< Enable runtime date range evaluation
-#define MUTT_PC_SEND_MODE_SEARCH (1<<2) ///< Allow send-mode body searching
+typedef uint8_t PatternCompFlags;           ///< Flags for mutt_pattern_comp(), e.g. #MUTT_PC_FULL_MSG
+#define MUTT_PC_NO_FLAGS                0   ///< No flags are set
+#define MUTT_PC_FULL_MSG          (1 << 0)  ///< Enable body and header matching
+#define MUTT_PC_PATTERN_DYNAMIC   (1 << 1)  ///< Enable runtime date range evaluation
+#define MUTT_PC_SEND_MODE_SEARCH  (1 << 2)  ///< Allow send-mode body searching
 
 /**
  * struct Pattern - A simple (non-regex) pattern
@@ -173,12 +170,12 @@ enum PatternType
   MUTT_PAT_MAX,
 };
 
-int mutt_pattern_exec(struct Pattern *pat, PatternExecFlags flags, struct Mailbox *m,
-                      struct Email *e, struct PatternCache *cache);
-int mutt_pattern_alias_exec(struct Pattern *pat, PatternExecFlags flags,
-                            struct AliasView *av, struct PatternCache *cache);
+bool mutt_pattern_exec(struct Pattern *pat, PatternExecFlags flags, struct Mailbox *m,
+                       struct Email *e, struct PatternCache *cache);
+bool mutt_pattern_alias_exec(struct Pattern *pat, PatternExecFlags flags,
+                             struct AliasView *av, struct PatternCache *cache);
 
-struct PatternList *mutt_pattern_comp(const char *s, PatternCompFlags flags, struct Buffer *err);
+struct PatternList *mutt_pattern_comp(struct Mailbox *m, struct Menu *menu, const char *s, PatternCompFlags flags, struct Buffer *err);
 void mutt_check_simple(struct Buffer *s, const char *simple);
 void mutt_pattern_free(struct PatternList **pat);
 bool dlg_select_pattern(char *buf, size_t buflen);
@@ -186,12 +183,11 @@ bool dlg_select_pattern(char *buf, size_t buflen);
 int mutt_which_case(const char *s);
 int mutt_is_list_recipient(bool all_addr, struct Envelope *e);
 int mutt_is_subscribed_list_recipient(bool all_addr, struct Envelope *e);
-int mutt_pattern_func(int op, char *prompt);
-int mutt_pattern_alias_func(int op, char *prompt, char *title, struct AliasMenuData *mdata, struct Menu *menu);
-int mutt_search_command(struct Mailbox *m, int cur, int op);
+int mutt_pattern_func(struct Context *ctx, int op, char *prompt);
+int mutt_pattern_alias_func(char *prompt, struct AliasMenuData *mdata, struct Menu *menu);
+int mutt_search_command(struct Mailbox *m, struct Menu *menu, int cur, int op);
 int mutt_search_alias_command(struct Menu *menu, int cur, int op);
 
-bool mutt_limit_current_thread(struct Email *e);
-bool config_init_pattern(struct ConfigSet *cs);
+bool mutt_limit_current_thread(struct Context *ctx, struct Email *e);
 
 #endif /* MUTT_PATTERN_LIB_H */

@@ -21,7 +21,7 @@
  */
 
 /**
- * @page imap_auth_anon IMAP anonymous authentication method
+ * @page imap_auth_anon Anonymous authentication
  *
  * IMAP anonymous authentication method
  */
@@ -30,7 +30,7 @@
 #include "private.h"
 #include "mutt/lib.h"
 #include "conn/lib.h"
-#include "lib.h"
+#include "adata.h"
 #include "auth.h"
 #include "mutt_socket.h"
 

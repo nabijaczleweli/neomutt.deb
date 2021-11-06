@@ -27,6 +27,8 @@
  * @page maildir_mh MH local mailbox type
  *
  * MH local mailbox type
+ *
+ * Implementation: #MxMhOps
  */
 
 #include "config.h"
@@ -37,6 +39,7 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -46,7 +49,8 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
-#include "maildir/lib.h"
+#include "lib.h"
+#include "progress/lib.h"
 #include "copy.h"
 #include "edata.h"
 #include "errno.h"
@@ -55,22 +59,22 @@
 #include "monitor.h"
 #include "mutt_globals.h"
 #include "mx.h"
-#include "progress.h"
 #include "sequence.h"
-#include "sort.h"
 #ifdef USE_HCACHE
 #include "hcache/lib.h"
 #endif
+
+struct Progress;
 
 /**
  * mh_mkstemp - Create a temporary file
  * @param[in]  m   Mailbox to create the file in
  * @param[out] fp  File handle
  * @param[out] tgt File name
- * @retval  0 Success
- * @retval -1 Failure
+ * @retval true Success
+ * @retval false Failure
  */
-int mh_mkstemp(struct Mailbox *m, FILE **fp, char **tgt)
+bool mh_mkstemp(struct Mailbox *m, FILE **fp, char **tgt)
 {
   int fd;
   char path[PATH_MAX];
@@ -87,7 +91,7 @@ int mh_mkstemp(struct Mailbox *m, FILE **fp, char **tgt)
       {
         mutt_perror(path);
         umask(omask);
-        return -1;
+        return false;
       }
     }
     else
@@ -104,10 +108,10 @@ int mh_mkstemp(struct Mailbox *m, FILE **fp, char **tgt)
     FREE(tgt);
     close(fd);
     unlink(path);
-    return -1;
+    return false;
   }
 
-  return 0;
+  return true;
 }
 
 /**
@@ -121,12 +125,12 @@ int mh_mkstemp(struct Mailbox *m, FILE **fp, char **tgt)
 static int mh_already_notified(struct Mailbox *m, int msgno)
 {
   char path[PATH_MAX];
-  struct stat sb;
+  struct stat st = { 0 };
 
   if ((snprintf(path, sizeof(path), "%s/%d", mailbox_path(m), msgno) < sizeof(path)) &&
-      (stat(path, &sb) == 0))
+      (stat(path, &st) == 0))
   {
-    return (mutt_file_stat_timespec_compare(&sb, MUTT_STAT_MTIME, &m->last_visited) <= 0);
+    return (mutt_file_stat_timespec_compare(&st, MUTT_STAT_MTIME, &m->last_visited) <= 0);
   }
   return -1;
 }
@@ -180,34 +184,32 @@ int mh_check_empty(const char *path)
 }
 
 /**
- * mh_mbox_check_stats - Check the Mailbox statistics - Implements MxOps::mbox_check_stats()
+ * mh_mbox_check_stats - Check the Mailbox statistics - Implements MxOps::mbox_check_stats() - @ingroup mx_mbox_check_stats
  */
-static int mh_mbox_check_stats(struct Mailbox *m, uint8_t flags)
+static enum MxStatus mh_mbox_check_stats(struct Mailbox *m, uint8_t flags)
 {
   struct MhSequences mhs = { 0 };
-  bool check_new = true;
-  int rc = -1;
   DIR *dirp = NULL;
   struct dirent *de = NULL;
 
   /* when $mail_check_recent is set and the .mh_sequences file hasn't changed
    * since the last m visit, there is no "new mail" */
-  if (C_MailCheckRecent && (mh_seq_changed(m) <= 0))
+  const bool c_mail_check_recent =
+      cs_subset_bool(NeoMutt->sub, "mail_check_recent");
+  if (c_mail_check_recent && (mh_seq_changed(m) <= 0))
   {
-    rc = 0;
-    check_new = false;
+    return MX_STATUS_OK;
   }
 
-  if (!check_new)
-    return 0;
-
   if (mh_seq_read(&mhs, mailbox_path(m)) < 0)
-    return -1;
+    return MX_STATUS_ERROR;
 
   m->msg_count = 0;
   m->msg_unread = 0;
   m->msg_flagged = 0;
 
+  enum MxStatus rc = MX_STATUS_OK;
+  bool check_new = true;
   for (int i = mhs.max; i > 0; i--)
   {
     if ((mh_seq_check(&mhs, i) & MH_SEQ_FLAGGED))
@@ -219,10 +221,10 @@ static int mh_mbox_check_stats(struct Mailbox *m, uint8_t flags)
       {
         /* if the first unseen message we encounter was in the m during the
          * last visit, don't notify about it */
-        if (!C_MailCheckRecent || (mh_already_notified(m, i) == 0))
+        if (!c_mail_check_recent || (mh_already_notified(m, i) == 0))
         {
           m->has_new = true;
-          rc = 1;
+          rc = MX_STATUS_NEW_MAIL;
         }
         /* Because we are traversing from high to low, we can stop
          * checking for new mail after the first unseen message.
@@ -383,11 +385,12 @@ int mh_rewrite_message(struct Mailbox *m, int msgno)
   long old_body_length = e->body->length;
   long old_hdr_lines = e->lines;
 
+  struct Message *src = mx_msg_open(m, msgno);
   struct Message *dest = mx_msg_open_new(m, e, MUTT_MSG_NO_FLAGS);
-  if (!dest)
+  if (!src || !dest)
     return -1;
 
-  int rc = mutt_copy_message(dest->fp, m, e, MUTT_CM_UPDATE, CH_UPDATE | CH_UPDATE_LEN, 0);
+  int rc = mutt_copy_message(dest->fp, e, src, MUTT_CM_UPDATE, CH_UPDATE | CH_UPDATE_LEN, 0);
   if (rc == 0)
   {
     char oldpath[PATH_MAX];
@@ -396,7 +399,6 @@ int mh_rewrite_message(struct Mailbox *m, int msgno)
     mutt_str_copy(partpath, e->path, sizeof(partpath));
 
     rc = mh_commit_msg(m, dest, e, false);
-    mx_msg_close(m, &dest);
 
     if (rc == 0)
     {
@@ -425,8 +427,8 @@ int mh_rewrite_message(struct Mailbox *m, int msgno)
         mutt_str_replace(&e->path, partpath);
     }
   }
-  else
-    mx_msg_close(m, &dest);
+  mx_msg_close(m, &src);
+  mx_msg_close(m, &dest);
 
   if ((rc == -1) && restore)
   {
@@ -475,7 +477,7 @@ int mh_sync_message(struct Mailbox *m, int msgno)
 void mh_update_mtime(struct Mailbox *m)
 {
   char buf[PATH_MAX];
-  struct stat st;
+  struct stat st = { 0 };
   struct MaildirMboxData *mdata = maildir_mdata_get(m);
 
   snprintf(buf, sizeof(buf), "%s/.mh_sequences", mailbox_path(m));
@@ -514,7 +516,7 @@ int mh_parse_dir(struct Mailbox *m, struct MdEmailArray *mda, struct Progress *p
     goto cleanup;
   }
 
-  while (((de = readdir(dirp))) && (SigInt != 1))
+  while (((de = readdir(dirp))) && !SigInt)
   {
     if (!mh_valid_message(de->d_name))
       continue;
@@ -527,7 +529,7 @@ int mh_parse_dir(struct Mailbox *m, struct MdEmailArray *mda, struct Progress *p
     e->edata_free = maildir_edata_free;
 
     if (m->verbose && progress)
-      mutt_progress_update(progress, ARRAY_SIZE(mda) + 1, -1);
+      progress_update(progress, ARRAY_SIZE(mda) + 1, -1);
 
     e->path = mutt_str_dup(de->d_name);
 
@@ -538,9 +540,9 @@ int mh_parse_dir(struct Mailbox *m, struct MdEmailArray *mda, struct Progress *p
 
   closedir(dirp);
 
-  if (SigInt == 1)
+  if (SigInt)
   {
-    SigInt = 0;
+    SigInt = false;
     return -2; /* action aborted */
   }
 
@@ -551,7 +553,7 @@ cleanup:
 }
 
 /**
- * mh_cmp_path - Compare two Maildirs by path - Implements ::sort_t
+ * mh_cmp_path - Compare two Maildirs by path - Implements ::sort_t - @ingroup sort_api
  */
 int mh_cmp_path(const void *a, const void *b)
 {
@@ -573,7 +575,16 @@ struct Email *mh_parse_message(const char *fname, struct Email *e)
 {
   FILE *fp = fopen(fname, "r");
   if (!fp)
+  {
     return NULL;
+  }
+
+  const long size = mutt_file_get_size_fp(fp);
+  if (size == 0)
+  {
+    mutt_file_fclose(&fp);
+    return NULL;
+  }
 
   if (!e)
   {
@@ -583,14 +594,11 @@ struct Email *mh_parse_message(const char *fname, struct Email *e)
   }
   e->env = mutt_rfc822_read_header(fp, e, false, false);
 
-  struct stat st;
-  fstat(fileno(fp), &st);
-
   if (!e->received)
     e->received = e->date_sent;
 
   /* always update the length since we have fresh information available. */
-  e->body->length = st.st_size - e->body->offset;
+  e->body->length = size - e->body->offset;
   e->index = -1;
 
   mutt_file_fclose(&fp);
@@ -608,7 +616,9 @@ void mh_delayed_parsing(struct Mailbox *m, struct MdEmailArray *mda, struct Prog
   char fn[PATH_MAX];
 
 #ifdef USE_HCACHE
-  struct HeaderCache *hc = mutt_hcache_open(C_HeaderCache, mailbox_path(m), NULL);
+  const char *const c_header_cache =
+      cs_subset_path(NeoMutt->sub, "header_cache");
+  struct HeaderCache *hc = mutt_hcache_open(c_header_cache, mailbox_path(m), NULL);
 #endif
 
   struct MdEmail *md = NULL;
@@ -620,23 +630,25 @@ void mh_delayed_parsing(struct Mailbox *m, struct MdEmailArray *mda, struct Prog
       continue;
 
     if (m->verbose && progress)
-      mutt_progress_update(progress, ARRAY_FOREACH_IDX, -1);
+      progress_update(progress, ARRAY_FOREACH_IDX, -1);
 
     snprintf(fn, sizeof(fn), "%s/%s", mailbox_path(m), md->email->path);
 
 #ifdef USE_HCACHE
-    struct stat lastchanged = { 0 };
+    struct stat st_lastchanged = { 0 };
     int rc = 0;
-    if (C_MaildirHeaderCacheVerify)
+    const bool c_maildir_header_cache_verify =
+        cs_subset_bool(NeoMutt->sub, "maildir_header_cache_verify");
+    if (c_maildir_header_cache_verify)
     {
-      rc = stat(fn, &lastchanged);
+      rc = stat(fn, &st_lastchanged);
     }
 
     const char *key = md->email->path;
     size_t keylen = strlen(key);
     struct HCacheEntry hce = mutt_hcache_fetch(hc, key, keylen, 0);
 
-    if (hce.email && (rc == 0) && (lastchanged.st_mtime <= hce.uidvalidity))
+    if (hce.email && (rc == 0) && (st_lastchanged.st_mtime <= hce.uidvalidity))
     {
       hce.email->edata = maildir_edata_new();
       hce.email->edata_free = maildir_edata_free;
@@ -665,7 +677,8 @@ void mh_delayed_parsing(struct Mailbox *m, struct MdEmailArray *mda, struct Prog
   mutt_hcache_close(hc);
 #endif
 
-  if (m && mda && (ARRAY_SIZE(mda) > 0) && (C_Sort == SORT_ORDER))
+  const short c_sort = cs_subset_sort(NeoMutt->sub, "sort");
+  if (m && mda && (ARRAY_SIZE(mda) > 0) && (c_sort == SORT_ORDER))
   {
     mutt_debug(LL_DEBUG3, "maildir: sorting %s into natural order\n", mailbox_path(m));
     ARRAY_SORT(mda, mh_cmp_path);
@@ -675,22 +688,22 @@ void mh_delayed_parsing(struct Mailbox *m, struct MdEmailArray *mda, struct Prog
 /**
  * mh_read_dir - Read an MH mailbox
  * @param m Mailbox
- * @retval  0 Success
- * @retval -1 Failure
+ * @retval true Success
+ * @retval false Error
  */
-int mh_read_dir(struct Mailbox *m)
+static bool mh_read_dir(struct Mailbox *m)
 {
   if (!m)
-    return -1;
+    return false;
 
   struct MhSequences mhs = { 0 };
-  struct Progress progress;
+  struct Progress *progress = NULL;
 
   if (m->verbose)
   {
     char msg[PATH_MAX];
     snprintf(msg, sizeof(msg), _("Scanning %s..."), mailbox_path(m));
-    mutt_progress_init(&progress, msg, MUTT_PROGRESS_READ, 0);
+    progress = progress_new(msg, MUTT_PROGRESS_READ, 0);
   }
 
   struct MaildirMboxData *mdata = maildir_mdata_get(m);
@@ -704,21 +717,24 @@ int mh_read_dir(struct Mailbox *m)
   mh_update_mtime(m);
 
   struct MdEmailArray mda = ARRAY_HEAD_INITIALIZER;
-  if (mh_parse_dir(m, &mda, &progress) < 0)
-    return -1;
+  int rc = mh_parse_dir(m, &mda, progress);
+  progress_free(&progress);
+  if (rc < 0)
+    return false;
 
   if (m->verbose)
   {
     char msg[PATH_MAX];
     snprintf(msg, sizeof(msg), _("Reading %s..."), mailbox_path(m));
-    mutt_progress_init(&progress, msg, MUTT_PROGRESS_READ, ARRAY_SIZE(&mda));
+    progress = progress_new(msg, MUTT_PROGRESS_READ, ARRAY_SIZE(&mda));
   }
-  mh_delayed_parsing(m, &mda, &progress);
+  mh_delayed_parsing(m, &mda, progress);
+  progress_free(&progress);
 
   if (mh_seq_read(&mhs, mailbox_path(m)) < 0)
   {
     maildirarray_clear(&mda);
-    return -1;
+    return false;
   }
   mh_update_maildir(&mda, &mhs);
   mh_seq_free(&mhs);
@@ -728,7 +744,7 @@ int mh_read_dir(struct Mailbox *m)
   if (!mdata->mh_umask)
     mdata->mh_umask = mh_umask(m);
 
-  return 0;
+  return true;
 }
 
 /**
@@ -752,7 +768,8 @@ int mh_sync_mailbox_message(struct Mailbox *m, int msgno, struct HeaderCache *hc
   {
     char path[PATH_MAX];
     snprintf(path, sizeof(path), "%s/%s", mailbox_path(m), e->path);
-    if (C_MhPurge)
+    const bool c_mh_purge = cs_subset_bool(NeoMutt->sub, "mh_purge");
+    if (c_mh_purge)
     {
 #ifdef USE_HCACHE
       if (hc)
@@ -772,7 +789,10 @@ int mh_sync_mailbox_message(struct Mailbox *m, int msgno, struct HeaderCache *hc
         char tmp[PATH_MAX];
         snprintf(tmp, sizeof(tmp), "%s/,%s", mailbox_path(m), e->path);
         unlink(tmp);
-        rename(path, tmp);
+        if (rename(path, tmp) != 0)
+        {
+          return -1;
+        }
       }
     }
   }
@@ -795,45 +815,15 @@ int mh_sync_mailbox_message(struct Mailbox *m, int msgno, struct HeaderCache *hc
 }
 
 /**
- * mh_open_message - Open an MH message
- * @param m          Mailbox
- * @param msg        Message to open
- * @param msgno      Index number
- * @retval  0 Success
- * @retval -1 Failure
- */
-int mh_open_message(struct Mailbox *m, struct Message *msg, int msgno)
-{
-  if (!m || !m->emails || (msgno >= m->msg_count))
-    return -1;
-
-  struct Email *e = m->emails[msgno];
-  if (!e)
-    return -1;
-
-  char path[PATH_MAX];
-
-  snprintf(path, sizeof(path), "%s/%s", mailbox_path(m), e->path);
-
-  msg->fp = fopen(path, "r");
-  if (!msg->fp)
-  {
-    mutt_perror(path);
-    mutt_debug(LL_DEBUG1, "fopen: %s: %s (errno %d)\n", path, strerror(errno), errno);
-    return -1;
-  }
-
-  return 0;
-}
-
-/**
- * mh_msg_save_hcache - Save message to the header cache - Implements MxOps::msg_save_hcache()
+ * mh_msg_save_hcache - Save message to the header cache - Implements MxOps::msg_save_hcache() - @ingroup mx_msg_save_hcache
  */
 int mh_msg_save_hcache(struct Mailbox *m, struct Email *e)
 {
   int rc = 0;
 #ifdef USE_HCACHE
-  struct HeaderCache *hc = mutt_hcache_open(C_HeaderCache, mailbox_path(m), NULL);
+  const char *const c_header_cache =
+      cs_subset_path(NeoMutt->sub, "header_cache");
+  struct HeaderCache *hc = mutt_hcache_open(c_header_cache, mailbox_path(m), NULL);
   rc = mutt_hcache_store(hc, e->path, strlen(e->path), e, 0);
   mutt_hcache_close(hc);
 #endif
@@ -841,7 +831,7 @@ int mh_msg_save_hcache(struct Mailbox *m, struct Email *e)
 }
 
 /**
- * mh_ac_owns_path - Check whether an Account own a Mailbox path - Implements MxOps::ac_owns_path()
+ * mh_ac_owns_path - Check whether an Account own a Mailbox path - Implements MxOps::ac_owns_path() - @ingroup mx_ac_owns_path
  */
 bool mh_ac_owns_path(struct Account *a, const char *path)
 {
@@ -849,33 +839,33 @@ bool mh_ac_owns_path(struct Account *a, const char *path)
 }
 
 /**
- * mh_ac_add - Add a Mailbox to an Account - Implements MxOps::ac_add()
+ * mh_ac_add - Add a Mailbox to an Account - Implements MxOps::ac_add() - @ingroup mx_ac_add
  */
-int mh_ac_add(struct Account *a, struct Mailbox *m)
+bool mh_ac_add(struct Account *a, struct Mailbox *m)
 {
-  return 0;
+  return true;
 }
 
 /**
- * mh_mbox_open - Open a Mailbox - Implements MxOps::mbox_open()
+ * mh_mbox_open - Open a Mailbox - Implements MxOps::mbox_open() - @ingroup mx_mbox_open
  */
-static int mh_mbox_open(struct Mailbox *m)
+static enum MxOpenReturns mh_mbox_open(struct Mailbox *m)
 {
-  return mh_read_dir(m);
+  return mh_read_dir(m) ? MX_OPEN_OK : MX_OPEN_ERROR;
 }
 
 /**
- * mh_mbox_open_append - Open a Mailbox for appending - Implements MxOps::mbox_open_append()
+ * mh_mbox_open_append - Open a Mailbox for appending - Implements MxOps::mbox_open_append() - @ingroup mx_mbox_open_append
  */
-static int mh_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
+static bool mh_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
 {
   if (!(flags & (MUTT_APPENDNEW | MUTT_NEWFOLDER)))
-    return 0;
+    return true;
 
   if (mutt_file_mkdir(mailbox_path(m), S_IRWXU))
   {
     mutt_perror(mailbox_path(m));
-    return -1;
+    return false;
   }
 
   char tmp[PATH_MAX];
@@ -885,15 +875,15 @@ static int mh_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
   {
     mutt_perror(tmp);
     rmdir(mailbox_path(m));
-    return -1;
+    return false;
   }
   close(i);
 
-  return 0;
+  return true;
 }
 
 /**
- * mh_mbox_check - Check for new mail - Implements MxOps::mbox_check()
+ * mh_mbox_check - Check for new mail - Implements MxOps::mbox_check() - @ingroup mx_mbox_check
  *
  * This function handles arrival of new mail and reopening of mh/maildir
  * folders. Things are getting rather complex because we don't have a
@@ -902,22 +892,24 @@ static int mh_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
  *
  * Don't change this code unless you _really_ understand what happens.
  */
-int mh_mbox_check(struct Mailbox *m)
+enum MxStatus mh_mbox_check(struct Mailbox *m)
 {
   char buf[PATH_MAX];
-  struct stat st, st_cur;
+  struct stat st = { 0 };
+  struct stat st_cur = { 0 };
   bool modified = false, occult = false, flags_changed = false;
   int num_new = 0;
   struct MhSequences mhs = { 0 };
   struct HashTable *fnames = NULL;
   struct MaildirMboxData *mdata = maildir_mdata_get(m);
 
-  if (!C_CheckNew)
-    return 0;
+  const bool c_check_new = cs_subset_bool(NeoMutt->sub, "check_new");
+  if (!c_check_new)
+    return MX_STATUS_OK;
 
   mutt_str_copy(buf, mailbox_path(m), sizeof(buf));
   if (stat(buf, &st) == -1)
-    return -1;
+    return MX_STATUS_ERROR;
 
   /* create .mh_sequences when there isn't one. */
   snprintf(buf, sizeof(buf), "%s/.mh_sequences", mailbox_path(m));
@@ -927,7 +919,7 @@ int mh_mbox_check(struct Mailbox *m)
     char *tmp = NULL;
     FILE *fp = NULL;
 
-    if (mh_mkstemp(m, &fp, &tmp) == 0)
+    if (mh_mkstemp(m, &fp, &tmp))
     {
       mutt_file_fclose(&fp);
       if (mutt_file_safe_rename(tmp, buf) == -1)
@@ -946,7 +938,7 @@ int mh_mbox_check(struct Mailbox *m)
   }
 
   if (!modified)
-    return 0;
+    return MX_STATUS_OK;
 
     /* Update the modification times on the mailbox.
      *
@@ -970,7 +962,7 @@ int mh_mbox_check(struct Mailbox *m)
   mh_delayed_parsing(m, &mda, NULL);
 
   if (mh_seq_read(&mhs, mailbox_path(m)) < 0)
-    return -1;
+    return MX_STATUS_ERROR;
   mh_update_maildir(&mda, &mhs);
   mh_seq_free(&mhs);
 
@@ -1028,51 +1020,57 @@ int mh_mbox_check(struct Mailbox *m)
 
   ARRAY_FREE(&mda);
   if (occult)
-    return MUTT_REOPENED;
+    return MX_STATUS_REOPENED;
   if (num_new > 0)
-    return MUTT_NEW_MAIL;
+    return MX_STATUS_NEW_MAIL;
   if (flags_changed)
-    return MUTT_FLAGS;
-  return 0;
+    return MX_STATUS_FLAGS;
+  return MX_STATUS_OK;
 }
 
 /**
- * mh_mbox_sync - Save changes to the Mailbox - Implements MxOps::mbox_sync()
- * @retval #MUTT_REOPENED  mailbox has been externally modified
- * @retval #MUTT_NEW_MAIL  new mail has arrived
+ * mh_mbox_sync - Save changes to the Mailbox - Implements MxOps::mbox_sync() - @ingroup mx_mbox_sync
+ * @retval #MX_STATUS_REOPENED  mailbox has been externally modified
+ * @retval #MX_STATUS_NEW_MAIL  new mail has arrived
  * @retval  0 Success
  * @retval -1 Error
  *
  * @note The flag retvals come from a call to a backend sync function
  */
-int mh_mbox_sync(struct Mailbox *m)
+enum MxStatus mh_mbox_sync(struct Mailbox *m)
 {
-  int check = mh_mbox_check(m);
-  if (check < 0)
+  enum MxStatus check = mh_mbox_check(m);
+  if (check == MX_STATUS_ERROR)
     return check;
 
   struct HeaderCache *hc = NULL;
 #ifdef USE_HCACHE
+  const char *const c_header_cache =
+      cs_subset_path(NeoMutt->sub, "header_cache");
   if (m->type == MUTT_MH)
-    hc = mutt_hcache_open(C_HeaderCache, mailbox_path(m), NULL);
+    hc = mutt_hcache_open(c_header_cache, mailbox_path(m), NULL);
 #endif
 
-  struct Progress progress;
+  struct Progress *progress = NULL;
   if (m->verbose)
   {
     char msg[PATH_MAX];
     snprintf(msg, sizeof(msg), _("Writing %s..."), mailbox_path(m));
-    mutt_progress_init(&progress, msg, MUTT_PROGRESS_WRITE, m->msg_count);
+    progress = progress_new(msg, MUTT_PROGRESS_WRITE, m->msg_count);
   }
 
   for (int i = 0; i < m->msg_count; i++)
   {
     if (m->verbose)
-      mutt_progress_update(&progress, i, -1);
+      progress_update(progress, i, -1);
 
     if (mh_sync_mailbox_message(m, i, hc) == -1)
+    {
+      progress_free(&progress);
       goto err;
+    }
   }
+  progress_free(&progress);
 
 #ifdef USE_HCACHE
   if (m->type == MUTT_MH)
@@ -1107,38 +1105,57 @@ err:
   if (m->type == MUTT_MH)
     mutt_hcache_close(hc);
 #endif
-  return -1;
+  return MX_STATUS_ERROR;
 }
 
 /**
- * mh_mbox_close - Close a Mailbox - Implements MxOps::mbox_close()
- * @retval 0 Always
+ * mh_mbox_close - Close a Mailbox - Implements MxOps::mbox_close() - @ingroup mx_mbox_close
+ * @retval MX_STATUS_OK Always
  */
-int mh_mbox_close(struct Mailbox *m)
+enum MxStatus mh_mbox_close(struct Mailbox *m)
 {
-  return 0;
+  return MX_STATUS_OK;
 }
 
 /**
- * mh_msg_open - Open an email message in a Mailbox - Implements MxOps::msg_open()
+ * mh_msg_open - Open an email message in a Mailbox - Implements MxOps::msg_open() - @ingroup mx_msg_open
  */
-static int mh_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
+static bool mh_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
 {
-  return mh_open_message(m, msg, msgno);
+  if (!m || !m->emails || (msgno >= m->msg_count))
+    return false;
+
+  struct Email *e = m->emails[msgno];
+  if (!e)
+    return false;
+
+  char path[PATH_MAX];
+
+  snprintf(path, sizeof(path), "%s/%s", mailbox_path(m), e->path);
+
+  msg->fp = fopen(path, "r");
+  if (!msg->fp)
+  {
+    mutt_perror(path);
+    mutt_debug(LL_DEBUG1, "fopen: %s: %s (errno %d)\n", path, strerror(errno), errno);
+    return false;
+  }
+
+  return true;
 }
 
 /**
- * mh_msg_open_new - Open a new message in a Mailbox - Implements MxOps::msg_open_new()
+ * mh_msg_open_new - Open a new message in a Mailbox - Implements MxOps::msg_open_new() - @ingroup mx_msg_open_new
  *
  * Open a new (temporary) message in an MH folder.
  */
-static int mh_msg_open_new(struct Mailbox *m, struct Message *msg, const struct Email *e)
+static bool mh_msg_open_new(struct Mailbox *m, struct Message *msg, const struct Email *e)
 {
   return mh_mkstemp(m, &msg->fp, &msg->path);
 }
 
 /**
- * mh_msg_commit - Save changes to an email - Implements MxOps::msg_commit()
+ * mh_msg_commit - Save changes to an email - Implements MxOps::msg_commit() - @ingroup mx_msg_commit
  */
 static int mh_msg_commit(struct Mailbox *m, struct Message *msg)
 {
@@ -1146,7 +1163,7 @@ static int mh_msg_commit(struct Mailbox *m, struct Message *msg)
 }
 
 /**
- * mh_msg_close - Close an email - Implements MxOps::msg_close()
+ * mh_msg_close - Close an email - Implements MxOps::msg_close() - @ingroup mx_msg_close
  *
  * @note May also return EOF Failure, see errno
  */
@@ -1156,7 +1173,7 @@ int mh_msg_close(struct Mailbox *m, struct Message *msg)
 }
 
 /**
- * mh_path_canon - Canonicalise a Mailbox path - Implements MxOps::path_canon()
+ * mh_path_canon - Canonicalise a Mailbox path - Implements MxOps::path_canon() - @ingroup mx_path_canon
  */
 int mh_path_canon(char *buf, size_t buflen)
 {
@@ -1165,28 +1182,28 @@ int mh_path_canon(char *buf, size_t buflen)
 }
 
 /**
- * mh_path_parent - Find the parent of a Mailbox path - Implements MxOps::path_parent()
+ * mh_path_parent - Find the parent of a Mailbox path - Implements MxOps::path_parent() - @ingroup mx_path_parent
  */
 int mh_path_parent(char *buf, size_t buflen)
 {
-  if (mutt_path_parent(buf, buflen))
+  if (mutt_path_parent(buf))
     return 0;
 
   if (buf[0] == '~')
     mutt_path_canon(buf, buflen, HomeDir, true);
 
-  if (mutt_path_parent(buf, buflen))
+  if (mutt_path_parent(buf))
     return 0;
 
   return -1;
 }
 
 /**
- * mh_path_pretty - Abbreviate a Mailbox path - Implements MxOps::path_pretty()
+ * mh_path_pretty - Abbreviate a Mailbox path - Implements MxOps::path_pretty() - @ingroup mx_path_pretty
  */
 int mh_path_pretty(char *buf, size_t buflen, const char *folder)
 {
-  if (mutt_path_abbr_folder(buf, buflen, folder))
+  if (mutt_path_abbr_folder(buf, folder))
     return 0;
 
   if (mutt_path_pretty(buf, buflen, HomeDir, false))
@@ -1196,7 +1213,7 @@ int mh_path_pretty(char *buf, size_t buflen, const char *folder)
 }
 
 /**
- * mh_path_probe - Is this an mh Mailbox? - Implements MxOps::path_probe()
+ * mh_path_probe - Is this an mh Mailbox? - Implements MxOps::path_probe() - @ingroup mx_path_probe
  */
 static enum MailboxType mh_path_probe(const char *path, const struct stat *st)
 {
@@ -1235,11 +1252,11 @@ static enum MailboxType mh_path_probe(const char *path, const struct stat *st)
   return MUTT_UNKNOWN;
 }
 
-// clang-format off
 /**
- * MxMhOps - MH Mailbox - Implements ::MxOps
+ * MxMhOps - MH Mailbox - Implements ::MxOps - @ingroup mx_api
  */
 struct MxOps MxMhOps = {
+  // clang-format off
   .type            = MUTT_MH,
   .name             = "mh",
   .is_local         = true,
@@ -1264,5 +1281,5 @@ struct MxOps MxMhOps = {
   .path_pretty      = mh_path_pretty,
   .path_parent      = mh_path_parent,
   .path_is_empty    = mh_check_empty,
+  // clang-format on
 };
-// clang-format on

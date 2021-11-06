@@ -24,6 +24,7 @@
 #include "config.h"
 #include "test_common.h"
 #define TEST_INIT test_init()
+#define TEST_FINI test_fini()
 #include "acutest.h"
 
 /******************************************************************************
@@ -499,12 +500,16 @@
   NEOMUTT_TEST_ITEM(test_slist_remove_string)                                  \
   NEOMUTT_TEST_ITEM(test_slist_to_buffer)                                      \
                                                                                \
+  /* sort */                                                                   \
+  NEOMUTT_TEST_ITEM(test_mutt_qsort_r)                                         \
+                                                                               \
   /* string */                                                                 \
   NEOMUTT_TEST_ITEM(test_mutt_istr_equal)                                      \
   NEOMUTT_TEST_ITEM(test_mutt_istr_find)                                       \
   NEOMUTT_TEST_ITEM(test_mutt_istr_remall)                                     \
   NEOMUTT_TEST_ITEM(test_mutt_istrn_cmp)                                       \
   NEOMUTT_TEST_ITEM(test_mutt_istrn_equal)                                     \
+  NEOMUTT_TEST_ITEM(test_mutt_istrn_rfind)                                     \
   NEOMUTT_TEST_ITEM(test_mutt_str_adjust)                                      \
   NEOMUTT_TEST_ITEM(test_mutt_str_append_item)                                 \
   NEOMUTT_TEST_ITEM(test_mutt_str_asprintf)                                    \
@@ -580,6 +585,14 @@ NEOMUTT_TEST_LIST
 #ifdef USE_LZ4
   NEOMUTT_TEST_ITEM(test_compress_lz4)
 #endif
+#ifdef USE_NOTMUCH
+  NEOMUTT_TEST_ITEM(test_nm_parse_type_from_query)
+  NEOMUTT_TEST_ITEM(test_nm_query_type_to_string)
+  NEOMUTT_TEST_ITEM(test_nm_string_to_query_type)
+  NEOMUTT_TEST_ITEM(test_nm_string_to_query_type_mapper)
+  NEOMUTT_TEST_ITEM(test_nm_windowed_query_from_query)
+  NEOMUTT_TEST_ITEM(test_nm_tag_string_to_tags)
+#endif
 #ifdef USE_ZLIB
   NEOMUTT_TEST_ITEM(test_compress_zlib)
 #endif
@@ -623,6 +636,14 @@ NEOMUTT_TEST_ITEM(test_compress_common)
 #endif
 #ifdef USE_LZ4
   NEOMUTT_TEST_ITEM(test_compress_lz4)
+#endif
+#ifdef USE_NOTMUCH
+  NEOMUTT_TEST_ITEM(test_nm_parse_type_from_query)
+  NEOMUTT_TEST_ITEM(test_nm_query_type_to_string)
+  NEOMUTT_TEST_ITEM(test_nm_string_to_query_type)
+  NEOMUTT_TEST_ITEM(test_nm_string_to_query_type_mapper)
+  NEOMUTT_TEST_ITEM(test_nm_windowed_query_from_query)
+  NEOMUTT_TEST_ITEM(test_nm_tag_string_to_tags)
 #endif
 #ifdef USE_ZLIB
   NEOMUTT_TEST_ITEM(test_compress_zlib)

@@ -49,7 +49,7 @@ struct ConfigSubset
   enum ConfigScope scope;      ///< Scope of Subset, e.g. #SET_SCOPE_ACCOUNT
   struct ConfigSubset *parent; ///< Parent Subset
   struct ConfigSet *cs;        ///< Parent ConfigSet
-  struct Notify *notify;       ///< Notifications system
+  struct Notify *notify;       ///< Notifications: #NotifyConfig, #EventConfig
 };
 
 /**
@@ -61,7 +61,6 @@ enum NotifyConfig
 {
   NT_CONFIG_SET = 1,     ///< Config item has been set
   NT_CONFIG_RESET,       ///< Config item has been reset to initial, or parent, value
-  NT_CONFIG_INITIAL_SET, ///< Config item's initial value has been set
 };
 
 /**

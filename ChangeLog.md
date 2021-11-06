@@ -1,3 +1,106 @@
+2021-10-29  Richard Russon  <rich@flatcap.org>
+* Features
+  - Notmuch: support separate database and mail roots without .notmuch
+* Bug Fixes
+  - fix notmuch crash on open failure
+  - fix crypto crash handling pgp keys
+  - fix ncrypt/pgp file_get_size return check
+  - fix restore case-insensitive header sort
+  - fix pager redrawing of long lines
+  - fix notmuch: check database dir for xapian dir
+  - fix notmuch: update index count after `<entire-thread>`
+  - fix protect hash table against empty keys
+  - fix prevent real_subj being set but empty
+  - fix leak when saving fcc
+  - fix leak after `<edit-or-view-raw-message>`
+  - fix leak after trash to hidden mailbox
+  - fix leak restoring postponed emails
+
+2021-10-22  Richard Russon  <rich@flatcap.org>
+* Bug Fixes
+  - fix new mail notifications
+  - fix pattern compilation error for ~( !~>(~P) )
+  - fix menu display on window resize
+  - Stop batch mode emails with no argument or recipients
+  - Add sanitize call in print mailcap function
+  - fix `hdr_order` to use the longest match
+  - fix (un)setenv to not return an error with unset env vars
+  - fix Imap sync when closing a mailbox
+  - fix segfault on OpenBSD current
+  - sidebar: restore `sidebar_spoolfile` colour
+  - fix assert when displaying a file from the browser
+  - fix exec command in compose
+  - fix `check_stats` for Notmuch mailboxes
+  - Fallback: Open Notmuch database without config
+  - fix gui hook commands on startup
+* Changed Config
+  - Re-enable `$ssl_force_tls`
+* Translations
+  - 100% Serbian
+  - 100% Lithuanian
+  - 100% German
+* Build
+  - Remove Slang from the build
+  - Warn about deprecated configure options
+
+2021-10-15  Richard Russon  <rich@flatcap.org>
+* Security
+  - Fix CVE-2021-32055
+* Features
+  - threads: implement the `$use_threads` feature
+    https://neomutt.org/feature/use-threads
+  - hooks: allow a -noregex param to folder and mbox hooks
+  - mailing lists: implement list-(un)subscribe using RFC2369 headers
+  - mailcap: implement x-neomutt-nowrap flag
+  - pager: add `$local_date_header` option
+  - imap, smtp: add support for authenticating using XOAUTH2
+  - Allow `<sync-mailbox`> to fail quietly
+  - imap: speed up server-side searches
+  - pager: improve skip-quoted and skip-headers
+  - notmuch: open database with user's configuration
+  - notmuch: implement `<vfolder-window-reset>`
+  - config: allow += modification of my_ variables
+  - notmuch: tolerate file renames behind neomutt's back
+  - pager: implement `$pager_read_delay`
+  - notmuch: validate `nm_query_window_timebase`
+  - notmuch: make $nm_record work in non-notmuch mailboxes
+  - compose: add `$greeting` - a welcome message on top of emails
+  - notmuch: show additional mail in query windows
+* Changed Config
+- Renamed lots of config, e.g.  `askbcc` to `ask_bcc`.
+* Bug Fixes
+  - imap: fix crash on external IMAP events
+  - notmuch: handle missing libnotmuch version bumps
+  - imap: add sanity check for qresync
+  - notmuch: allow windows with 0 duration
+  - index: fix index selection on `<collapse-all>`
+  - imap: fix crash when sync'ing labels
+  - search: fix searching by Message-Id in `<mark-message>`
+  - threads: fix double sorting of threads
+  - stats: don't check mailbox stats unless told
+  - alias: fix crash on empty query
+  - pager: honor mid-message config changes
+  - mailbox: don't propagate read-only state across reopens
+  - hcache: fix caching new labels in the header cache
+  - crypto: set invalidity flags for gpgme/smime keys
+  - notmuch: fix parsing of multiple `type=`
+  - notmuch: validate $nm_default_url
+  - messages: avoid unnecessary opening of messages
+  - imap: fix seqset iterator when it ends in a comma
+  - build: refuse to build without pcre2 when pcre2 is linked in ncurses
+* Translations
+  - 100% Serbian
+  - 100% Lithuanian
+  - 100% German
+  - 100% Czech
+  - 96% Spanish
+  - 92% Polish
+  - 85% Norwegian
+  - 80% French
+  - 78% Russian
+  - 74% Esperanto
+  - 66% Greek
+
 2021-02-05  Richard Russon  <rich@flatcap.org>
 * Features
   - Add <skip-headers> to skip past message headers in pager
@@ -197,7 +300,7 @@
 * Bug Fixes
   - Avoid opening the same hcache file twice
   - Re-open Mailbox after folder-hook
-  - Fix the matching of the spoolfile Mailbox
+  - Fix the matching of the spool_file Mailbox
   - Fix link-thread to link all tagged emails
 * Changed Config
   - Add $tunnel_is_secure config, defaulting to true
@@ -989,7 +1092,7 @@
   - Change maildir and mh check_mailbox to use dynamic sized hash
   - Fix uses of context-\>changed as a counter
   - Make cmd_parse_fetch() more precise about setting reopen/check flags
-  - Enable $reply_self for group-reply, even with $metoo unset
+  - Enable $reply_self for group-reply, even with $me_too unset
 
 2017-09-12  Richard Russon  \<rich@flatcap.org\>
 * Bug Fixes
@@ -1497,7 +1600,7 @@
   - Use getaddrinfo_a if possible (#420)
 * Bug Fixes
   - handle sigint within socket operations (#411)
-  - Avoid browsing the remote spoolfile by setting MUTT_SELECT_MULTI attach
+  - Avoid browsing the remote spool_file by setting MUTT_SELECT_MULTI attach
   - notmuch: fix crash when completing tags (#395)
   - Fixes missing failure return of notmuch msg open (#401)
   - Fix latest Coverity issues (#387)
@@ -1686,7 +1789,7 @@
   - Improve openssl interactive_check_cert. (closes #3899)
   - Add mutt_array_size macro, change interactive_check_cert() to use it. (see #3899)
   - Return to pager upon aborting a jump operation. (closes #3901)
-  - Change sidebar_spoolfile coloring to be lower precedence.
+  - Change sidebar_spool_file coloring to be lower precedence.
   - Move '@' pattern modifier documentation to the right section.
   - Add setenv/unsetenv commands.
   - Rework OpenSSL certificate verification to support alternative chains. (closes #3903)
@@ -1807,7 +1910,7 @@
   - notmuch: Synchronise tags to flags
 * Bug Fixes
   - updates when pager is open
-  - crash when neither $spoolfile, $folder are set
+  - crash when neither $spool_file, $folder are set
   - forgotten-attachment: fix empty regex expression
   - status-color when pager_index_lines \> 0
   - buffer underrun when no menu item is selected

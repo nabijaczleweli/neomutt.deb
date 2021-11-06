@@ -37,12 +37,16 @@
 #define SOME_PRIME 149711
 
 /**
- * gen_string_hash - Generate a hash from a string - Implements hash_gen_hash_t
+ * gen_string_hash - Generate a hash from a string - Implements hash_gen_hash_t - @ingroup hash_gen_hash_api
+ *
+ * @note If the key is NULL or empty, the retval will be 0
  */
 static size_t gen_string_hash(union HashKey key, size_t num_elems)
 {
   size_t hash = 0;
   const unsigned char *s = (const unsigned char *) key.strkey;
+  if (!s)
+    return 0;
 
   while (*s != '\0')
     hash += ((hash << 7) + *s++);
@@ -52,7 +56,7 @@ static size_t gen_string_hash(union HashKey key, size_t num_elems)
 }
 
 /**
- * cmp_string_key - Compare two string keys - Implements hash_cmp_key_t
+ * cmp_string_key - Compare two string keys - Implements hash_cmp_key_t - @ingroup hash_cmp_key_api
  */
 static int cmp_string_key(union HashKey a, union HashKey b)
 {
@@ -60,7 +64,7 @@ static int cmp_string_key(union HashKey a, union HashKey b)
 }
 
 /**
- * gen_case_string_hash - Generate a hash from a string (ignore the case) - Implements hash_gen_hash_t
+ * gen_case_string_hash - Generate a hash from a string (ignore the case) - Implements hash_gen_hash_t - @ingroup hash_gen_hash_api
  */
 static size_t gen_case_string_hash(union HashKey key, size_t num_elems)
 {
@@ -75,7 +79,7 @@ static size_t gen_case_string_hash(union HashKey key, size_t num_elems)
 }
 
 /**
- * cmp_case_string_key - Compare two string keys (ignore case) - Implements hash_cmp_key_t
+ * cmp_case_string_key - Compare two string keys (ignore case) - Implements hash_cmp_key_t - @ingroup hash_cmp_key_api
  */
 static int cmp_case_string_key(union HashKey a, union HashKey b)
 {
@@ -83,7 +87,7 @@ static int cmp_case_string_key(union HashKey a, union HashKey b)
 }
 
 /**
- * gen_int_hash - Generate a hash from an integer - Implements hash_gen_hash_t
+ * gen_int_hash - Generate a hash from an integer - Implements hash_gen_hash_t - @ingroup hash_gen_hash_api
  */
 static size_t gen_int_hash(union HashKey key, size_t num_elems)
 {
@@ -91,7 +95,7 @@ static size_t gen_int_hash(union HashKey key, size_t num_elems)
 }
 
 /**
- * cmp_int_key - Compare two integer keys - Implements hash_cmp_key_t
+ * cmp_int_key - Compare two integer keys - Implements hash_cmp_key_t - @ingroup hash_cmp_key_api
  */
 static int cmp_int_key(union HashKey a, union HashKey b)
 {
@@ -309,7 +313,7 @@ void mutt_hash_set_destructor(struct HashTable *table, hash_hdata_free_t fn, int
 struct HashElem *mutt_hash_typed_insert(struct HashTable *table,
                                         const char *strkey, int type, void *data)
 {
-  if (!table || !strkey)
+  if (!table || !strkey || (strkey[0] == '\0'))
     return NULL;
 
   union HashKey key;
@@ -418,11 +422,13 @@ struct HashElem *mutt_hash_find_bucket(const struct HashTable *table, const char
  */
 void mutt_hash_delete(struct HashTable *table, const char *strkey, const void *data)
 {
-  if (!table || !strkey)
+  if (!table || !strkey || (strkey[0] == '\0'))
     return;
   union HashKey key;
-  key.strkey = strkey;
+  // Copy the key because union_hash_delete() may use it after the HashElem is freed.
+  key.strkey = mutt_str_dup(strkey);
   union_hash_delete(table, key, data);
+  FREE(&key.strkey);
 }
 
 /**
@@ -458,7 +464,7 @@ void mutt_hash_free(struct HashTable **ptr)
     {
       tmp = elem;
       elem = elem->next;
-      if (table->hdata_free)
+      if (table->hdata_free && tmp->data)
         table->hdata_free(tmp->type, tmp->data, table->hdata);
       if (table->strdup_keys)
         FREE(&tmp->key.strkey);

@@ -26,9 +26,11 @@
 #include <stdbool.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
-#include "gui/lib.h"
+#include "color/lib.h"
 
+struct IndexSharedData;
 struct Mailbox;
+struct MuttWindow;
 
 extern struct ListHead SidebarWhitelist;
 
@@ -60,6 +62,7 @@ enum DivType
  */
 struct SidebarWindowData
 {
+  struct IndexSharedData *shared;         ///< Shared Index Data
   ARRAY_HEAD(, struct SbEntry *) entries; ///< Items to display in the sidebar
 
   int top_index;             ///< First mailbox visible in sidebar
@@ -72,21 +75,6 @@ struct SidebarWindowData
   short divider_width;       ///< Width of the divider in screen columns
 };
 
-extern short C_SidebarComponentDepth;
-extern char *C_SidebarDelimChars;
-extern char *C_SidebarDividerChar;
-extern bool  C_SidebarFolderIndent;
-extern char *C_SidebarFormat;
-extern char *C_SidebarIndentString;
-extern bool  C_SidebarNewMailOnly;
-extern bool  C_SidebarNextNewWrap;
-extern bool  C_SidebarNonEmptyMailboxOnly;
-extern bool  C_SidebarOnRight;
-extern bool  C_SidebarShortPath;
-extern short C_SidebarSortMethod;
-extern bool  C_SidebarVisible;
-extern short C_SidebarWidth;
-
 // sidebar.c
 void sb_add_mailbox        (struct SidebarWindowData *wdata, struct Mailbox *m);
 void sb_remove_mailbox     (struct SidebarWindowData *wdata, struct Mailbox *m);
@@ -97,7 +85,7 @@ bool select_next(struct SidebarWindowData *wdata);
 bool select_prev(struct SidebarWindowData *wdata);
 
 // observer.c
-int sb_insertion_observer(struct NotifyCallback *nc);
+int sb_insertion_window_observer(struct NotifyCallback *nc);
 void sb_win_add_observers(struct MuttWindow *win);
 
 // sort.c
@@ -106,7 +94,7 @@ void sb_sort_entries(struct SidebarWindowData *wdata, enum SortType sort);
 // wdata.c
 void                      sb_wdata_free(struct MuttWindow *win, void **ptr);
 struct SidebarWindowData *sb_wdata_get(struct MuttWindow *win);
-struct SidebarWindowData *sb_wdata_new(void);
+struct SidebarWindowData *sb_wdata_new(struct IndexSharedData *shared);
 
 // window.c
 int sb_recalc(struct MuttWindow *win);

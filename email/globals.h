@@ -26,14 +26,6 @@
 #include <stdbool.h>
 #include "mutt/lib.h"
 
-/* Config items */
-extern bool          C_AutoSubscribe;
-extern bool          C_MarkOld;
-extern struct Regex *C_ReplyRegex;
-extern char *        C_SendCharset;
-extern char *        C_SpamSeparator;
-extern bool          C_Weed;
-
 /* Global variables */
 extern struct ListHead Ignore;              ///< List of header patterns to ignore
 extern struct RegexList NoSpamList;         ///< List of regexes to whitelist non-spam emails
@@ -45,6 +37,5 @@ extern struct RegexList UnSubscribedLists;  ///< List of regexes to blacklist fa
 extern struct RegexList MailLists;          ///< List of regexes to match mailing lists
 extern struct RegexList UnMailLists;        ///< List of regexes to blacklist false matches in MailLists
 extern struct RegexList SubscribedLists;    ///< List of regexes to match subscribed mailing lists
-extern struct ReplaceList SubjectRegexList; ///< List of regexes to tidy the view of the email's subject
 
 #endif /* MUTT_EMAIL_GLOBALS_H */

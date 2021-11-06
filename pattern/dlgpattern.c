@@ -1,6 +1,6 @@
 /**
  * @file
- * Display a guide to Patterns
+ * Pattern Selection Dialog
  *
  * @authors
  * Copyright (C) 1996-2000,2006-2007,2010 Michael R. Elkins <me@mutt.org>
@@ -22,9 +22,48 @@
  */
 
 /**
- * @page pattern_dlgpattern Display a guide to Patterns
+ * @page pattern_dlgpattern Pattern Selection Dialog
  *
- * Display a guide to Patterns
+ * The Pattern Selection Dialog lets the user select a pattern.
+ *
+ * This is a @ref gui_simple
+ *
+ * ## Windows
+ *
+ * | Name                     | Type           | See Also             |
+ * | :----------------------- | :------------- | :------------------- |
+ * | Pattern Selection Dialog | WT_DLG_PATTERN | dlg_select_pattern() |
+ *
+ * **Parent**
+ * - @ref gui_dialog
+ *
+ * **Children**
+ * - See: @ref gui_simple
+ *
+ * ## Data
+ * - #Menu
+ * - #Menu::mdata
+ * - #PatternEntry
+ *
+ * The @ref gui_simple holds a Menu.  The Pattern Selection Dialog stores its
+ * data (#PatternEntry) in Menu::mdata.
+ *
+ * ## Events
+ *
+ * Once constructed, it is controlled by the following events:
+ *
+ * | Event Type  | Handler                   |
+ * | :---------- | :------------------------ |
+ * | #NT_CONFIG  | pattern_config_observer() |
+ * | #NT_WINDOW  | pattern_window_observer() |
+ *
+ * The Pattern Selection Dialog doesn't have any specific colours, so it
+ * doesn't need to support #NT_COLOR.
+ *
+ * The Pattern Selection Dialog does not implement MuttWindow::recalc() or
+ * MuttWindow::repaint().
+ *
+ * Some other events are handled by the @ref gui_simple.
  */
 
 #include "config.h"
@@ -37,12 +76,9 @@
 #include "config/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
-#include "mutt.h"
 #include "lib.h"
+#include "menu/lib.h"
 #include "format_flags.h"
-#include "keymap.h"
-#include "mutt_globals.h"
-#include "mutt_menu.h"
 #include "muttlib.h"
 #include "opcodes.h"
 
@@ -51,10 +87,10 @@
  */
 struct PatternEntry
 {
-  int num;           ///< Index number
-  const char *tag;   ///< Copied to buffer if selected
-  const char *expr;  ///< Displayed in the menu
-  const char *descr; ///< Description of pattern
+  int num;          ///< Index number
+  const char *tag;  ///< Copied to buffer if selected
+  const char *expr; ///< Displayed in the menu
+  const char *desc; ///< Description of pattern
 };
 
 /// Help Bar for the Pattern selection dialog
@@ -68,7 +104,7 @@ static const struct Mapping PatternHelp[] = {
 };
 
 /**
- * pattern_format_str - Format a string for the pattern completion menu - Implements ::format_t
+ * pattern_format_str - Format a string for the pattern completion menu - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
  * |:--------|:----------------------
@@ -86,7 +122,7 @@ static const char *pattern_format_str(char *buf, size_t buflen, size_t col, int 
   switch (op)
   {
     case 'd':
-      mutt_format_s(buf, buflen, prec, NONULL(entry->descr));
+      mutt_format_s(buf, buflen, prec, NONULL(entry->desc));
       break;
     case 'e':
       mutt_format_s(buf, buflen, prec, NONULL(entry->expr));
@@ -104,24 +140,42 @@ static const char *pattern_format_str(char *buf, size_t buflen, size_t col, int 
 }
 
 /**
- * make_pattern_entry - Create a line for the Pattern Completion menu - Implements Menu::make_entry()
+ * make_pattern_entry - Create a line for the Pattern Completion menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  */
-static void make_pattern_entry(char *buf, size_t buflen, struct Menu *menu, int num)
+static void make_pattern_entry(struct Menu *menu, char *buf, size_t buflen, int num)
 {
   struct PatternEntry *entry = &((struct PatternEntry *) menu->mdata)[num];
 
-  mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
-                      NONULL(C_PatternFormat), pattern_format_str,
-                      (intptr_t) entry, MUTT_FORMAT_ARROWCURSOR);
+  const char *const c_pattern_format =
+      cs_subset_string(NeoMutt->sub, "pattern_format");
+  mutt_expando_format(buf, buflen, 0, menu->win->state.cols, NONULL(c_pattern_format),
+                      pattern_format_str, (intptr_t) entry, MUTT_FORMAT_ARROWCURSOR);
+}
+
+/**
+ * free_pattern_menu - Free the Pattern Completion menu - Implements Menu::mdata_free() - @ingroup menu_mdata_free
+ */
+static void free_pattern_menu(struct Menu *menu, void **ptr)
+{
+  struct PatternEntry *entries = *ptr;
+
+  for (size_t i = 0; i < menu->max; i++)
+  {
+    FREE(&entries[i].tag);
+    FREE(&entries[i].expr);
+    FREE(&entries[i].desc);
+  }
+
+  FREE(ptr);
 }
 
 /**
  * create_pattern_menu - Create the Pattern Completion menu
+ * @param dlg Dialog holding the Menu
  * @retval ptr New Menu
  */
-static struct Menu *create_pattern_menu(void)
+static struct Menu *create_pattern_menu(struct MuttWindow *dlg)
 {
-  struct PatternEntry *entries = NULL;
   int num_entries = 0, i = 0;
   struct Buffer *entrybuf = NULL;
 
@@ -129,15 +183,18 @@ static struct Menu *create_pattern_menu(void)
     num_entries++;
   /* Add three more hard-coded entries */
   num_entries += 3;
+  struct PatternEntry *entries =
+      mutt_mem_calloc(num_entries, sizeof(struct PatternEntry));
 
-  struct Menu *menu = mutt_menu_new(MENU_GENERIC);
-
+  struct Menu *menu = dlg->wdata;
   menu->make_entry = make_pattern_entry;
-
-  // L10N: Pattern completion menu title
-  menu->title = _("Patterns");
-  menu->mdata = entries = mutt_mem_calloc(num_entries, sizeof(struct PatternEntry));
+  menu->mdata = entries;
+  menu->mdata_free = free_pattern_menu;
   menu->max = num_entries;
+
+  struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
+  // L10N: Pattern completion menu title
+  sbar_set_title(sbar, _("Patterns"));
 
   entrybuf = mutt_buffer_pool_get();
   while (Flags[i].tag)
@@ -181,7 +238,7 @@ static struct Menu *create_pattern_menu(void)
         break;
     }
     entries[i].expr = mutt_str_dup(mutt_buffer_string(entrybuf));
-    entries[i].descr = mutt_str_dup(_(Flags[i].desc));
+    entries[i].desc = mutt_str_dup(_(Flags[i].desc));
 
     i++;
   }
@@ -200,7 +257,7 @@ static struct Menu *create_pattern_menu(void)
   mutt_buffer_printf(entrybuf, "~(%s)", patternstr);
   entries[i].expr = mutt_str_dup(mutt_buffer_string(entrybuf));
   // L10N: Pattern Completion Menu description for ~()
-  entries[i].descr = mutt_str_dup(
+  entries[i].desc = mutt_str_dup(
       _("messages in threads containing messages matching PATTERN"));
   i++;
 
@@ -209,7 +266,7 @@ static struct Menu *create_pattern_menu(void)
   mutt_buffer_printf(entrybuf, "~<(%s)", patternstr);
   entries[i].expr = mutt_str_dup(mutt_buffer_string(entrybuf));
   // L10N: Pattern Completion Menu description for ~<()
-  entries[i].descr =
+  entries[i].desc =
       mutt_str_dup(_("messages whose immediate parent matches PATTERN"));
   i++;
 
@@ -218,10 +275,8 @@ static struct Menu *create_pattern_menu(void)
   mutt_buffer_printf(entrybuf, "~>(%s)", patternstr);
   entries[i].expr = mutt_str_dup(mutt_buffer_string(entrybuf));
   // L10N: Pattern Completion Menu description for ~>()
-  entries[i].descr =
+  entries[i].desc =
       mutt_str_dup(_("messages having an immediate child matching PATTERN"));
-
-  mutt_menu_push_current(menu);
 
   mutt_buffer_pool_release(&entrybuf);
 
@@ -229,52 +284,83 @@ static struct Menu *create_pattern_menu(void)
 }
 
 /**
- * free_pattern_menu - Free the Pattern Completion menu
- * @param ptr Menu to free
+ * pattern_config_observer - Notification that a Config Variable has changed - Implements ::observer_t - @ingroup observer_api
+ *
+ * The Address Book Window is affected by changes to `$sort_pattern`.
  */
-static void free_pattern_menu(struct Menu **ptr)
+static int pattern_config_observer(struct NotifyCallback *nc)
 {
-  if (!ptr || !*ptr)
-    return;
+  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
+    return -1;
 
-  struct Menu *menu = *ptr;
-  mutt_menu_pop_current(menu);
+  struct EventConfig *ev_c = nc->event_data;
 
-  struct PatternEntry *entries = (struct PatternEntry *) menu->mdata;
-  while (menu->max)
-  {
-    menu->max--;
-    FREE(&entries[menu->max].tag);
-    FREE(&entries[menu->max].expr);
-    FREE(&entries[menu->max].descr);
-  }
-  FREE(&menu->mdata);
+  if (!mutt_str_equal(ev_c->name, "pattern_format"))
+    return 0;
 
-  mutt_menu_free(ptr);
+  struct Menu *menu = nc->global_data;
+  menu_queue_redraw(menu, MENU_REDRAW_FULL);
+  mutt_debug(LL_DEBUG5, "config done, request WA_RECALC, MENU_REDRAW_FULL\n");
+
+  return 0;
+}
+
+/**
+ * pattern_window_observer - Notification that a Window has changed - Implements ::observer_t - @ingroup observer_api
+ *
+ * This function is triggered by changes to the windows.
+ *
+ * - Delete (this window): clean up the resources held by the Help Bar
+ */
+static int pattern_window_observer(struct NotifyCallback *nc)
+{
+  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+    return -1;
+
+  if (nc->event_subtype != NT_WINDOW_DELETE)
+    return 0;
+
+  struct MuttWindow *win_menu = nc->global_data;
+  struct EventWindow *ev_w = nc->event_data;
+  if (ev_w->win != win_menu)
+    return 0;
+
+  struct Menu *menu = win_menu->wdata;
+
+  notify_observer_remove(NeoMutt->notify, pattern_config_observer, menu);
+  notify_observer_remove(win_menu->notify, pattern_window_observer, win_menu);
+
+  mutt_debug(LL_DEBUG5, "window delete done\n");
+  return 0;
 }
 
 /**
  * dlg_select_pattern - Show menu to select a Pattern
  * @param buf    Buffer for the selected Pattern
  * @param buflen Length of buffer
- * @retval bool true, if a selection was made
+ * @retval true A selection was made
  */
 bool dlg_select_pattern(char *buf, size_t buflen)
 {
-  struct Menu *menu = create_pattern_menu();
-  struct MuttWindow *dlg = dialog_create_simple_index(menu, WT_DLG_PATTERN);
-  dlg->help_data = PatternHelp;
-  dlg->help_menu = MENU_GENERIC;
+  struct MuttWindow *dlg = simple_dialog_new(MENU_GENERIC, WT_DLG_PATTERN, PatternHelp);
+  struct Menu *menu = create_pattern_menu(dlg);
+
+  struct MuttWindow *win_menu = menu->win;
+
+  // NT_COLOR is handled by the SimpleDialog
+  notify_observer_add(NeoMutt->notify, NT_CONFIG, pattern_config_observer, menu);
+  notify_observer_add(win_menu->notify, NT_WINDOW, pattern_window_observer, win_menu);
 
   bool rc = false;
   bool done = false;
   while (!done)
   {
-    switch (mutt_menu_loop(menu))
+    switch (menu_loop(menu))
     {
       case OP_GENERIC_SELECT_ENTRY:
       {
-        struct PatternEntry *entry = (struct PatternEntry *) menu->mdata + menu->current;
+        const int index = menu_get_index(menu);
+        struct PatternEntry *entry = ((struct PatternEntry *) menu->mdata) + index;
         mutt_str_copy(buf, entry->tag, buflen);
         rc = true;
         done = true;
@@ -287,7 +373,6 @@ bool dlg_select_pattern(char *buf, size_t buflen)
     }
   }
 
-  free_pattern_menu(&menu);
-  dialog_destroy_simple_index(&dlg);
+  simple_dialog_free(&dlg);
   return rc;
 }

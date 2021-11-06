@@ -21,7 +21,7 @@
  */
 
 /**
- * @page core_neomutt Container for Accounts, Notifications
+ * @page core_neomutt NeoMutt object
  *
  * Container for Accounts, Notifications
  */
@@ -79,7 +79,7 @@ void neomutt_free(struct NeoMutt **ptr)
  * neomutt_account_add - Add an Account to the global list
  * @param n NeoMutt
  * @param a Account to add
- * @retval true If Account was added
+ * @retval true Account was added
  */
 bool neomutt_account_add(struct NeoMutt *n, struct Account *a)
 {
@@ -89,6 +89,7 @@ bool neomutt_account_add(struct NeoMutt *n, struct Account *a)
   TAILQ_INSERT_TAIL(&n->accounts, a, entries);
   notify_set_parent(a->notify, n->notify);
 
+  mutt_debug(LL_NOTIFY, "NT_ACCOUNT_ADD: %s %p\n", mailbox_get_type_name(a->type), a);
   struct EventAccount ev_a = { a };
   notify_send(n->notify, NT_ACCOUNT, NT_ACCOUNT_ADD, &ev_a);
   return true;
@@ -98,32 +99,35 @@ bool neomutt_account_add(struct NeoMutt *n, struct Account *a)
  * neomutt_account_remove - Remove an Account from the global list
  * @param n NeoMutt
  * @param a Account to remove
- * @retval true If Account was removed
+ * @retval true Account was removed
  *
  * @note If a is NULL, all the Accounts will be removed
  */
 bool neomutt_account_remove(struct NeoMutt *n, struct Account *a)
 {
-  if (!n)
+  if (!n || TAILQ_EMPTY(&n->accounts))
     return false;
+
+  if (!a)
+  {
+    mutt_debug(LL_NOTIFY, "NT_ACCOUNT_DELETE_ALL\n");
+    struct EventAccount ev_a = { NULL };
+    notify_send(n->notify, NT_ACCOUNT, NT_ACCOUNT_DELETE_ALL, &ev_a);
+  }
 
   bool result = false;
   struct Account *np = NULL;
   struct Account *tmp = NULL;
   TAILQ_FOREACH_SAFE(np, &n->accounts, entries, tmp)
   {
-    if (!a || (np == a))
-    {
-      struct EventAccount ev_a = { np };
-      notify_send(n->notify, NT_ACCOUNT, NT_ACCOUNT_REMOVE, &ev_a);
+    if (a && (np != a))
+      continue;
 
-      TAILQ_REMOVE(&n->accounts, np, entries);
-      notify_set_parent(n->notify, NULL);
-      account_free(&np);
-      result = true;
-      if (a)
-        break;
-    }
+    TAILQ_REMOVE(&n->accounts, np, entries);
+    account_free(&np);
+    result = true;
+    if (a)
+      break;
   }
   return result;
 }

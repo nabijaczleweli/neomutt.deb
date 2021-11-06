@@ -21,7 +21,7 @@
  */
 
 /**
- * @page lib_core CORE: Backbone objects of NeoMutt
+ * @page lib_core Core NeoMutt objects
  *
  * Backbone objects of NeoMutt
  *
@@ -37,7 +37,9 @@
 
 // IWYU pragma: begin_exports
 #include "account.h"
+#include "command.h"
 #include "mailbox.h"
+#include "mxapi.h"
 #include "neomutt.h"
 // IWYU pragma: end_exports
 

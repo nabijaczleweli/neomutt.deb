@@ -21,8 +21,8 @@
  */
 
 /**
- * @page lib_send SEND: Shared code for sending Emails
-
+ * @page lib_send Send
+ *
  * Shared code for sending Emails
  *
  * | File             | Description             |
@@ -40,7 +40,6 @@
 #ifndef MUTT_SEND_LIB_H
 #define MUTT_SEND_LIB_H
 
-#include <stdbool.h>
 // IWYU pragma: begin_exports
 #include "body.h"
 #include "header.h"

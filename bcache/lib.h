@@ -1,6 +1,6 @@
 /**
  * @file
- * Body Caching - local copies of email bodies
+ * Body Caching (local copies of email bodies)
  *
  * @authors
  * Copyright (C) 2006-2007 Brendan Cully <brendan@kublai.com>
@@ -22,9 +22,9 @@
  */
 
 /**
- * @page lib_bcache BCACHE: Body Caching - local copies of email bodies
+ * @page lib_bcache Body (Message) Cache
  *
- * Body Caching - local copies of email bodies
+ * Body Caching (Local copies of email bodies)
  *
  * | File                | Description                |
  * | :------------------ | :------------------------- |
@@ -39,14 +39,13 @@
 struct ConnAccount;
 struct BodyCache;
 
-/* These Config Variables are only used in bcache.c */
-extern bool  C_MessageCacheClean;
-extern char *C_MessageCachedir;
-
 /**
- * typedef bcache_list_t - Prototype for mutt_bcache_list() callback
+ * @defgroup bcache_list_api Body Cache Callback API
+ *
+ * Prototype for a mutt_bcache_list() callback function
+ *
+ * @param id      Cache id
  * @param bcache  Body Cache from mutt_bcache_open()
- * @param want_id Callback function called for each match
  * @param data    Data to pass to the callback function
  * @retval -1  Failure
  * @retval >=0 count of matching items

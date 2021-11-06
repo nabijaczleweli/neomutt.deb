@@ -35,13 +35,12 @@
 #include <time.h>
 #include <unistd.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
-#include "context.h"
 #include "copy.h"
-#include "mutt_globals.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "protos.h"
@@ -60,21 +59,18 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
   char buf[256];
   int rc;
   FILE *fp = NULL;
-  struct stat sb;
+  struct stat st = { 0 };
   bool old_append = m->append;
 
   struct Buffer *fname = mutt_buffer_pool_get();
   mutt_buffer_mktemp(fname);
 
-  enum MailboxType otype = C_MboxType;
-  C_MboxType = MUTT_MBOX;
+  // Temporarily force $mbox_type to be MUTT_MBOX
+  const unsigned char c_mbox_type = cs_subset_enum(NeoMutt->sub, "mbox_type");
+  cs_subset_str_native_set(NeoMutt->sub, "mbox_type", MUTT_MBOX, NULL);
 
   struct Mailbox *m_fname = mx_path_resolve(mutt_buffer_string(fname));
-  struct Context *ctx_tmp = mx_mbox_open(m_fname, MUTT_NEWFOLDER);
-
-  C_MboxType = otype;
-
-  if (!ctx_tmp)
+  if (!mx_mbox_open(m_fname, MUTT_NEWFOLDER))
   {
     mutt_error(_("could not create temporary folder: %s"), strerror(errno));
     mutt_buffer_pool_release(&fname);
@@ -82,12 +78,16 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
     return -1;
   }
 
+  cs_subset_str_native_set(NeoMutt->sub, "mbox_type", c_mbox_type, NULL);
+
   const CopyHeaderFlags chflags =
       CH_NOLEN | (((m->type == MUTT_MBOX) || (m->type == MUTT_MMDF)) ? CH_NO_FLAGS : CH_NOSTATUS);
-  rc = mutt_append_message(ctx_tmp->mailbox, m, e, MUTT_CM_NO_FLAGS, chflags);
+  rc = mutt_append_message(m_fname, m, e, NULL, MUTT_CM_NO_FLAGS, chflags);
   int oerrno = errno;
 
-  mx_mbox_close(&ctx_tmp);
+  mx_mbox_close(m_fname);
+  if (m_fname->flags == MB_HIDDEN)
+    mailbox_free(&m_fname);
 
   if (rc == -1)
   {
@@ -95,7 +95,7 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
     goto bail;
   }
 
-  rc = stat(mutt_buffer_string(fname), &sb);
+  rc = stat(mutt_buffer_string(fname), &st);
   if (rc == -1)
   {
     mutt_error(_("Can't stat %s: %s"), mutt_buffer_string(fname), strerror(errno));
@@ -107,7 +107,7 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
    * the message separator, and not the body of the message.  If we fail to
    * remove it, the message will grow by one line each time the user edits
    * the message.  */
-  if ((sb.st_size != 0) && (truncate(mutt_buffer_string(fname), sb.st_size - 1) == -1))
+  if ((st.st_size != 0) && (truncate(mutt_buffer_string(fname), st.st_size - 1) == -1))
   {
     rc = -1;
     mutt_error(_("could not truncate temporary mail folder: %s"), strerror(errno));
@@ -118,7 +118,7 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
   {
     /* remove write permissions */
     rc = mutt_file_chmod_rm_stat(mutt_buffer_string(fname),
-                                 S_IWUSR | S_IWGRP | S_IWOTH, &sb);
+                                 S_IWUSR | S_IWGRP | S_IWOTH, &st);
     if (rc == -1)
     {
       mutt_debug(LL_DEBUG1, "Could not remove write permissions of %s: %s",
@@ -129,14 +129,14 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
   }
 
   /* re-stat after the truncate, to avoid false "modified" bugs */
-  rc = stat(mutt_buffer_string(fname), &sb);
+  rc = stat(mutt_buffer_string(fname), &st);
   if (rc == -1)
   {
     mutt_error(_("Can't stat %s: %s"), mutt_buffer_string(fname), strerror(errno));
     goto bail;
   }
 
-  /* Do not reuse the stat sb here as it is outdated. */
+  /* Do not reuse the stat st here as it is outdated. */
   time_t mtime = mutt_file_decrease_mtime(mutt_buffer_string(fname), NULL);
   if (mtime == (time_t) -1)
   {
@@ -145,30 +145,31 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
     goto bail;
   }
 
-  mutt_edit_file(NONULL(C_Editor), mutt_buffer_string(fname));
+  const char *const c_editor = cs_subset_string(NeoMutt->sub, "editor");
+  mutt_edit_file(NONULL(c_editor), mutt_buffer_string(fname));
 
-  rc = stat(mutt_buffer_string(fname), &sb);
+  rc = stat(mutt_buffer_string(fname), &st);
   if (rc == -1)
   {
     mutt_error(_("Can't stat %s: %s"), mutt_buffer_string(fname), strerror(errno));
     goto bail;
   }
 
-  if (sb.st_size == 0)
+  if (st.st_size == 0)
   {
     mutt_message(_("Message file is empty"));
     rc = 1;
     goto bail;
   }
 
-  if ((action == EVM_EDIT) && (sb.st_mtime == mtime))
+  if ((action == EVM_EDIT) && (st.st_mtime == mtime))
   {
     mutt_message(_("Message not modified"));
     rc = 1;
     goto bail;
   }
 
-  if ((action == EVM_VIEW) && (sb.st_mtime != mtime))
+  if ((action == EVM_VIEW) && (st.st_mtime != mtime))
   {
     mutt_message(_("Message of read-only mailbox modified! Ignoring changes."));
     rc = 1;
@@ -190,24 +191,20 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
     goto bail;
   }
 
-  struct Context *ctx_app = mx_mbox_open(m, MUTT_APPEND | MUTT_QUIET);
-  if (!ctx_app)
+  if (!mx_mbox_open(m, MUTT_APPEND | MUTT_QUIET))
   {
     rc = -1;
     /* L10N: %s is from strerror(errno) */
     mutt_error(_("Can't append to folder: %s"), strerror(errno));
     goto bail;
   }
-
   MsgOpenFlags of = MUTT_MSG_NO_FLAGS;
   CopyHeaderFlags cf =
-      (((ctx_app->mailbox->type == MUTT_MBOX) || (ctx_app->mailbox->type == MUTT_MMDF)) ?
-           CH_NO_FLAGS :
-           CH_NOSTATUS);
+      (((m->type == MUTT_MBOX) || (m->type == MUTT_MMDF)) ? CH_NO_FLAGS : CH_NOSTATUS);
 
   if (fgets(buf, sizeof(buf), fp) && is_from(buf, NULL, 0, NULL))
   {
-    if ((ctx_app->mailbox->type == MUTT_MBOX) || (ctx_app->mailbox->type == MUTT_MMDF))
+    if ((m->type == MUTT_MBOX) || (m->type == MUTT_MMDF))
       cf = CH_FROM | CH_FORCE_FROM;
   }
   else
@@ -220,7 +217,7 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
   bool o_old = e->old;
   e->read = false;
   e->old = false;
-  struct Message *msg = mx_msg_open_new(ctx_app->mailbox, e, of);
+  struct Message *msg = mx_msg_open_new(m, e, of);
   e->read = o_read;
   e->old = o_old;
 
@@ -228,21 +225,21 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
   {
     rc = -1;
     mutt_error(_("Can't append to folder: %s"), strerror(errno));
-    mx_mbox_close(&ctx_app);
+    mx_mbox_close(m);
     goto bail;
   }
 
-  rc = mutt_copy_hdr(fp, msg->fp, 0, sb.st_size, CH_NOLEN | cf, NULL, 0);
+  rc = mutt_copy_hdr(fp, msg->fp, 0, st.st_size, CH_NOLEN | cf, NULL, 0);
   if (rc == 0)
   {
     fputc('\n', msg->fp);
     mutt_file_copy_stream(fp, msg->fp);
   }
 
-  rc = mx_msg_commit(ctx_app->mailbox, msg);
-  mx_msg_close(ctx_app->mailbox, &msg);
+  rc = mx_msg_commit(m, msg);
+  mx_msg_close(m, &msg);
 
-  mx_mbox_close(&ctx_app);
+  mx_mbox_close(m);
 
 bail:
   mutt_file_fclose(&fp);
@@ -256,7 +253,8 @@ bail:
     mutt_set_flag(m, e, MUTT_PURGE, true);
     mutt_set_flag(m, e, MUTT_READ, true);
 
-    if (C_DeleteUntag)
+    const bool c_delete_untag = cs_subset_bool(NeoMutt->sub, "delete_untag");
+    if (c_delete_untag)
       mutt_set_flag(m, e, MUTT_TAG, false);
   }
   else if (rc == -1)

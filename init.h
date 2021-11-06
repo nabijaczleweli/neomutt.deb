@@ -24,19 +24,17 @@
 #ifndef MUTT_INIT_H
 #define MUTT_INIT_H
 
-#include "config.h"
 #include <stddef.h>
 #include <stdbool.h>
-#include <stdint.h>
+#include "core/lib.h"
 #include "mutt.h"
 #include "hook.h"
-#include "mutt_commands.h"
 
 struct Buffer;
 struct ConfigSet;
 struct ListHead;
 
-struct ConfigSet *    init_config            (size_t size);
+void                  init_config            (struct ConfigSet *cs);
 int                   mutt_command_complete  (char *buf, size_t buflen, int pos, int numtabs);
 int                   mutt_extract_token     (struct Buffer *dest, struct Buffer *tok, TokenFlags flags);
 HookFlags             mutt_get_hook_type     (const char *name);

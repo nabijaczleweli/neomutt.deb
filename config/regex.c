@@ -29,15 +29,15 @@
  * - Empty regular expression is stored as `NULL`
  * - Validator is passed `struct Regex`, which may be `NULL`
  * - Data is freed when `ConfigSet` is freed
+ * - Implementation: #CstRegex
  */
 
 #include "config.h"
 #include <stddef.h>
-#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include "mutt/lib.h"
-#include "regex2.h" // IWYU pragma: keep
+#include "regex2.h"
 #include "set.h"
 #include "types.h"
 
@@ -58,7 +58,7 @@ void regex_free(struct Regex **r)
 }
 
 /**
- * regex_destroy - Destroy a Regex object - Implements ConfigSetType::destroy()
+ * regex_destroy - Destroy a Regex object - Implements ConfigSetType::destroy() - @ingroup cfg_type_destroy
  */
 static void regex_destroy(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef)
 {
@@ -115,7 +115,7 @@ struct Regex *regex_new(const char *str, uint32_t flags, struct Buffer *err)
 }
 
 /**
- * regex_string_set - Set a Regex by string - Implements ConfigSetType::string_set()
+ * regex_string_set - Set a Regex by string - Implements ConfigSetType::string_set() - @ingroup cfg_type_string_set
  */
 static int regex_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                             const char *value, struct Buffer *err)
@@ -165,14 +165,14 @@ static int regex_string_set(const struct ConfigSet *cs, void *var, struct Config
       FREE(&cdef->initial);
 
     cdef->type |= DT_INITIAL_SET;
-    cdef->initial = IP mutt_str_dup(value);
+    cdef->initial = (intptr_t) mutt_str_dup(value);
   }
 
   return rc;
 }
 
 /**
- * regex_string_get - Get a Regex as a string - Implements ConfigSetType::string_get()
+ * regex_string_get - Get a Regex as a string - Implements ConfigSetType::string_get() - @ingroup cfg_type_string_get
  */
 static int regex_string_get(const struct ConfigSet *cs, void *var,
                             const struct ConfigDef *cdef, struct Buffer *result)
@@ -198,7 +198,7 @@ static int regex_string_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * regex_native_set - Set a Regex config item by Regex object - Implements ConfigSetType::native_set()
+ * regex_native_set - Set a Regex config item by Regex object - Implements ConfigSetType::native_set() - @ingroup cfg_type_native_set
  */
 static int regex_native_set(const struct ConfigSet *cs, void *var,
                             const struct ConfigDef *cdef, intptr_t value, struct Buffer *err)
@@ -239,7 +239,7 @@ static int regex_native_set(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * regex_native_get - Get a Regex object from a Regex config item - Implements ConfigSetType::native_get()
+ * regex_native_get - Get a Regex object from a Regex config item - Implements ConfigSetType::native_get() - @ingroup cfg_type_native_get
  */
 static intptr_t regex_native_get(const struct ConfigSet *cs, void *var,
                                  const struct ConfigDef *cdef, struct Buffer *err)
@@ -250,7 +250,7 @@ static intptr_t regex_native_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * regex_reset - Reset a Regex to its initial value - Implements ConfigSetType::reset()
+ * regex_reset - Reset a Regex to its initial value - Implements ConfigSetType::reset() - @ingroup cfg_type_reset
  */
 static int regex_reset(const struct ConfigSet *cs, void *var,
                        const struct ConfigDef *cdef, struct Buffer *err)
@@ -296,9 +296,9 @@ static int regex_reset(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * cst_regex - Config type representing a regular expression
+ * CstRegex - Config type representing a regular expression
  */
-const struct ConfigSetType cst_regex = {
+const struct ConfigSetType CstRegex = {
   DT_REGEX,
   "regex",
   regex_string_set,

@@ -21,7 +21,7 @@
  */
 
 /**
- * @page lib_email EMAIL: Structs that make up an email
+ * @page lib_email Email code
  *
  * Structs that make up an email
  *
@@ -41,6 +41,8 @@
  * | email/tags.c           | @subpage email_tags      |
  * | email/thread.c         | @subpage email_thread    |
  * | email/url.c            | @subpage email_url       |
+ *
+ * @image html libemail.svg
  */
 
 #ifndef MUTT_EMAIL_LIB_H

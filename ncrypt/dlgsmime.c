@@ -1,6 +1,6 @@
 /**
  * @file
- * SMIME key selection dialog
+ * SMIME Key Selection Dialog
  *
  * @authors
  * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
@@ -21,25 +21,51 @@
  */
 
 /**
- * @page crypt_dlgsmime SMIME key selection dialog
+ * @page crypt_dlgsmime SMIME Key Selection Dialog
  *
- * SMIME key selection dialog
+ * The SMIME Key Selection Dialog lets the user select a SMIME key.
+ *
+ * This is a @ref gui_simple
+ *
+ * ## Windows
+ *
+ * | Name                       | Type         | See Also               |
+ * | :------------------------- | :----------- | :--------------------- |
+ * | SMIME Key Selection Dialog | WT_DLG_SMIME | dlg_select_smime_key() |
+ *
+ * **Parent**
+ * - @ref gui_dialog
+ *
+ * **Children**
+ * - See: @ref gui_simple
+ *
+ * ## Data
+ * - #Menu
+ * - #Menu::mdata
+ * - #SmimeKey
+ *
+ * The @ref gui_simple holds a Menu.  The SMIME Key Selection Dialog stores its
+ * data (#SmimeKey) in Menu::mdata.
+ *
+ * ## Events
+ *
+ * None.  The dialog is not affected by any config or colours and doesn't
+ * support sorting.  Once constructed, the events are handled by the Menu (part
+ * of the @ref gui_simple).
  */
 
 #include "config.h"
 #include <stdbool.h>
 #include <stdio.h>
-#include <string.h>
 #include "private.h"
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "gui/lib.h"
-#include "ncrypt/lib.h"
-#include "keymap.h"
+#include "lib.h"
+#include "menu/lib.h"
+#include "question/lib.h"
 #include "mutt_logging.h"
-#include "mutt_menu.h"
 #include "opcodes.h"
-#include "protos.h"
 #include "smime.h"
 
 /// Help Bar for the Smime key selection dialog
@@ -79,9 +105,9 @@ static char *smime_key_flags(KeyFlags flags)
 }
 
 /**
- * smime_make_entry - Format a menu item for the smime key list - Implements Menu::make_entry()
+ * smime_make_entry - Format a menu item for the smime key list - Implements Menu::make_entry() - @ingroup menu_make_entry
  */
-static void smime_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
+static void smime_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
 {
   struct SmimeKey **table = menu->mdata;
   struct SmimeKey *key = table[line];
@@ -149,6 +175,16 @@ static void smime_make_entry(char *buf, size_t buflen, struct Menu *menu, int li
 }
 
 /**
+ * smime_key_table_free - Free the key table - Implements Menu::mdata_free() - @ingroup menu_mdata_free
+ *
+ * @note The keys are owned by the caller of the dialog
+ */
+static void smime_key_table_free(struct Menu *menu, void **ptr)
+{
+  FREE(ptr);
+}
+
+/**
  * dlg_select_smime_key - Get the user to select a key
  * @param keys  List of keys to select from
  * @param query String to match
@@ -162,8 +198,6 @@ struct SmimeKey *dlg_select_smime_key(struct SmimeKey *keys, char *query)
   struct SmimeKey *key = NULL;
   struct SmimeKey *selected_key = NULL;
   char buf[1024];
-  char title[256];
-  struct Menu *menu = NULL;
   const char *s = "";
   bool done = false;
 
@@ -178,31 +212,34 @@ struct SmimeKey *dlg_select_smime_key(struct SmimeKey *keys, char *query)
     table[table_index++] = key;
   }
 
-  snprintf(title, sizeof(title), _("S/MIME certificates matching \"%s\""), query);
+  struct MuttWindow *dlg = simple_dialog_new(MENU_SMIME, WT_DLG_SMIME, SmimeHelp);
 
-  menu = mutt_menu_new(MENU_SMIME);
-  struct MuttWindow *dlg = dialog_create_simple_index(menu, WT_DLG_SMIME);
-  dlg->help_data = SmimeHelp;
-  dlg->help_menu = MENU_SMIME;
-
+  struct Menu *menu = dlg->wdata;
   menu->max = table_index;
   menu->make_entry = smime_make_entry;
   menu->mdata = table;
-  menu->title = title;
-  mutt_menu_push_current(menu);
+  menu->mdata_free = smime_key_table_free;
   /* sorting keys might be done later - TODO */
+
+  char title[256];
+  struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
+  snprintf(title, sizeof(title), _("S/MIME certificates matching \"%s\""), query);
+  sbar_set_title(sbar, title);
 
   mutt_clear_error();
 
   done = false;
   while (!done)
   {
-    switch (mutt_menu_loop(menu))
+    switch (menu_loop(menu))
     {
       case OP_GENERIC_SELECT_ENTRY:
-        if (table[menu->current]->trust != 't')
+      {
+        const int index = menu_get_index(menu);
+        struct SmimeKey *cur_key = table[index];
+        if (cur_key->trust != 't')
         {
-          switch (table[menu->current]->trust)
+          switch (cur_key->trust)
           {
             case 'e':
             case 'i':
@@ -228,19 +265,17 @@ struct SmimeKey *dlg_select_smime_key(struct SmimeKey *keys, char *query)
           }
         }
 
-        selected_key = table[menu->current];
+        selected_key = cur_key;
         done = true;
         break;
+      }
+
       case OP_EXIT:
         done = true;
         break;
     }
   }
 
-  mutt_menu_pop_current(menu);
-  mutt_menu_free(&menu);
-  dialog_destroy_simple_index(&dlg);
-  FREE(&table);
-
+  simple_dialog_free(&dlg);
   return selected_key;
 }

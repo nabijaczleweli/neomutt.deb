@@ -24,12 +24,8 @@
 #define MUTT_EMAIL_RFC2231_H
 
 #include <stddef.h>
-#include <stdbool.h>
 
 struct ParameterList;
-
-/* These Config Variables are only used in rfc2231.c */
-extern bool C_Rfc2047Parameters;
 
 void   rfc2231_decode_parameters(struct ParameterList *pl);
 size_t rfc2231_encode_string    (struct ParameterList *head, const char *attribute, char *value);

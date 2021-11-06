@@ -31,8 +31,9 @@
 #include <string.h>
 #include "private.h"
 #include "mutt/lib.h"
+#include "config/lib.h"
+#include "core/lib.h"
 
-// clang-format off
 /**
  * Index64u - Lookup table for Base64 encoding/decoding
  *
@@ -42,16 +43,17 @@
  *   mime A-Za-z0-9+/
  */
 const int Index64u[128] = {
-    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
-    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
-    -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,62, 63,-1,-1,-1,
-    52,53,54,55, 56,57,58,59, 60,61,-1,-1, -1,-1,-1,-1,
-    -1, 0, 1, 2,  3, 4, 5, 6,  7, 8, 9,10, 11,12,13,14,
-    15,16,17,18, 19,20,21,22, 23,24,25,-1, -1,-1,-1,-1,
-    -1,26,27,28, 29,30,31,32, 33,34,35,36, 37,38,39,40,
-    41,42,43,44, 45,46,47,48, 49,50,51,-1, -1,-1,-1,-1
+  // clang-format off
+  -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+  -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
+  -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,62, 63,-1,-1,-1,
+  52,53,54,55, 56,57,58,59, 60,61,-1,-1, -1,-1,-1,-1,
+  -1, 0, 1, 2,  3, 4, 5, 6,  7, 8, 9,10, 11,12,13,14,
+  15,16,17,18, 19,20,21,22, 23,24,25,-1, -1,-1,-1,-1,
+  -1,26,27,28, 29,30,31,32, 33,34,35,36, 37,38,39,40,
+  41,42,43,44, 45,46,47,48, 49,50,51,-1, -1,-1,-1,-1
+  // clang-format on
 };
-// clang-format on
 
 /**
  * B64Chars - Characters of the Base64 encoding
@@ -315,15 +317,16 @@ bail:
  */
 void imap_utf_encode(bool unicode, char **s)
 {
-  if (!C_Charset || !s || !*s)
+  const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
+  if (!c_charset || !s || !*s)
     return;
 
-  if (unicode && mutt_ch_is_utf8(C_Charset))
+  if (unicode && mutt_ch_is_utf8(c_charset))
   {
     return;
   }
 
-  if (mutt_ch_convert_string(s, C_Charset, "utf-8", MUTT_ICONV_NO_FLAGS) != 0)
+  if (mutt_ch_convert_string(s, c_charset, "utf-8", MUTT_ICONV_NO_FLAGS) != 0)
   {
     FREE(s);
     return;
@@ -344,10 +347,11 @@ void imap_utf_encode(bool unicode, char **s)
  */
 void imap_utf_decode(bool unicode, char **s)
 {
-  if (!C_Charset || !s || !*s)
+  const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
+  if (!c_charset || !s || !*s)
     return;
 
-  if (unicode && mutt_ch_is_utf8(C_Charset))
+  if (unicode && mutt_ch_is_utf8(c_charset))
   {
     return;
   }
@@ -359,7 +363,7 @@ void imap_utf_decode(bool unicode, char **s)
     *s = utf8;
   }
 
-  if (mutt_ch_convert_string(s, "utf-8", C_Charset, MUTT_ICONV_NO_FLAGS) != 0)
+  if (mutt_ch_convert_string(s, "utf-8", c_charset, MUTT_ICONV_NO_FLAGS) != 0)
   {
     FREE(s);
   }

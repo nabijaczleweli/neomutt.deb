@@ -24,7 +24,7 @@
  */
 
 /**
- * @page imap_command Send/receive commands to/from an IMAP server
+ * @page imap_command Send/receive commands
  *
  * Send/receive commands to/from an IMAP server
  */
@@ -40,16 +40,17 @@
 #include <string.h>
 #include "private.h"
 #include "mutt/lib.h"
+#include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
 #include "conn/lib.h"
+#include "adata.h"
+#include "edata.h"
 #include "init.h"
-#include "message.h"
+#include "mdata.h"
 #include "msn.h"
 #include "mutt_account.h"
-#include "mutt_globals.h"
 #include "mutt_logging.h"
-#include "mutt_menu.h"
 #include "mutt_socket.h"
 #include "mx.h"
 
@@ -70,6 +71,7 @@ static const char *const Capabilities[] = {
   "AUTH=GSSAPI",
   "AUTH=ANONYMOUS",
   "AUTH=OAUTHBEARER",
+  "AUTH=XOAUTH2",
   "STARTTLS",
   "LOGINDISABLED",
   "IDLE",
@@ -99,7 +101,7 @@ static bool cmd_queue_full(struct ImapAccountData *adata)
 /**
  * cmd_new - Create and queue a new command control block
  * @param adata Imap Account data
- * @retval NULL if the pipeline is full
+ * @retval NULL The pipeline is full
  * @retval ptr New command
  */
 static struct ImapCommand *cmd_new(struct ImapAccountData *adata)
@@ -227,7 +229,7 @@ static int cmd_start(struct ImapAccountData *adata, const char *cmdstr, ImapCmdF
 }
 
 /**
- * cmd_status - parse response line for tagged OK/NO/BAD
+ * cmd_status - Parse response line for tagged OK/NO/BAD
  * @param s Status string from server
  * @retval  0 Success
  * @retval <0 Failure, e.g. #IMAP_RES_BAD
@@ -527,7 +529,7 @@ static void cmd_parse_fetch(struct ImapAccountData *adata, char *s)
 }
 
 /**
- * cmd_parse_capability - set capability bits according to CAPABILITY response
+ * cmd_parse_capability - Set capability bits according to CAPABILITY response
  * @param adata Imap Account data
  * @param s     Command string with capabilities
  */
@@ -674,7 +676,9 @@ static void cmd_parse_lsub(struct ImapAccountData *adata, char *s)
     return;
   }
 
-  if (!C_ImapCheckSubscribed)
+  const bool c_imap_check_subscribed =
+      cs_subset_bool(NeoMutt->sub, "imap_check_subscribed");
+  if (!c_imap_check_subscribed)
     return;
 
   adata->cmdresult = &list;
@@ -692,7 +696,8 @@ static void cmd_parse_lsub(struct ImapAccountData *adata, char *s)
   imap_quote_string(quoted_name, sizeof(quoted_name), list.name, true);
   url.path = quoted_name + 1;
   url.path[strlen(url.path) - 1] = '\0';
-  if (mutt_str_equal(url.user, C_ImapUser))
+  const char *const c_imap_user = cs_subset_string(NeoMutt->sub, "imap_user");
+  if (mutt_str_equal(url.user, c_imap_user))
     url.user = NULL;
   url_tostring(&url, buf + 11, sizeof(buf) - 11, U_NO_FLAGS);
   mutt_str_cat(buf, sizeof(buf), "\"");
@@ -888,7 +893,9 @@ static void cmd_parse_status(struct ImapAccountData *adata, char *s)
              mailbox, olduv, oldun, mdata->unseen);
 
   bool new_mail = false;
-  if (C_MailCheckRecent)
+  const bool c_mail_check_recent =
+      cs_subset_bool(NeoMutt->sub, "mail_check_recent");
+  if (c_mail_check_recent)
   {
     if ((olduv != 0) && (olduv == mdata->uidvalidity))
     {
@@ -913,6 +920,9 @@ static void cmd_parse_status(struct ImapAccountData *adata, char *s)
   // force back to keep detecting new mail until the mailbox is opened
   if (m->has_new)
     mdata->uid_next = oldun;
+
+  struct EventMailbox ev_m = { m };
+  notify_send(m->notify, NT_MAILBOX, NT_MAILBOX_CHANGE, &ev_m);
 }
 
 /**
@@ -973,7 +983,7 @@ static void cmd_parse_exists(struct ImapAccountData *adata, const char *pn)
 }
 
 /**
- * cmd_handle_untagged - fallback parser for otherwise unhandled messages
+ * cmd_handle_untagged - Fallback parser for otherwise unhandled messages
  * @param adata Imap Account data
  * @retval  0 Success
  * @retval -1 Failure
@@ -983,6 +993,8 @@ static int cmd_handle_untagged(struct ImapAccountData *adata)
   char *s = imap_next_word(adata->buf);
   char *pn = imap_next_word(s);
 
+  const bool c_imap_server_noise =
+      cs_subset_bool(NeoMutt->sub, "imap_server_noise");
   if ((adata->state >= IMAP_SELECTED) && isdigit((unsigned char) *s))
   {
     /* pn vs. s: need initial seqno */
@@ -1034,7 +1046,7 @@ static int cmd_handle_untagged(struct ImapAccountData *adata)
 
     return -1;
   }
-  else if (C_ImapServernoise && mutt_istr_startswith(s, "NO"))
+  else if (c_imap_server_noise && mutt_istr_startswith(s, "NO"))
   {
     mutt_debug(LL_DEBUG2, "Handling untagged NO\n");
 
@@ -1189,7 +1201,7 @@ int imap_cmd_step(struct ImapAccountData *adata)
  * imap_code - Was the command successful
  * @param s IMAP command status
  * @retval 1 Command result was OK
- * @retval 0 If NO or BAD
+ * @retval 0 NO or BAD
  */
 bool imap_code(const char *s)
 {
@@ -1260,8 +1272,10 @@ int imap_exec(struct ImapAccountData *adata, const char *cmdstr, ImapCmdFlags fl
   if (flags & IMAP_CMD_QUEUE)
     return IMAP_EXEC_SUCCESS;
 
-  if ((flags & IMAP_CMD_POLL) && (C_ImapPollTimeout > 0) &&
-      ((mutt_socket_poll(adata->conn, C_ImapPollTimeout)) == 0))
+  const short c_imap_poll_timeout =
+      cs_subset_number(NeoMutt->sub, "imap_poll_timeout");
+  if ((flags & IMAP_CMD_POLL) && (c_imap_poll_timeout > 0) &&
+      ((mutt_socket_poll(adata->conn, c_imap_poll_timeout)) == 0))
   {
     mutt_error(_("Connection to %s timed out"), adata->conn->account.host);
     cmd_handle_fatal(adata);
@@ -1380,7 +1394,10 @@ int imap_cmd_idle(struct ImapAccountData *adata)
     return -1;
   }
 
-  if ((C_ImapPollTimeout > 0) && ((mutt_socket_poll(adata->conn, C_ImapPollTimeout)) == 0))
+  const short c_imap_poll_timeout =
+      cs_subset_number(NeoMutt->sub, "imap_poll_timeout");
+  if ((c_imap_poll_timeout > 0) &&
+      ((mutt_socket_poll(adata->conn, c_imap_poll_timeout)) == 0))
   {
     mutt_error(_("Connection to %s timed out"), adata->conn->account.host);
     cmd_handle_fatal(adata);

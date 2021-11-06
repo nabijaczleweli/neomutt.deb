@@ -23,18 +23,55 @@
 /**
  * @page gui_dialog Dialog Windows
  *
- * Dialog Windows
+ * A Dialog is an interactive set of windows allowing the user to perform some
+ * task, e.g. @ref alias_dlgalias
+ *
+ * The All Dialogs window is a container window and not visible.  All active dialogs
+ * will be children of this window, though only one will be active at a time.
+ *
+ * ## Windows
+ *
+ * | Name        | Type            | Constructor      |
+ * | :---------- | :-------------- | :--------------- |
+ * | All Dialogs | #WT_ALL_DIALOGS | alldialogs_new() |
+ *
+ * **Parent**
+ * - @ref gui_rootwin
+ *
+ * **Children**
+ *
+ * The All Dialogs window has many possible children, e.g.
+ *
+ * - @ref alias_dlgalias
+ * - @ref compose_dialog
+ * - @ref crypt_dlggpgme
+ * - ...
+ *
+ * ## Data
+ *
+ * The All Dialogs window has no data.
+ *
+ * ## Events
+ *
+ * Once constructed, it is controlled by the following events:
+ *
+ * | Event Type  | Handler                      |
+ * | :---------- | :--------------------------- |
+ * | #NT_WINDOW  | alldialogs_window_observer() |
+ *
+ * The All Dialogs window does not implement MuttWindow::recalc() or MuttWindow::repaint().
  */
 
 #include "config.h"
 #include <stddef.h>
 #include <stdbool.h>
 #include "mutt/lib.h"
-#include "config/lib.h"
-#include "core/lib.h"
-#include "debug/lib.h"
 #include "lib.h"
-#include "mutt_menu.h"
+#ifdef USE_DEBUG_WINDOW
+#include "debug/lib.h"
+#endif
+
+struct MuttWindow *AllDialogsWindow = NULL; ///< Parent of all Dialogs
 
 /**
  * dialog_find - Find the parent Dialog of a Window
@@ -76,6 +113,8 @@ void dialog_push(struct MuttWindow *dlg)
   notify_set_parent(dlg->notify, AllDialogsWindow->notify);
 
   // Notify the world, allowing plugins to integrate
+  mutt_debug(LL_NOTIFY, "NT_WINDOW_DIALOG visible: %s, %p\n",
+             mutt_window_win_name(dlg), dlg);
   struct EventWindow ev_w = { dlg, WN_VISIBLE };
   notify_send(dlg->notify, NT_WINDOW, NT_WINDOW_DIALOG, &ev_w);
 
@@ -105,6 +144,8 @@ void dialog_pop(void)
     return;
 
   // Notify the world, allowing plugins to clean up
+  mutt_debug(LL_NOTIFY, "NT_WINDOW_DIALOG hidden: %s, %p\n",
+             mutt_window_win_name(last), last);
   struct EventWindow ev_w = { last, WN_HIDDEN };
   notify_send(last->notify, NT_WINDOW, NT_WINDOW_DIALOG, &ev_w);
 
@@ -117,103 +158,78 @@ void dialog_pop(void)
   {
     last->state.visible = true;
     mutt_window_reflow(AllDialogsWindow);
+    window_set_focus(last);
   }
-  window_set_focus(last);
-  mutt_menu_set_current_redraw(REDRAW_FULL);
+  else
+  {
+    AllDialogsWindow->focus = NULL;
+  }
 #ifdef USE_DEBUG_WINDOW
   debug_win_dump();
 #endif
 }
 
 /**
- * dialog_config_observer - Listen for config changes affecting a Dialog - Implements ::observer_t
+ * alldialogs_window_observer - Notification that a Window has changed - Implements ::observer_t - @ingroup observer_api
+ *
+ * This function is triggered by changes to the windows.
+ *
+ * - Delete (this window): clean up the resources held by the All Dialogs window
  */
-static int dialog_config_observer(struct NotifyCallback *nc)
+static int alldialogs_window_observer(struct NotifyCallback *nc)
 {
-  if (!nc->event_data || !nc->global_data)
+  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
     return -1;
-  if (nc->event_type != NT_CONFIG)
+
+  if (nc->event_subtype != NT_WINDOW_DELETE)
     return 0;
 
-  struct EventConfig *ec = nc->event_data;
-  struct MuttWindow *dlg = nc->global_data;
-
-  if (!mutt_str_equal(ec->name, "status_on_top"))
+  struct MuttWindow *win_alldlgs = nc->global_data;
+  struct EventWindow *ev_w = nc->event_data;
+  if (ev_w->win != win_alldlgs)
     return 0;
 
-  struct MuttWindow *win_first = TAILQ_FIRST(&dlg->children);
+  notify_observer_remove(win_alldlgs->notify, alldialogs_window_observer, win_alldlgs);
 
-  const bool c_status_on_top = cs_subset_bool(NeoMutt->sub, "status_on_top");
-  if ((c_status_on_top && (win_first->type == WT_INDEX)) ||
-      (!c_status_on_top && (win_first->type != WT_INDEX)))
-  {
-    // Swap the Index and the IndexBar Windows
-    TAILQ_REMOVE(&dlg->children, win_first, entries);
-    TAILQ_INSERT_TAIL(&dlg->children, win_first, entries);
-  }
-
-  mutt_window_reflow(dlg);
+  AllDialogsWindow = NULL;
+  mutt_debug(LL_DEBUG5, "window delete done\n");
   return 0;
 }
 
 /**
- * dialog_create_simple_index - Create a simple index Dialog
- * @param menu Menu to use
- * @param type Dialog type, e.g. #WT_DLG_ALIAS
- * @retval ptr New Dialog Window
+ * alldialogs_new - Create the AllDialogs Window
+ * @retval ptr New AllDialogs Window
+ *
+ * Create the container for all the Dialogs.
  */
-struct MuttWindow *dialog_create_simple_index(struct Menu *menu, enum WindowType type)
+struct MuttWindow *alldialogs_new(void)
 {
-  if (!menu)
-    return NULL;
-
-  struct MuttWindow *dlg =
-      mutt_window_new(type, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
+  struct MuttWindow *win_alldlgs =
+      mutt_window_new(WT_ALL_DIALOGS, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
                       MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
 
-  struct MuttWindow *index =
-      mutt_window_new(WT_INDEX, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  dlg->focus = index;
+  notify_observer_add(win_alldlgs->notify, NT_WINDOW, alldialogs_window_observer, win_alldlgs);
 
-  struct MuttWindow *ibar =
-      mutt_window_new(WT_INDEX_BAR, MUTT_WIN_ORIENT_VERTICAL,
-                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
+  AllDialogsWindow = win_alldlgs;
 
-  const bool c_status_on_top = cs_subset_bool(NeoMutt->sub, "status_on_top");
-  if (c_status_on_top)
-  {
-    mutt_window_add_child(dlg, ibar);
-    mutt_window_add_child(dlg, index);
-  }
-  else
-  {
-    mutt_window_add_child(dlg, index);
-    mutt_window_add_child(dlg, ibar);
-  }
-
-  menu->pagelen = index->state.rows;
-  menu->win_index = index;
-  menu->win_ibar = ibar;
-
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, dialog_config_observer, dlg);
-  dialog_push(dlg);
-
-  return dlg;
+  return win_alldlgs;
 }
 
 /**
- * dialog_destroy_simple_index - Destroy a simple index Dialog
- * @param ptr Dialog Window to destroy
+ * alldialogs_get_current - Get the currently active Dialog
+ * @retval ptr Active Dialog
  */
-void dialog_destroy_simple_index(struct MuttWindow **ptr)
+struct MuttWindow *alldialogs_get_current(void)
 {
-  if (!ptr || !*ptr)
-    return;
+  if (!AllDialogsWindow)
+    return NULL;
 
-  struct MuttWindow *dlg = *ptr;
+  struct MuttWindow *np = NULL;
+  TAILQ_FOREACH(np, &AllDialogsWindow->children, entries)
+  {
+    if (mutt_window_is_visible(np))
+      return np;
+  }
 
-  dialog_pop();
-  notify_observer_remove(NeoMutt->notify, dialog_config_observer, dlg);
-  mutt_window_free(ptr);
+  return NULL;
 }

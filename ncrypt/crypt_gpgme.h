@@ -32,7 +32,7 @@
 struct AddressList;
 struct Body;
 struct Email;
-struct Mailbox;
+struct Message;
 struct State;
 
 /* We work based on user IDs, getting from a user ID to the key is
@@ -42,7 +42,7 @@ struct State;
  */
 struct CryptKeyInfo
 {
-  struct CryptKeyInfo *next;
+  struct CryptKeyInfo *next; ///< Linked list
   gpgme_key_t kobj;
   int idx;                   ///< and the user ID at this index
   const char *uid;           ///< and for convenience point to this user ID
@@ -81,11 +81,11 @@ enum KeyCap
 void         pgp_gpgme_set_sender(const char *sender);
 
 int          pgp_gpgme_application_handler(struct Body *m, struct State *s);
-int          pgp_gpgme_check_traditional(FILE *fp, struct Body *b, bool just_one);
+bool         pgp_gpgme_check_traditional(FILE *fp, struct Body *b, bool just_one);
 int          pgp_gpgme_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Body **cur);
 int          pgp_gpgme_encrypted_handler(struct Body *a, struct State *s);
 struct Body *pgp_gpgme_encrypt_message(struct Body *a, char *keylist, bool sign, const struct AddressList *from);
-char *       pgp_gpgme_find_keys(struct AddressList *addrlist, bool oppenc_mode);
+char *       pgp_gpgme_find_keys(const struct AddressList *addrlist, bool oppenc_mode);
 void         pgp_gpgme_invoke_import(const char *fname);
 struct Body *pgp_gpgme_make_key_attachment(void);
 SecurityFlags pgp_gpgme_send_menu(struct Email *e);
@@ -95,12 +95,12 @@ int          pgp_gpgme_verify_one(struct Body *sigbdy, struct State *s, const ch
 int          smime_gpgme_application_handler(struct Body *a, struct State *s);
 struct Body *smime_gpgme_build_smime_entity(struct Body *a, char *keylist);
 int          smime_gpgme_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Body **cur);
-char *       smime_gpgme_find_keys(struct AddressList *addrlist, bool oppenc_mode);
+char *       smime_gpgme_find_keys(const struct AddressList *addrlist, bool oppenc_mode);
 void         smime_gpgme_init(void);
 SecurityFlags smime_gpgme_send_menu(struct Email *e);
 struct Body *smime_gpgme_sign_message(struct Body *a, const struct AddressList *from);
 int          smime_gpgme_verify_one(struct Body *sigbdy, struct State *s, const char *tempfile);
-int          smime_gpgme_verify_sender(struct Mailbox *m, struct Email *e);
+int          smime_gpgme_verify_sender(struct Email *e, struct Message *msg);
 
 bool crypt_id_is_strong(struct CryptKeyInfo *key);
 int digit(const char *s);

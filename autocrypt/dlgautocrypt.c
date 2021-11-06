@@ -21,9 +21,47 @@
  */
 
 /**
- * @page autocrypt_account Autocrypt account menu
+ * @page autocrypt_account Autocrypt account dialog
  *
- * Autocrypt account menu
+ * The Autocrypt Account Dialog lets the user set up or update an Autocrypt Account.
+ *
+ * This is a @ref gui_simple
+ *
+ * ## Windows
+ *
+ * | Name                     | Type             | See Also                       |
+ * | :----------------------- | :--------------- | :----------------------------- |
+ * | Autocrypt Account Dialog | WT_DLG_AUTOCRYPT | dlg_select_autocrypt_account() |
+ *
+ * **Parent**
+ * - @ref gui_dialog
+ *
+ * **Children**
+ * - See: @ref gui_simple
+ *
+ * ## Data
+ * - #Menu
+ * - #Menu::mdata
+ * - #AccountEntry
+ *
+ * The @ref gui_simple holds a Menu.  The Autocrypt Account Dialog stores its
+ * data (#AccountEntry) in Menu::mdata.
+ *
+ * ## Events
+ *
+ * Once constructed, it is controlled by the following events:
+ *
+ * | Event Type  | Handler                     |
+ * | :---------- | :-------------------------- |
+ * | #NT_CONFIG  | autocrypt_config_observer() |
+ * | #NT_WINDOW  | autocrypt_window_observer() |
+ *
+ * The Autocrypt Account Dialog doesn't have any specific colours, so it doesn't
+ * need to support #NT_COLOR.
+ *
+ * The Autocrypt Account Dialog does not implement MuttWindow::recalc() or MuttWindow::repaint().
+ *
+ * Some other events are handled by the @ref gui_simple.
  */
 
 #include "config.h"
@@ -34,13 +72,12 @@
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
+#include "core/lib.h"
 #include "gui/lib.h"
-#include "mutt.h"
-#include "autocrypt/lib.h"
+#include "lib.h"
+#include "menu/lib.h"
+#include "question/lib.h"
 #include "format_flags.h"
-#include "keymap.h"
-#include "mutt_globals.h"
-#include "mutt_menu.h"
 #include "muttlib.h"
 #include "opcodes.h"
 
@@ -49,10 +86,9 @@
  */
 struct AccountEntry
 {
-  int tagged; /* TODO */
-  int num;
-  struct AutocryptAccount *account;
-  struct Address *addr;
+  int num;                          ///< Number in the index
+  struct AutocryptAccount *account; ///< Account details
+  struct Address *addr; ///< Email address associated with the account
 };
 
 /// Help Bar for the Autocrypt Account selection dialog
@@ -83,7 +119,7 @@ static const struct Mapping AutocryptAcctHelp[] = {
 };
 
 /**
- * account_format_str - Format a string for the Autocrypt account list - Implements ::format_t
+ * autocrypt_format_str - Format a string for the Autocrypt account list - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
  * |:--------|:-----------------------------------------------------------------
@@ -93,10 +129,10 @@ static const struct Mapping AutocryptAcctHelp[] = {
  * | \%p     | Prefer-encrypt flag
  * | \%s     | Status flag (active/inactive)
  */
-static const char *account_format_str(char *buf, size_t buflen, size_t col, int cols,
-                                      char op, const char *src, const char *prec,
-                                      const char *if_str, const char *else_str,
-                                      intptr_t data, MuttFormatFlags flags)
+static const char *autocrypt_format_str(char *buf, size_t buflen, size_t col, int cols,
+                                        char op, const char *src, const char *prec,
+                                        const char *if_str, const char *else_str,
+                                        intptr_t data, MuttFormatFlags flags)
 {
   struct AccountEntry *entry = (struct AccountEntry *) data;
   char tmp[128];
@@ -148,38 +184,56 @@ static const char *account_format_str(char *buf, size_t buflen, size_t col, int 
 }
 
 /**
- * account_make_entry - Create a line for the Autocrypt account menu - Implements Menu::make_entry()
+ * autocrypt_make_entry - Create a line for the Autocrypt account menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  */
-static void account_make_entry(char *buf, size_t buflen, struct Menu *menu, int num)
+static void autocrypt_make_entry(struct Menu *menu, char *buf, size_t buflen, int num)
 {
   struct AccountEntry *entry = &((struct AccountEntry *) menu->mdata)[num];
 
-  mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
-                      NONULL(C_AutocryptAcctFormat), account_format_str,
-                      IP entry, MUTT_FORMAT_ARROWCURSOR);
+  const char *const c_autocrypt_acct_format =
+      cs_subset_string(NeoMutt->sub, "autocrypt_acct_format");
+  mutt_expando_format(buf, buflen, 0, menu->win->state.cols,
+                      NONULL(c_autocrypt_acct_format), autocrypt_format_str,
+                      (intptr_t) entry, MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
- * create_menu - Create the Autocrypt account Menu
- * @retval ptr New Menu
+ * autocrypt_menu_free - Free the Autocrypt account Menu - Implements Menu::mdata_free() - @ingroup menu_mdata_free
  */
-static struct Menu *create_menu(void)
+static void autocrypt_menu_free(struct Menu *menu, void **ptr)
 {
+  struct AccountEntry *entries = *ptr;
+
+  for (size_t i = 0; i < menu->max; i++)
+  {
+    mutt_autocrypt_db_account_free(&entries[i].account);
+    mutt_addr_free(&entries[i].addr);
+  }
+
+  FREE(ptr);
+}
+
+/**
+ * populate_menu - Add the Autocrypt data to a Menu
+ * @param menu Menu to populate
+ * @retval true Success
+ */
+static bool populate_menu(struct Menu *menu)
+{
+  // Clear out any existing data
+  autocrypt_menu_free(menu, &menu->mdata);
+  menu->max = 0;
+
   struct AutocryptAccount **accounts = NULL;
   int num_accounts = 0;
 
   if (mutt_autocrypt_db_account_get_all(&accounts, &num_accounts) < 0)
-    return NULL;
-
-  struct Menu *menu = mutt_menu_new(MENU_AUTOCRYPT_ACCT);
-  menu->make_entry = account_make_entry;
-  /* menu->tag = account_tag; */
-  // L10N: Autocrypt Account Management Menu title
-  menu->title = _("Autocrypt Accounts");
+    return false;
 
   struct AccountEntry *entries =
       mutt_mem_calloc(num_accounts, sizeof(struct AccountEntry));
   menu->mdata = entries;
+  menu->mdata_free = autocrypt_menu_free;
   menu->max = num_accounts;
 
   for (int i = 0; i < num_accounts; i++)
@@ -187,7 +241,7 @@ static struct Menu *create_menu(void)
     entries[i].num = i + 1;
     /* note: we are transferring the account pointer to the entries
      * array, and freeing the accounts array below.  the account
-     * will be freed in menu_free().  */
+     * will be freed in autocrypt_menu_free().  */
     entries[i].account = accounts[i];
 
     entries[i].addr = mutt_addr_new();
@@ -196,28 +250,8 @@ static struct Menu *create_menu(void)
   }
   FREE(&accounts);
 
-  mutt_menu_push_current(menu);
-
-  return menu;
-}
-
-/**
- * menu_free - Free the Autocrypt account Menu
- * @param menu Menu to free
- */
-static void menu_free(struct Menu **menu)
-{
-  struct AccountEntry *entries = (struct AccountEntry *) (*menu)->mdata;
-
-  for (int i = 0; i < (*menu)->max; i++)
-  {
-    mutt_autocrypt_db_account_free(&entries[i].account);
-    mutt_addr_free(&entries[i].addr);
-  }
-  FREE(&(*menu)->mdata);
-
-  mutt_menu_pop_current(*menu);
-  mutt_menu_free(menu);
+  menu_queue_redraw(menu, MENU_REDRAW_FULL);
+  return true;
 }
 
 /**
@@ -251,43 +285,98 @@ static void toggle_prefer_encrypt(struct AccountEntry *entry)
 }
 
 /**
+ * autocrypt_config_observer - Notification that a Config Variable has changed - Implements ::observer_t - @ingroup observer_api
+ *
+ * The Address Book Window is affected by changes to `$sort_autocrypt`.
+ */
+static int autocrypt_config_observer(struct NotifyCallback *nc)
+{
+  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
+    return -1;
+
+  struct EventConfig *ev_c = nc->event_data;
+
+  if (!mutt_str_equal(ev_c->name, "autocrypt_acct_format"))
+    return 0;
+
+  struct Menu *menu = nc->global_data;
+  menu_queue_redraw(menu, MENU_REDRAW_FULL);
+  mutt_debug(LL_DEBUG5, "config done, request WA_RECALC, MENU_REDRAW_FULL\n");
+
+  return 0;
+}
+
+/**
+ * autocrypt_window_observer - Notification that a Window has changed - Implements ::observer_t - @ingroup observer_api
+ *
+ * This function is triggered by changes to the windows.
+ *
+ * - Delete (this window): clean up the resources held by the Help Bar
+ */
+static int autocrypt_window_observer(struct NotifyCallback *nc)
+{
+  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+    return -1;
+
+  if (nc->event_subtype != NT_WINDOW_DELETE)
+    return 0;
+
+  struct MuttWindow *win_menu = nc->global_data;
+  struct EventWindow *ev_w = nc->event_data;
+  if (ev_w->win != win_menu)
+    return 0;
+
+  struct Menu *menu = win_menu->wdata;
+
+  notify_observer_remove(NeoMutt->notify, autocrypt_config_observer, menu);
+  notify_observer_remove(win_menu->notify, autocrypt_window_observer, win_menu);
+
+  mutt_debug(LL_DEBUG5, "window delete done\n");
+  return 0;
+}
+
+/**
  * dlg_select_autocrypt_account - Display the Autocrypt account Menu
  */
 void dlg_select_autocrypt_account(void)
 {
-  if (!C_Autocrypt)
+  const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
+  if (!c_autocrypt)
     return;
 
   if (mutt_autocrypt_init(false))
     return;
 
-  struct Menu *menu = create_menu();
-  if (!menu)
-    return;
+  struct MuttWindow *dlg =
+      simple_dialog_new(MENU_AUTOCRYPT_ACCT, WT_DLG_AUTOCRYPT, AutocryptAcctHelp);
 
-  struct MuttWindow *dlg = dialog_create_simple_index(menu, WT_DLG_AUTOCRYPT);
-  dlg->help_data = AutocryptAcctHelp;
-  dlg->help_menu = MENU_AUTOCRYPT_ACCT;
+  struct Menu *menu = dlg->wdata;
+  menu->make_entry = autocrypt_make_entry;
+
+  populate_menu(menu);
+
+  struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
+  // L10N: Autocrypt Account Management Menu title
+  sbar_set_title(sbar, _("Autocrypt Accounts"));
+
+  struct MuttWindow *win_menu = menu->win;
+
+  // NT_COLOR is handled by the SimpleDialog
+  notify_observer_add(NeoMutt->notify, NT_CONFIG, autocrypt_config_observer, menu);
+  notify_observer_add(win_menu->notify, NT_WINDOW, autocrypt_window_observer, win_menu);
 
   bool done = false;
   while (!done)
   {
-    switch (mutt_menu_loop(menu))
+    switch (menu_loop(menu))
     {
       case OP_EXIT:
         done = true;
         break;
 
       case OP_AUTOCRYPT_CREATE_ACCT:
-        if (mutt_autocrypt_account_init(false))
-          break;
-
-        menu_free(&menu);
-        dialog_destroy_simple_index(&dlg);
-        menu = create_menu();
-        dlg = dialog_create_simple_index(menu, WT_DLG_AUTOCRYPT);
-        dlg->help_data = AutocryptAcctHelp;
-        dlg->help_menu = MENU_AUTOCRYPT_ACCT;
+        if (mutt_autocrypt_account_init(false) == 0)
+          populate_menu(menu);
         break;
 
       case OP_AUTOCRYPT_DELETE_ACCT:
@@ -295,7 +384,8 @@ void dlg_select_autocrypt_account(void)
         if (!menu->mdata)
           break;
 
-        struct AccountEntry *entry = (struct AccountEntry *) (menu->mdata) + menu->current;
+        const int index = menu_get_index(menu);
+        struct AccountEntry *entry = ((struct AccountEntry *) menu->mdata) + index;
         char msg[128];
         snprintf(msg, sizeof(msg),
                  // L10N: Confirmation message when deleting an autocrypt account
@@ -303,15 +393,9 @@ void dlg_select_autocrypt_account(void)
         if (mutt_yesorno(msg, MUTT_NO) != MUTT_YES)
           break;
 
-        if (!mutt_autocrypt_db_account_delete(entry->account))
-        {
-          menu_free(&menu);
-          dialog_destroy_simple_index(&dlg);
-          menu = create_menu();
-          dlg = dialog_create_simple_index(menu, WT_DLG_AUTOCRYPT);
-          dlg->help_data = AutocryptAcctHelp;
-          dlg->help_menu = MENU_AUTOCRYPT_ACCT;
-        }
+        if (mutt_autocrypt_db_account_delete(entry->account) == 0)
+          populate_menu(menu);
+
         break;
       }
 
@@ -320,9 +404,10 @@ void dlg_select_autocrypt_account(void)
         if (!menu->mdata)
           break;
 
-        struct AccountEntry *entry = (struct AccountEntry *) (menu->mdata) + menu->current;
+        const int index = menu_get_index(menu);
+        struct AccountEntry *entry = ((struct AccountEntry *) menu->mdata) + index;
         toggle_active(entry);
-        menu->redraw |= REDRAW_FULL;
+        menu_queue_redraw(menu, MENU_REDRAW_FULL);
         break;
       }
 
@@ -331,14 +416,14 @@ void dlg_select_autocrypt_account(void)
         if (!menu->mdata)
           break;
 
-        struct AccountEntry *entry = (struct AccountEntry *) (menu->mdata) + menu->current;
+        const int index = menu_get_index(menu);
+        struct AccountEntry *entry = (struct AccountEntry *) (menu->mdata) + index;
         toggle_prefer_encrypt(entry);
-        menu->redraw |= REDRAW_FULL;
+        menu_queue_redraw(menu, MENU_REDRAW_FULL);
         break;
       }
     }
   }
 
-  menu_free(&menu);
-  dialog_destroy_simple_index(&dlg);
+  simple_dialog_free(&dlg);
 }

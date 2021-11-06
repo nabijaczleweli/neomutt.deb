@@ -30,11 +30,11 @@
  * - Empty address is stored as `NULL`
  * - Validator is passed `struct Address *`, which may be `NULL`
  * - Data is freed when `ConfigSet` is freed
+ * - Implementation: #CstAddress
  */
 
 #include "config.h"
 #include <stddef.h>
-#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include "mutt/lib.h"
@@ -44,7 +44,7 @@
 #include "types.h"
 
 /**
- * address_destroy - Destroy an Address object - Implements ConfigSetType::destroy()
+ * address_destroy - Destroy an Address object - Implements ConfigSetType::destroy() - @ingroup cfg_type_destroy
  */
 static void address_destroy(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef)
 {
@@ -56,7 +56,7 @@ static void address_destroy(const struct ConfigSet *cs, void *var, const struct 
 }
 
 /**
- * address_string_set - Set an Address by string - Implements ConfigSetType::string_set()
+ * address_string_set - Set an Address by string - Implements ConfigSetType::string_set() - @ingroup cfg_type_string_set
  */
 static int address_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                               const char *value, struct Buffer *err)
@@ -103,14 +103,14 @@ static int address_string_set(const struct ConfigSet *cs, void *var, struct Conf
       FREE(&cdef->initial);
 
     cdef->type |= DT_INITIAL_SET;
-    cdef->initial = IP mutt_str_dup(value);
+    cdef->initial = (intptr_t) mutt_str_dup(value);
   }
 
   return rc;
 }
 
 /**
- * address_string_get - Get an Address as a string - Implements ConfigSetType::string_get()
+ * address_string_get - Get an Address as a string - Implements ConfigSetType::string_get() - @ingroup cfg_type_string_get
  */
 static int address_string_get(const struct ConfigSet *cs, void *var,
                               const struct ConfigDef *cdef, struct Buffer *result)
@@ -156,7 +156,7 @@ static struct Address *address_dup(struct Address *addr)
 }
 
 /**
- * address_native_set - Set an Address config item by Address object - Implements ConfigSetType::native_set()
+ * address_native_set - Set an Address config item by Address object - Implements ConfigSetType::native_set() - @ingroup cfg_type_native_set
  */
 static int address_native_set(const struct ConfigSet *cs, void *var,
                               const struct ConfigDef *cdef, intptr_t value,
@@ -185,7 +185,7 @@ static int address_native_set(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * address_native_get - Get an Address object from an Address config item - Implements ConfigSetType::native_get()
+ * address_native_get - Get an Address object from an Address config item - Implements ConfigSetType::native_get() - @ingroup cfg_type_native_get
  */
 static intptr_t address_native_get(const struct ConfigSet *cs, void *var,
                                    const struct ConfigDef *cdef, struct Buffer *err)
@@ -196,7 +196,7 @@ static intptr_t address_native_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * address_reset - Reset an Address to its initial value - Implements ConfigSetType::reset()
+ * address_reset - Reset an Address to its initial value - Implements ConfigSetType::reset() - @ingroup cfg_type_reset
  */
 static int address_reset(const struct ConfigSet *cs, void *var,
                          const struct ConfigDef *cdef, struct Buffer *err)
@@ -257,9 +257,9 @@ void address_free(struct Address **addr)
 }
 
 /**
- * cst_address - Config type representing an Email Addresss
+ * CstAddress - Config type representing an Email Address
  */
-const struct ConfigSetType cst_address = {
+const struct ConfigSetType CstAddress = {
   DT_ADDRESS,
   "address",
   address_string_set,

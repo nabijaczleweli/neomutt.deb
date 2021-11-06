@@ -66,6 +66,7 @@ enum UserHdrsOverrideIdx
  */
 struct UserHdrsOverride
 {
+  /// Which email headers have been overridden
   bool is_overridden[mutt_array_size(userhdrs_override_headers)];
 };
 
@@ -506,13 +507,11 @@ out:
  * @param r    String List of references
  * @param fp   File to write to
  * @param trim Trim the list to at most this many items
- * @param sub  Config Subset
  *
  * Write the list in reverse because they are stored in reverse order when
  * parsed to speed up threading.
  */
-void mutt_write_references(const struct ListHead *r, FILE *fp, size_t trim,
-                           struct ConfigSubset *sub)
+void mutt_write_references(const struct ListHead *r, FILE *fp, size_t trim)
 {
   struct ListNode *np = NULL;
   size_t length = 0;
@@ -581,7 +580,7 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
       !privacy)
   {
     struct Buffer *date = mutt_buffer_pool_get();
-    mutt_date_make_date(date);
+    mutt_date_make_date(date, cs_subset_bool(sub, "local_date_header"));
     fprintf(fp, "Date: %s\n", mutt_buffer_string(date));
     mutt_buffer_pool_release(&date);
   }
@@ -666,7 +665,7 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
         ((mode == MUTT_WRITE_HEADER_NORMAL) || (mode == MUTT_WRITE_HEADER_FCC) ||
          (mode == MUTT_WRITE_HEADER_POSTPONE)))
     {
-      const char *c_crypt_protected_headers_subject =
+      const char *const c_crypt_protected_headers_subject =
           cs_subset_string(sub, "crypt_protected_headers_subject");
       mutt_write_one_header(fp, "Subject", c_crypt_protected_headers_subject,
                             NULL, 0, CH_NO_FLAGS, sub);
@@ -710,7 +709,7 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
     if (!STAILQ_EMPTY(&env->references))
     {
       fputs("References:", fp);
-      mutt_write_references(&env->references, fp, 10, sub);
+      mutt_write_references(&env->references, fp, 10);
       fputc('\n', fp);
     }
 
@@ -725,7 +724,7 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
   if (!STAILQ_EMPTY(&env->in_reply_to))
   {
     fputs("In-Reply-To:", fp);
-    mutt_write_references(&env->in_reply_to, fp, 0, sub);
+    mutt_write_references(&env->in_reply_to, fp, 0);
     fputc('\n', fp);
   }
 

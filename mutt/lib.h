@@ -21,7 +21,9 @@
  */
 
 /**
- * @page lib_mutt MUTT: Shared code for handling strings, files, dates, etc
+ * @page lib_mutt Mutt
+ *
+ * Shared code for handling strings, files, dates, etc
  *
  * Each source file in the library provides a group of related functions.
  *
@@ -44,18 +46,21 @@
  * | mutt/md5.c       | @subpage mutt_md5       |
  * | mutt/memory.c    | @subpage mutt_memory    |
  * | mutt/notify.c    | @subpage mutt_notify    |
- * | mutt/observer.h  | @subpage mutt_observer  |
  * | mutt/path.c      | @subpage mutt_path      |
  * | mutt/pool.c      | @subpage mutt_pool      |
  * | mutt/prex.c      | @subpage mutt_prex      |
+ * | mutt/qsort_r.c   | @subpage mutt_qsort_r   |
  * | mutt/random.c    | @subpage mutt_random    |
  * | mutt/regex.c     | @subpage mutt_regex     |
  * | mutt/slist.c     | @subpage mutt_slist     |
  * | mutt/signal.c    | @subpage mutt_signal    |
+ * | mutt/state.c     | @subpage mutt_state     |
  * | mutt/string.c    | @subpage mutt_string    |
  *
  * @note The library is self-contained -- some files may depend on others in
  *       the library, but none depends on source from outside.
+ *
+ * @image html libmutt.svg
  */
 
 #ifndef MUTT_MUTT_LIB_H
@@ -85,11 +90,13 @@
 #include "path.h"
 #include "pool.h"
 #include "prex.h"
+#include "qsort_r.h"
 #include "queue.h"
 #include "random.h"
 #include "regex3.h"
 #include "signal2.h"
 #include "slist.h"
+#include "state.h"
 #include "string2.h"
 // IWYU pragma: end_exports
 

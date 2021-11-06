@@ -28,8 +28,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "attach/lib.h"
 #include "format_flags.h"
-#include "mutt_attach.h"
 
 struct Address;
 struct Body;
@@ -37,9 +37,6 @@ struct Buffer;
 struct ListHead;
 struct passwd;
 struct stat;
-
-/* These Config Variables are only used in muttlib.c */
-extern struct Regex *C_GecosMask;
 
 void        mutt_adv_mktemp(struct Buffer *buf);
 void        mutt_buffer_mktemp_full(struct Buffer *buf, const char *prefix, const char *suffix, const char *src, int line);

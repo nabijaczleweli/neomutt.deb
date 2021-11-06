@@ -23,7 +23,7 @@
  */
 
 /**
- * @page lib_ncrypt NCRYPT: Encrypt/decrypt/sign/verify emails
+ * @page lib_ncrypt Ncrypt
  *
  * Encrypt/decrypt/sign/verify emails
  *
@@ -63,22 +63,12 @@ struct Body;
 #ifdef USE_AUTOCRYPT
 struct Buffer;
 #endif
-struct ConfigSet;
 struct Email;
 struct EmailList;
 struct Envelope;
 struct Mailbox;
+struct Message;
 struct State;
-
-extern bool            C_CryptOpportunisticEncrypt;
-extern bool            C_CryptProtectedHeadersRead;
-extern bool            C_CryptProtectedHeadersSave;
-extern unsigned char   C_CryptVerifySig;
-extern bool            C_PgpAutoDecode;
-extern char *          C_PgpSignAs;
-extern char *          C_SmimeEncryptWith;
-extern bool            C_SmimeIsDefault;
-extern char *          C_SmimeSignAs;
 
 typedef uint16_t SecurityFlags;           ///< Flags, e.g. #SEC_ENCRYPT
 #define SEC_NO_FLAGS                  0   ///< No flags are set
@@ -153,18 +143,18 @@ void         crypt_extract_keys_from_messages(struct Mailbox *m, struct EmailLis
 void         crypt_forget_passphrase(void);
 int          crypt_get_keys(struct Email *e, char **keylist, bool oppenc_mode);
 void         crypt_opportunistic_encrypt(struct Email *e);
-SecurityFlags crypt_query(struct Body *m);
+SecurityFlags crypt_query(struct Body *b);
 bool         crypt_valid_passphrase(SecurityFlags flags);
-SecurityFlags mutt_is_application_pgp(struct Body *m);
-SecurityFlags mutt_is_application_smime(struct Body *m);
+SecurityFlags mutt_is_application_pgp(struct Body *b);
+SecurityFlags mutt_is_application_smime(struct Body *b);
 SecurityFlags mutt_is_malformed_multipart_pgp_encrypted(struct Body *b);
 SecurityFlags mutt_is_multipart_encrypted(struct Body *b);
 SecurityFlags mutt_is_multipart_signed(struct Body *b);
 int          mutt_is_valid_multipart_pgp_encrypted(struct Body *b);
 int          mutt_protect(struct Email *e, char *keylist, bool postpone);
-int          mutt_protected_headers_handler(struct Body *m, struct State *s);
+int          mutt_protected_headers_handler(struct Body *b, struct State *s);
 bool         mutt_should_hide_protected_subject(struct Email *e);
-int          mutt_signed_handler(struct Body *a, struct State *s);
+int          mutt_signed_handler(struct Body *b, struct State *s);
 
 /* cryptglue.c */
 void         crypt_cleanup(void);
@@ -172,7 +162,7 @@ bool         crypt_has_module_backend(SecurityFlags type);
 void         crypt_init(void);
 void         crypt_invoke_message(SecurityFlags type);
 int          crypt_pgp_application_handler(struct Body *m, struct State *s);
-int          crypt_pgp_check_traditional(FILE *fp, struct Body *b, bool just_one);
+bool         crypt_pgp_check_traditional(FILE *fp, struct Body *b, bool just_one);
 int          crypt_pgp_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Body **cur);
 int          crypt_pgp_encrypted_handler(struct Body *a, struct State *s);
 void         crypt_pgp_extract_key_from_attachment(FILE *fp, struct Body *top);
@@ -183,7 +173,7 @@ int          crypt_smime_application_handler(struct Body *m, struct State *s);
 int          crypt_smime_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Body **cur);
 void         crypt_smime_getkeys(struct Envelope *env);
 SecurityFlags crypt_smime_send_menu(struct Email *e);
-int          crypt_smime_verify_sender(struct Mailbox *m, struct Email *e);
+int          crypt_smime_verify_sender(struct Email *e, struct Message *msg);
 
 /* crypt_mod.c */
 void crypto_module_free(void);

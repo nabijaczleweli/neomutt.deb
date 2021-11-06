@@ -20,12 +20,6 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/**
- * @page mutt_observer Observer of notifications
- *
- * Observer of notifications
- */
-
 #ifndef MUTT_LIB_OBSERVER_H
 #define MUTT_LIB_OBSERVER_H
 
@@ -46,10 +40,17 @@ struct NotifyCallback
 };
 
 /**
- * typedef observer_t - Prototype for a notification callback function
+ * @defgroup observer_api Observer API
+ *
+ * Prototype for a notification callback function
+ *
  * @param[in] nc Callback data
  * @retval  0 Success
  * @retval -1 Error
+ *
+ * **Contract**
+ * - @a nc          is not NULL
+ * - @a nc->current is not NULL
  */
 typedef int (*observer_t)(struct NotifyCallback *nc);
 

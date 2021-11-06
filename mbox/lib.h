@@ -22,7 +22,7 @@
  */
 
 /**
- * @page lib_mbox MBOX: Local mailbox type
+ * @page lib_mbox Mbox
  *
  * Mbox local mailbox type
  *
@@ -39,9 +39,7 @@
 #include <stdio.h>
 #include <time.h>
 #include "core/lib.h"
-#include "mx.h"
 
-struct ConfigSet;
 struct stat;
 
 /**
@@ -56,17 +54,14 @@ struct MboxAccountData
   bool append : 1; ///< mailbox is opened in append mode
 };
 
-extern bool C_CheckMboxSize;
-
 extern struct MxOps MxMboxOps;
 extern struct MxOps MxMmdfOps;
 
 #define MMDF_SEP "\001\001\001\001\n"
 
-int              mbox_check(struct Mailbox *m, struct stat *sb, bool check_stats);
+enum MxStatus    mbox_check(struct Mailbox *m, struct stat *st, bool check_stats);
 enum MailboxType mbox_path_probe(const char *path, const struct stat *st);
 void             mbox_reset_atime(struct Mailbox *m, struct stat *st);
 bool             mbox_test_new_folder(const char *path);
-bool config_init_mbox(struct ConfigSet *cs);
 
 #endif /* MUTT_MBOX_LIB_H */

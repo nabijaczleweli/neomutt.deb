@@ -51,23 +51,16 @@
 #include "mutt.h"
 #include "muttlib.h"
 #include "ncrypt/lib.h"
+#include "question/lib.h"
 #include "format_flags.h"
 #include "hook.h"
 #include "init.h"
 #include "mutt_globals.h"
 #include "mx.h"
 #include "protos.h"
-#if defined(HAVE_SYSCALL_H)
-#include <syscall.h>
-#elif defined(HAVE_SYS_SYSCALL_H)
-#include <sys/syscall.h>
-#endif
 #ifdef USE_IMAP
 #include "imap/lib.h"
 #endif
-
-/* These Config Variables are only used in muttlib.c */
-struct Regex *C_GecosMask; ///< Config: Regex for parsing GECOS field of /etc/passwd
 
 static const char *xdg_env_vars[] = {
   [XDG_CONFIG_HOME] = "XDG_CONFIG_HOME",
@@ -98,10 +91,11 @@ void mutt_adv_mktemp(struct Buffer *buf)
     struct Buffer *prefix = mutt_buffer_pool_get();
     mutt_buffer_strcpy(prefix, buf->data);
     mutt_file_sanitize_filename(prefix->data, true);
-    mutt_buffer_printf(buf, "%s/%s", NONULL(C_Tmpdir), mutt_buffer_string(prefix));
+    const char *const c_tmpdir = cs_subset_path(NeoMutt->sub, "tmpdir");
+    mutt_buffer_printf(buf, "%s/%s", NONULL(c_tmpdir), mutt_buffer_string(prefix));
 
-    struct stat sb;
-    if ((lstat(mutt_buffer_string(buf), &sb) == -1) && (errno == ENOENT))
+    struct stat st = { 0 };
+    if ((lstat(mutt_buffer_string(buf), &st) == -1) && (errno == ENOENT))
       goto out;
 
     char *suffix = strchr(prefix->data, '.');
@@ -195,20 +189,21 @@ void mutt_buffer_expand_path_regex(struct Buffer *buf, bool regex)
       case '=':
       case '+':
       {
-        enum MailboxType mb_type = mx_path_probe(C_Folder);
+        const char *const c_folder = cs_subset_string(NeoMutt->sub, "folder");
+        enum MailboxType mb_type = mx_path_probe(c_folder);
 
         /* if folder = {host} or imap[s]://host/: don't append slash */
-        if ((mb_type == MUTT_IMAP) && ((C_Folder[strlen(C_Folder) - 1] == '}') ||
-                                       (C_Folder[strlen(C_Folder) - 1] == '/')))
+        if ((mb_type == MUTT_IMAP) && ((c_folder[strlen(c_folder) - 1] == '}') ||
+                                       (c_folder[strlen(c_folder) - 1] == '/')))
         {
-          mutt_buffer_strcpy(p, NONULL(C_Folder));
+          mutt_buffer_strcpy(p, NONULL(c_folder));
         }
         else if (mb_type == MUTT_NOTMUCH)
-          mutt_buffer_strcpy(p, NONULL(C_Folder));
-        else if (C_Folder && (C_Folder[strlen(C_Folder) - 1] == '/'))
-          mutt_buffer_strcpy(p, NONULL(C_Folder));
+          mutt_buffer_strcpy(p, NONULL(c_folder));
+        else if (c_folder && (c_folder[strlen(c_folder) - 1] == '/'))
+          mutt_buffer_strcpy(p, NONULL(c_folder));
         else
-          mutt_buffer_printf(p, "%s/", NONULL(C_Folder));
+          mutt_buffer_printf(p, "%s/", NONULL(c_folder));
 
         tail = s + 1;
         break;
@@ -243,14 +238,16 @@ void mutt_buffer_expand_path_regex(struct Buffer *buf, bool regex)
 
       case '>':
       {
-        mutt_buffer_strcpy(p, C_Mbox);
+        const char *const c_mbox = cs_subset_string(NeoMutt->sub, "mbox");
+        mutt_buffer_strcpy(p, c_mbox);
         tail = s + 1;
         break;
       }
 
       case '<':
       {
-        mutt_buffer_strcpy(p, C_Record);
+        const char *const c_record = cs_subset_string(NeoMutt->sub, "record");
+        mutt_buffer_strcpy(p, c_record);
         tail = s + 1;
         break;
       }
@@ -264,7 +261,9 @@ void mutt_buffer_expand_path_regex(struct Buffer *buf, bool regex)
         }
         else
         {
-          mutt_buffer_strcpy(p, C_Spoolfile);
+          const char *const c_spool_file =
+              cs_subset_string(NeoMutt->sub, "spool_file");
+          mutt_buffer_strcpy(p, c_spool_file);
           tail = s + 1;
         }
         break;
@@ -370,7 +369,9 @@ char *mutt_gecos_name(char *dest, size_t destlen, struct passwd *pw)
 
   memset(dest, 0, destlen);
 
-  if (mutt_regex_capture(C_GecosMask, pw->pw_gecos, 1, pat_match))
+  const struct Regex *c_gecos_mask =
+      cs_subset_regex(NeoMutt->sub, "gecos_mask");
+  if (mutt_regex_capture(c_gecos_mask, pw->pw_gecos, 1, pat_match))
   {
     mutt_str_copy(dest, pw->pw_gecos + pat_match[0].rm_so,
                   MIN(pat_match[0].rm_eo - pat_match[0].rm_so + 1, destlen));
@@ -387,7 +388,7 @@ char *mutt_gecos_name(char *dest, size_t destlen, struct passwd *pw)
     if (dest[idx] == '&')
     {
       memmove(&dest[idx + pwnl], &dest[idx + 1],
-              MAX((ssize_t)(destlen - idx - pwnl - 1), 0));
+              MAX((ssize_t) (destlen - idx - pwnl - 1), 0));
       memcpy(&dest[idx], pw->pw_name, MIN(destlen - idx - 1, pwnl));
       dest[idx] = toupper((unsigned char) dest[idx]);
     }
@@ -428,7 +429,7 @@ bool mutt_needs_mailcap(struct Body *m)
 /**
  * mutt_is_text_part - Is this part of an email in plain text?
  * @param b Part of an email
- * @retval true If part is in plain text
+ * @retval true Part is in plain text
  */
 bool mutt_is_text_part(struct Body *b)
 {
@@ -467,7 +468,8 @@ bool mutt_is_text_part(struct Body *b)
 void mutt_buffer_mktemp_full(struct Buffer *buf, const char *prefix,
                              const char *suffix, const char *src, int line)
 {
-  mutt_buffer_printf(buf, "%s/%s-%s-%d-%d-%" PRIu64 "%s%s", NONULL(C_Tmpdir),
+  const char *const c_tmpdir = cs_subset_path(NeoMutt->sub, "tmpdir");
+  mutt_buffer_printf(buf, "%s/%s-%s-%d-%d-%" PRIu64 "%s%s", NONULL(c_tmpdir),
                      NONULL(prefix), NONULL(ShortHostname), (int) getuid(),
                      (int) getpid(), mutt_rand64(), suffix ? "." : "", NONULL(suffix));
 
@@ -494,8 +496,9 @@ void mutt_buffer_mktemp_full(struct Buffer *buf, const char *prefix,
 void mutt_mktemp_full(char *buf, size_t buflen, const char *prefix,
                       const char *suffix, const char *src, int line)
 {
+  const char *const c_tmpdir = cs_subset_path(NeoMutt->sub, "tmpdir");
   size_t n =
-      snprintf(buf, buflen, "%s/%s-%s-%d-%d-%" PRIu64 "%s%s", NONULL(C_Tmpdir),
+      snprintf(buf, buflen, "%s/%s-%s-%d-%d-%" PRIu64 "%s%s", NONULL(c_tmpdir),
                NONULL(prefix), NONULL(ShortHostname), (int) getuid(),
                (int) getpid(), mutt_rand64(), suffix ? "." : "", NONULL(suffix));
   if (n >= buflen)
@@ -532,9 +535,10 @@ void mutt_pretty_mailbox(char *buf, size_t buflen)
 
   scheme = url_check_scheme(buf);
 
+  const char *const c_folder = cs_subset_string(NeoMutt->sub, "folder");
   if ((scheme == U_IMAP) || (scheme == U_IMAPS))
   {
-    imap_pretty_mailbox(buf, buflen, C_Folder);
+    imap_pretty_mailbox(buf, buflen, c_folder);
     return;
   }
 
@@ -580,7 +584,7 @@ void mutt_pretty_mailbox(char *buf, size_t buflen)
     mutt_str_copy(p, tmp, buflen - (p - buf));
   }
 
-  if ((len = mutt_str_startswith(buf, C_Folder)) && (buf[len] == '/'))
+  if ((len = mutt_str_startswith(buf, c_folder)) && (buf[len] == '/'))
   {
     *buf++ = '=';
     memmove(buf, buf + len, mutt_str_len(buf + len) + 1);
@@ -621,7 +625,7 @@ void mutt_buffer_pretty_mailbox(struct Buffer *buf)
 int mutt_check_overwrite(const char *attname, const char *path, struct Buffer *fname,
                          enum SaveAttach *opt, char **directory)
 {
-  struct stat st;
+  struct stat st = { 0 };
 
   mutt_buffer_strcpy(fname, path);
   if (access(mutt_buffer_string(fname), F_OK) != 0)
@@ -660,7 +664,8 @@ int mutt_check_overwrite(const char *attname, const char *path, struct Buffer *f
 
     struct Buffer *tmp = mutt_buffer_pool_get();
     mutt_buffer_strcpy(tmp, mutt_path_basename(NONULL(attname)));
-    if ((mutt_buffer_get_field(_("File under directory: "), tmp, MUTT_FILE | MUTT_CLEAR) != 0) ||
+    if ((mutt_buffer_get_field(_("File under directory: "), tmp, MUTT_FILE | MUTT_CLEAR,
+                               false, NULL, NULL, NULL) != 0) ||
         mutt_buffer_is_empty(tmp))
     {
       mutt_buffer_pool_release(&tmp);
@@ -707,7 +712,8 @@ void mutt_save_path(char *buf, size_t buflen, const struct Address *addr)
   if (addr && addr->mailbox)
   {
     mutt_str_copy(buf, addr->mailbox, buflen);
-    if (!C_SaveAddress)
+    const bool c_save_address = cs_subset_bool(NeoMutt->sub, "save_address");
+    if (!c_save_address)
     {
       char *p = strpbrk(buf, "%@");
       if (p)
@@ -729,7 +735,8 @@ void mutt_buffer_save_path(struct Buffer *dest, const struct Address *a)
   if (a && a->mailbox)
   {
     mutt_buffer_strcpy(dest, a->mailbox);
-    if (!C_SaveAddress)
+    const bool c_save_address = cs_subset_bool(NeoMutt->sub, "save_address");
+    if (!c_save_address)
     {
       char *p = strpbrk(dest->data, "%@");
       if (p)
@@ -760,7 +767,7 @@ void mutt_safe_path(struct Buffer *dest, const struct Address *a)
 }
 
 /**
- * mutt_expando_format - Expand expandos (%x) in a string
+ * mutt_expando_format - Expand expandos (%x) in a string - @ingroup expando_api
  * @param[out] buf      Buffer in which to save string
  * @param[in]  buflen   Buffer length
  * @param[in]  col      Starting column
@@ -785,10 +792,14 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
   mutt_str_copy(src2, src, mutt_str_len(src) + 1);
   src = src2;
 
+  const bool c_arrow_cursor = cs_subset_bool(NeoMutt->sub, "arrow_cursor");
+  const char *const c_arrow_string =
+      cs_subset_string(NeoMutt->sub, "arrow_string");
+
   prefix[0] = '\0';
   buflen--; /* save room for the terminal \0 */
-  wlen = ((flags & MUTT_FORMAT_ARROWCURSOR) && C_ArrowCursor) ?
-             mutt_strwidth(C_ArrowString) + 1 :
+  wlen = ((flags & MUTT_FORMAT_ARROWCURSOR) && c_arrow_cursor) ?
+             mutt_strwidth(c_arrow_string) + 1 :
              0;
   col += wlen;
 
@@ -970,7 +981,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
         src++;
         cp = prefix;
         count = 0;
-        while ((count < sizeof(prefix)) && (*src != '?'))
+        while ((count < (sizeof(prefix) - 1)) && (*src != '\0') && (*src != '?'))
         {
           *cp++ = *src++;
           count++;
@@ -984,8 +995,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
         /* eat the format string */
         cp = prefix;
         count = 0;
-        while ((count < sizeof(prefix)) && (isdigit((unsigned char) *src) || (*src == '.') ||
-                                            (*src == '-') || (*src == '=')))
+        while ((count < (sizeof(prefix) - 1)) && strchr("0123456789.-=", *src))
         {
           *cp++ = *src++;
           count++;
@@ -1139,8 +1149,8 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
           }
           else if (soft)
           {
-            int offset = ((flags & MUTT_FORMAT_ARROWCURSOR) && C_ArrowCursor) ?
-                             mutt_strwidth(C_ArrowString) + 1 :
+            int offset = ((flags & MUTT_FORMAT_ARROWCURSOR) && c_arrow_cursor) ?
+                             mutt_strwidth(c_arrow_string) + 1 :
                              0;
             int avail_cols = (cols > offset) ? (cols - offset) : 0;
             /* \0-terminate buf for length computation in mutt_wstr_trunc() */
@@ -1305,7 +1315,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
 FILE *mutt_open_read(const char *path, pid_t *thepid)
 {
   FILE *fp = NULL;
-  struct stat s;
+  struct stat st = { 0 };
 
   size_t len = mutt_str_len(path);
   if (len == 0)
@@ -1326,9 +1336,9 @@ FILE *mutt_open_read(const char *path, pid_t *thepid)
   }
   else
   {
-    if (stat(path, &s) < 0)
+    if (stat(path, &st) < 0)
       return NULL;
-    if (S_ISDIR(s.st_mode))
+    if (S_ISDIR(st.st_mode))
     {
       errno = EINVAL;
       return NULL;
@@ -1343,7 +1353,7 @@ FILE *mutt_open_read(const char *path, pid_t *thepid)
  * mutt_save_confirm - Ask the user to save
  * @param s  Save location
  * @param st Timestamp
- * @retval  0 if OK to proceed
+ * @retval  0 OK to proceed
  * @retval -1 to abort
  * @retval  1 to retry
  */
@@ -1363,7 +1373,9 @@ int mutt_save_confirm(const char *s, struct stat *st)
 
   if ((type != MUTT_MAILBOX_ERROR) && (type != MUTT_UNKNOWN) && (mx_access(s, W_OK) == 0))
   {
-    if (C_Confirmappend)
+    const bool c_confirm_append =
+        cs_subset_bool(NeoMutt->sub, "confirm_append");
+    if (c_confirm_append)
     {
       struct Buffer *tmp = mutt_buffer_pool_get();
       mutt_buffer_printf(tmp, _("Append messages to %s?"), s);
@@ -1400,7 +1412,9 @@ int mutt_save_confirm(const char *s, struct stat *st)
     /* pathname does not exist */
     if (errno == ENOENT)
     {
-      if (C_Confirmcreate)
+      const bool c_confirm_create =
+          cs_subset_bool(NeoMutt->sub, "confirm_create");
+      if (c_confirm_create)
       {
         struct Buffer *tmp = mutt_buffer_pool_get();
         mutt_buffer_printf(tmp, _("Create %s?"), s);
@@ -1412,7 +1426,7 @@ int mutt_save_confirm(const char *s, struct stat *st)
         mutt_buffer_pool_release(&tmp);
       }
 
-      /* user confirmed with MUTT_YES or set `$confirmcreate` */
+      /* user confirmed with MUTT_YES or set `$confirm_create` */
       if (ret == 0)
       {
         /* create dir recursively */
@@ -1434,7 +1448,7 @@ int mutt_save_confirm(const char *s, struct stat *st)
     }
   }
 
-  mutt_window_clearline(MessageWindow, 0);
+  msgwin_clear_text();
   return ret;
 }
 
@@ -1446,8 +1460,9 @@ int mutt_save_confirm(const char *s, struct stat *st)
  */
 void mutt_sleep(short s)
 {
-  if (C_SleepTime > s)
-    sleep(C_SleepTime);
+  const short c_sleep_time = cs_subset_number(NeoMutt->sub, "sleep_time");
+  if (c_sleep_time > s)
+    sleep(c_sleep_time);
   else if (s)
     sleep(s);
 }
@@ -1475,7 +1490,8 @@ const char *mutt_make_version(void)
 void mutt_encode_path(struct Buffer *buf, const char *src)
 {
   char *p = mutt_str_dup(src);
-  int rc = mutt_ch_convert_string(&p, C_Charset, "us-ascii", MUTT_ICONV_NO_FLAGS);
+  const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
+  int rc = mutt_ch_convert_string(&p, c_charset, "us-ascii", MUTT_ICONV_NO_FLAGS);
   size_t len = mutt_buffer_strcpy(buf, (rc == 0) ? NONULL(p) : NONULL(src));
 
   /* convert the path to POSIX "Portable Filename Character Set" */
@@ -1493,7 +1509,7 @@ void mutt_encode_path(struct Buffer *buf, const char *src)
  * mutt_set_xdg_path - Find an XDG path or its fallback
  * @param type    Type of XDG variable, e.g. #XDG_CONFIG_HOME
  * @param buf     Buffer to save path
- * @retval 1 if an entry was found that actually exists on disk and 0 otherwise
+ * @retval 1 An entry was found that actually exists on disk and 0 otherwise
  *
  * Process an XDG environment variable or its fallback.
  */
@@ -1540,10 +1556,11 @@ void mutt_get_parent_path(const char *path, char *buf, size_t buflen)
 {
   enum MailboxType mb_type = mx_path_probe(path);
 
+  const char *const c_folder = cs_subset_string(NeoMutt->sub, "folder");
   if (mb_type == MUTT_IMAP)
     imap_get_parent_path(path, buf, buflen);
   else if (mb_type == MUTT_NOTMUCH)
-    mutt_str_copy(buf, C_Folder, buflen);
+    mutt_str_copy(buf, c_folder, buflen);
   else
   {
     mutt_str_copy(buf, path, buflen);
@@ -1570,12 +1587,12 @@ void mutt_get_parent_path(const char *path, char *buf, size_t buflen)
 }
 
 /**
- * mutt_inbox_cmp - do two folders share the same path and one is an inbox
+ * mutt_inbox_cmp - Do two folders share the same path and one is an inbox
  * @param a First path
  * @param b Second path
- * @retval -1 if a is INBOX of b
- * @retval 0 if none is INBOX
- * @retval 1 if b is INBOX for a
+ * @retval -1 a is INBOX of b
+ * @retval  0 None is INBOX
+ * @retval  1 b is INBOX for a
  *
  * This function compares two folder paths. It first looks for the position of
  * the last common '/' character. If a valid position is found and it's not the
@@ -1664,32 +1681,40 @@ void mutt_str_pretty_size(char *buf, size_t buflen, size_t num)
   if (!buf || (buflen == 0))
     return;
 
-  if (C_SizeShowBytes && (num < 1024))
+  const bool c_size_show_bytes =
+      cs_subset_bool(NeoMutt->sub, "size_show_bytes");
+  const bool c_size_show_fractions =
+      cs_subset_bool(NeoMutt->sub, "size_show_fractions");
+  const bool c_size_show_mb = cs_subset_bool(NeoMutt->sub, "size_show_mb");
+  const bool c_size_units_on_left =
+      cs_subset_bool(NeoMutt->sub, "size_units_on_left");
+
+  if (c_size_show_bytes && (num < 1024))
   {
     snprintf(buf, buflen, "%d", (int) num);
   }
   else if (num == 0)
   {
-    mutt_str_copy(buf, C_SizeUnitsOnLeft ? "K0" : "0K", buflen);
+    mutt_str_copy(buf, c_size_units_on_left ? "K0" : "0K", buflen);
   }
-  else if (C_SizeShowFractions && (num < 10189)) /* 0.1K - 9.9K */
+  else if (c_size_show_fractions && (num < 10189)) /* 0.1K - 9.9K */
   {
-    snprintf(buf, buflen, C_SizeUnitsOnLeft ? "K%3.1f" : "%3.1fK",
+    snprintf(buf, buflen, c_size_units_on_left ? "K%3.1f" : "%3.1fK",
              (num < 103) ? 0.1 : (num / 1024.0));
   }
-  else if (!C_SizeShowMb || (num < 1023949)) /* 10K - 999K */
+  else if (!c_size_show_mb || (num < 1023949)) /* 10K - 999K */
   {
     /* 51 is magic which causes 10189/10240 to be rounded up to 10 */
-    snprintf(buf, buflen, C_SizeUnitsOnLeft ? ("K%zu") : ("%zuK"), (num + 51) / 1024);
+    snprintf(buf, buflen, c_size_units_on_left ? ("K%zu") : ("%zuK"), (num + 51) / 1024);
   }
-  else if (C_SizeShowFractions && (num < 10433332)) /* 1.0M - 9.9M */
+  else if (c_size_show_fractions && (num < 10433332)) /* 1.0M - 9.9M */
   {
-    snprintf(buf, buflen, C_SizeUnitsOnLeft ? "M%3.1f" : "%3.1fM", num / 1048576.0);
+    snprintf(buf, buflen, c_size_units_on_left ? "M%3.1f" : "%3.1fM", num / 1048576.0);
   }
   else /* 10M+ */
   {
     /* (10433332 + 52428) / 1048576 = 10 */
-    snprintf(buf, buflen, C_SizeUnitsOnLeft ? ("M%zu") : ("%zuM"), (num + 52428) / 1048576);
+    snprintf(buf, buflen, c_size_units_on_left ? ("M%zu") : ("%zuM"), (num + 52428) / 1048576);
   }
 }
 

@@ -35,16 +35,12 @@
 #include <string.h>
 #include <unistd.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
 #include "email/lib.h"
+#include "core/lib.h"
 #include "gui/lib.h"
 #include "rfc3676.h"
-#include "mutt_globals.h"
 #include "muttlib.h"
-#include "state.h"
-
-/* These Config Variables are only used in rfc3676.c */
-bool C_ReflowSpaceQuotes; ///< Config: Insert spaces into reply quotes for 'format=flowed' messages
-short C_ReflowWrap; ///< Config: Maximum paragraph width for reformatting 'format=flowed' text
 
 #define FLOWED_MAX 72
 
@@ -80,7 +76,7 @@ static int get_quote_level(const char *line)
 /**
  * space_quotes - Should we add spaces between quote levels
  * @param s State to use
- * @retval true If spaces should be added
+ * @retval true Spaces should be added
  *
  * Determines whether to add spacing between/after each quote level:
  * `   >>>foo`
@@ -91,17 +87,20 @@ static int space_quotes(struct State *s)
 {
   /* Allow quote spacing in the pager even for `$text_flowed`,
    * but obviously not when replying.  */
-  if (C_TextFlowed && (s->flags & MUTT_REPLYING))
+  const bool c_text_flowed = cs_subset_bool(NeoMutt->sub, "text_flowed");
+  if (c_text_flowed && (s->flags & MUTT_REPLYING))
     return 0;
 
-  return C_ReflowSpaceQuotes;
+  const bool c_reflow_space_quotes =
+      cs_subset_bool(NeoMutt->sub, "reflow_space_quotes");
+  return c_reflow_space_quotes;
 }
 
 /**
  * add_quote_suffix - Should we add a trailing space to quotes
  * @param s  State to use
  * @param ql Quote level
- * @retval true If spaces should be added
+ * @retval true Spaces should be added
  *
  * Determines whether to add a trailing space to quotes:
  * `   >>> foo`
@@ -120,7 +119,8 @@ static bool add_quote_suffix(struct State *s, int ql)
     return false;
 
   /* The prefix will add its own space */
-  if (!C_TextFlowed && !ql && s->prefix)
+  const bool c_text_flowed = cs_subset_bool(NeoMutt->sub, "text_flowed");
+  if (!c_text_flowed && !ql && s->prefix)
     return false;
 
   return true;
@@ -141,7 +141,8 @@ static size_t print_indent(int ql, struct State *s, int add_suffix)
   {
     /* use given prefix only for format=fixed replies to format=flowed,
      * for format=flowed replies to format=flowed, use '>' indentation */
-    if (C_TextFlowed)
+    const bool c_text_flowed = cs_subset_bool(NeoMutt->sub, "text_flowed");
+    if (c_text_flowed)
       ql++;
     else
     {
@@ -191,8 +192,10 @@ static void flush_par(struct State *s, struct FlowedState *fst)
 static int quote_width(struct State *s, int ql)
 {
   const int screen_width = (s->flags & MUTT_DISPLAY) ? s->wraplen : 80;
-  int width = mutt_window_wrap_cols(screen_width, C_ReflowWrap);
-  if (C_TextFlowed && (s->flags & MUTT_REPLYING))
+  const short c_reflow_wrap = cs_subset_number(NeoMutt->sub, "reflow_wrap");
+  int width = mutt_window_wrap_cols(screen_width, c_reflow_wrap);
+  const bool c_text_flowed = cs_subset_bool(NeoMutt->sub, "text_flowed");
+  if (c_text_flowed && (s->flags & MUTT_REPLYING))
   {
     /* When replying, force a wrap at FLOWED_MAX to comply with RFC3676
      * guidelines */
@@ -269,7 +272,8 @@ static void print_flowed_line(char *line, struct State *s, int ql,
       mutt_debug(LL_DEBUG3, "f=f: break line at %lu, %lu spaces left\n",
                  fst->width, fst->spaces);
       /* only honor trailing spaces for format=flowed replies */
-      if (C_TextFlowed)
+      const bool c_text_flowed = cs_subset_bool(NeoMutt->sub, "text_flowed");
+      if (c_text_flowed)
         for (; fst->spaces; fst->spaces--)
           state_putc(s, ' ');
       state_putc(s, '\n');
@@ -310,7 +314,7 @@ static void print_fixed_line(const char *line, struct State *s, int ql, struct F
 }
 
 /**
- * rfc3676_handler - Body handler implementing RFC3676 for format=flowed - Implements ::handler_t
+ * rfc3676_handler - Body handler implementing RFC3676 for format=flowed - Implements ::handler_t - @ingroup handler_api
  * @retval 0 Always
  */
 int rfc3676_handler(struct Body *a, struct State *s)
@@ -382,7 +386,7 @@ int rfc3676_handler(struct Body *a, struct State *s)
 /**
  * mutt_rfc3676_is_format_flowed - Is the Email "format-flowed"?
  * @param b Email Body to examine
- * @retval bool true, if "format-flowed"
+ * @retval true Email is "format-flowed"
  */
 bool mutt_rfc3676_is_format_flowed(struct Body *b)
 {

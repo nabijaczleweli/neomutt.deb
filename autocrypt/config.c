@@ -21,7 +21,7 @@
  */
 
 /**
- * @page autocrypt_config Config used by libautocrypt
+ * @page autocrypt_config Autocrypt Config
  *
  * Config used by libautocrypt
  */
@@ -30,39 +30,32 @@
 #include <stddef.h>
 #include <config/lib.h>
 #include <stdbool.h>
-#include "private.h"
-#include "mutt/lib.h"
 
 // clang-format off
-bool  C_Autocrypt;           ///< Config: Enables the Autocrypt feature
-bool  C_AutocryptReply;      ///< Config: Replying to an autocrypt email automatically enables autocrypt in the reply
-char *C_AutocryptAcctFormat; ///< Config: Format of the autocrypt account menu
-char *C_AutocryptDir;        ///< Config: Location of autocrypt files, including the GPG keyring and SQLite database
-
 char *AutocryptSignAs;     ///< Autocrypt Key id to sign as
 char *AutocryptDefaultKey; ///< Autocrypt default key id (used for postponing messages)
 // clang-format on
 
-struct ConfigDef AutocryptVars[] = {
+static struct ConfigDef AutocryptVars[] = {
   // clang-format off
-  { "autocrypt", DT_BOOL, &C_Autocrypt, false, 0, NULL,
+  { "autocrypt", DT_BOOL, false, 0, NULL,
     "Enables the Autocrypt feature"
   },
-  { "autocrypt_acct_format", DT_STRING|R_MENU, &C_AutocryptAcctFormat, IP "%4n %-30a %20p %10s", 0, NULL,
+  { "autocrypt_acct_format", DT_STRING|R_MENU, IP "%4n %-30a %20p %10s", 0, NULL,
     "Format of the autocrypt account menu"
   },
-  { "autocrypt_dir", DT_PATH|DT_PATH_DIR, &C_AutocryptDir, IP "~/.mutt/autocrypt", 0, NULL,
+  { "autocrypt_dir", DT_PATH|DT_PATH_DIR, IP "~/.mutt/autocrypt", 0, NULL,
     "Location of autocrypt files, including the GPG keyring and SQLite database"
   },
-  { "autocrypt_reply", DT_BOOL, &C_AutocryptReply, true, 0, NULL,
+  { "autocrypt_reply", DT_BOOL, true, 0, NULL,
     "Replying to an autocrypt email automatically enables autocrypt in the reply"
   },
-  { NULL, 0, NULL, 0, 0, NULL, NULL },
+  { NULL },
   // clang-format on
 };
 
 /**
- * config_init_autocrypt - Register autocrypt config variables - Implements ::module_init_config_t
+ * config_init_autocrypt - Register autocrypt config variables - Implements ::module_init_config_t - @ingroup cfg_module_api
  */
 bool config_init_autocrypt(struct ConfigSet *cs)
 {

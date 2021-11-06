@@ -27,10 +27,10 @@
  *
  * - Backed by `short`
  * - Validator is passed `short`
+ * - Implementation: #CstSort
  */
 
 #include "config.h"
-#include <limits.h>
 #include <stdint.h>
 #include <string.h>
 #include "mutt/lib.h"
@@ -42,7 +42,7 @@
 #define PREFIX_LAST "last-"
 
 /**
- * sort_string_set - Set a Sort by string - Implements ConfigSetType::string_set()
+ * sort_string_set - Set a Sort by string - Implements ConfigSetType::string_set() - @ingroup cfg_type_string_set
  */
 static int sort_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                            const char *value, struct Buffer *err)
@@ -112,7 +112,7 @@ static int sort_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
 }
 
 /**
- * sort_string_get - Get a Sort as a string - Implements ConfigSetType::string_get()
+ * sort_string_get - Get a Sort as a string - Implements ConfigSetType::string_get() - @ingroup cfg_type_string_get
  */
 static int sort_string_get(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, struct Buffer *result)
@@ -147,7 +147,7 @@ static int sort_string_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * sort_native_set - Set a Sort config item by int - Implements ConfigSetType::native_set()
+ * sort_native_set - Set a Sort config item by int - Implements ConfigSetType::native_set() - @ingroup cfg_type_native_set
  */
 static int sort_native_set(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, intptr_t value, struct Buffer *err)
@@ -178,7 +178,7 @@ static int sort_native_set(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * sort_native_get - Get an int from a Sort config item - Implements ConfigSetType::native_get()
+ * sort_native_get - Get an int from a Sort config item - Implements ConfigSetType::native_get() - @ingroup cfg_type_native_get
  */
 static intptr_t sort_native_get(const struct ConfigSet *cs, void *var,
                                 const struct ConfigDef *cdef, struct Buffer *err)
@@ -187,7 +187,7 @@ static intptr_t sort_native_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * sort_reset - Reset a Sort to its initial value - Implements ConfigSetType::reset()
+ * sort_reset - Reset a Sort to its initial value - Implements ConfigSetType::reset() - @ingroup cfg_type_reset
  */
 static int sort_reset(const struct ConfigSet *cs, void *var,
                       const struct ConfigDef *cdef, struct Buffer *err)
@@ -208,9 +208,9 @@ static int sort_reset(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * cst_sort - Config type representing a sort option
+ * CstSort - Config type representing a sort option
  */
-const struct ConfigSetType cst_sort = {
+const struct ConfigSetType CstSort = {
   DT_SORT,
   "sort",
   sort_string_set,

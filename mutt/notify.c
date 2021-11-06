@@ -30,16 +30,27 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "notify.h"
+#include "logging.h"
 #include "memory.h"
 #include "queue.h"
+
+/// Lookup table for NotifyType
+/// Must be the same size and order as #NotifyType
+static char *NotifyTypeNames[] = {
+  "NT_ALL",     "NT_ACCOUNT", "NT_ALIAS",   "NT_ALTERN",  "NT_ATTACH",
+  "NT_BINDING", "NT_COLOR",   "NT_COMMAND", "NT_COMPOSE", "NT_CONFIG",
+  "NT_CONTEXT", "NT_EMAIL",   "NT_GLOBAL",  "NT_HEADER",  "NT_INDEX",
+  "NT_MAILBOX", "NT_MENU",    "NT_PAGER",   "NT_SCORE",   "NT_SUBJRX",
+  "NT_WINDOW",
+};
 
 /**
  * struct Notify - Notification API
  */
 struct Notify
 {
-  struct Notify *parent;
-  struct ObserverList observers;
+  struct Notify *parent;         ///< Parent of the notification object
+  struct ObserverList observers; ///< List of observers of this object
 };
 
 /**
@@ -94,7 +105,7 @@ void notify_set_parent(struct Notify *notify, struct Notify *parent)
  * @param event_type    Type of event, e.g. #NT_ACCOUNT
  * @param event_subtype Subtype, e.g. #NT_ACCOUNT_ADD
  * @param event_data    Private data associated with the event type
- * @retval true If successfully sent
+ * @retval true Successfully sent
  *
  * Notifications are sent to all observers of the object, then propagated up
  * the handler tree.  For example a "new email" notification would be sent to
@@ -110,7 +121,7 @@ static bool send(struct Notify *source, struct Notify *current,
   if (!source || !current)
     return false;
 
-  // mutt_debug(LL_NOTIFY, "send: %d, %ld\n", event_type, event_data);
+  mutt_debug(LL_NOTIFY, "send: %d, %ld\n", event_type, event_data);
   struct ObserverNode *np = NULL;
   STAILQ_FOREACH(np, &current->observers, entries)
   {
@@ -118,8 +129,16 @@ static bool send(struct Notify *source, struct Notify *current,
     if (!o)
       continue;
 
-    struct NotifyCallback nc = { current, event_type, event_subtype, event_data, o->global_data };
-    o->callback(&nc);
+    if ((o->type == NT_ALL) || (event_type == o->type))
+    {
+      struct NotifyCallback nc = { current, event_type, event_subtype,
+                                   event_data, o->global_data };
+      if (o->callback(&nc) < 0)
+      {
+        mutt_debug(LL_DEBUG1, "failed to send notification: %s/%d, global %p, event %p\n",
+                   NotifyTypeNames[event_type], event_subtype, o->global_data, event_data);
+      }
+    }
   }
 
   if (current->parent)
@@ -145,13 +164,14 @@ static bool send(struct Notify *source, struct Notify *current,
  * @param event_type    Type of event, e.g. #NT_ACCOUNT
  * @param event_subtype Subtype, e.g. #NT_ACCOUNT_ADD
  * @param event_data    Private data associated with the event
- * @retval true If successfully sent
+ * @retval true Successfully sent
  *
  * See send() for more details.
  */
 bool notify_send(struct Notify *notify, enum NotifyType event_type,
                  int event_subtype, void *event_data)
 {
+  mutt_debug(LL_NOTIFY, "sending: %s/%d\n", NotifyTypeNames[event_type], event_subtype);
   return send(notify, notify, event_type, event_subtype, event_data);
 }
 
@@ -161,7 +181,7 @@ bool notify_send(struct Notify *notify, enum NotifyType event_type,
  * @param type        Notification type to observe, e.g. #NT_WINDOW
  * @param callback    Function to call on a matching event, see ::observer_t
  * @param global_data Private data associated with the observer
- * @retval true If successful
+ * @retval true Successful
  *
  * New observers are added to the front of the list, giving them higher
  * priority than existing observers.
@@ -178,11 +198,12 @@ bool notify_observer_add(struct Notify *notify, enum NotifyType type,
     if (!np->observer)
       continue;
 
-    if (np->observer->callback == callback)
+    if ((np->observer->callback == callback) && (np->observer->global_data == global_data))
       return true;
   }
 
   struct Observer *o = mutt_mem_calloc(1, sizeof(*o));
+  o->type = type;
   o->callback = callback;
   o->global_data = global_data;
 
@@ -198,7 +219,7 @@ bool notify_observer_add(struct Notify *notify, enum NotifyType type,
  * @param notify      Notification handler
  * @param callback    Function to call on a matching event, see ::observer_t
  * @param global_data Private data to match specific callback
- * @retval true If successful
+ * @retval true Successful
  *
  * @note This function frees the Observer, but doesn't free the ObserverNode.
  *       If `send()` is present higher up the call stack,

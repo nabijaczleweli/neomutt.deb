@@ -21,13 +21,14 @@
  */
 
 /**
- * @page email_email Representation of an email
+ * @page email_email Email object
  *
  * Representation of an email
  */
 
 #include "config.h"
 #include <stdbool.h>
+#include <string.h>
 #include "mutt/lib.h"
 #include "email.h"
 #include "body.h"
@@ -47,7 +48,11 @@ void email_free(struct Email **ptr)
 
   struct Email *e = *ptr;
 
-  if (e->edata && e->edata_free)
+  mutt_debug(LL_NOTIFY, "NT_EMAIL_DELETE: %p\n", e);
+  struct EventEmail ev_e = { 1, &e };
+  notify_send(e->notify, NT_EMAIL, NT_EMAIL_DELETE, &ev_e);
+
+  if (e->edata_free && e->edata)
     e->edata_free(&e->edata);
 
   mutt_env_free(&e->env);
@@ -61,6 +66,7 @@ void email_free(struct Email **ptr)
   nm_edata_free(&e->nm_edata);
 #endif
   driver_tags_free(&e->tags);
+  notify_free(&e->notify);
 
   FREE(ptr);
 }
@@ -80,6 +86,8 @@ struct Email *email_new(void)
   STAILQ_INIT(&e->tags);
   e->visible = true;
   e->sequence = sequence++;
+  e->notify = notify_new();
+
   return e;
 }
 
@@ -110,7 +118,7 @@ bool email_cmp_strict(const struct Email *e1, const struct Email *e2)
 }
 
 /**
- * email_size - compute the size of an email
+ * email_size - Compute the size of an email
  * @param e Email
  * @retval num Size of the email, in bytes
  */
@@ -165,7 +173,7 @@ int emaillist_add_email(struct EmailList *el, struct Email *e)
  * @param hdrlist List of headers to search
  * @param header  The header to search for
  * @retval node   The node in the list matching the header
- * @retval NULL   If no matching header is found
+ * @retval NULL   No matching header is found
  *
  * The header should either of the form "X-Header:" or "X-Header: value"
  */

@@ -30,23 +30,21 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/types.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
-#include "gui/lib.h"
 #include "status.h"
+#include "index/lib.h"
+#include "menu/lib.h"
 #include "context.h"
 #include "format_flags.h"
 #include "mutt_globals.h"
 #include "mutt_mailbox.h"
-#include "mutt_menu.h"
+#include "mutt_thread.h"
 #include "muttlib.h"
 #include "options.h"
 #include "protos.h"
-#include "sort.h"
-
-/* These Config Variables are only used in status.c */
-struct MbTable *C_StatusChars; ///< Config: Indicator characters for the status bar
 
 /**
  * get_sort_str - Get the sort method as a string
@@ -68,12 +66,12 @@ static char *get_sort_str(char *buf, size_t buflen, enum SortType method)
  */
 struct MenuStatusLineData
 {
-  struct Menu *menu;
-  struct Mailbox *m;
+  struct IndexSharedData *shared; ///< Data shared between Index, Pager and Sidebar
+  struct Menu *menu;              ///< Current Menu
 };
 
 /**
- * status_format_str - Create the status bar string - Implements ::format_t
+ * status_format_str - Create the status bar string - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
  * |:--------|:--------------------------------------------------------
@@ -95,6 +93,7 @@ struct MenuStatusLineData
  * | \%r     | Readonly/wontwrite/changed flag
  * | \%S     | Current aux sorting method (`$sort_aux`)
  * | \%s     | Current sorting method (`$sort`)
+ * | \%T     | Current threading view (`$use_threads`)
  * | \%t     | Number of tagged messages
  * | \%u     | Number of unread messages
  * | \%V     | Currently active limit pattern
@@ -107,8 +106,11 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
 {
   char fmt[128], tmp[128];
   bool optional = (flags & MUTT_FORMAT_OPTIONAL);
-  struct Menu *menu = ((struct MenuStatusLineData *) data)->menu;
-  struct Mailbox *m = ((struct MenuStatusLineData *) data)->m;
+  struct MenuStatusLineData *msld = (struct MenuStatusLineData *) data;
+  struct IndexSharedData *shared = msld->shared;
+  struct Context *ctx = shared->ctx;
+  struct Mailbox *m = shared->mailbox;
+  struct Menu *menu = msld->menu;
 
   *buf = '\0';
   switch (op)
@@ -209,10 +211,10 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
       if (!optional)
       {
         snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-        mutt_str_pretty_size(tmp, sizeof(tmp), Context ? Context->vsize : 0);
+        mutt_str_pretty_size(tmp, sizeof(tmp), ctx ? ctx->vsize : 0);
         snprintf(buf, buflen, fmt, tmp);
       }
-      else if (!ctx_has_limit(Context))
+      else if (!ctx_has_limit(ctx))
         optional = false;
       break;
 
@@ -235,7 +237,7 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
         snprintf(fmt, sizeof(fmt), "%%%sd", prec);
         snprintf(buf, buflen, fmt, m ? m->vcount : 0);
       }
-      else if (!ctx_has_limit(Context))
+      else if (!ctx_has_limit(ctx))
         optional = false;
       break;
 
@@ -317,12 +319,14 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
                                                             0);
       }
 
-      if (!C_StatusChars || !C_StatusChars->len)
+      const struct MbTable *c_status_chars =
+          cs_subset_mbtable(NeoMutt->sub, "status_chars");
+      if (!c_status_chars || !c_status_chars->len)
         buf[0] = '\0';
-      else if (i >= C_StatusChars->len)
-        snprintf(buf, buflen, "%s", C_StatusChars->chars[0]);
+      else if (i >= c_status_chars->len)
+        snprintf(buf, buflen, "%s", c_status_chars->chars[0]);
       else
-        snprintf(buf, buflen, "%s", C_StatusChars->chars[i]);
+        snprintf(buf, buflen, "%s", c_status_chars->chars[i]);
       break;
     }
 
@@ -340,14 +344,20 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
     }
 
     case 's':
+    {
       snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-      snprintf(buf, buflen, fmt, get_sort_str(tmp, sizeof(tmp), C_Sort));
+      const short c_sort = cs_subset_sort(NeoMutt->sub, "sort");
+      snprintf(buf, buflen, fmt, get_sort_str(tmp, sizeof(tmp), c_sort));
       break;
+    }
 
     case 'S':
+    {
       snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-      snprintf(buf, buflen, fmt, get_sort_str(tmp, sizeof(tmp), C_SortAux));
+      const short c_sort_aux = cs_subset_sort(NeoMutt->sub, "sort_aux");
+      snprintf(buf, buflen, fmt, get_sort_str(tmp, sizeof(tmp), c_sort_aux));
       break;
+    }
 
     case 't':
     {
@@ -358,6 +368,19 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
         snprintf(buf, buflen, fmt, num);
       }
       else if (num == 0)
+        optional = false;
+      break;
+    }
+
+    case 'T':
+    {
+      const enum UseThreads c_use_threads = mutt_thread_style();
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%ss", prec);
+        snprintf(buf, buflen, fmt, get_use_threads_str(c_use_threads));
+      }
+      else if (c_use_threads == UT_FLAT)
         optional = false;
       break;
     }
@@ -380,9 +403,9 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
       if (!optional)
       {
         snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-        snprintf(buf, buflen, fmt, ctx_has_limit(Context) ? Context->pattern : "");
+        snprintf(buf, buflen, fmt, ctx_has_limit(ctx) ? ctx->pattern : "");
       }
-      else if (!ctx_has_limit(Context))
+      else if (!ctx_has_limit(ctx))
         optional = false;
       break;
 
@@ -397,15 +420,16 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
 
   if (optional)
   {
-    mutt_expando_format(buf, buflen, col, cols, if_str, status_format_str,
-                        (intptr_t) data, MUTT_FORMAT_NO_FLAGS);
+    mutt_expando_format(buf, buflen, col, cols, if_str, status_format_str, data,
+                        MUTT_FORMAT_NO_FLAGS);
   }
   else if (flags & MUTT_FORMAT_OPTIONAL)
   {
     mutt_expando_format(buf, buflen, col, cols, else_str, status_format_str,
-                        (intptr_t) data, MUTT_FORMAT_NO_FLAGS);
+                        data, MUTT_FORMAT_NO_FLAGS);
   }
 
+  /* We return the format string, unchanged */
   return src;
 }
 
@@ -413,14 +437,16 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
  * menu_status_line - Create the status line
  * @param[out] buf      Buffer in which to save string
  * @param[in]  buflen   Buffer length
+ * @param[in]  shared   Shared Index data
  * @param[in]  menu     Current menu
- * @param[in]  m        Current Mailbox
- * @param[in]  p        Format string
+ * @param[in]  cols     Maximum number of columns to use
+ * @param[in]  fmt      Format string
  */
-void menu_status_line(char *buf, size_t buflen, struct Menu *menu,
-                      struct Mailbox *m, const char *p)
+void menu_status_line(char *buf, size_t buflen, struct IndexSharedData *shared,
+                      struct Menu *menu, int cols, const char *fmt)
 {
-  struct MenuStatusLineData data = { .menu = menu, .m = m };
-  mutt_expando_format(buf, buflen, 0, menu ? menu->win_ibar->state.cols : buflen, p,
-                      status_format_str, (intptr_t) &data, MUTT_FORMAT_NO_FLAGS);
+  struct MenuStatusLineData data = { shared, menu };
+
+  mutt_expando_format(buf, buflen, 0, cols, fmt, status_format_str,
+                      (intptr_t) &data, MUTT_FORMAT_NO_FLAGS);
 }

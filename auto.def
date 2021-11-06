@@ -16,7 +16,7 @@ use system cc cc-lib mutt-gettext mutt-iconv pkg-config
 ###############################################################################
 # Names and versions
 define PACKAGE          "neomutt"
-define PACKAGE_VERSION  "20210205"
+define PACKAGE_VERSION  "20211029"
 define BUGS_ADDRESS     "neomutt-devel@neomutt.org"
 
 # Subdirectories that contain additional Makefile.autosetup files
@@ -26,10 +26,8 @@ set subdirs {po docs contrib}
 ###############################################################################
 # Add any user options here
 options {
-# Curses / S-Lang
-  with-ui:=ncurses          => "Select ncurses or slang for the UI"
+# Curses
   with-ncurses:path         => "Location of ncurses"
-  with-slang:path           => "Location of S-Lang"
 # Features w/o 3rd party dependencies
   doc=1                     => "Disable building the documentation"
   full-doc=0                => "Build the full documentation set"
@@ -129,6 +127,18 @@ options {
   debug-notify=0            => "DEBUG: Enable Notifications dump"
   debug-parse-test=0        => "DEBUG: Enable 'neomutt -T' for config testing"
   debug-window=0            => "DEBUG: Enable windows dump"
+# Deprecated stuff
+  with-ui:=deprecated       => "Deprecated"
+  with-slang:deprecated     => "Deprecated"
+}
+###############################################################################
+
+###############################################################################
+# Deprecated config options
+foreach dep {with-ui with-slang} {
+  if {[opt-bool -nodefault $dep] != -1} {
+    user-notice "\nThe configure option \"--$dep\" is not used anymore\n"
+  }
 }
 ###############################################################################
 
@@ -152,9 +162,9 @@ if {1} {
   # relative --enable-opt to true. This allows "--with-opt=/usr" to be used as
   # a shortcut for "--opt --with-opt=/usr".
   foreach opt {
-    bdb gdbm gnutls gpgme gss homespool idn idn2 kyotocabinet lmdb lua lz4
-    mixmaster ncurses nls notmuch pcre2 qdbm rocksdb sasl slang sqlite ssl tdb
-    tokyocabinet zlib zstd
+    bdb gdbm gnutls gpgme gss homespool idn idn2 kyotocabinet lmdb lua lz4 
+    mixmaster nls notmuch pcre2 qdbm rocksdb sasl sqlite ssl tdb tokyocabinet 
+    zlib zstd
   } {
     if {[opt-val with-$opt] ne {}} {
       define want-$opt 1
@@ -176,6 +186,7 @@ define PKGDATADIR       [get-define datadir]/neomutt
 define PKGDOCDIR        [opt-val docdir [get-define datadir]/doc/neomutt]
 define SYSCONFDIR       [get-define sysconfdir]
 define TMPDIR           [opt-val with-tmpdir /tmp]
+set libdir_tail         [file tail [get-define libdir]] ;# used only locally
 ###############################################################################
 
 ###############################################################################
@@ -183,24 +194,38 @@ define TMPDIR           [opt-val with-tmpdir /tmp]
 if {1} {
   # Check for a header file and a function in a library
   proc check-inc-and-lib {name prefix header fun lib} {
-    cc-with [list -cflags -I$prefix/include -libs -L$prefix/lib] {
+    cc-with [list -cflags -I$prefix/include -libs -L$prefix/$::libdir_tail] {
       if {[cc-check-includes $header] && [cc-check-function-in-lib $fun $lib]} {
         define-append CFLAGS  -I$prefix/include
-        define-append LDFLAGS -L$prefix/lib
+        define-append LDFLAGS -L$prefix/$::libdir_tail
         define-feature $name
       }
     }
     have-feature $name
   }
 
-  # Get the value of a macro by preprocessing a header file that defines it
-  proc check-define-value {incfile macro} {
-    set code "#include \"$incfile\"\n$macro"
-    if {[catch {exec [get-define CC] {*}[get-define CFLAGS] -xc - -E | tail -1 << $code} out]} {
-      user-notice $out
-      set out ""
+  proc check-define {incfile macro} {
+    set code {}
+    if {$incfile ne {}} {
+      append code "#include \"$incfile\"\n"
+    }
+    append code "#ifndef $macro\n#error \"$macro not defined\"\n#endif\n$macro"
+    if {[catch {exec {*}[get-define CC] {*}[get-define CFLAGS] -xc - -E | tail -1 << $code} out]} {
+      error
     }
     set out
+  }
+
+  # Check whether a macro is defined after preprocessing a header file
+  proc has-define {incfile macro} {
+    expr {[catch {check-define $incfile $macro}] == 0}
+  }
+
+  # Get the value of a macro by preprocessing a header file that defines it
+  proc get-define-value {incfile macro} {
+    if {![catch {check-define $incfile $macro} out]} {
+      return $out
+    }
   }
 
   # Convert a string into a representation suitable for a C char[]
@@ -266,7 +291,7 @@ if {1} {
   }
 
   # GCC-specifc CFLAGS
-  if {![catch {exec [get-define CC] --version} res]} {
+  if {![catch {exec {*}[get-define CC] --version} res]} {
     if {[regexp -nocase gcc $res]} {
       define-append CFLAGS "-fno-delete-null-pointer-checks"
     }
@@ -321,6 +346,7 @@ cc-with {-includes "signal.h unistd.h"} {
 if {1} {
   cc-check-includes \
     ioctl.h \
+    termios.h \
     sys/ioctl.h \
     syscall.h \
     sys/random.h \
@@ -336,10 +362,18 @@ if {1} {
     getsid \
     iswblank \
     mkdtemp \
+    qsort_s \
     strsep \
+    tcgetwinsize \
     utimesnsat \
     vasprintf \
     wcscasecmp
+
+  # The following systems have known-bad qsort_r with reversed arguments
+  if {![has-define sys/param.h __FreeBSD_version] &&
+      ![has-define {} __APPLE__]} {
+    cc-check-functions qsort_r
+  }
 
   cc-check-function-in-lib gethostent nsl
   cc-check-function-in-lib setsockopt socket
@@ -598,13 +632,13 @@ if {[get-define want-lua]} {
           if {[file exists $lua_prefix/include$lua_suffix/lua.h]} {
             msg-result "yes"
             set libs [list lua-${maj}.${min} lua${maj}.${min} lua]
-            cc-with [list -libs "-L$lua_prefix/lib"] {
+            cc-with [list -libs "-L$lua_prefix/$::libdir_tail"] {
               if {![cc-check-function-in-lib luaL_openlibs $libs]} {
                 continue
               }
             }
             define-append CFLAGS -I$lua_prefix/include$lua_suffix
-            define-append LDFLAGS -L$lua_prefix/lib
+            define-append LDFLAGS -L$lua_prefix/$::libdir_tail
             define USE_LUA
             return
           }
@@ -633,6 +667,7 @@ if {[get-define want-notmuch]} {
     msg-result "no"
   }
   cc-check-function-in-lib notmuch_database_index_file notmuch
+  cc-check-function-in-lib notmuch_database_open_with_config notmuch
 }
 
 ###############################################################################
@@ -682,82 +717,49 @@ if {[get-define want-fmemopen]} {
 }
 
 ###############################################################################
-# Ncurses / S-Lang
-switch [opt-val with-ui ncurses] {
-  ncurses {
-    define-append CFLAGS -DNCURSES_WIDECHAR
-    set ncurses_prefix [opt-val with-ncurses $prefix]
+# Ncurses
+define-append CFLAGS -DNCURSES_WIDECHAR
+set ncurses_prefix [opt-val with-ncurses $prefix]
 
-    cc-with [list -libs -L$ncurses_prefix/lib] {
+cc-with [list -libs -L$ncurses_prefix/$::libdir_tail] {
 
-      set tinfo_libs   {tinfow tinfo}
-      set ncurses_libs {ncursesw ncurses curses}
+  set tinfo_libs   {tinfow tinfo}
+  set ncurses_libs {ncursesw ncurses curses}
 
-      # Locate the library defining tgetent()
-      # This must be done *before* checking for ncurses functions, see
-      # https://github.com/neomutt/neomutt/issues/1118
-      foreach tinfo_lib [concat $tinfo_libs $ncurses_libs] {
-        if {[cc-check-function-in-lib tgetent $tinfo_lib]} {
-          break
-        }
-      }
-
-      # Locate the library defining waddnwstr()
-      foreach ncurses_lib $ncurses_libs {
-        if {[cc-check-function-in-lib waddnwstr $ncurses_lib]} {
-          break
-        }
-      }
-
-      if {![have-feature waddnwstr] || ![have-feature tgetent]} {
-        user-error "Unable to find ncursesw library"
-      }
-
-      foreach f {bkgdset curs_set meta start_color typeahead use_default_colors} {
-        cc-check-function-in-lib $f $ncurses_lib
-      }
-      cc-check-functions use_extended_names
-    }
-
-    # Locate the directory containing ncurses.h
-    # See https://github.com/neomutt/neomutt/pull/679
-    apply {{ncurses_prefix} {
-      cc-with [list -cflags -I$ncurses_prefix/include] {
-        foreach ncurses_inc {ncursesw/ ncurses/ curses/ {}} {
-          if {[cc-check-includes ${ncurses_inc}ncurses.h] ||
-              [cc-check-includes ${ncurses_inc}curses.h]} {
-            return
-          }
-        }
-        user-error "Unable to find ncurses headers"
-      }
-    }} $ncurses_prefix
-
-    if {[have-feature start_color]} {
-      define-feature COLOR
+  # Locate the library defining tgetent()
+  # This must be done *before* checking for ncurses functions, see
+  # https://github.com/neomutt/neomutt/issues/1118
+  foreach tinfo_lib [concat $tinfo_libs $ncurses_libs] {
+    if {[cc-check-function-in-lib tgetent $tinfo_lib]} {
+      break
     }
   }
 
-  slang {
-    cc-with {-includes sys/param.h} {
-      if {[cc-check-defines BSD]} {
-        cc-check-function-in-lib initscr termlib
-      }
+  # Locate the library defining waddnwstr()
+  foreach ncurses_lib $ncurses_libs {
+    if {[cc-check-function-in-lib waddnwstr $ncurses_lib]} {
+      break
     }
-    if {![check-inc-and-lib slang [opt-val with-slang $prefix] \
-                            slcurses.h SLtt_get_terminfo slang]} {
-      user-error "Unable to find S-Lang"
-    }
-    define USE_SLANG_CURSES
-    define-feature COLOR
-    define-feature DIRECTCOLOR
   }
 
-  default {
-    user-error "Invalid value for --with-ui=[opt-val with-ui], select ncurses\
-                or slang"
+  if {![have-feature waddnwstr] || ![have-feature tgetent]} {
+    user-error "Unable to find ncursesw library"
   }
 }
+
+# Locate the directory containing ncurses.h
+# See https://github.com/neomutt/neomutt/pull/679
+apply {{ncurses_prefix} {
+  cc-with [list -cflags -I$ncurses_prefix/include] {
+    foreach ncurses_inc {ncursesw/ ncurses/ curses/ {}} {
+      if {[cc-check-includes ${ncurses_inc}ncurses.h] ||
+          [cc-check-includes ${ncurses_inc}curses.h]} {
+        return
+      }
+    }
+    user-error "Unable to find ncurses headers"
+  }
+}} $ncurses_prefix
 
 ###############################################################################
 # Iconv - try to mimic AM_ICONV by preferring an installed libiconv
@@ -797,7 +799,7 @@ if {[get-define want-ssl] && ![get-define want-gnutls]} {
   } else {
     set ssl_prefix [opt-val with-ssl $prefix]
     set ssl_cflags -I$ssl_prefix/include
-    set ssl_ldflags -L$ssl_prefix/lib
+    set ssl_ldflags -L$ssl_prefix/$::libdir_tail
     cc-with [list -libs $ssl_ldflags -cflags $ssl_cflags] {
       if {![cc-check-includes openssl/bio.h openssl/err.h openssl/ssl.h] ||
           ![cc-check-function-in-lib X509_STORE_CTX_new crypto] ||
@@ -810,7 +812,7 @@ if {[get-define want-ssl] && ![get-define want-gnutls]} {
     }
   }
 
-  cc-check-functions RAND_status RAND_egd
+  cc-check-functions RAND_egd
   cc-check-function-in-lib deflate z
   define USE_SSL
   define USE_SSL_OPENSSL
@@ -824,12 +826,13 @@ if {[get-define want-ssl] && ![get-define want-gnutls]} {
     pkgconf true gnutls
   } else {
     set gnutls_prefix [opt-val with-gnutls $prefix]
-    cc-with [list -cflags -I$gnutls_prefix/include -libs -L$gnutls_prefix/lib] {
+    cc-with [list -cflags -I$gnutls_prefix/include \
+                   -libs -L$gnutls_prefix/$::libdir_tail] {
       if {![cc-check-function-in-lib gnutls_check_version gnutls]} {
         user-error "Unable to find GnuTLS"
       }
       define-append CFLAGS -I$gnutls_prefix/include
-      define-append LDFLAGS -L$gnutls_prefix/lib
+      define-append LDFLAGS -L$gnutls_prefix/$::libdir_tail
     }
   }
   cc-check-function-in-lib gnutls_priority_set_direct gnutls
@@ -865,10 +868,11 @@ if {[get-define want-idn]} {
     find-idn1-includes
   } else {
     set idn_prefix [opt-val with-idn $prefix]
-    cc-with [list -cflags -I$idn_prefix/include -libs -L$idn_prefix/lib] {
+    cc-with [list -cflags -I$idn_prefix/include \
+                   -libs -L$idn_prefix/$::libdir_tail] {
       find-idn1-includes
       define-append CFLAGS -I$idn_prefix/include
-      define-append LDFLAGS -L$idn_prefix/lib
+      define-append LDFLAGS -L$idn_prefix/$::libdir_tail
     }
   }
   if {![cc-check-function-in-lib stringprep_check_version idn]} {
@@ -890,10 +894,11 @@ if {[get-define want-idn]} {
     find-idn2-includes
   } else {
     set idn_prefix [opt-val with-idn2 $prefix]
-    cc-with [list -cflags -I$idn_prefix/include -libs -L$idn_prefix/lib] {
+    cc-with [list -cflags -I$idn_prefix/include \
+                  -libs -L$idn_prefix/$::libdir_tail] {
       find-idn2-includes
       define-append CFLAGS -I$idn_prefix/include
-      define-append LDFLAGS -L$idn_prefix/lib
+      define-append LDFLAGS -L$idn_prefix/$::libdir_tail
     }
   }
   if {![cc-check-function-in-lib idn2_to_ascii_8z     idn2] ||
@@ -919,6 +924,10 @@ if {[get-define want-pcre2]} {
     }
   }
   define-feature pcre2
+} elseif {[check-inc-and-lib pcre2_unwarranted {} {} pcre2_regcomp {}]} {
+  # See https://bugs.exim.org/show_bug.cgi?id=2707 and
+  # https://github.com/neomutt/neomutt/issues/2865
+  user-error "Found libpcre2-posix: please reconfigure with --pcre2"
 }
 
 ###############################################################################
@@ -937,7 +946,7 @@ if {[get-define want-bdb]} {
 
   foreach maj $bdb_majors min $bdb_minors ver $bdb_exploded {
     set ver_inc_dir $bdb_prefix/include/$ver
-    set ver_lib_dir $bdb_prefix/lib/$ver
+    set ver_lib_dir $bdb_prefix/$::libdir_tail/$ver
     set ver_inc_file $ver_inc_dir/db.h
     set ver_lib_file  db-$maj.$min
 
@@ -949,8 +958,8 @@ if {[get-define want-bdb]} {
     }
 
     # Version is coherent?
-    set inc_maj [check-define-value $ver_inc_file DB_VERSION_MAJOR]
-    set inc_min [check-define-value $ver_inc_file DB_VERSION_MINOR]
+    set inc_maj [get-define-value $ver_inc_file DB_VERSION_MAJOR]
+    set inc_min [get-define-value $ver_inc_file DB_VERSION_MINOR]
     if {$inc_maj eq {}   || $inc_min eq {} ||
         $inc_maj != $maj || $inc_min != $min} {
       msg-result "no (expecting $maj.$min, got $inc_maj.$inc_min)"
@@ -1224,6 +1233,7 @@ if {[get-define want-asan]} {
   msg-result "yes"
   define-append CFLAGS -fsanitize=address -O0 -fno-omit-frame-pointer -fno-common
   define-append LDFLAGS -fsanitize=address
+  define USE_ASAN
 }
 
 ###############################################################################

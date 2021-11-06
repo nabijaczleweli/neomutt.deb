@@ -80,7 +80,7 @@ typedef uint16_t AclFlags;          ///< Flags, e.g. #MUTT_ACL_ADMIN
  */
 struct Mailbox
 {
-  struct Buffer pathbuf;
+  struct Buffer pathbuf;              ///< Path of the Mailbox
   char *realpath;                     ///< Used for duplicate detection, context comparison, and the sidebar
   char *name;                         ///< A short name for the Mailbox
   struct ConfigSubset *sub;           ///< Inherited config items
@@ -138,10 +138,14 @@ struct Mailbox
   /**
    * mdata_free - Free the private data attached to the Mailbox
    * @param ptr Private data to be freed
+   *
+   * **Contract**
+   * - @a ptr  is not NULL
+   * - @a *ptr is not NULL
    */
   void (*mdata_free)(void **ptr);
 
-  struct Notify *notify;              ///< Notifications handler
+  struct Notify *notify;              ///< Notifications: #NotifyMailbox, #EventMailbox
 
   int gen;                            ///< Generation number, for sorting
 };
@@ -160,21 +164,24 @@ STAILQ_HEAD(MailboxList, MailboxNode);
  * enum NotifyMailbox - Types of Mailbox Event
  *
  * Observers of #NT_MAILBOX will be passed an #EventMailbox.
+ *
+ * @note Delete notifications are sent **before** the object is deleted.
+ * @note Other notifications are sent **after** the event.
  */
 enum NotifyMailbox
 {
-  NT_MAILBOX_ADD = 1, ///< A new Mailbox has been created
-  NT_MAILBOX_REMOVE,  ///< A Mailbox is about to be destroyed
-  NT_MAILBOX_CHANGED, ///< Mailbox data has changed
+  NT_MAILBOX_ADD = 1,    ///< Mailbox has been added
+  NT_MAILBOX_DELETE,     ///< Mailbox is about to be deleted
+  NT_MAILBOX_DELETE_ALL, ///< All Mailboxes are about to be deleted
+  NT_MAILBOX_CHANGE,     ///< Mailbox has been changed
 
   /* These don't really belong here as they are tied to GUI operations.
    * Eventually, they'll be eliminated. */
-  NT_MAILBOX_CLOSED,  ///< Mailbox was closed
-  NT_MAILBOX_INVALID, ///< Email list was changed
-  NT_MAILBOX_RESORT,  ///< Email list needs resorting
-  NT_MAILBOX_SWITCH,  ///< Current Mailbox has changed
-  NT_MAILBOX_UPDATE,  ///< Update internal tables
-  NT_MAILBOX_UNTAG,   ///< Clear the 'last-tagged' pointer
+  NT_MAILBOX_INVALID,    ///< Email list was changed
+  NT_MAILBOX_RESORT,     ///< Email list needs resorting
+  NT_MAILBOX_SWITCH,     ///< Current Mailbox has changed
+  NT_MAILBOX_UPDATE,     ///< Update internal tables
+  NT_MAILBOX_UNTAG,      ///< Clear the 'last-tagged' pointer
 };
 
 /**
@@ -195,6 +202,10 @@ bool            mailbox_set_subset(struct Mailbox *m, struct ConfigSubset *sub);
 void            mailbox_size_add  (struct Mailbox *m, const struct Email *e);
 void            mailbox_size_sub  (struct Mailbox *m, const struct Email *e);
 void            mailbox_update    (struct Mailbox *m);
+void            mailbox_gc_add    (struct Email *e);
+void            mailbox_gc_run    (void);
+
+const char *mailbox_get_type_name(enum MailboxType type);
 
 /**
  * mailbox_path - Get the Mailbox's path string

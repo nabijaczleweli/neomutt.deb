@@ -34,14 +34,15 @@
 #include <wchar.h>
 #include <wctype.h>
 #include "mutt/lib.h"
-#include "core/neomutt.h"
+#include "config/lib.h"
+#include "core/lib.h"
 #include "alias/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
 #include "history/lib.h"
+#include "menu/lib.h"
 #include "pattern/lib.h"
 #include "browser.h"
-#include "context.h"
 #include "enter_state.h"
 #include "init.h"
 #include "keymap.h"
@@ -53,7 +54,7 @@
 #include "protos.h"
 
 /**
- * enum EnterRedrawFlags - redraw flags for mutt_enter_string_full()
+ * enum EnterRedrawFlags - Redraw flags for mutt_enter_string_full()
  */
 enum EnterRedrawFlags
 {
@@ -67,20 +68,21 @@ enum EnterRedrawFlags
 
 /**
  * my_addwch - Display one wide character on screen
- * @param wc Character to display
+ * @param win Window
+ * @param wc  Character to display
  * @retval OK  Success
  * @retval ERR Failure
  */
-static int my_addwch(wchar_t wc)
+static int my_addwch(struct MuttWindow *win, wchar_t wc)
 {
   int n = wcwidth(wc);
   if (IsWPrint(wc) && (n > 0))
-    return mutt_addwch(wc);
+    return mutt_addwch(win, wc);
   if (!(wc & ~0x7f))
-    return mutt_window_printf("^%c", ((int) wc + 0x40) & 0x7f);
+    return mutt_window_printf(win, "^%c", ((int) wc + 0x40) & 0x7f);
   if (!(wc & ~0xffff))
-    return mutt_window_printf("\\u%04x", (int) wc);
-  return mutt_window_printf("\\u%08x", (int) wc);
+    return mutt_window_printf(win, "\\u%04x", (int) wc);
+  return mutt_window_printf(win, "\\u%08x", (int) wc);
 }
 
 /**
@@ -131,44 +133,13 @@ struct EnterState *mutt_enter_state_new(void)
 }
 
 /**
- * mutt_enter_string - Ask the user for a string
- * @param buf    Buffer to store the string
- * @param buflen Buffer length
- * @param col    Initial cursor position
- * @param flags  Flags, see #CompletionFlags
- * @retval 0 if input was given
- * @retval -1 if abort
- *
- * This function is for very basic input, currently used only by the
- * built-in editor.  It does not handle screen redrawing on resizes
- * well, because there is no active menu for the built-in editor.
- * Most callers should prefer mutt_get_field() instead.
- */
-int mutt_enter_string(char *buf, size_t buflen, int col, CompletionFlags flags)
-{
-  int rc;
-  struct EnterState *es = mutt_enter_state_new();
-  do
-  {
-    if (SigWinch)
-    {
-      SigWinch = 0;
-      mutt_resize_screen();
-      clearok(stdscr, true);
-    }
-    rc = mutt_enter_string_full(buf, buflen, col, flags, false, NULL, NULL, es);
-  } while (rc == 1);
-  mutt_enter_state_free(&es);
-  return rc;
-}
-
-/**
  * mutt_enter_string_full - Ask the user for a string
  * @param[in]  buf      Buffer to store the string
  * @param[in]  buflen   Buffer length
  * @param[in]  col      Initial cursor position
  * @param[in]  flags    Flags, see #CompletionFlags
  * @param[in]  multiple Allow multiple matches
+ * @param[in]  m        Mailbox
  * @param[out] files    List of files selected
  * @param[out] numfiles Number of files selected
  * @param[out] state    Current state (if function is called repeatedly)
@@ -176,11 +147,15 @@ int mutt_enter_string(char *buf, size_t buflen, int col, CompletionFlags flags)
  * @retval 0  Selection made
  * @retval -1 Aborted
  */
-int mutt_enter_string_full(char *buf, size_t buflen, int col,
-                           CompletionFlags flags, bool multiple, char ***files,
+int mutt_enter_string_full(char *buf, size_t buflen, int col, CompletionFlags flags,
+                           bool multiple, struct Mailbox *m, char ***files,
                            int *numfiles, struct EnterState *state)
 {
-  int width = MessageWindow->state.cols - col - 1;
+  struct MuttWindow *win = msgwin_get_window();
+  if (!win)
+    return -1;
+
+  int width = win->state.cols - col - 1;
   enum EnterRedrawFlags redraw = ENTER_REDRAW_NONE;
   bool pass = (flags & MUTT_PASS);
   bool first = true;
@@ -240,17 +215,17 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
             state->wbuf, state->lastchar,
             mutt_mb_wcswidth(state->wbuf, state->curpos) - (width / 2));
       }
-      mutt_window_move(MessageWindow, col, 0);
+      mutt_window_move(win, col, 0);
       int w = 0;
       for (size_t i = state->begin; i < state->lastchar; i++)
       {
         w += mutt_mb_wcwidth(state->wbuf[i]);
         if (w > width)
           break;
-        my_addwch(state->wbuf[i]);
+        my_addwch(win, state->wbuf[i]);
       }
-      mutt_window_clrtoeol(MessageWindow);
-      mutt_window_move(MessageWindow,
+      mutt_window_clrtoeol(win);
+      mutt_window_move(win,
                        col + mutt_mb_wcswidth(state->wbuf + state->begin,
                                               state->curpos - state->begin),
                        0);
@@ -307,7 +282,9 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
           if (state->curpos == 0)
           {
             // Pressing backspace when no text is in the command prompt should exit the prompt
-            if (C_AbortBackspace && (state->lastchar == 0))
+            const bool c_abort_backspace =
+                cs_subset_bool(NeoMutt->sub, "abort_backspace");
+            if (c_abort_backspace && (state->lastchar == 0))
               goto bye;
             // Pressing backspace with text in the command prompt should just beep
             mutt_beep(false);
@@ -508,7 +485,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
 
             struct Buffer *pool = mutt_buffer_pool_get();
             mutt_buffer_addstr(pool, buf);
-            mutt_mailbox_next(Context ? Context->mailbox : NULL, pool);
+            mutt_mailbox_next(m, pool);
             mutt_str_copy(buf, mutt_buffer_string(pool), buflen);
             mutt_buffer_pool_release(&pool);
 
@@ -537,7 +514,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
                 (memcmp(tempbuf, state->wbuf + i, (state->lastchar - i) * sizeof(wchar_t)) == 0))
             {
               mutt_select_file(buf, buflen, (flags & MUTT_EFILE) ? MUTT_SEL_FOLDER : MUTT_SEL_NO_FLAGS,
-                               NULL, NULL);
+                               m, NULL, NULL);
               if (buf[0] != '\0')
                 replace_part(state, i, buf);
               rc = 1;
@@ -668,7 +645,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
               mutt_select_file(buf, buflen,
                                ((flags & MUTT_EFILE) ? MUTT_SEL_FOLDER : MUTT_SEL_NO_FLAGS) |
                                    (multiple ? MUTT_SEL_MULTI : MUTT_SEL_NO_FLAGS),
-                               files, numfiles);
+                               m, files, numfiles);
               if (buf[0] != '\0')
               {
                 mutt_pretty_mailbox(buf, buflen);
@@ -722,7 +699,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
           do
           {
             event = mutt_getch();
-          } while (event.ch == -2);
+          } while (event.ch == -2); // Timeout
           if (event.ch >= 0)
           {
             LastKey = event.ch;
@@ -769,7 +746,7 @@ int mutt_enter_string_full(char *buf, size_t buflen, int col,
       {
         char c = ch;
         size_t k = mbrtowc(&wc, &c, 1, &mbstate);
-        if (k == (size_t)(-2))
+        if (k == (size_t) (-2))
           continue;
         else if ((k != 0) && (k != 1))
         {

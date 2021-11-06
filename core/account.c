@@ -21,7 +21,7 @@
  */
 
 /**
- * @page core_account A group of associated Mailboxes
+ * @page core_account Account object
  *
  * A group of associated Mailboxes
  */
@@ -30,7 +30,7 @@
 #include <stddef.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
-#include "core/neomutt.h"
+#include "core/lib.h"
 #include "account.h"
 #include "mailbox.h"
 
@@ -61,7 +61,7 @@ struct Account *account_new(const char *name, struct ConfigSubset *sub)
  * account_mailbox_add - Add a Mailbox to an Account
  * @param a Account
  * @param m Mailbox to add
- * @retval true If Mailbox was added
+ * @retval true Mailbox was added
  */
 bool account_mailbox_add(struct Account *a, struct Mailbox *m)
 {
@@ -78,6 +78,7 @@ bool account_mailbox_add(struct Account *a, struct Mailbox *m)
   mailbox_set_subset(m, a->sub);
   notify_set_parent(m->notify, a->notify);
 
+  mutt_debug(LL_NOTIFY, "NT_MAILBOX_ADD: %s %p\n", mailbox_get_type_name(m->type), m);
   struct EventMailbox ev_m = { m };
   notify_send(a->notify, NT_MAILBOX, NT_MAILBOX_ADD, &ev_m);
   return true;
@@ -87,32 +88,45 @@ bool account_mailbox_add(struct Account *a, struct Mailbox *m)
  * account_mailbox_remove - Remove a Mailbox from an Account
  * @param a Account
  * @param m Mailbox to remove
+ * @retval true On success
  *
  * @note If m is NULL, all the mailboxes will be removed and FREE'd. Otherwise,
  * the specified mailbox is removed from the Account but not FREE'd.
  */
 bool account_mailbox_remove(struct Account *a, struct Mailbox *m)
 {
-  if (!a)
+  if (!a || STAILQ_EMPTY(&a->mailboxes))
     return false;
+
+  if (!m)
+  {
+    mutt_debug(LL_NOTIFY, "NT_MAILBOX_DELETE_ALL\n");
+    struct EventMailbox ev_m = { NULL };
+    notify_send(a->notify, NT_MAILBOX, NT_MAILBOX_DELETE_ALL, &ev_m);
+  }
 
   bool result = false;
   struct MailboxNode *np = NULL;
   struct MailboxNode *tmp = NULL;
   STAILQ_FOREACH_SAFE(np, &a->mailboxes, entries, tmp)
   {
-    if (!m || (np->mailbox == m))
+    if (m && (np->mailbox != m))
+      continue;
+
+    STAILQ_REMOVE(&a->mailboxes, np, MailboxNode, entries);
+    if (m)
     {
-      struct EventMailbox ev_m = { m };
-      notify_send(a->notify, NT_MAILBOX, NT_MAILBOX_REMOVE, &ev_m);
-      STAILQ_REMOVE(&a->mailboxes, np, MailboxNode, entries);
-      if (!m)
-        mailbox_free(&np->mailbox);
-      FREE(&np);
-      result = true;
-      if (m)
-        break;
+      m->account = NULL;
+      notify_set_parent(m->notify, NeoMutt->notify);
     }
+    else
+    {
+      mailbox_free(&np->mailbox);
+    }
+    FREE(&np);
+    result = true;
+    if (m)
+      break;
   }
 
   return result;
@@ -129,10 +143,15 @@ void account_free(struct Account **ptr)
 
   struct Account *a = *ptr;
 
-  if (a->adata_free)
-    a->adata_free(&a->adata);
+  mutt_debug(LL_NOTIFY, "NT_ACCOUNT_DELETE: %s %p\n", mailbox_get_type_name(a->type), a);
+  struct EventAccount ev_a = { a };
+  notify_send(a->notify, NT_ACCOUNT, NT_ACCOUNT_DELETE, &ev_a);
 
   account_mailbox_remove(a, NULL);
+
+  if (a->adata && a->adata_free)
+    a->adata_free(&a->adata);
+
   cs_subset_free(&a->sub);
   FREE(&a->name);
   notify_free(&a->notify);

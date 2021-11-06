@@ -21,14 +21,16 @@
  */
 
 /**
- * @page lib_pop POP: Network mailbox
+ * @page lib_pop Pop
  *
  * POP network mailbox
  *
  * | File          | Description         |
  * | :------------ | :------------------ |
+ * | pop/adata.c   | @subpage pop_adata  |
  * | pop/auth.c    | @subpage pop_auth   |
  * | pop/config.c  | @subpage pop_config |
+ * | pop/edata.c   | @subpage pop_edata  |
  * | pop/lib.c     | @subpage pop_lib    |
  * | pop/pop.c     | @subpage pop_pop    |
  */
@@ -36,17 +38,13 @@
 #ifndef MUTT_POP_LIB_H
 #define MUTT_POP_LIB_H
 
-#include <stdbool.h>
 #include "core/lib.h"
-#include "mx.h"
 
-struct ConfigSet;
 struct stat;
 
 extern struct MxOps MxPopOps;
 
 void pop_fetch_mail(void);
 enum MailboxType pop_path_probe(const char *path, const struct stat *st);
-bool config_init_pop(struct ConfigSet *cs);
 
 #endif /* MUTT_POP_LIB_H */

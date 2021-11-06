@@ -30,21 +30,20 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "config/lib.h"
-#include "lib.h"
 
-struct ConfigDef HelpbarVars[] = {
+static struct ConfigDef HelpbarVars[] = {
   // clang-format off
-  { "help", DT_BOOL|R_REFLOW, NULL, true, 0, NULL,
+  { "help", DT_BOOL, true, 0, NULL,
     "Display a help line with common key bindings"
   },
-  { NULL, 0, NULL, 0, 0, NULL, NULL },
+  { NULL },
   // clang-format on
 };
 
 /**
- * config_init_helpbar - Register helpbar config variables - Implements ::module_init_config_t
+ * config_init_helpbar - Register helpbar config variables - Implements ::module_init_config_t - @ingroup cfg_module_api
  */
 bool config_init_helpbar(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, HelpbarVars, DT_NO_VARIABLE);
+  return cs_register_variables(cs, HelpbarVars, 0);
 }

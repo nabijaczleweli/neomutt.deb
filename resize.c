@@ -33,9 +33,10 @@
 #include <unistd.h>
 #include "mutt/lib.h"
 #include "gui/lib.h"
-#ifdef USE_SLANG_CURSES
-#include <stdbool.h>
+#ifdef HAVE_TERMIOS_H
+#include <termios.h>
 #endif
+#ifndef HAVE_TCGETWINSIZE
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
 #else
@@ -43,58 +44,29 @@
 #include <ioctl.h>
 #endif
 #endif
+#endif /* HAVE_TCGETWINSIZE */
 
 /**
- * mutt_get_winsize - Use an ioctl to get the window size
+ * mutt_get_winsize - Get the window size
  * @retval obj Window size
  */
 static struct winsize mutt_get_winsize(void)
 {
   struct winsize w = { 0 };
+
   int fd = open("/dev/tty", O_RDONLY);
   if (fd != -1)
   {
+#ifdef HAVE_TCGETWINSIZE
+    tcgetwinsize(fd, &w);
+#else
     ioctl(fd, TIOCGWINSZ, &w);
+#endif
     close(fd);
   }
   return w;
 }
 
-#ifdef USE_SLANG_CURSES
-/**
- * mutt_resize_screen - Update NeoMutt's opinion about the window size (SLANG)
- */
-void mutt_resize_screen(void)
-{
-  struct winsize w = mutt_get_winsize();
-
-  /* The following two variables are global to slang */
-  SLtt_Screen_Rows = w.ws_row;
-  SLtt_Screen_Cols = w.ws_col;
-
-  if (SLtt_Screen_Rows <= 0)
-  {
-    const char *cp = mutt_str_getenv("LINES");
-    if (cp && (mutt_str_atoi(cp, &SLtt_Screen_Rows) < 0))
-      SLtt_Screen_Rows = 24;
-  }
-
-  if (SLtt_Screen_Cols <= 0)
-  {
-    const char *cp = mutt_str_getenv("COLUMNS");
-    if (cp && (mutt_str_atoi(cp, &SLtt_Screen_Cols) < 0))
-      SLtt_Screen_Cols = 80;
-  }
-
-  delwin(stdscr);
-  SLsmg_reset_smg();
-  SLsmg_init_smg();
-  stdscr = newwin(0, 0, 0, 0);
-  keypad(stdscr, true);
-  mutt_window_set_root(SLtt_Screen_Cols, SLtt_Screen_Rows);
-  window_notify_all(NULL);
-}
-#else
 /**
  * mutt_resize_screen - Update NeoMutt's opinion about the window size (CURSES)
  */
@@ -120,7 +92,6 @@ void mutt_resize_screen(void)
   }
 
   resizeterm(screenrows, screencols);
-  mutt_window_set_root(screencols, screenrows);
+  rootwin_set_size(screencols, screenrows);
   window_notify_all(NULL);
 }
-#endif

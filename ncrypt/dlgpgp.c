@@ -1,6 +1,6 @@
 /**
  * @file
- * PGP key selection dialog
+ * PGP Key Selection Dialog
  *
  * @authors
  * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
@@ -21,23 +21,69 @@
  */
 
 /**
- * @page crypt_dlgpgp PGP key selection dialog
+ * @page crypt_dlgpgp PGP Key Selection Dialog
  *
- * PGP key selection dialog
+ * The PGP Key Selection Dialog lets the user select a PGP key.
+ *
+ * This is a @ref gui_simple
+ *
+ * ## Windows
+ *
+ * | Name                     | Type       | See Also             |
+ * | :----------------------- | :--------- | :------------------- |
+ * | PGP Key Selection Dialog | WT_DLG_PGP | dlg_select_pgp_key() |
+ *
+ * **Parent**
+ * - @ref gui_dialog
+ *
+ * **Children**
+ * - See: @ref gui_simple
+ *
+ * ## Data
+ * - #Menu
+ * - #Menu::mdata
+ * - #PgpUid
+ *
+ * The @ref gui_simple holds a Menu.  The PGP Key Selection Dialog stores its
+ * data (#PgpUid) in Menu::mdata.
+ *
+ * ## Events
+ *
+ * Once constructed, it is controlled by the following events:
+ *
+ * | Event Type  | Handler                   |
+ * | :---------- | :------------------------ |
+ * | #NT_CONFIG  | pgp_key_config_observer() |
+ * | #NT_WINDOW  | pgp_key_window_observer() |
+ *
+ * The PGP Key Selection Dialog doesn't have any specific colours, so it
+ * doesn't need to support #NT_COLOR.
+ *
+ * The PGP Key Selection Dialog does not implement MuttWindow::recalc() or
+ * MuttWindow::repaint().
+ *
+ * Some other events are handled by the @ref gui_simple.
  */
 
 #include "config.h"
+#include <ctype.h>
 #include <locale.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include "private.h"
 #include "mutt/lib.h"
 #include "address/lib.h"
+#include "config/lib.h"
+#include "core/lib.h"
 #include "gui/lib.h"
+#include "lib.h"
+#include "menu/lib.h"
+#include "pager/lib.h"
+#include "question/lib.h"
 #include "format_flags.h"
 #include "mutt_logging.h"
-#include "mutt_menu.h"
 #include "muttlib.h"
 #include "opcodes.h"
 #include "options.h"
@@ -45,7 +91,6 @@
 #include "pgpinvoke.h"
 #include "pgpkey.h"
 #include "pgplib.h"
-#include "protos.h"
 
 /// Help Bar for the PGP key selection dialog
 static const struct Mapping PgpHelp[] = {
@@ -63,7 +108,7 @@ static const struct Mapping PgpHelp[] = {
  */
 struct PgpEntry
 {
-  size_t num;
+  size_t num; ///< Index number
   struct PgpUid *uid;
 };
 
@@ -99,8 +144,9 @@ static int pgp_compare_key_address(const void *a, const void *b)
  */
 static int pgp_compare_address_qsort(const void *a, const void *b)
 {
-  return (C_PgpSortKeys & SORT_REVERSE) ? !pgp_compare_key_address(a, b) :
-                                          pgp_compare_key_address(a, b);
+  const short c_pgp_sort_keys = cs_subset_sort(NeoMutt->sub, "pgp_sort_keys");
+  return (c_pgp_sort_keys & SORT_REVERSE) ? !pgp_compare_key_address(a, b) :
+                                            pgp_compare_key_address(a, b);
 }
 
 /**
@@ -132,8 +178,9 @@ static int pgp_compare_key_date(const void *a, const void *b)
  */
 static int pgp_compare_date_qsort(const void *a, const void *b)
 {
-  return (C_PgpSortKeys & SORT_REVERSE) ? !pgp_compare_key_date(a, b) :
-                                          pgp_compare_key_date(a, b);
+  const short c_pgp_sort_keys = cs_subset_sort(NeoMutt->sub, "pgp_sort_keys");
+  return (c_pgp_sort_keys & SORT_REVERSE) ? !pgp_compare_key_date(a, b) :
+                                            pgp_compare_key_date(a, b);
 }
 
 /**
@@ -165,8 +212,9 @@ static int pgp_compare_keyid(const void *a, const void *b)
  */
 static int pgp_compare_keyid_qsort(const void *a, const void *b)
 {
-  return (C_PgpSortKeys & SORT_REVERSE) ? !pgp_compare_keyid(a, b) :
-                                          pgp_compare_keyid(a, b);
+  const short c_pgp_sort_keys = cs_subset_sort(NeoMutt->sub, "pgp_sort_keys");
+  return (c_pgp_sort_keys & SORT_REVERSE) ? !pgp_compare_keyid(a, b) :
+                                            pgp_compare_keyid(a, b);
 }
 
 /**
@@ -214,8 +262,9 @@ static int pgp_compare_key_trust(const void *a, const void *b)
  */
 static int pgp_compare_trust_qsort(const void *a, const void *b)
 {
-  return (C_PgpSortKeys & SORT_REVERSE) ? !pgp_compare_key_trust(a, b) :
-                                          pgp_compare_key_trust(a, b);
+  const short c_pgp_sort_keys = cs_subset_sort(NeoMutt->sub, "pgp_sort_keys");
+  return (c_pgp_sort_keys & SORT_REVERSE) ? !pgp_compare_key_trust(a, b) :
+                                            pgp_compare_key_trust(a, b);
 }
 
 /**
@@ -268,7 +317,7 @@ static char pgp_flags(KeyFlags flags)
 }
 
 /**
- * pgp_entry_format_str - Format an entry on the PGP key selection menu - Implements ::format_t
+ * pgp_entry_format_str - Format an entry on the PGP key selection menu - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
  * |:--------|:--------------------------------------------------------
@@ -440,13 +489,15 @@ static const char *pgp_entry_format_str(char *buf, size_t buflen, size_t col, in
     mutt_expando_format(buf, buflen, col, cols, else_str, pgp_entry_format_str,
                         data, MUTT_FORMAT_NO_FLAGS);
   }
+
+  /* We return the format string, unchanged */
   return src;
 }
 
 /**
- * pgp_make_entry - Format a menu item for the pgp key list - Implements Menu::make_entry()
+ * pgp_make_entry - Format a menu item for the pgp key list - Implements Menu::make_entry() - @ingroup menu_make_entry
  */
-static void pgp_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
+static void pgp_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
 {
   struct PgpUid **key_table = menu->mdata;
   struct PgpEntry entry;
@@ -454,9 +505,73 @@ static void pgp_make_entry(char *buf, size_t buflen, struct Menu *menu, int line
   entry.uid = key_table[line];
   entry.num = line + 1;
 
-  mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols,
-                      NONULL(C_PgpEntryFormat), pgp_entry_format_str,
+  const char *const c_pgp_entry_format =
+      cs_subset_string(NeoMutt->sub, "pgp_entry_format");
+  mutt_expando_format(buf, buflen, 0, menu->win->state.cols,
+                      NONULL(c_pgp_entry_format), pgp_entry_format_str,
                       (intptr_t) &entry, MUTT_FORMAT_ARROWCURSOR);
+}
+
+/**
+ * pgp_key_table_free - Free the key table - Implements Menu::mdata_free() - @ingroup menu_mdata_free
+ *
+ * @note The keys are owned by the caller of the dialog
+ */
+static void pgp_key_table_free(struct Menu *menu, void **ptr)
+{
+  FREE(ptr);
+}
+
+/**
+ * pgp_key_config_observer - Notification that a Config Variable has changed - Implements ::observer_t - @ingroup observer_api
+ */
+static int pgp_key_config_observer(struct NotifyCallback *nc)
+{
+  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
+    return -1;
+
+  struct EventConfig *ev_c = nc->event_data;
+
+  if (!mutt_str_equal(ev_c->name, "pgp_entry_format") &&
+      !mutt_str_equal(ev_c->name, "pgp_sort_keys"))
+  {
+    return 0;
+  }
+
+  struct Menu *menu = nc->global_data;
+  menu_queue_redraw(menu, MENU_REDRAW_FULL);
+  mutt_debug(LL_DEBUG5, "config done, request WA_RECALC, MENU_REDRAW_FULL\n");
+
+  return 0;
+}
+
+/**
+ * pgp_key_window_observer - Notification that a Window has changed - Implements ::observer_t - @ingroup observer_api
+ *
+ * This function is triggered by changes to the windows.
+ *
+ * - Delete (this window): clean up the resources held by the Help Bar
+ */
+static int pgp_key_window_observer(struct NotifyCallback *nc)
+{
+  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+    return -1;
+
+  if (nc->event_subtype != NT_WINDOW_DELETE)
+    return 0;
+
+  struct MuttWindow *win_menu = nc->global_data;
+  struct EventWindow *ev_w = nc->event_data;
+  if (ev_w->win != win_menu)
+    return 0;
+
+  struct Menu *menu = win_menu->wdata;
+
+  notify_observer_remove(NeoMutt->notify, pgp_key_config_observer, menu);
+  notify_observer_remove(win_menu->notify, pgp_key_window_observer, win_menu);
+
+  mutt_debug(LL_DEBUG5, "window delete done\n");
+  return 0;
 }
 
 /**
@@ -482,9 +597,11 @@ struct PgpKeyInfo *dlg_select_pgp_key(struct PgpKeyInfo *keys,
 
   int keymax = 0;
 
+  const bool c_pgp_show_unusable =
+      cs_subset_bool(NeoMutt->sub, "pgp_show_unusable");
   for (i = 0, kp = keys; kp; kp = kp->next)
   {
-    if (!C_PgpShowUnusable && (kp->flags & KEYFLAG_CANTUSE))
+    if (!c_pgp_show_unusable && (kp->flags & KEYFLAG_CANTUSE))
     {
       unusable = true;
       continue;
@@ -492,7 +609,7 @@ struct PgpKeyInfo *dlg_select_pgp_key(struct PgpKeyInfo *keys,
 
     for (a = kp->address; a; a = a->next)
     {
-      if (!C_PgpShowUnusable && (a->flags & KEYFLAG_CANTUSE))
+      if (!c_pgp_show_unusable && (a->flags & KEYFLAG_CANTUSE))
       {
         unusable = true;
         continue;
@@ -515,7 +632,8 @@ struct PgpKeyInfo *dlg_select_pgp_key(struct PgpKeyInfo *keys,
   }
 
   int (*f)(const void *, const void *);
-  switch (C_PgpSortKeys & SORT_MASK)
+  const short c_pgp_sort_keys = cs_subset_sort(NeoMutt->sub, "pgp_sort_keys");
+  switch (c_pgp_sort_keys & SORT_MASK)
   {
     case SORT_ADDRESS:
       f = pgp_compare_address_qsort;
@@ -533,22 +651,27 @@ struct PgpKeyInfo *dlg_select_pgp_key(struct PgpKeyInfo *keys,
   }
   qsort(key_table, i, sizeof(struct PgpUid *), f);
 
-  menu = mutt_menu_new(MENU_PGP);
-  struct MuttWindow *dlg = dialog_create_simple_index(menu, WT_DLG_PGP);
-  dlg->help_data = PgpHelp;
-  dlg->help_menu = MENU_PGP;
+  struct MuttWindow *dlg = simple_dialog_new(MENU_PGP, WT_DLG_PGP, PgpHelp);
 
+  menu = dlg->wdata;
   menu->max = i;
   menu->make_entry = pgp_make_entry;
   menu->mdata = key_table;
-  mutt_menu_push_current(menu);
+  menu->mdata_free = pgp_key_table_free;
+
+  struct MuttWindow *win_menu = menu->win;
+
+  // NT_COLOR is handled by the SimpleDialog
+  notify_observer_add(NeoMutt->notify, NT_CONFIG, pgp_key_config_observer, menu);
+  notify_observer_add(win_menu->notify, NT_WINDOW, pgp_key_window_observer, win_menu);
 
   if (p)
     snprintf(buf, sizeof(buf), _("PGP keys matching <%s>"), p->mailbox);
   else
     snprintf(buf, sizeof(buf), _("PGP keys matching \"%s\""), s);
 
-  menu->title = buf;
+  struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
+  sbar_set_title(sbar, buf);
 
   kp = NULL;
 
@@ -556,7 +679,7 @@ struct PgpKeyInfo *dlg_select_pgp_key(struct PgpKeyInfo *keys,
 
   while (!done)
   {
-    switch (mutt_menu_loop(menu))
+    switch (menu_loop(menu))
     {
       case OP_VERIFY_KEY:
       {
@@ -579,8 +702,10 @@ struct PgpKeyInfo *dlg_select_pgp_key(struct PgpKeyInfo *keys,
 
         mutt_message(_("Invoking PGP..."));
 
+        const int index = menu_get_index(menu);
+        struct PgpUid *cur_key = key_table[index];
         snprintf(tmpbuf, sizeof(tmpbuf), "0x%s",
-                 pgp_fpr_or_lkeyid(pgp_principal_key(key_table[menu->current]->parent)));
+                 pgp_fpr_or_lkeyid(pgp_principal_key(cur_key->parent)));
 
         pid_t pid = pgp_invoke_verify_key(NULL, NULL, NULL, -1, fileno(fp_tmp),
                                           fileno(fp_null), tmpbuf);
@@ -598,45 +723,59 @@ struct PgpKeyInfo *dlg_select_pgp_key(struct PgpKeyInfo *keys,
         mutt_clear_error();
         char title[1024];
         snprintf(title, sizeof(title), _("Key ID: 0x%s"),
-                 pgp_keyid(pgp_principal_key(key_table[menu->current]->parent)));
-        mutt_do_pager(title, mutt_buffer_string(tempfile), MUTT_PAGER_NO_FLAGS, NULL);
+                 pgp_keyid(pgp_principal_key(cur_key->parent)));
+
+        struct PagerData pdata = { 0 };
+        struct PagerView pview = { &pdata };
+
+        pdata.fname = mutt_buffer_string(tempfile);
+
+        pview.banner = title;
+        pview.flags = MUTT_PAGER_NO_FLAGS;
+        pview.mode = PAGER_MODE_OTHER;
+
+        mutt_do_pager(&pview, NULL);
         mutt_buffer_pool_release(&tempfile);
-        menu->redraw = REDRAW_FULL;
+        menu_queue_redraw(menu, MENU_REDRAW_FULL);
         break;
       }
 
       case OP_VIEW_ID:
-
-        mutt_message("%s", NONULL(key_table[menu->current]->addr));
+      {
+        const int index = menu_get_index(menu);
+        struct PgpUid *cur_key = key_table[index];
+        mutt_message("%s", NONULL(cur_key->addr));
         break;
+      }
 
       case OP_GENERIC_SELECT_ENTRY:
-
+      {
         /* XXX make error reporting more verbose */
 
+        const int index = menu_get_index(menu);
+        struct PgpUid *cur_key = key_table[index];
         if (OptPgpCheckTrust)
         {
-          if (!pgp_key_is_valid(key_table[menu->current]->parent))
+          if (!pgp_key_is_valid(cur_key->parent))
           {
             mutt_error(_("This key can't be used: expired/disabled/revoked"));
             break;
           }
         }
 
-        if (OptPgpCheckTrust && (!pgp_id_is_valid(key_table[menu->current]) ||
-                                 !pgp_id_is_strong(key_table[menu->current])))
+        if (OptPgpCheckTrust && (!pgp_id_is_valid(cur_key) || !pgp_id_is_strong(cur_key)))
         {
           const char *str = "";
           char buf2[1024];
 
-          if (key_table[menu->current]->flags & KEYFLAG_CANTUSE)
+          if (cur_key->flags & KEYFLAG_CANTUSE)
           {
             str = _("ID is expired/disabled/revoked. Do you really want to use "
                     "the key?");
           }
           else
           {
-            switch (key_table[menu->current]->trust & 0x03)
+            switch (cur_key->trust & 0x03)
             {
               case 0:
                 str = _("ID has undefined validity. Do you really want to use "
@@ -661,9 +800,10 @@ struct PgpKeyInfo *dlg_select_pgp_key(struct PgpKeyInfo *keys,
           }
         }
 
-        kp = key_table[menu->current]->parent;
+        kp = cur_key->parent;
         done = true;
         break;
+      }
 
       case OP_EXIT:
 
@@ -673,10 +813,6 @@ struct PgpKeyInfo *dlg_select_pgp_key(struct PgpKeyInfo *keys,
     }
   }
 
-  mutt_menu_pop_current(menu);
-  mutt_menu_free(&menu);
-  dialog_destroy_simple_index(&dlg);
-  FREE(&key_table);
-
+  simple_dialog_free(&dlg);
   return kp;
 }

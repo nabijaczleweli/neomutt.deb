@@ -29,14 +29,13 @@
 #include "config.h"
 #include <string.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
 #include "context.h"
 #include "imap/lib.h"
-#include "maildir/lib.h"
 #include "ncrypt/lib.h"
 #include "pattern/lib.h"
-#include "mutt_globals.h"
 #include "mutt_header.h"
 #include "mutt_thread.h"
 #include "mx.h"
@@ -54,8 +53,9 @@ void ctx_free(struct Context **ptr)
 
   struct Context *ctx = *ptr;
 
-  struct EventContext ev_ctx = { ctx };
-  notify_send(ctx->notify, NT_CONTEXT, NT_CONTEXT_CLOSE, &ev_ctx);
+  struct EventContext ev_c = { ctx };
+  mutt_debug(LL_NOTIFY, "NT_CONTEXT_DELETE: %p\n", ctx);
+  notify_send(ctx->notify, NT_CONTEXT, NT_CONTEXT_DELETE, &ev_c);
 
   if (ctx->mailbox)
     notify_observer_remove(ctx->mailbox->notify, ctx_mailbox_observer, ctx);
@@ -65,7 +65,8 @@ void ctx_free(struct Context **ptr)
   FREE(&ctx->pattern);
   mutt_pattern_free(&ctx->limit_pattern);
 
-  FREE(ptr);
+  FREE(&ctx);
+  *ptr = NULL;
 }
 
 /**
@@ -75,12 +76,24 @@ void ctx_free(struct Context **ptr)
  */
 struct Context *ctx_new(struct Mailbox *m)
 {
+  if (!m)
+    return NULL;
+
   struct Context *ctx = mutt_mem_calloc(1, sizeof(struct Context));
 
   ctx->notify = notify_new();
   notify_set_parent(ctx->notify, NeoMutt->notify);
+  struct EventContext ev_c = { ctx };
+  mutt_debug(LL_NOTIFY, "NT_CONTEXT_ADD: %p\n", ctx);
+  notify_send(ctx->notify, NT_CONTEXT, NT_CONTEXT_ADD, &ev_c);
+  // If the Mailbox is closed, ctx->mailbox must be set to NULL
+  notify_observer_add(m->notify, NT_MAILBOX, ctx_mailbox_observer, ctx);
+
   ctx->mailbox = m;
   ctx->threads = mutt_thread_ctx_init(m);
+  ctx->msg_in_pager = -1;
+  ctx->collapsed = false;
+  ctx_update(ctx);
 
   return ctx;
 }
@@ -130,6 +143,7 @@ void ctx_update(struct Context *ctx)
 
   mutt_clear_threads(ctx->threads);
 
+  const bool c_score = cs_subset_bool(NeoMutt->sub, "score");
   struct Email *e = NULL;
   for (int msgno = 0; msgno < m->msg_count; msgno++)
   {
@@ -165,7 +179,7 @@ void ctx_update(struct Context *ctx)
       if (e2)
       {
         e2->superseded = true;
-        if (C_Score)
+        if (c_score)
           mutt_score_message(ctx->mailbox, e2, true);
       }
     }
@@ -177,7 +191,7 @@ void ctx_update(struct Context *ctx)
       mutt_hash_insert(m->subj_hash, e->env->real_subj, e);
     mutt_label_hash_add(m, e);
 
-    if (C_Score)
+    if (c_score)
       mutt_score_message(ctx->mailbox, e, false);
 
     if (e->changed)
@@ -227,8 +241,9 @@ static void update_tables(struct Context *ctx)
   {
     if (!m->emails[i])
       break;
+    const bool c_maildir_trash = cs_subset_bool(NeoMutt->sub, "maildir_trash");
     if (!m->emails[i]->quasi_deleted &&
-        (!m->emails[i]->deleted || ((m->type == MUTT_MAILDIR) && C_MaildirTrash)))
+        (!m->emails[i]->deleted || ((m->type == MUTT_MAILDIR) && c_maildir_trash)))
     {
       if (i != j)
       {
@@ -247,7 +262,7 @@ static void update_tables(struct Context *ctx)
       m->emails[j]->changed = false;
       m->emails[j]->env->changed = false;
 
-      if ((m->type == MUTT_MAILDIR) && C_MaildirTrash)
+      if ((m->type == MUTT_MAILDIR) && c_maildir_trash)
       {
         if (m->emails[j]->deleted)
           m->msg_deleted++;
@@ -285,27 +300,26 @@ static void update_tables(struct Context *ctx)
         imap_notify_delete_email(m, m->emails[i]);
 #endif
 
-      email_free(&m->emails[i]);
+      mailbox_gc_add(m->emails[i]);
+      m->emails[i] = NULL;
     }
   }
   m->msg_count = j;
 }
 
 /**
- * ctx_mailbox_observer - Watch for changes affecting the Context - Implements ::observer_t
+ * ctx_mailbox_observer - Notification that a Mailbox has changed - Implements ::observer_t - @ingroup observer_api
  */
 int ctx_mailbox_observer(struct NotifyCallback *nc)
 {
-  if (!nc->global_data)
+  if ((nc->event_type != NT_MAILBOX) || !nc->global_data)
     return -1;
-  if (nc->event_type != NT_MAILBOX)
-    return 0;
 
   struct Context *ctx = nc->global_data;
 
   switch (nc->event_subtype)
   {
-    case NT_MAILBOX_CLOSED:
+    case NT_MAILBOX_DELETE:
       mutt_clear_threads(ctx->threads);
       ctx_cleanup(ctx);
       break;
@@ -318,20 +332,22 @@ int ctx_mailbox_observer(struct NotifyCallback *nc)
     case NT_MAILBOX_RESORT:
       mutt_sort_headers(ctx->mailbox, ctx->threads, true, &ctx->vsize);
       break;
+    default:
+      return 0;
   }
 
+  mutt_debug(LL_DEBUG5, "mailbox done\n");
   return 0;
 }
 
 /**
  * message_is_tagged - Is a message in the index tagged (and within limit)
- * @param ctx Open mailbox
  * @param e   Email
  * @retval true The message is both tagged and within limit
  *
  * If a limit is in effect, the message must be visible within it.
  */
-bool message_is_tagged(struct Context *ctx, struct Email *e)
+bool message_is_tagged(struct Email *e)
 {
   return e->visible && e->tagged;
 }
@@ -360,7 +376,7 @@ int el_add_tagged(struct EmailList *el, struct Context *ctx, struct Email *e, bo
       e = m->emails[i];
       if (!e)
         break;
-      if (!message_is_tagged(ctx, e))
+      if (!message_is_tagged(e))
         continue;
 
       struct EmailNode *en = mutt_mem_calloc(1, sizeof(*en));
@@ -420,12 +436,12 @@ bool ctx_has_limit(const struct Context *ctx)
 }
 
 /**
- * ctx_mailbox - wrapper to get the mailbox in a Context, or NULL
+ * ctx_mailbox - Wrapper to get the mailbox in a Context, or NULL
  * @param ctx Context
  * @retval ptr The mailbox in the Context
  * @retval NULL Context is NULL or doesn't have a mailbox
  */
 struct Mailbox *ctx_mailbox(struct Context *ctx)
 {
-  return Context ? Context->mailbox : NULL;
+  return ctx ? ctx->mailbox : NULL;
 }

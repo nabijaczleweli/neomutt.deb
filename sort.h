@@ -26,38 +26,45 @@
 
 #include <stdbool.h>
 #include <sys/types.h>
-#include "config/lib.h"
+#include "core/lib.h"
 #include "options.h" // IWYU pragma: keep
-#include "where.h"
 
 struct Address;
-struct Mailbox;
+struct Email;
 struct ThreadsContext;
 
-/* These Config Variables are only used in sort.c */
-extern bool C_ReverseAlias;
-
-#define SORT_CODE(x) ((OptAuxSort ? C_SortAux : C_Sort) & SORT_REVERSE) ? -(x) : x
-
 /**
- * typedef sort_t - Prototype for a function to compare two emails
- * @param a First email
- * @param b Second email
- * @retval -1 a precedes b
+ * @defgroup sort_api Sorting API
+ *
+ * Prototype for generic comparison function, compatible with qsort()
+ *
+ * @param a First item
+ * @param b Second item
+ * @retval <0 a precedes b
  * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * @retval >0 b precedes a
  */
 typedef int (*sort_t)(const void *a, const void *b);
 
-sort_t mutt_get_sort_func(enum SortType method);
+/**
+ * @defgroup sort_mail_api Mail Sorting API
+ *
+ * Prototype for an email comparison function
+ *
+ * @param a       First item
+ * @param b       Second item
+ * @param reverse true if this is a reverse sort (smaller b precedes a)
+ * @retval <0 a precedes b
+ * @retval  0 a and b are identical
+ * @retval >0 b precedes a
+ */
+typedef int (*sort_mail_t)(const struct Email *a, const struct Email *b, bool reverse);
+
+int mutt_compare_emails(const struct Email *a, const struct Email *b,
+                        enum MailboxType type, short sort, short sort_aux);
 
 void mutt_sort_headers(struct Mailbox *m, struct ThreadsContext *threads, bool init, off_t *vsize);
-int perform_auxsort(int retval, const void *a, const void *b);
 
 const char *mutt_get_name(const struct Address *a);
-
-/* These variables are backing for config items */
-WHERE short C_Sort;    ///< Config: Sort method for the index
-WHERE short C_SortAux; ///< Config: Secondary sort method for the index
 
 #endif /* MUTT_SORT_H */

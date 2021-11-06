@@ -38,6 +38,17 @@
 struct Notify;
 
 /**
+ * ConfigEventNames - Names for logging
+ */
+static const struct Mapping ConfigEventNames[] = {
+  // clang-format off
+  { "NT_CONFIG_SET",   NT_CONFIG_SET   },
+  { "NT_CONFIG_RESET", NT_CONFIG_RESET },
+  { NULL, 0 },
+  // clang-format on
+};
+
+/**
  * elem_list_sort - Sort two HashElem pointers to config
  * @param a First HashElem
  * @param b Second HashElem
@@ -222,8 +233,10 @@ void cs_subset_notify_observers(const struct ConfigSubset *sub,
     return;
 
   struct HashElem *he_base = cs_get_base(he);
-  struct EventConfig ec = { sub, he_base->key.strkey, he };
-  notify_send(sub->notify, NT_CONFIG, ev, &ec);
+  struct EventConfig ev_c = { sub, he_base->key.strkey, he };
+  mutt_debug(LL_NOTIFY, "%s: %s\n",
+             NONULL(mutt_map_get_name(ev, ConfigEventNames)), he_base->key.strkey);
+  notify_send(sub->notify, NT_CONFIG, ev, &ev_c);
 }
 
 /**

@@ -41,7 +41,6 @@
 #include "regex3.h"
 #include "string2.h"
 
-// clang-format off
 /**
  * Weekdays - Day of the week (abbreviated)
  */
@@ -54,7 +53,7 @@ static const char *const Weekdays[] = {
  */
 static const char *const Months[] = {
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 };
 
 /**
@@ -63,6 +62,7 @@ static const char *const Months[] = {
  * @note Keep in alphabetical order
  */
 static const struct Tz TimeZones[] = {
+  // clang-format off
   { "aat",     1,  0, true  }, /* Atlantic Africa Time */
   { "adt",     4,  0, false }, /* Arabia DST */
   { "ast",     3,  0, false }, /* Arabia */
@@ -112,8 +112,8 @@ static const struct Tz TimeZones[] = {
   { "wgst",    2,  0, true  }, /* Western Greenland DST */
   { "wgt",     3,  0, true  }, /* Western Greenland */
   { "wst",     8,  0, false }, /* Western Australia */
+  // clang-format on
 };
-// clang-format on
 
 /**
  * compute_tz - Calculate the number of seconds east of UTC
@@ -184,7 +184,7 @@ static const struct Tz *find_tz(const char *s, size_t len)
 /**
  * is_leap_year_feb - Is a given February in a leap year
  * @param tm Date to be tested
- * @retval true if it's a leap year
+ * @retval true It's a leap year
  */
 static int is_leap_year_feb(struct tm *tm)
 {
@@ -369,19 +369,30 @@ void mutt_date_normalize_time(struct tm *tm)
 
 /**
  * mutt_date_make_date - Write a date in RFC822 format to a buffer
- * @param buf Buffer for result
+ * @param buf   Buffer for result
+ * @param local If true, use the local timezone.  Otherwise use UTC.
  *
  * Appends the date to the passed in buffer.
  * The buffer is not cleared because some callers prepend quotes.
  */
-void mutt_date_make_date(struct Buffer *buf)
+void mutt_date_make_date(struct Buffer *buf, bool local)
 {
   if (!buf)
     return;
 
+  struct tm tm;
+  time_t tz = 0;
+
   time_t t = mutt_date_epoch();
-  struct tm tm = mutt_date_localtime(t);
-  time_t tz = mutt_date_local_tz(t);
+  if (local)
+  {
+    tm = mutt_date_localtime(t);
+    tz = mutt_date_local_tz(t);
+  }
+  else
+  {
+    tm = mutt_date_gmtime(t);
+  }
 
   tz /= 60;
 

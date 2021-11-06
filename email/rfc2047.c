@@ -23,7 +23,7 @@
  */
 
 /**
- * @page email_rfc2047 RFC2047 encoding / decoding functions
+ * @page email_rfc2047 RFC2047 encoding / decoding
  *
  * RFC2047 MIME extensions encoding / decoding routines.
  */
@@ -37,11 +37,11 @@
 #include <string.h>
 #include "mutt/lib.h"
 #include "address/lib.h"
+#include "config/lib.h"
+#include "core/lib.h"
 #include "rfc2047.h"
 #include "envelope.h"
-#include "globals.h"
 #include "mime.h"
-#include "mutt_globals.h"
 
 #define ENCWORD_LEN_MAX 75
 #define ENCWORD_LEN_MIN 9 /* strlen ("=?.?.?.?=") */
@@ -51,7 +51,10 @@
 #define CONTINUATION_BYTE(ch) (((ch) &0xc0) == 0x80)
 
 /**
- * typedef encoder_t - Prototype for an encoding function
+ * @defgroup encoder_api Mime Encoder API
+ *
+ * Prototype for an encoding function
+ *
  * @param str    String to encode
  * @param buf    Buffer for result
  * @param buflen Length of buffer
@@ -61,7 +64,7 @@
 typedef size_t (*encoder_t)(char *str, const char *buf, size_t buflen, const char *tocode);
 
 /**
- * b_encoder - Base64 Encode a string - Implements ::encoder_t
+ * b_encoder - Base64 Encode a string - Implements ::encoder_t - @ingroup encoder_api
  */
 static size_t b_encoder(char *str, const char *buf, size_t buflen, const char *tocode)
 {
@@ -94,7 +97,7 @@ static size_t b_encoder(char *str, const char *buf, size_t buflen, const char *t
 }
 
 /**
- * q_encoder - Quoted-printable Encode a string - Implements ::encoder_t
+ * q_encoder - Quoted-printable Encode a string - Implements ::encoder_t - @ingroup encoder_api
  */
 static size_t q_encoder(char *str, const char *buf, size_t buflen, const char *tocode)
 {
@@ -192,13 +195,13 @@ static size_t try_block(const char *d, size_t dlen, const char *fromcode,
   if (fromcode)
   {
     iconv_t cd = mutt_ch_iconv_open(tocode, fromcode, MUTT_ICONV_NO_FLAGS);
-    assert(cd != (iconv_t)(-1));
+    assert(cd != (iconv_t) (-1));
     ib = d;
     ibl = dlen;
     ob = buf;
     obl = sizeof(buf) - strlen(tocode);
-    if ((iconv(cd, (ICONV_CONST char **) &ib, &ibl, &ob, &obl) == (size_t)(-1)) ||
-        (iconv(cd, NULL, NULL, &ob, &obl) == (size_t)(-1)))
+    if ((iconv(cd, (ICONV_CONST char **) &ib, &ibl, &ob, &obl) == (size_t) (-1)) ||
+        (iconv(cd, NULL, NULL, &ob, &obl) == (size_t) (-1)))
     {
       assert(errno == E2BIG);
       iconv_close(cd);
@@ -272,7 +275,7 @@ static size_t encode_block(char *str, char *buf, size_t buflen, const char *from
   }
 
   const iconv_t cd = mutt_ch_iconv_open(tocode, fromcode, MUTT_ICONV_NO_FLAGS);
-  assert(cd != (iconv_t)(-1));
+  assert(cd != (iconv_t) (-1));
   const char *ib = buf;
   size_t ibl = buflen;
   char tmp[ENCWORD_LEN_MAX - ENCWORD_LEN_MIN + 1];
@@ -280,7 +283,7 @@ static size_t encode_block(char *str, char *buf, size_t buflen, const char *from
   size_t obl = sizeof(tmp) - strlen(tocode);
   const size_t n1 = iconv(cd, (ICONV_CONST char **) &ib, &ibl, &ob, &obl);
   const size_t n2 = iconv(cd, NULL, NULL, &ob, &obl);
-  assert(n1 != (size_t)(-1) && n2 != (size_t)(-1));
+  assert(n1 != (size_t) (-1) && n2 != (size_t) (-1));
   iconv_close(cd);
   return (*encoder)(str, tmp, ob - tmp, tocode);
 }
@@ -337,7 +340,8 @@ static void finalize_chunk(struct Buffer *res, struct Buffer *buf, char *charset
     return;
   char end = charset[charsetlen];
   charset[charsetlen] = '\0';
-  mutt_ch_convert_string(&buf->data, charset, C_Charset, MUTT_ICONV_HOOK_FROM);
+  const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
+  mutt_ch_convert_string(&buf->data, charset, c_charset, MUTT_ICONV_HOOK_FROM);
   charset[charsetlen] = end;
   mutt_mb_filter_unprintable(&buf->data);
   mutt_buffer_addstr(res, buf->data);
@@ -614,7 +618,8 @@ static int encode(const char *d, size_t dlen, int col, const char *fromcode,
  */
 void rfc2047_encode(char **pd, const char *specials, int col, const char *charsets)
 {
-  if (!C_Charset || !pd || !*pd)
+  const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
+  if (!c_charset || !pd || !*pd)
     return;
 
   if (!charsets)
@@ -622,7 +627,7 @@ void rfc2047_encode(char **pd, const char *specials, int col, const char *charse
 
   char *e = NULL;
   size_t elen = 0;
-  encode(*pd, strlen(*pd), col, C_Charset, charsets, &e, &elen, specials);
+  encode(*pd, strlen(*pd), col, c_charset, charsets, &e, &elen, specials);
 
   FREE(pd);
   *pd = e;
@@ -680,7 +685,9 @@ void rfc2047_decode(char **pd)
 
       /* Add non-encoded part */
       {
-        if (C_AssumedCharset)
+        const char *const c_assumed_charset =
+            cs_subset_string(NeoMutt->sub, "assumed_charset");
+        if (c_assumed_charset)
         {
           char *conv = mutt_strn_dup(s, holelen);
           mutt_ch_convert_nonmime_string(&conv);
@@ -744,10 +751,12 @@ void rfc2047_encode_addrlist(struct AddressList *al, const char *tag)
   struct Address *a = NULL;
   TAILQ_FOREACH(a, al, entries)
   {
+    const char *const c_send_charset =
+        cs_subset_string(NeoMutt->sub, "send_charset");
     if (a->personal)
-      rfc2047_encode(&a->personal, AddressSpecials, col, C_SendCharset);
+      rfc2047_encode(&a->personal, AddressSpecials, col, c_send_charset);
     else if (a->group && a->mailbox)
-      rfc2047_encode(&a->mailbox, AddressSpecials, col, C_SendCharset);
+      rfc2047_encode(&a->mailbox, AddressSpecials, col, c_send_charset);
   }
 }
 
@@ -763,7 +772,9 @@ void rfc2047_decode_addrlist(struct AddressList *al)
   struct Address *a = NULL;
   TAILQ_FOREACH(a, al, entries)
   {
-    if (a->personal && ((strstr(a->personal, "=?")) || C_AssumedCharset))
+    const char *const c_assumed_charset =
+        cs_subset_string(NeoMutt->sub, "assumed_charset");
+    if (a->personal && ((strstr(a->personal, "=?")) || c_assumed_charset))
     {
       rfc2047_decode(&a->personal);
     }
@@ -807,6 +818,8 @@ void rfc2047_encode_envelope(struct Envelope *env)
   rfc2047_encode_addrlist(&env->reply_to, "Reply-To");
   rfc2047_encode_addrlist(&env->mail_followup_to, "Mail-Followup-To");
   rfc2047_encode_addrlist(&env->sender, "Sender");
-  rfc2047_encode(&env->x_label, NULL, sizeof("X-Label:"), C_SendCharset);
-  rfc2047_encode(&env->subject, NULL, sizeof("Subject:"), C_SendCharset);
+  const char *const c_send_charset =
+      cs_subset_string(NeoMutt->sub, "send_charset");
+  rfc2047_encode(&env->x_label, NULL, sizeof("X-Label:"), c_send_charset);
+  rfc2047_encode(&env->subject, NULL, sizeof("Subject:"), c_send_charset);
 }

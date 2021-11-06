@@ -22,7 +22,7 @@
  */
 
 /**
- * @page conn_tunnel Support for network tunnelling
+ * @page conn_tunnel Network tunnelling
  *
  * Support for network tunnelling
  */
@@ -37,10 +37,9 @@
 #include <unistd.h>
 #include "private.h"
 #include "mutt/lib.h"
+#include "config/lib.h"
+#include "core/lib.h"
 #include "lib.h"
-#include "connaccount.h"
-#include "connection.h"
-#include "mutt_globals.h"
 
 /**
  * struct TunnelSockData - A network tunnel (pair of sockets)
@@ -53,7 +52,7 @@ struct TunnelSockData
 };
 
 /**
- * tunnel_socket_open - Open a tunnel socket - Implements Connection::open()
+ * tunnel_socket_open - Open a tunnel socket - Implements Connection::open() - @ingroup connection_open
  */
 static int tunnel_socket_open(struct Connection *conn)
 {
@@ -62,7 +61,8 @@ static int tunnel_socket_open(struct Connection *conn)
   struct TunnelSockData *tunnel = mutt_mem_malloc(sizeof(struct TunnelSockData));
   conn->sockdata = tunnel;
 
-  mutt_message(_("Connecting with \"%s\"..."), C_Tunnel);
+  const char *const c_tunnel = cs_subset_string(NeoMutt->sub, "tunnel");
+  mutt_message(_("Connecting with \"%s\"..."), c_tunnel);
 
   int rc = pipe(pin);
   if (rc == -1)
@@ -101,7 +101,7 @@ static int tunnel_socket_open(struct Connection *conn)
     /* Don't let the subprocess think it can use the controlling tty */
     setsid();
 
-    execle(EXEC_SHELL, "sh", "-c", C_Tunnel, NULL, mutt_envlist_getlist());
+    execle(EXEC_SHELL, "sh", "-c", c_tunnel, NULL, mutt_envlist_getlist());
     _exit(127);
   }
   mutt_sig_unblock_system(true);
@@ -132,7 +132,7 @@ static int tunnel_socket_open(struct Connection *conn)
 }
 
 /**
- * tunnel_socket_read - Read data from a tunnel socket - Implements Connection::read()
+ * tunnel_socket_read - Read data from a tunnel socket - Implements Connection::read() - @ingroup connection_read
  */
 static int tunnel_socket_read(struct Connection *conn, char *buf, size_t count)
 {
@@ -154,7 +154,7 @@ static int tunnel_socket_read(struct Connection *conn, char *buf, size_t count)
 }
 
 /**
- * tunnel_socket_write - Write data to a tunnel socket - Implements Connection::write()
+ * tunnel_socket_write - Write data to a tunnel socket - Implements Connection::write() - @ingroup connection_write
  */
 static int tunnel_socket_write(struct Connection *conn, const char *buf, size_t count)
 {
@@ -182,7 +182,7 @@ static int tunnel_socket_write(struct Connection *conn, const char *buf, size_t 
 }
 
 /**
- * tunnel_socket_poll - Checks whether tunnel reads would block - Implements Connection::poll()
+ * tunnel_socket_poll - Checks whether tunnel reads would block - Implements Connection::poll() - @ingroup connection_poll
  */
 static int tunnel_socket_poll(struct Connection *conn, time_t wait_secs)
 {
@@ -199,7 +199,7 @@ static int tunnel_socket_poll(struct Connection *conn, time_t wait_secs)
 }
 
 /**
- * tunnel_socket_close - Close a tunnel socket - Implements Connection::close()
+ * tunnel_socket_close - Close a tunnel socket - Implements Connection::close() - @ingroup connection_close
  */
 static int tunnel_socket_close(struct Connection *conn)
 {
@@ -225,7 +225,7 @@ static int tunnel_socket_close(struct Connection *conn)
 }
 
 /**
- * mutt_tunnel_socket_setup - sets up tunnel connection functions
+ * mutt_tunnel_socket_setup - Sets up tunnel connection functions
  * @param conn Connection to assign functions to
  *
  * Assign tunnel socket functions to the Connection conn.
@@ -239,6 +239,8 @@ void mutt_tunnel_socket_setup(struct Connection *conn)
   conn->poll = tunnel_socket_poll;
   /* Note we are using ssf as a boolean in this case.  See the notes in
    * conn/connection.h */
-  if (C_TunnelIsSecure)
+  const bool c_tunnel_is_secure =
+      cs_subset_bool(NeoMutt->sub, "tunnel_is_secure");
+  if (c_tunnel_is_secure)
     conn->ssf = 1;
 }

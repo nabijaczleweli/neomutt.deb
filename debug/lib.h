@@ -21,14 +21,13 @@
  */
 
 /**
- * @page lib_debug DEBUG: Debugging tools
+ * @page lib_debug Debug Code
  *
- * Debugging tools
+ * Debugging code
  *
  * | File                | Description                |
  * | :------------------ | :------------------------- |
  * | debug/backtrace.c   | @subpage debug_backtrace   |
- * | debug/common.c      | @subpage debug_common      |
  * | debug/email.c       | @subpage debug_email       |
  * | debug/graphviz.c    | @subpage debug_graphviz    |
  * | debug/notify.c      | @subpage debug_notify      |
@@ -42,18 +41,16 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "email/lib.h"
+#include "core/lib.h"
 
 struct AddressList;
 struct Buffer;
+struct Context;
 struct ListHead;
-struct MuttWindow;
 struct NotifyCallback;
 
 // Backtrace
 void show_backtrace(void);
-
-// Common
-const char *win_name(const struct MuttWindow *win);
 
 // Email
 void        add_flag               (struct Buffer *buf, bool is_set, const char *name);
@@ -70,7 +67,7 @@ const char *get_content_type       (enum ContentType type);
 
 // Graphviz
 void        add_flag               (struct Buffer *buf, bool is_set, const char *name);
-void        dump_graphviz          (const char *title);
+void        dump_graphviz          (const char *title, struct Context *ctx);
 void        dump_graphviz_attach_ctx(struct AttachCtx *actx);
 void        dump_graphviz_email    (struct Email *e);
 const char *get_content_disposition(enum ContentDisposition disp);
@@ -78,7 +75,8 @@ const char *get_content_encoding   (enum ContentEncoding enc);
 const char *get_content_type       (enum ContentType type);
 
 // Notify
-int debug_notify_observer(struct NotifyCallback *nc);
+int debug_all_observer(struct NotifyCallback *nc);
+const char *get_mailbox_type(enum MailboxType type);
 
 // Parse Set
 void test_parse_set(void);

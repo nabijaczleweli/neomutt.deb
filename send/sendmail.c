@@ -41,12 +41,10 @@
 #include "config/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
-#include "context.h"
+#include "pager/lib.h"
 #include "format_flags.h"
-#include "mutt_globals.h"
 #include "muttlib.h"
 #include "options.h"
-#include "pager.h"
 #ifdef USE_NNTP
 #include "nntp/lib.h"
 #endif
@@ -55,6 +53,8 @@
 #else
 #define EX_OK 0
 #endif
+
+struct Mailbox;
 
 SIG_ATOMIC_VOLATILE_T SigAlrm; ///< true after SIGALRM is received
 
@@ -70,7 +70,7 @@ static void alarm_handler(int sig)
 }
 
 /**
- * send_msg - invoke sendmail in a subshell
+ * send_msg - Invoke sendmail in a subshell
  * @param[in]  path     Path to program to execute
  * @param[in]  args     Arguments to pass to program
  * @param[in]  msg      Temp file containing message to send
@@ -273,6 +273,7 @@ static void add_args(struct SendmailArgs *args, struct AddressList *al)
 
 /**
  * mutt_invoke_sendmail - Run sendmail
+ * @param m        Mailbox
  * @param from     The sender
  * @param to       Recipients
  * @param cc       Recipients
@@ -283,9 +284,10 @@ static void add_args(struct SendmailArgs *args, struct AddressList *al)
  * @retval  0 Success
  * @retval -1 Failure
  */
-int mutt_invoke_sendmail(struct AddressList *from, struct AddressList *to,
-                         struct AddressList *cc, struct AddressList *bcc,
-                         const char *msg, bool eightbit, struct ConfigSubset *sub)
+int mutt_invoke_sendmail(struct Mailbox *m, struct AddressList *from,
+                         struct AddressList *to, struct AddressList *cc,
+                         struct AddressList *bcc, const char *msg,
+                         bool eightbit, struct ConfigSubset *sub)
 {
   char *ps = NULL, *path = NULL, *s = NULL, *childout = NULL;
   struct SendmailArgs args = ARRAY_HEAD_INITIALIZER;
@@ -297,12 +299,12 @@ int mutt_invoke_sendmail(struct AddressList *from, struct AddressList *to,
   {
     char cmd[1024];
 
-    const char *c_inews = cs_subset_string(sub, "inews");
+    const char *const c_inews = cs_subset_string(sub, "inews");
     mutt_expando_format(cmd, sizeof(cmd), 0, sizeof(cmd), NONULL(c_inews),
                         nntp_format_str, 0, MUTT_FORMAT_NO_FLAGS);
     if (*cmd == '\0')
     {
-      i = nntp_post(Context->mailbox, msg);
+      i = nntp_post(m, msg);
       unlink(msg);
       return i;
     }
@@ -312,7 +314,7 @@ int mutt_invoke_sendmail(struct AddressList *from, struct AddressList *to,
   else
 #endif
   {
-    const char *c_sendmail = cs_subset_string(sub, "sendmail");
+    const char *const c_sendmail = cs_subset_string(sub, "sendmail");
     s = mutt_str_dup(c_sendmail);
   }
 
@@ -362,8 +364,8 @@ int mutt_invoke_sendmail(struct AddressList *from, struct AddressList *to,
       }
     }
 
-    const bool c_use_8bitmime = cs_subset_bool(sub, "use_8bitmime");
-    if (eightbit && c_use_8bitmime)
+    const bool c_use_8bit_mime = cs_subset_bool(sub, "use_8bit_mime");
+    if (eightbit && c_use_8bit_mime)
       ARRAY_ADD(&args, "-B8BITMIME");
 
     const bool c_use_envelope_from = cs_subset_bool(sub, "use_envelope_from");
@@ -383,14 +385,14 @@ int mutt_invoke_sendmail(struct AddressList *from, struct AddressList *to,
       }
     }
 
-    const char *c_dsn_notify = cs_subset_string(sub, "dsn_notify");
+    const char *const c_dsn_notify = cs_subset_string(sub, "dsn_notify");
     if (c_dsn_notify)
     {
       ARRAY_ADD(&args, "-N");
       ARRAY_ADD(&args, c_dsn_notify);
     }
 
-    const char *c_dsn_return = cs_subset_string(sub, "dsn_return");
+    const char *const c_dsn_return = cs_subset_string(sub, "dsn_return");
     if (c_dsn_return)
     {
       ARRAY_ADD(&args, "-R");
@@ -416,7 +418,9 @@ int mutt_invoke_sendmail(struct AddressList *from, struct AddressList *to,
    * mutt_endwin() it leaves other users staring at a blank screen.
    * So instead, just force a hard redraw on the next refresh. */
   if (!OptNoCurses)
+  {
     mutt_need_hard_redraw();
+  }
 
   const short c_sendmail_wait = cs_subset_number(sub, "sendmail_wait");
   i = send_msg(path, &args, msg, OptNoCurses ? NULL : &childout, c_sendmail_wait);
@@ -428,12 +432,20 @@ int mutt_invoke_sendmail(struct AddressList *from, struct AddressList *to,
       mutt_error(_("Error sending message, child exited %d (%s)"), i, NONULL(e));
       if (childout)
       {
-        struct stat st;
+        struct stat st = { 0 };
 
         if ((stat(childout, &st) == 0) && (st.st_size > 0))
         {
-          mutt_do_pager(_("Output of the delivery process"), childout,
-                        MUTT_PAGER_NO_FLAGS, NULL);
+          struct PagerData pdata = { 0 };
+          struct PagerView pview = { &pdata };
+
+          pdata.fname = childout;
+
+          pview.banner = _("Output of the delivery process");
+          pview.flags = MUTT_PAGER_NO_FLAGS;
+          pview.mode = PAGER_MODE_OTHER;
+
+          mutt_do_pager(&pview, NULL);
         }
       }
     }

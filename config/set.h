@@ -54,7 +54,9 @@ struct HashElem;
 #define IP (intptr_t)
 
 /**
- * struct ConfigDef - Config item definition
+ * @defgroup cfg_def_api Config Definition API
+ *
+ * Config item definition
  *
  * Every config variable that NeoMutt supports is backed by a ConfigDef.
  */
@@ -62,11 +64,13 @@ struct ConfigDef
 {
   const char   *name;      ///< User-visible name
   uint32_t      type;      ///< Variable type, e.g. #DT_STRING
-  void         *var;       ///< Pointer to the global variable
   intptr_t      initial;   ///< Initial value
   intptr_t      data;      ///< Extra variable data
 
   /**
+   * @defgroup cfg_def_validator validator()
+   * @ingroup cfg_def_api
+   *
    * validator - Validate a config variable
    * @param cs    Config items
    * @param cdef  Config definition
@@ -78,10 +82,13 @@ struct ConfigDef
   int (*validator)(const struct ConfigSet *cs, const struct ConfigDef *cdef, intptr_t value, struct Buffer *err);
 
   const char *docs; ///< One-liner description
+  intptr_t    var;  ///< Storage for the variable
 };
 
 /**
- * struct ConfigSetType - Type definition for a config item
+ * @defgroup cfg_type_api Config Type API
+ *
+ * Type definition for a config item
  *
  * Each config item has a type which is defined by a set of callback functions.
  */
@@ -91,6 +98,9 @@ struct ConfigSetType
   const char *name;          ///< Name of the type, e.g. "String"
 
   /**
+   * @defgroup cfg_type_string_set string_set()
+   * @ingroup cfg_type_api
+   *
    * string_set - Set a config item by string
    * @param cs    Config items
    * @param var   Variable to set (may be NULL)
@@ -108,6 +118,9 @@ struct ConfigSetType
   int (*string_set)(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef, const char *value, struct Buffer *err);
 
   /**
+   * @defgroup cfg_type_string_get string_get()
+   * @ingroup cfg_type_api
+   *
    * string_get - Get a config item as a string
    * @param cs     Config items
    * @param var    Variable to get (may be NULL)
@@ -125,6 +138,9 @@ struct ConfigSetType
   int (*string_get)(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef, struct Buffer *result);
 
   /**
+   * @defgroup cfg_type_native_set native_set()
+   * @ingroup cfg_type_api
+   *
    * native_set - Set a config item by string
    * @param cs    Config items
    * @param var   Variable to set
@@ -141,6 +157,9 @@ struct ConfigSetType
   int (*native_set)(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef, intptr_t value, struct Buffer *err);
 
   /**
+   * @defgroup cfg_type_native_get native_get()
+   * @ingroup cfg_type_api
+   *
    * native_get - Get a string from a config item
    * @param cs   Config items
    * @param var  Variable to get
@@ -157,6 +176,9 @@ struct ConfigSetType
   intptr_t (*native_get)(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef, struct Buffer *err);
 
   /**
+   * @defgroup cfg_type_string_plus_equals string_plus_equals()
+   * @ingroup cfg_type_api
+   *
    * string_plus_equals - Add to a config item by string
    * @param cs    Config items
    * @param var   Variable to set
@@ -173,6 +195,9 @@ struct ConfigSetType
   int (*string_plus_equals)(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef, const char *value, struct Buffer *err);
 
   /**
+   * @defgroup cfg_type_string_minus_equals string_minus_equals()
+   * @ingroup cfg_type_api
+   *
    * string_minus_equals - Remove from a config item as a string
    * @param cs    Config items
    * @param var   Variable to set
@@ -189,6 +214,9 @@ struct ConfigSetType
   int (*string_minus_equals)(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef, const char *value, struct Buffer *err);
 
   /**
+   * @defgroup cfg_type_reset reset()
+   * @ingroup cfg_type_api
+   *
    * reset - Reset a config item to its initial value
    * @param cs   Config items
    * @param var  Variable to reset
@@ -204,6 +232,9 @@ struct ConfigSetType
   int (*reset)(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef, struct Buffer *err);
 
   /**
+   * @defgroup cfg_type_destroy destroy()
+   * @ingroup cfg_type_api
+   *
    * destroy - Destroy a config item
    * @param cs   Config items
    * @param var  Variable to destroy
