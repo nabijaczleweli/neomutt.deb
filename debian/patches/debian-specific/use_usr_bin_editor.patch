@@ -1,52 +1,26 @@
 From: Antonio Radici <antonio@debian.org>
+Updated-By: наб <nabijaczleweli@nabijaczleweli.xyz>
 Date: Thu, 27 Feb 2014 16:06:15 +0100
+Updated-Date: Sat, 06 Nov 2021 14:13:41 +0100
 Subject: use_usr_bin_editor
 
 Even if EDITOR is not set, mutt will always use /usr/bin/editor
 (which is set by update-alternatives), rather than falling back
 to vi.
 ---
- docs/config.c | 2 +-
- init.c        | 2 ++
- mutt_config.c | 2 +-
- 3 files changed, 4 insertions(+), 2 deletions(-)
+ init.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/docs/config.c b/docs/config.c
-index cd5d1ec..2cb1f11 100644
---- a/docs/config.c
-+++ b/docs/config.c
-@@ -1066,7 +1066,7 @@
- ** ignored for interoperability reasons.
- */
- 
--{ "editor", DT_COMMAND, "vi" },
-+{ "editor", DT_COMMAND, "/usr/bin/editor" },
- /*
- ** .pp
- ** This variable specifies which editor is used by NeoMutt.
 diff --git a/init.c b/init.c
-index 458b07a..56758a1 100644
+index b78f578..248781f 100644
 --- a/init.c
 +++ b/init.c
-@@ -798,6 +798,8 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
-   const char *env_ed = mutt_str_getenv("VISUAL");
+@@ -796,7 +796,7 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
    if (!env_ed)
      env_ed = mutt_str_getenv("EDITOR");
-+    if (!env_ed)
-+      env_ed = "/usr/bin/editor";
-   if (env_ed)
-   {
-     cs_str_string_set(cs, "editor", env_ed, NULL);
-diff --git a/mutt_config.c b/mutt_config.c
-index 2ae7819..67b4bf4 100644
---- a/mutt_config.c
-+++ b/mutt_config.c
-@@ -323,7 +323,7 @@ struct ConfigDef MainVars[] = {
-   { "duplicate_threads", DT_BOOL|R_RESORT|R_RESORT_INIT|R_INDEX, &C_DuplicateThreads, true, 0, pager_validator,
-     "Highlight messages with duplicated message IDs"
-   },
--  { "editor", DT_STRING|DT_NOT_EMPTY|DT_COMMAND, &C_Editor, IP "vi", 0, NULL,
-+  { "editor", DT_STRING|DT_NOT_EMPTY|DT_COMMAND, &C_Editor, IP "/usr/bin/editor", 0, NULL,
-     "External command to use as an email editor"
-   },
-   { "flag_chars", DT_MBTABLE|R_INDEX|R_PAGER, &C_FlagChars, IP "*!DdrONon- ", 0, NULL,
+   if (!env_ed)
+-    env_ed = "vi";
++    env_ed = "/usr/bin/editor";
+   cs_str_initial_set(cs, "editor", env_ed, NULL);
+ 
+   const char *const c_editor = cs_subset_string(NeoMutt->sub, "editor");
