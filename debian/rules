@@ -31,7 +31,6 @@ override_dh_auto_configure:
 		--gpgme	\
 		--lua \
 		$(notmuch) \
-		--with-ui \
 		--gnutls \
 		--gss \
 		--idn \
