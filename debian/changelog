@@ -1,3 +1,11 @@
+neomutt (20211029+dfsg.1-0.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Remove needless configure --with-ui option
+  * Import PR #3124, fixing formatting vulnerabilities
+
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Sat, 06 Nov 2021 18:53:52 +0100
+
 neomutt (20211029+dfsg.1-0.1) unstable; urgency=medium
 
   * Non-maintainer upload.
