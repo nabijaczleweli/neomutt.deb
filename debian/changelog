@@ -1,3 +1,13 @@
+neomutt (20211029+dfsg.1-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version 20211029+dfsg.1
+  * Rebase and update debian-specific/use_usr_bin_editor.patch
+    and misc/smime.rc, refresh other patches
+  * Update neomutt-test-files to 8e4fc46e731da0863c04b005885f92aa925b6367
+
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Sat, 06 Nov 2021 17:43:26 +0100
+
 neomutt (20210205+dfsg.1-0.1) unstable; urgency=medium
 
   * Non-maintainer upload.
