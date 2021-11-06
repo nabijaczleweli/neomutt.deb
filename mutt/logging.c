@@ -45,7 +45,7 @@
 const char *LevelAbbr = "PEWM12345N"; ///< Abbreviations of logging level names
 
 /**
- * MuttLogger - The log dispatcher
+ * MuttLogger - The log dispatcher - @ingroup logging_api
  *
  * This function pointer controls where log messages are redirected.
  */
@@ -225,7 +225,7 @@ void log_file_set_version(const char *version)
 
 /**
  * log_file_running - Is the log file running?
- * @retval true If the log file is running
+ * @retval true The log file is running
  */
 bool log_file_running(void)
 {
@@ -233,7 +233,7 @@ bool log_file_running(void)
 }
 
 /**
- * log_disp_file - Save a log line to a file - Implements ::log_dispatcher_t
+ * log_disp_file - Save a log line to a file - Implements ::log_dispatcher_t - @ingroup logging_api
  *
  * This log dispatcher saves a line of text to a file.  The format is:
  * * `[TIMESTAMP]<LEVEL> FUNCTION() FORMATTED-MESSAGE`
@@ -364,7 +364,7 @@ void log_queue_flush(log_dispatcher_t disp)
  * The queue is written to a temporary file.  The format is:
  * * `[HH:MM:SS]<LEVEL> FORMATTED-MESSAGE`
  *
- * @note The caller should free the returned string and delete the file.
+ * @note The caller should delete the file
  */
 int log_queue_save(FILE *fp)
 {
@@ -387,7 +387,7 @@ int log_queue_save(FILE *fp)
 }
 
 /**
- * log_disp_queue - Save a log line to an internal queue - Implements ::log_dispatcher_t
+ * log_disp_queue - Save a log line to an internal queue - Implements ::log_dispatcher_t - @ingroup logging_api
  *
  * This log dispatcher saves a line of text to a queue.
  * The format string and parameters are expanded and the other parameters are
@@ -429,7 +429,7 @@ int log_disp_queue(time_t stamp, const char *file, int line,
 }
 
 /**
- * log_disp_terminal - Save a log line to the terminal - Implements ::log_dispatcher_t
+ * log_disp_terminal - Save a log line to the terminal - Implements ::log_dispatcher_t - @ingroup logging_api
  *
  * This log dispatcher saves a line of text to the terminal.
  * The format is:
@@ -441,9 +441,6 @@ int log_disp_queue(time_t stamp, const char *file, int line,
 int log_disp_terminal(time_t stamp, const char *file, int line,
                       const char *function, enum LogLevel level, ...)
 {
-  if ((level < LL_PERROR) || (level > LL_MESSAGE))
-    return 0;
-
   char buf[1024];
 
   va_list ap;
@@ -453,6 +450,9 @@ int log_disp_terminal(time_t stamp, const char *file, int line,
   va_end(ap);
 
   log_disp_file(stamp, file, line, function, level, "%s", buf);
+
+  if ((level < LL_PERROR) || (level > LL_MESSAGE))
+    return 0;
 
   FILE *fp = (level < LL_MESSAGE) ? stderr : stdout;
   int err = errno;
@@ -501,7 +501,7 @@ int log_disp_terminal(time_t stamp, const char *file, int line,
 }
 
 /**
- * log_disp_null - Discard log lines - Implements ::log_dispatcher_t
+ * log_disp_null - Discard log lines - Implements ::log_dispatcher_t - @ingroup logging_api
  */
 int log_disp_null(time_t stamp, const char *file, int line,
                   const char *function, enum LogLevel level, ...)

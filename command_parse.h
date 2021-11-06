@@ -26,7 +26,7 @@
 
 #include "config.h"
 #include <stdint.h>
-#include "mutt_commands.h"
+#include "core/lib.h"
 
 struct Buffer;
 struct GroupList;

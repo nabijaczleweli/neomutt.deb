@@ -37,10 +37,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-#include "private.h"
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
@@ -49,18 +47,18 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "lib.h"
+#include "attach/lib.h"
+#include "question/lib.h"
 #include "send/lib.h"
 #include "crypt.h"
 #include "cryptglue.h"
 #include "handler.h"
 #include "hook.h"
-#include "mutt_attach.h"
 #include "muttlib.h"
 #include "options.h"
 #include "pgpinvoke.h"
 #include "pgpkey.h"
 #include "pgpmicalg.h"
-#include "state.h"
 #ifdef CRYPT_BACKEND_CLASSIC_PGP
 #include "pgp.h"
 #include "pgplib.h"
@@ -70,7 +68,7 @@ char PgpPass[1024];
 time_t PgpExptime = 0; /* when does the cached passphrase expire? */
 
 /**
- * pgp_class_void_passphrase - Implements CryptModuleSpecs::void_passphrase()
+ * pgp_class_void_passphrase - Implements CryptModuleSpecs::void_passphrase() - @ingroup crypto_void_passphrase
  */
 void pgp_class_void_passphrase(void)
 {
@@ -79,7 +77,7 @@ void pgp_class_void_passphrase(void)
 }
 
 /**
- * pgp_class_valid_passphrase - Implements CryptModuleSpecs::valid_passphrase()
+ * pgp_class_valid_passphrase - Implements CryptModuleSpecs::valid_passphrase() - @ingroup crypto_valid_passphrase
  */
 bool pgp_class_valid_passphrase(void)
 {
@@ -97,9 +95,11 @@ bool pgp_class_valid_passphrase(void)
 
   pgp_class_void_passphrase();
 
-  if (mutt_get_password(_("Enter PGP passphrase:"), PgpPass, sizeof(PgpPass)) == 0)
+  if (mutt_get_field_unbuffered(_("Enter PGP passphrase:"), PgpPass,
+                                sizeof(PgpPass), MUTT_PASS) == 0)
   {
-    PgpExptime = mutt_date_add_timeout(mutt_date_epoch(), C_PgpTimeout);
+    const long c_pgp_timeout = cs_subset_long(NeoMutt->sub, "pgp_timeout");
+    PgpExptime = mutt_date_add_timeout(mutt_date_epoch(), c_pgp_timeout);
     return true;
   }
   else
@@ -110,7 +110,7 @@ bool pgp_class_valid_passphrase(void)
 
 /**
  * pgp_use_gpg_agent - Does the user want to use the gpg agent?
- * @retval true If they do
+ * @retval true The user wants to use the gpg agent
  *
  * @note This functions sets the environment variable `$GPG_TTY`
  */
@@ -119,7 +119,9 @@ bool pgp_use_gpg_agent(void)
   char *tty = NULL;
 
   /* GnuPG 2.1 no longer exports GPG_AGENT_INFO */
-  if (!C_PgpUseGpgAgent)
+  const bool c_pgp_use_gpg_agent =
+      cs_subset_bool(NeoMutt->sub, "pgp_use_gpg_agent");
+  if (!c_pgp_use_gpg_agent)
     return false;
 
   tty = ttyname(0);
@@ -139,7 +141,9 @@ bool pgp_use_gpg_agent(void)
  */
 static struct PgpKeyInfo *key_parent(struct PgpKeyInfo *k)
 {
-  if ((k->flags & KEYFLAG_SUBKEY) && k->parent && C_PgpIgnoreSubkeys)
+  const bool c_pgp_ignore_subkeys =
+      cs_subset_bool(NeoMutt->sub, "pgp_ignore_subkeys");
+  if ((k->flags & KEYFLAG_SUBKEY) && k->parent && c_pgp_ignore_subkeys)
     k = k->parent;
 
   return k;
@@ -178,7 +182,8 @@ char *pgp_short_keyid(struct PgpKeyInfo *k)
  */
 char *pgp_this_keyid(struct PgpKeyInfo *k)
 {
-  if (C_PgpLongIds)
+  const bool c_pgp_long_ids = cs_subset_bool(NeoMutt->sub, "pgp_long_ids");
+  if (c_pgp_long_ids)
     return k->keyid;
   return k->keyid + 8;
 }
@@ -242,14 +247,16 @@ static int pgp_copy_checksig(FILE *fp_in, FILE *fp_out)
 
   int rc = -1;
 
-  if (C_PgpGoodSign && C_PgpGoodSign->regex)
+  const struct Regex *c_pgp_good_sign =
+      cs_subset_regex(NeoMutt->sub, "pgp_good_sign");
+  if (c_pgp_good_sign && c_pgp_good_sign->regex)
   {
     char *line = NULL;
     size_t linelen;
 
     while ((line = mutt_file_read_line(line, &linelen, fp_in, NULL, MUTT_RL_NO_FLAGS)))
     {
-      if (mutt_regex_match(C_PgpGoodSign, line))
+      if (mutt_regex_match(c_pgp_good_sign, line))
       {
         mutt_debug(LL_DEBUG2, "\"%s\" matches regex\n", line);
         rc = 0;
@@ -288,14 +295,16 @@ static int pgp_check_pgp_decryption_okay_regex(FILE *fp_in)
 {
   int rc = -1;
 
-  if (C_PgpDecryptionOkay && C_PgpDecryptionOkay->regex)
+  const struct Regex *c_pgp_decryption_okay =
+      cs_subset_regex(NeoMutt->sub, "pgp_decryption_okay");
+  if (c_pgp_decryption_okay && c_pgp_decryption_okay->regex)
   {
     char *line = NULL;
     size_t linelen;
 
     while ((line = mutt_file_read_line(line, &linelen, fp_in, NULL, MUTT_RL_NO_FLAGS)))
     {
-      if (mutt_regex_match(C_PgpDecryptionOkay, line))
+      if (mutt_regex_match(c_pgp_decryption_okay, line))
       {
         mutt_debug(LL_DEBUG2, "\"%s\" matches regex\n", line);
         rc = 0;
@@ -342,7 +351,9 @@ static int pgp_check_decryption_okay(FILE *fp_in)
   size_t linelen;
   int inside_decrypt = 0;
 
-  if (!C_PgpCheckGpgDecryptStatusFd)
+  const bool c_pgp_check_gpg_decrypt_status_fd =
+      cs_subset_bool(NeoMutt->sub, "pgp_check_gpg_decrypt_status_fd");
+  if (!c_pgp_check_gpg_decrypt_status_fd)
     return pgp_check_pgp_decryption_okay_regex(fp_in);
 
   while ((line = mutt_file_read_line(line, &linelen, fp_in, NULL, MUTT_RL_NO_FLAGS)))
@@ -408,8 +419,9 @@ static void pgp_copy_clearsigned(FILE *fp_in, struct State *s, char *charset)
   /* fromcode comes from the MIME Content-Type charset label. It might
    * be a wrong label, so we want the ability to do corrections via
    * charset-hooks. Therefore we set flags to MUTT_ICONV_HOOK_FROM.  */
+  const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
   struct FgetConv *fc =
-      mutt_ch_fgetconv_open(fp_in, charset, C_Charset, MUTT_ICONV_HOOK_FROM);
+      mutt_ch_fgetconv_open(fp_in, charset, c_charset, MUTT_ICONV_HOOK_FROM);
 
   for (complete = true, armor_header = true;
        mutt_ch_fgetconvs(buf, sizeof(buf), fc); complete = (strchr(buf, '\n')))
@@ -445,7 +457,7 @@ static void pgp_copy_clearsigned(FILE *fp_in, struct State *s, char *charset)
 }
 
 /**
- * pgp_class_application_handler - Implements CryptModuleSpecs::application_handler()
+ * pgp_class_application_handler - Implements CryptModuleSpecs::application_handler() - @ingroup crypto_application_handler
  */
 int pgp_class_application_handler(struct Body *m, struct State *s)
 {
@@ -471,7 +483,11 @@ int pgp_class_application_handler(struct Body *m, struct State *s)
   char body_charset[256];
   mutt_body_get_charset(m, body_charset, sizeof(body_charset));
 
-  fseeko(s->fp_in, m->offset, SEEK_SET);
+  if (fseeko(s->fp_in, m->offset, SEEK_SET) != 0)
+  {
+    mutt_perror("fseeko");
+    return -1;
+  }
   last_pos = m->offset;
 
   for (bytes = m->length; bytes > 0;)
@@ -632,7 +648,9 @@ int pgp_class_application_handler(struct Body *m, struct State *s)
             state_attach_puts(s, _("[-- End of PGP output --]\n\n"));
           }
           if (pgp_use_gpg_agent())
+          {
             mutt_need_hard_redraw();
+          }
         }
 
         /* treat empty result as sign of failure */
@@ -678,12 +696,13 @@ int pgp_class_application_handler(struct Body *m, struct State *s)
         int ch;
         char *expected_charset = (gpgcharset && *gpgcharset) ? gpgcharset : "utf-8";
 
+        const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
         mutt_debug(LL_DEBUG3, "pgp: recoding inline from [%s] to [%s]\n",
-                   expected_charset, C_Charset);
+                   expected_charset, c_charset);
 
         rewind(fp_pgp_out);
         state_set_prefix(s);
-        fc = mutt_ch_fgetconv_open(fp_pgp_out, expected_charset, C_Charset, MUTT_ICONV_HOOK_FROM);
+        fc = mutt_ch_fgetconv_open(fp_pgp_out, expected_charset, c_charset, MUTT_ICONV_HOOK_FROM);
         while ((ch = mutt_ch_fgetconv(fc)) != EOF)
           state_prefix_putc(s, ch);
         mutt_ch_fgetconv_close(&fc);
@@ -761,14 +780,14 @@ out:
  * pgp_check_traditional_one_body - Check the body of an inline PGP message
  * @param fp File to read
  * @param b  Body to populate
- * @retval 1 Success
- * @retval 0 Error
+ * @retval true  Success
+ * @retval false Error
  */
-static int pgp_check_traditional_one_body(FILE *fp, struct Body *b)
+static bool pgp_check_traditional_one_body(FILE *fp, struct Body *b)
 {
   struct Buffer *tempfile = NULL;
   char buf[8192];
-  int rc = 0;
+  bool rc = false;
 
   bool sgn = false;
   bool enc = false;
@@ -822,7 +841,7 @@ static int pgp_check_traditional_one_body(FILE *fp, struct Body *b)
   else if (key)
     mutt_param_set(&b->parameter, "x-action", "pgp-keys");
 
-  rc = 1;
+  rc = true;
 
 cleanup:
   mutt_buffer_pool_release(&tempfile);
@@ -830,11 +849,11 @@ cleanup:
 }
 
 /**
- * pgp_class_check_traditional - Implements CryptModuleSpecs::pgp_check_traditional()
+ * pgp_class_check_traditional - Implements CryptModuleSpecs::pgp_check_traditional() - @ingroup crypto_pgp_check_traditional
  */
-int pgp_class_check_traditional(FILE *fp, struct Body *b, bool just_one)
+bool pgp_class_check_traditional(FILE *fp, struct Body *b, bool just_one)
 {
-  int rc = 0;
+  bool rc = false;
   int r;
   for (; b; b = b->next)
   {
@@ -857,7 +876,7 @@ int pgp_class_check_traditional(FILE *fp, struct Body *b, bool just_one)
 }
 
 /**
- * pgp_class_verify_one - Implements CryptModuleSpecs::verify_one()
+ * pgp_class_verify_one - Implements CryptModuleSpecs::verify_one() - @ingroup crypto_verify_one
  */
 int pgp_class_verify_one(struct Body *sigbdy, struct State *s, const char *tempfile)
 {
@@ -875,7 +894,12 @@ int pgp_class_verify_one(struct Body *sigbdy, struct State *s, const char *tempf
     goto cleanup;
   }
 
-  fseeko(s->fp_in, sigbdy->offset, SEEK_SET);
+  if (fseeko(s->fp_in, sigbdy->offset, SEEK_SET) != 0)
+  {
+    mutt_perror("fseeko");
+    mutt_file_fclose(&fp_sig);
+    goto cleanup;
+  }
   mutt_file_copy_bytes(s->fp_in, fp_sig, sigbdy->length);
   mutt_file_fclose(&fp_sig);
 
@@ -958,7 +982,7 @@ cleanup:
 }
 
 /**
- * pgp_class_extract_key_from_attachment - Implements CryptModuleSpecs::pgp_extract_key_from_attachment()
+ * pgp_class_extract_key_from_attachment - Implements CryptModuleSpecs::pgp_extract_key_from_attachment() - @ingroup crypto_pgp_extract_key_from_attachment
  */
 void pgp_class_extract_key_from_attachment(FILE *fp, struct Body *top)
 {
@@ -991,7 +1015,6 @@ static struct Body *pgp_decrypt_part(struct Body *a, struct State *s,
 
   char buf[1024];
   FILE *fp_pgp_in = NULL, *fp_pgp_out = NULL, *fp_pgp_tmp = NULL;
-  struct stat info;
   struct Body *tattach = NULL;
   pid_t pid;
   int rv;
@@ -1016,7 +1039,13 @@ static struct Body *pgp_decrypt_part(struct Body *a, struct State *s,
   /* Position the stream at the beginning of the body, and send the data to
    * the temporary file.  */
 
-  fseeko(s->fp_in, a->offset, SEEK_SET);
+  if (fseeko(s->fp_in, a->offset, SEEK_SET) != 0)
+  {
+    mutt_perror("fseeko");
+    mutt_file_fclose(&fp_pgp_tmp);
+    mutt_file_fclose(&fp_pgp_err);
+    goto cleanup;
+  }
   mutt_file_copy_bytes(s->fp_in, fp_pgp_tmp, a->length);
   mutt_file_fclose(&fp_pgp_tmp);
 
@@ -1052,7 +1081,13 @@ static struct Body *pgp_decrypt_part(struct Body *a, struct State *s,
   }
 
   mutt_file_fclose(&fp_pgp_out);
+
   rv = filter_wait(pid);
+  const bool c_pgp_use_gpg_agent =
+      cs_subset_bool(NeoMutt->sub, "pgp_use_gpg_agent");
+  if (c_pgp_use_gpg_agent)
+    mutt_need_hard_redraw();
+
   mutt_file_unlink(mutt_buffer_string(pgptmpfile));
 
   fflush(fp_pgp_err);
@@ -1079,9 +1114,6 @@ static struct Body *pgp_decrypt_part(struct Body *a, struct State *s,
   fflush(fp_out);
   rewind(fp_out);
 
-  if (pgp_use_gpg_agent())
-    mutt_need_hard_redraw();
-
   if (fgetc(fp_out) == EOF)
   {
     mutt_error(_("Decryption failed"));
@@ -1090,13 +1122,17 @@ static struct Body *pgp_decrypt_part(struct Body *a, struct State *s,
   }
 
   rewind(fp_out);
+  const long size = mutt_file_get_size_fp(fp_out);
+  if (size == 0)
+  {
+    goto cleanup;
+  }
 
   tattach = mutt_read_mime_header(fp_out, 0);
   if (tattach)
   {
     /* Need to set the length of this body part.  */
-    fstat(fileno(fp_out), &info);
-    tattach->length = info.st_size - tattach->offset;
+    tattach->length = size - tattach->offset;
 
     /* See if we need to recurse on this MIME part.  */
     mutt_parse_part(fp_out, tattach);
@@ -1108,14 +1144,13 @@ cleanup:
 }
 
 /**
- * pgp_class_decrypt_mime - Implements CryptModuleSpecs::decrypt_mime()
+ * pgp_class_decrypt_mime - Implements CryptModuleSpecs::decrypt_mime() - @ingroup crypto_decrypt_mime
  */
 int pgp_class_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Body **cur)
 {
   struct State s = { 0 };
   struct Body *p = b;
   bool need_decode = false;
-  int saved_type = 0;
   LOFF_T saved_offset = 0;
   size_t saved_length = 0;
   FILE *fp_decoded = NULL;
@@ -1140,7 +1175,6 @@ int pgp_class_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Bo
 
   if (need_decode)
   {
-    saved_type = b->type;
     saved_offset = b->offset;
     saved_length = b->length;
 
@@ -1151,7 +1185,12 @@ int pgp_class_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Bo
       return -1;
     }
 
-    fseeko(s.fp_in, b->offset, SEEK_SET);
+    if (fseeko(s.fp_in, b->offset, SEEK_SET) != 0)
+    {
+      mutt_perror("fseeko");
+      rc = -1;
+      goto bail;
+    }
     s.fp_out = fp_decoded;
 
     mutt_decode_attachment(b, &s);
@@ -1180,7 +1219,6 @@ int pgp_class_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Bo
 bail:
   if (need_decode)
   {
-    b->type = saved_type;
     b->length = saved_length;
     b->offset = saved_offset;
     mutt_file_fclose(&fp_decoded);
@@ -1190,7 +1228,7 @@ bail:
 }
 
 /**
- * pgp_class_encrypted_handler - Implements CryptModuleSpecs::encrypted_handler()
+ * pgp_class_encrypted_handler - Implements CryptModuleSpecs::encrypted_handler() - @ingroup crypto_encrypted_handler
  */
 int pgp_class_encrypted_handler(struct Body *a, struct State *s)
 {
@@ -1280,7 +1318,7 @@ int pgp_class_encrypted_handler(struct Body *a, struct State *s)
  */
 
 /**
- * pgp_class_sign_message - Implements CryptModuleSpecs::sign_message()
+ * pgp_class_sign_message - Implements CryptModuleSpecs::sign_message() - @ingroup crypto_sign_message
  */
 struct Body *pgp_class_sign_message(struct Body *a, const struct AddressList *from)
 {
@@ -1354,7 +1392,8 @@ struct Body *pgp_class_sign_message(struct Body *a, const struct AddressList *fr
     fputs(buf, stdout);
   }
 
-  if (filter_wait(pid) && C_PgpCheckExit)
+  const bool c_pgp_check_exit = cs_subset_bool(NeoMutt->sub, "pgp_check_exit");
+  if (filter_wait(pid) && c_pgp_check_exit)
     empty = true;
 
   mutt_file_fclose(&fp_pgp_err);
@@ -1410,9 +1449,9 @@ cleanup:
 }
 
 /**
- * pgp_class_find_keys - Implements CryptModuleSpecs::find_keys()
+ * pgp_class_find_keys - Implements CryptModuleSpecs::find_keys() - @ingroup crypto_find_keys
  */
-char *pgp_class_find_keys(struct AddressList *addrlist, bool oppenc_mode)
+char *pgp_class_find_keys(const struct AddressList *addrlist, bool oppenc_mode)
 {
   struct ListHead crypt_hook_list = STAILQ_HEAD_INITIALIZER(crypt_hook_list);
   struct ListNode *crypt_hook = NULL;
@@ -1442,7 +1481,9 @@ char *pgp_class_find_keys(struct AddressList *addrlist, bool oppenc_mode)
       {
         keyid = crypt_hook->data;
         enum QuadOption ans = MUTT_YES;
-        if (!oppenc_mode && C_CryptConfirmhook)
+        const bool c_crypt_confirm_hook =
+            cs_subset_bool(NeoMutt->sub, "crypt_confirm_hook");
+        if (!oppenc_mode && c_crypt_confirm_hook)
         {
           snprintf(buf, sizeof(buf), _("Use keyID = \"%s\" for %s?"), keyid, p->mailbox);
           ans = mutt_yesorno(buf, MUTT_YES);
@@ -1529,7 +1570,7 @@ char *pgp_class_find_keys(struct AddressList *addrlist, bool oppenc_mode)
 }
 
 /**
- * pgp_class_encrypt_message - Implements CryptModuleSpecs::pgp_encrypt_message()
+ * pgp_class_encrypt_message - Implements CryptModuleSpecs::pgp_encrypt_message() - @ingroup crypto_pgp_encrypt_message
  *
  * @warning "a" is no longer freed in this routine, you need to free it later.
  * This is necessary for $fcc_attach.
@@ -1600,7 +1641,8 @@ struct Body *pgp_class_encrypt_message(struct Body *a, char *keylist, bool sign,
   }
   mutt_file_fclose(&fp_pgp_in);
 
-  if (filter_wait(pid) && C_PgpCheckExit)
+  const bool c_pgp_check_exit = cs_subset_bool(NeoMutt->sub, "pgp_check_exit");
+  if (filter_wait(pid) && c_pgp_check_exit)
     empty = true;
 
   unlink(mutt_buffer_string(pgpinfile));
@@ -1665,13 +1707,13 @@ cleanup:
 }
 
 /**
- * pgp_class_traditional_encryptsign - Implements CryptModuleSpecs::pgp_traditional_encryptsign()
+ * pgp_class_traditional_encryptsign - Implements CryptModuleSpecs::pgp_traditional_encryptsign() - @ingroup crypto_pgp_traditional_encryptsign
  */
 struct Body *pgp_class_traditional_encryptsign(struct Body *a, SecurityFlags flags, char *keylist)
 {
   struct Body *b = NULL;
   char body_charset[256];
-  char *from_charset = NULL;
+  const char *from_charset = NULL;
   const char *send_charset = NULL;
   bool empty = false;
   bool err;
@@ -1707,10 +1749,11 @@ struct Body *pgp_class_traditional_encryptsign(struct Body *a, SecurityFlags fla
    * we have to convert from $charset to utf-8.  */
 
   mutt_body_get_charset(a, body_charset, sizeof(body_charset));
+  const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
   if (a->noconv)
     from_charset = body_charset;
   else
-    from_charset = C_Charset;
+    from_charset = c_charset;
 
   if (!mutt_ch_is_us_ascii(body_charset))
   {
@@ -1772,7 +1815,8 @@ struct Body *pgp_class_traditional_encryptsign(struct Body *a, SecurityFlags fla
     fprintf(fp_pgp_in, "%s\n", PgpPass);
   mutt_file_fclose(&fp_pgp_in);
 
-  if (filter_wait(pid) && C_PgpCheckExit)
+  const bool c_pgp_check_exit = cs_subset_bool(NeoMutt->sub, "pgp_check_exit");
+  if (filter_wait(pid) && c_pgp_check_exit)
     empty = true;
 
   mutt_file_unlink(mutt_buffer_string(pgpinfile));
@@ -1837,7 +1881,7 @@ cleanup:
 }
 
 /**
- * pgp_class_send_menu - Implements CryptModuleSpecs::send_menu()
+ * pgp_class_send_menu - Implements CryptModuleSpecs::send_menu() - @ingroup crypto_send_menu
  */
 SecurityFlags pgp_class_send_menu(struct Email *e)
 {
@@ -1852,7 +1896,9 @@ SecurityFlags pgp_class_send_menu(struct Email *e)
     return e->security;
 
   /* If autoinline and no crypto options set, then set inline. */
-  if (C_PgpAutoinline &&
+  const bool c_pgp_auto_inline =
+      cs_subset_bool(NeoMutt->sub, "pgp_auto_inline");
+  if (c_pgp_auto_inline &&
       !((e->security & APPLICATION_PGP) && (e->security & (SEC_SIGN | SEC_ENCRYPT))))
   {
     e->security |= SEC_INLINE;
@@ -1877,7 +1923,9 @@ SecurityFlags pgp_class_send_menu(struct Email *e)
    * between inline and mime, but not turn encryption on or off.
    * NOTE: "Signing" and "Clearing" only adjust the sign bit, so we have different
    *       letter choices for those.  */
-  if (C_CryptOpportunisticEncrypt && (e->security & SEC_OPPENCRYPT))
+  const bool c_crypt_opportunistic_encrypt =
+      cs_subset_bool(NeoMutt->sub, "crypt_opportunistic_encrypt");
+  if (c_crypt_opportunistic_encrypt && (e->security & SEC_OPPENCRYPT))
   {
     if (e->security & (SEC_ENCRYPT | SEC_SIGN))
     {
@@ -1903,7 +1951,7 @@ SecurityFlags pgp_class_send_menu(struct Email *e)
   }
   /* Opportunistic encryption option is set, but is toggled off
    * for this message.  */
-  else if (C_CryptOpportunisticEncrypt)
+  else if (c_crypt_opportunistic_encrypt)
   {
     /* When the message is not selected for signing or encryption, the toggle
      * between PGP/MIME and Traditional doesn't make sense.  */
@@ -1969,7 +2017,7 @@ SecurityFlags pgp_class_send_menu(struct Email *e)
         {
           char input_signas[128];
           snprintf(input_signas, sizeof(input_signas), "0x%s", pgp_fpr_or_lkeyid(p));
-          mutt_str_replace(&C_PgpSignAs, input_signas);
+          cs_subset_str_string_set(NeoMutt->sub, "pgp_sign_as", input_signas, NULL);
           pgp_key_free(&p);
 
           e->security |= SEC_SIGN;

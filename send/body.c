@@ -124,9 +124,9 @@ static void encode_base64(struct FgetConv *fc, FILE *fp_out, int istext)
 
   while ((ch = mutt_ch_fgetconv(fc)) != EOF)
   {
-    if (SigInt == 1)
+    if (SigInt)
     {
-      SigInt = 0;
+      SigInt = false;
       return;
     }
     if (istext && (ch == '\n') && (ch1 != '\r'))
@@ -149,9 +149,9 @@ static void encode_8bit(struct FgetConv *fc, FILE *fp_out)
 
   while ((ch = mutt_ch_fgetconv(fc)) != EOF)
   {
-    if (SigInt == 1)
+    if (SigInt)
     {
-      SigInt = 0;
+      SigInt = false;
       return;
     }
     fputc(ch, fp_out);
@@ -295,7 +295,7 @@ static void encode_quoted(struct FgetConv *fc, FILE *fp_out, bool istext)
 /**
  * write_as_text_part - Should the Body be written as a text MIME part
  * @param b Email to examine
- * @retval true If the Body should be written as text
+ * @retval true The Body should be written as text
  */
 static bool write_as_text_part(struct Body *b)
 {
@@ -382,9 +382,9 @@ int mutt_write_mime_body(struct Body *a, FILE *fp, struct ConfigSubset *sub)
   mutt_ch_fgetconv_close(&fc);
   mutt_file_fclose(&fp_in);
 
-  if (SigInt == 1)
+  if (SigInt)
   {
-    SigInt = 0;
+    SigInt = false;
     return -1;
   }
   return ferror(fp) ? -1 : 0;

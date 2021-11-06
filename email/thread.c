@@ -21,7 +21,7 @@
  */
 
 /**
- * @page email_thread Create/manipulate threading in emails
+ * @page email_thread Email threading
  *
  * Create/manipulate threading in emails
  */
@@ -39,7 +39,7 @@
  * is_descendant - Is one thread a descendant of another
  * @param a Parent thread
  * @param b Child thread
- * @retval true If b is a descendent of a (child, grandchild, etc)
+ * @retval true b is a descendent of a (child, grandchild, etc)
  */
 bool is_descendant(struct MuttThread *a, struct MuttThread *b)
 {
@@ -76,10 +76,18 @@ void unlink_message(struct MuttThread **old, struct MuttThread *cur)
   if (cur->next)
     cur->next->prev = cur->prev;
 
-  if (cur->sort_key)
+  if (cur->sort_thread_key)
   {
-    for (tmp = cur->parent; tmp && (tmp->sort_key == cur->sort_key); tmp = tmp->parent)
-      tmp->sort_key = NULL;
+    for (tmp = cur->parent;
+         tmp && (tmp->sort_thread_key == cur->sort_thread_key); tmp = tmp->parent)
+    {
+      tmp->sort_thread_key = NULL;
+    }
+  }
+  if (cur->sort_aux_key)
+  {
+    for (tmp = cur->parent; tmp && (tmp->sort_aux_key == cur->sort_aux_key); tmp = tmp->parent)
+      tmp->sort_aux_key = NULL;
   }
 }
 
@@ -106,7 +114,7 @@ void insert_message(struct MuttThread **add, struct MuttThread *parent, struct M
 }
 
 /**
- * thread_hash_destructor - Hash Destructor callback - Implements ::hash_hdata_free_t
+ * thread_hash_destructor - Hash Destructor callback - Implements ::hash_hdata_free_t - @ingroup hash_hdata_free_api
  */
 void thread_hash_destructor(int type, void *obj, intptr_t data)
 {
@@ -119,7 +127,7 @@ void thread_hash_destructor(int type, void *obj, intptr_t data)
  * @param reverse If true, reverse the direction of the search
  * @retval ptr Matching Email
  */
-struct Email *find_virtual(struct MuttThread *cur, int reverse)
+struct Email *find_virtual(struct MuttThread *cur, bool reverse)
 {
   if (!cur)
     return NULL;

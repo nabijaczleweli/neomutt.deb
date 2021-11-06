@@ -31,43 +31,56 @@
 #include <string.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
-#include "core/lib.h"
-#include "debug/lib.h"
 #include "mutt_window.h"
-#include "helpbar/lib.h"
+#include "curs_lib.h"
 #include "mutt_curses.h"
-#include "mutt_globals.h"
-#include "mutt_menu.h"
-#include "opcodes.h"
 #include "options.h"
 #include "reflow.h"
+#include "rootwin.h"
+#ifdef USE_DEBUG_WINDOW
+#include "debug/lib.h"
+#endif
 
-struct MuttWindow *RootWindow = NULL;       ///< Parent of all Windows
-struct MuttWindow *AllDialogsWindow = NULL; ///< Parent of all Dialogs
-struct MuttWindow *MessageWindow = NULL;    ///< Message Window, ":set", etc
-
-/// Help Bar for the Command Line Editor
-static const struct Mapping EditorHelp[] = {
+/// Lookups for Window Names
+static const struct Mapping WindowNames[] = {
   // clang-format off
-  { N_("Complete"),    OP_EDITOR_COMPLETE },
-  { N_("Hist Up"),     OP_EDITOR_HISTORY_UP },
-  { N_("Hist Down"),   OP_EDITOR_HISTORY_DOWN },
-  { N_("Hist Search"), OP_EDITOR_HISTORY_SEARCH },
-  { N_("Begin Line"),  OP_EDITOR_BOL },
-  { N_("End Line"),    OP_EDITOR_EOL },
-  { N_("Kill Line"),   OP_EDITOR_KILL_LINE },
-  { N_("Kill Word"),   OP_EDITOR_KILL_WORD },
+  { "WT_ALL_DIALOGS",     WT_ALL_DIALOGS },
+  { "WT_CONTAINER",       WT_CONTAINER },
+  { "WT_CUSTOM",          WT_CUSTOM },
+  { "WT_DLG_ALIAS",       WT_DLG_ALIAS },
+  { "WT_DLG_ATTACH",      WT_DLG_ATTACH },
+  { "WT_DLG_AUTOCRYPT",   WT_DLG_AUTOCRYPT },
+  { "WT_DLG_BROWSER",     WT_DLG_BROWSER },
+  { "WT_DLG_CERTIFICATE", WT_DLG_CERTIFICATE },
+  { "WT_DLG_COMPOSE",     WT_DLG_COMPOSE },
+  { "WT_DLG_CRYPT_GPGME", WT_DLG_CRYPT_GPGME },
+  { "WT_DLG_DO_PAGER",    WT_DLG_DO_PAGER },
+  { "WT_DLG_HISTORY",     WT_DLG_HISTORY },
+  { "WT_DLG_INDEX",       WT_DLG_INDEX },
+  { "WT_DLG_PGP",         WT_DLG_PGP },
+  { "WT_DLG_POSTPONE",    WT_DLG_POSTPONE },
+  { "WT_DLG_QUERY",       WT_DLG_QUERY },
+  { "WT_DLG_REMAILER",    WT_DLG_REMAILER },
+  { "WT_DLG_SMIME",       WT_DLG_SMIME },
+  { "WT_HELP_BAR",        WT_HELP_BAR },
+  { "WT_INDEX",           WT_INDEX },
+  { "WT_MENU",            WT_MENU },
+  { "WT_MESSAGE",         WT_MESSAGE },
+  { "WT_PAGER",           WT_PAGER },
+  { "WT_ROOT",            WT_ROOT },
+  { "WT_SIDEBAR",         WT_SIDEBAR },
+  { "WT_STATUS_BAR",      WT_STATUS_BAR },
   { NULL, 0 },
-  // clang-format off
+  // clang-format on
 };
 
 /**
  * window_was_visible - Was the Window visible?
  * @param win Window
- * @retval true If the Window was visible
+ * @retval true The Window was visible
  *
  * Using the `WindowState old`, check if a Window used to be visible.
- * For a Window to be visible, *it* must have been visible and it's parent and
+ * For a Window to be visible, *it* must have been visible and its parent and
  * grandparent, etc.
  */
 static bool window_was_visible(struct MuttWindow *win)
@@ -118,6 +131,7 @@ static void window_notify(struct MuttWindow *win)
   if (flags == WN_NO_FLAGS)
     return;
 
+  mutt_debug(LL_NOTIFY, "NT_WINDOW_STATE: %s, %p\n", mutt_window_win_name(win), win);
   struct EventWindow ev_w = { win, flags };
   notify_send(win->notify, NT_WINDOW, NT_WINDOW_STATE, &ev_w);
 }
@@ -193,36 +207,19 @@ void mutt_window_free(struct MuttWindow **ptr)
   if (win->parent && (win->parent->focus == win))
     win->parent->focus = NULL;
 
+  mutt_debug(LL_NOTIFY, "NT_WINDOW_DELETE: %s, %p\n", mutt_window_win_name(win), win);
   struct EventWindow ev_w = { win, WN_NO_FLAGS };
   notify_send(win->notify, NT_WINDOW, NT_WINDOW_DELETE, &ev_w);
 
   mutt_winlist_free(&win->children);
 
-  if (win->wdata && win->wdata_free)
+  if (win->wdata_free && win->wdata)
     win->wdata_free(win, &win->wdata); // Custom function to free private data
 
   notify_free(&win->notify);
 
   FREE(ptr);
 }
-
-#ifdef USE_SLANG_CURSES
-/**
- * vw_printw - Write a formatted string to a Window (function missing from Slang)
- * @param win Window
- * @param fmt printf format string
- * @param ap  printf arguments
- * @retval 0 Always
- */
-static int vw_printw(SLcurses_Window_Type *win, const char *fmt, va_list ap)
-{
-  char buf[1024];
-
-  (void) SLvsnprintf(buf, sizeof(buf), (char *) fmt, ap);
-  SLcurses_waddnstr(win, buf, -1);
-  return 0;
-}
-#endif
 
 /**
  * mutt_window_clearline - Clear a row of a Window
@@ -246,7 +243,7 @@ void mutt_window_clrtoeol(struct MuttWindow *win)
   if (!win || !stdscr)
     return;
 
-  if (win->state.col_offset + win->state.cols == COLS)
+  if ((win->state.col_offset + win->state.cols) == COLS)
     clrtoeol();
   else
   {
@@ -261,53 +258,6 @@ void mutt_window_clrtoeol(struct MuttWindow *win)
     }
     move(row, col);
   }
-}
-
-/**
- * mutt_dlg_rootwin_observer - Listen for config changes affecting the Root Window - Implements ::observer_t
- */
-static int mutt_dlg_rootwin_observer(struct NotifyCallback *nc)
-{
-  if (!nc->event_data || !nc->global_data)
-    return -1;
-  if (nc->event_type != NT_CONFIG)
-    return 0;
-
-  struct EventConfig *ec = nc->event_data;
-  struct MuttWindow *root_win = nc->global_data;
-
-  if (mutt_str_equal(ec->name, "status_on_top"))
-  {
-    struct MuttWindow *first = TAILQ_FIRST(&root_win->children);
-    if (!first)
-      return -1;
-
-    if ((C_StatusOnTop && (first->type == WT_HELP_BAR)) ||
-        (!C_StatusOnTop && (first->type != WT_HELP_BAR)))
-    {
-      // Swap the HelpLine and the Dialogs Container
-      struct MuttWindow *next = TAILQ_NEXT(first, entries);
-      if (!next)
-        return -1;
-      TAILQ_REMOVE(&root_win->children, next, entries);
-      TAILQ_INSERT_HEAD(&root_win->children, next, entries);
-    }
-  }
-
-  mutt_window_reflow(root_win);
-  return 0;
-}
-
-/**
- * mutt_window_free_all - Free all the default Windows
- */
-void mutt_window_free_all(void)
-{
-  if (NeoMutt)
-    notify_observer_remove(NeoMutt->notify, mutt_dlg_rootwin_observer, RootWindow);
-  AllDialogsWindow = NULL;
-  MessageWindow = NULL;
-  mutt_window_free(&RootWindow);
 }
 
 /**
@@ -329,46 +279,6 @@ void mutt_window_get_coords(struct MuttWindow *win, int *col, int *row)
     *col = x - win->state.col_offset;
   if (row)
     *row = y - win->state.row_offset;
-}
-
-/**
- * mutt_window_init - Create the default Windows
- *
- * Create the Help, Index, Status, Message and Sidebar Windows.
- */
-void mutt_window_init(void)
-{
-  if (RootWindow)
-    return;
-
-  RootWindow =
-      mutt_window_new(WT_ROOT, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED, 0, 0);
-  notify_set_parent(RootWindow->notify, NeoMutt->notify);
-
-  struct MuttWindow *win_helpbar = helpbar_create();
-
-  AllDialogsWindow = mutt_window_new(WT_ALL_DIALOGS, MUTT_WIN_ORIENT_VERTICAL,
-                                     MUTT_WIN_SIZE_MAXIMISE, MUTT_WIN_SIZE_UNLIMITED,
-                                     MUTT_WIN_SIZE_UNLIMITED);
-
-  MessageWindow = mutt_window_new(WT_MESSAGE, MUTT_WIN_ORIENT_VERTICAL,
-                                  MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
-  MessageWindow->help_data = EditorHelp;
-  MessageWindow->help_menu = MENU_EDITOR;
-
-  if (C_StatusOnTop)
-  {
-    mutt_window_add_child(RootWindow, AllDialogsWindow);
-    mutt_window_add_child(RootWindow, win_helpbar);
-  }
-  else
-  {
-    mutt_window_add_child(RootWindow, win_helpbar);
-    mutt_window_add_child(RootWindow, AllDialogsWindow);
-  }
-
-  mutt_window_add_child(RootWindow, MessageWindow);
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, mutt_dlg_rootwin_observer, RootWindow);
 }
 
 /**
@@ -395,11 +305,7 @@ int mutt_window_move(struct MuttWindow *win, int col, int row)
  */
 int mutt_window_mvaddstr(struct MuttWindow *win, int col, int row, const char *str)
 {
-#ifdef USE_SLANG_CURSES
-  return mvaddstr(win->state.row_offset + row, win->state.col_offset + col, (char *) str);
-#else
   return mvaddstr(win->state.row_offset + row, win->state.col_offset + col, str);
-#endif
 }
 
 /**
@@ -442,28 +348,9 @@ void mutt_window_reflow(struct MuttWindow *win)
   window_reflow(win);
   window_notify_all(win);
 
-  mutt_menu_set_current_redraw_full();
-  /* the pager menu needs this flag set to recalc line_info */
-  mutt_menu_set_current_redraw(REDRAW_FLOW);
 #ifdef USE_DEBUG_WINDOW
   debug_win_dump();
 #endif
-}
-
-/**
- * mutt_window_reflow_message_rows - Resize the Message Window
- * @param mw_rows Number of rows required
- *
- * Resize the other Windows to allow a multi-line message to be displayed.
- */
-void mutt_window_reflow_message_rows(int mw_rows)
-{
-  MessageWindow->req_rows = mw_rows;
-  mutt_window_reflow(MessageWindow->parent);
-
-  /* We don't also set REDRAW_FLOW because this function only
-   * changes rows and is a temporary adjustment. */
-  mutt_menu_set_current_redraw_full();
 }
 
 /**
@@ -485,69 +372,55 @@ int mutt_window_wrap_cols(int width, short wrap)
 
 /**
  * mutt_window_addch - Write one character to a Window
+ * @param win Window
  * @param ch  Character to write
  * @retval  0 Success
  * @retval -1 Error
  */
-int mutt_window_addch(int ch)
+int mutt_window_addch(struct MuttWindow *win, int ch)
 {
   return addch(ch);
 }
 
 /**
  * mutt_window_addnstr - Write a partial string to a Window
+ * @param win Window
  * @param str String
  * @param num Maximum number of characters to write
  * @retval  0 Success
  * @retval -1 Error
  */
-int mutt_window_addnstr(const char *str, int num)
+int mutt_window_addnstr(struct MuttWindow *win, const char *str, int num)
 {
   if (!str)
     return -1;
 
-#ifdef USE_SLANG_CURSES
-  return addnstr((char *) str, num);
-#else
   return addnstr(str, num);
-#endif
 }
 
 /**
  * mutt_window_addstr - Write a string to a Window
+ * @param win Window
  * @param str String
  * @retval  0 Success
  * @retval -1 Error
  */
-int mutt_window_addstr(const char *str)
+int mutt_window_addstr(struct MuttWindow *win, const char *str)
 {
   if (!str)
     return -1;
 
-#ifdef USE_SLANG_CURSES
-  return addstr((char *) str);
-#else
   return addstr(str);
-#endif
-}
-
-/**
- * mutt_window_move_abs - Move the cursor to an absolute screen position
- * @param col Screen column (0-based)
- * @param row Screen row (0-based)
- */
-void mutt_window_move_abs(int col, int row)
-{
-  move(row, col);
 }
 
 /**
  * mutt_window_printf - Write a formatted string to a Window
+ * @param win Window
  * @param fmt Format string
  * @param ... Arguments
  * @retval num Number of characters written
  */
-int mutt_window_printf(const char *fmt, ...)
+int mutt_window_printf(struct MuttWindow *win, const char *fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
@@ -572,8 +445,9 @@ void mutt_window_add_child(struct MuttWindow *parent, struct MuttWindow *child)
 
   notify_set_parent(child->notify, parent->notify);
 
+  mutt_debug(LL_NOTIFY, "NT_WINDOW_NEW: %s, %p\n", mutt_window_win_name(child), child);
   struct EventWindow ev_w = { child, WN_NO_FLAGS };
-  notify_send(child->notify, NT_WINDOW, NT_WINDOW_NEW, &ev_w);
+  notify_send(child->notify, NT_WINDOW, NT_WINDOW_ADD, &ev_w);
 }
 
 /**
@@ -586,9 +460,7 @@ struct MuttWindow *mutt_window_remove_child(struct MuttWindow *parent, struct Mu
   if (!parent || !child)
     return NULL;
 
-  struct EventWindow ev_w = { child, WN_NO_FLAGS };
-  notify_send(child->notify, NT_WINDOW, NT_WINDOW_DELETE, &ev_w);
-
+  // A notification will be sent when the Window is freed
   TAILQ_REMOVE(&parent->children, child, entries);
   child->parent = NULL;
 
@@ -617,41 +489,11 @@ void mutt_winlist_free(struct MuttWindowList *head)
 }
 
 /**
- * mutt_window_set_root - Set the dimensions of the Root Window
- * @param rows
- * @param cols
- */
-void mutt_window_set_root(int cols, int rows)
-{
-  if (!RootWindow)
-    return;
-
-  bool changed = false;
-
-  if (RootWindow->state.rows != rows)
-  {
-    RootWindow->state.rows = rows;
-    changed = true;
-  }
-
-  if (RootWindow->state.cols != cols)
-  {
-    RootWindow->state.cols = cols;
-    changed = true;
-  }
-
-  if (changed)
-  {
-    mutt_window_reflow(RootWindow);
-  }
-}
-
-/**
  * mutt_window_is_visible - Is the Window visible?
  * @param win Window
- * @retval true If the Window is visible
+ * @retval true The Window is visible
  *
- * For a Window to be visible, *it* must be visible and it's parent and
+ * For a Window to be visible, *it* must be visible and its parent and
  * grandparent, etc.
  */
 bool mutt_window_is_visible(struct MuttWindow *win)
@@ -669,26 +511,43 @@ bool mutt_window_is_visible(struct MuttWindow *win)
 }
 
 /**
- * mutt_window_find - Find a Window of a given type
- * @param root Window to start searching
- * @param type Window type to find, e.g. #WT_INDEX_BAR
+ * window_find_child - Recursively find a child Window of a given type
+ * @param win  Window to start searching
+ * @param type Window type to find, e.g. #WT_STATUS_BAR
  * @retval ptr  Matching Window
  * @retval NULL No match
  */
-struct MuttWindow *mutt_window_find(struct MuttWindow *root, enum WindowType type)
+struct MuttWindow *window_find_child(struct MuttWindow *win, enum WindowType type)
 {
-  if (!root)
+  if (!win)
     return NULL;
-  if (root->type == type)
-    return root;
+  if (win->type == type)
+    return win;
 
   struct MuttWindow *np = NULL;
   struct MuttWindow *match = NULL;
-  TAILQ_FOREACH(np, &root->children, entries)
+  TAILQ_FOREACH(np, &win->children, entries)
   {
-    match = mutt_window_find(np, type);
+    match = window_find_child(np, type);
     if (match)
       return match;
+  }
+
+  return NULL;
+}
+
+/**
+ * window_find_parent - Find a (grand-)parent of a Window by type
+ * @param win  Window
+ * @param type Window type, e.g. #WT_DLG_INDEX
+ * @retval ptr Window
+ */
+struct MuttWindow *window_find_parent(struct MuttWindow *win, enum WindowType type)
+{
+  for (; win; win = win->parent)
+  {
+    if (win->type == type)
+      return win;
   }
 
   return NULL;
@@ -700,14 +559,12 @@ struct MuttWindow *mutt_window_find(struct MuttWindow *root, enum WindowType typ
  */
 static void window_recalc(struct MuttWindow *win)
 {
-  if (!win)
+  if (!win || !win->state.visible)
     return;
 
-  if (win->recalc)
-  {
+  if (win->recalc && (win->actions & WA_RECALC))
     win->recalc(win);
-    win->actions &= ~WA_RECALC;
-  }
+  win->actions &= ~WA_RECALC;
 
   struct MuttWindow *np = NULL;
   TAILQ_FOREACH(np, &win->children, entries)
@@ -719,72 +576,59 @@ static void window_recalc(struct MuttWindow *win)
 /**
  * window_repaint - Repaint a tree of Windows
  * @param win   Window to start at
- * @param force Repaint everything
  */
-static void window_repaint(struct MuttWindow *win, bool force)
+static void window_repaint(struct MuttWindow *win)
 {
-  if (!win)
+  if (!win || !win->state.visible)
     return;
 
-  if (win->repaint && (force || (win->actions & WA_REPAINT)))
-  {
+  if (win->repaint && (win->actions & WA_REPAINT))
     win->repaint(win);
-    win->actions &= ~WA_REPAINT;
-  }
+  win->actions &= ~WA_REPAINT;
 
   struct MuttWindow *np = NULL;
   TAILQ_FOREACH(np, &win->children, entries)
   {
-    window_repaint(np, force);
+    window_repaint(np);
   }
 }
 
 /**
  * window_redraw - Reflow, recalc and repaint a tree of Windows
- * @param win   Window to start at
- * @param force Repaint everything
+ * @param win Window to start at
+ *
+ * @note If win is NULL, all windows will be redrawn
  */
-void window_redraw(struct MuttWindow *win, bool force)
+void window_redraw(struct MuttWindow *win)
 {
   if (!win)
-    return;
+    win = RootWindow;
 
   window_reflow(win);
   window_notify_all(win);
 
   window_recalc(win);
-  window_repaint(win, force);
+  window_repaint(win);
+  mutt_refresh();
 }
 
 /**
- * window_set_focus - Set the Window focus
- * @param win Window to focus
+ * window_is_focused - Does the given Window have the focus?
+ * @param win Window to check
+ * @retval true Window has focus
  */
-void window_set_focus(struct MuttWindow *win)
+bool window_is_focused(struct MuttWindow *win)
 {
   if (!win)
-    return;
+    return false;
 
-  struct MuttWindow *parent = win->parent;
-  struct MuttWindow *child = win;
+  struct MuttWindow *win_focus = window_get_focus();
 
-  // Set the chain of focus, all the way to the root
-  for (; parent; child = parent, parent = parent->parent)
-    parent->focus = child;
-
-  // Find the most focussed Window
-  while (win && win->focus)
-    win = win->focus;
-
-  struct EventWindow ev_w = { win, WN_NO_FLAGS };
-  notify_send(win->notify, NT_WINDOW, NT_WINDOW_FOCUS, &ev_w);
-#ifdef USE_DEBUG_WINDOW
-  debug_win_dump();
-#endif
+  return (win_focus == win);
 }
 
 /**
- * window_get_focus - Get the currently focussed Window
+ * window_get_focus - Get the currently focused Window
  * @retval ptr Window with focus
  */
 struct MuttWindow *window_get_focus(void)
@@ -795,6 +639,42 @@ struct MuttWindow *window_get_focus(void)
     win = win->focus;
 
   return win;
+}
+
+/**
+ * window_set_focus - Set the Window focus
+ * @param win Window to focus
+ * @retval ptr  Old focused Window
+ * @retval NULL Error, or focus not changed
+ */
+struct MuttWindow *window_set_focus(struct MuttWindow *win)
+{
+  if (!win)
+    return NULL;
+
+  struct MuttWindow *old_focus = window_get_focus();
+
+  struct MuttWindow *parent = win->parent;
+  struct MuttWindow *child = win;
+
+  // Set the chain of focus, all the way to the root
+  for (; parent; child = parent, parent = parent->parent)
+    parent->focus = child;
+
+  // Find the most focused Window
+  while (win && win->focus)
+    win = win->focus;
+
+  if (win == old_focus)
+    return NULL;
+
+  mutt_debug(LL_NOTIFY, "NT_WINDOW_FOCUS: %s, %p\n", mutt_window_win_name(win), win);
+  struct EventWindow ev_w = { win, WN_NO_FLAGS };
+  notify_send(win->notify, NT_WINDOW, NT_WINDOW_FOCUS, &ev_w);
+#ifdef USE_DEBUG_WINDOW
+  debug_win_dump();
+#endif
+  return old_focus;
 }
 
 /**
@@ -812,3 +692,77 @@ void mutt_window_clear(struct MuttWindow *win)
     mutt_window_clearline(win, i);
 }
 
+/**
+ * mutt_window_win_name - Get the name of a Window
+ * @param win Window
+ * @retval ptr  String describing Window
+ * @retval NULL Error, or unknown
+ */
+const char *mutt_window_win_name(const struct MuttWindow *win)
+{
+  if (!win)
+    return "UNKNOWN";
+
+  const char *name = mutt_map_get_name(win->type, WindowNames);
+  if (name)
+    return name;
+  return "UNKNOWN";
+}
+
+/**
+ * window_invalidate - Mark a window as in need of repaint
+ * @param win   Window to start at
+ */
+static void window_invalidate(struct MuttWindow *win)
+{
+  if (!win)
+    return;
+
+  win->actions |= WA_REPAINT;
+
+  struct MuttWindow *np = NULL;
+  TAILQ_FOREACH(np, &win->children, entries)
+  {
+    window_invalidate(np);
+  }
+}
+
+/**
+ * window_invalidate_all - Mark all windows as in need of repaint
+ */
+void window_invalidate_all(void)
+{
+  window_invalidate(RootWindow);
+  clearok(stdscr, true);
+  keypad(stdscr, true);
+}
+
+/**
+ * window_status_on_top - Organise windows according to config variable
+ * @param panel Window containing WT_MENU and WT_STATUS_BAR
+ * @param sub   Config Subset
+ * @retval true Window order was changed
+ *
+ * Set the positions of two Windows based on a config variable `$status_on_top`.
+ *
+ * @note The children are expected to have types: #WT_MENU, #WT_STATUS_BAR
+ */
+bool window_status_on_top(struct MuttWindow *panel, struct ConfigSubset *sub)
+{
+  const bool c_status_on_top = cs_subset_bool(sub, "status_on_top");
+
+  struct MuttWindow *win_first = TAILQ_FIRST(&panel->children);
+
+  if ((c_status_on_top && (win_first->type == WT_STATUS_BAR)) ||
+      (!c_status_on_top && (win_first->type != WT_STATUS_BAR)))
+  {
+    return false;
+  }
+
+  TAILQ_REMOVE(&panel->children, win_first, entries);
+  TAILQ_INSERT_TAIL(&panel->children, win_first, entries);
+
+  mutt_window_reflow(panel);
+  mutt_debug(LL_DEBUG5, "config done, request WA_REFLOW\n");
+  return true;
+}

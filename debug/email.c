@@ -27,9 +27,13 @@
  */
 
 #include "config.h"
+#include <stdbool.h>
+#include <stdio.h>
 #include "mutt/lib.h"
-#include "gui/lib.h"
+#include "address/lib.h"
+#include "email/lib.h"
 #include "lib.h"
+#include "ncrypt/lib.h"
 
 void dump_addr_list(char *buf, size_t buflen, const struct AddressList *al, const char *name)
 {
@@ -96,6 +100,8 @@ void dump_envelope(const struct Envelope *env)
   if (env->S)                                                                  \
   mutt_debug(LL_DEBUG1, "\t%s: %s\n", #S, env->S)
   OPT_STRING(list_post);
+  OPT_STRING(list_subscribe);
+  OPT_STRING(list_unsubscribe);
   OPT_STRING(subject);
   OPT_STRING(real_subj);
   OPT_STRING(disp_subj);

@@ -32,25 +32,25 @@
 #include "mutt/lib.h"
 #include "gui/lib.h"
 
+struct IndexSharedData;
+
 /**
  * sb_wdata_new - Create new Window data for the Sidebar
  * @retval ptr New Window data
  */
-struct SidebarWindowData *sb_wdata_new(void)
+struct SidebarWindowData *sb_wdata_new(struct IndexSharedData *shared)
 {
   struct SidebarWindowData *wdata = mutt_mem_calloc(1, sizeof(struct SidebarWindowData));
+  wdata->shared = shared;
   ARRAY_INIT(&wdata->entries);
   return wdata;
 }
 
 /**
- * sb_wdata_free - Free Sidebar Window data - Implements MuttWindow::wdata_free()
+ * sb_wdata_free - Free Sidebar Window data - Implements MuttWindow::wdata_free() - @ingroup window_wdata_free
  */
 void sb_wdata_free(struct MuttWindow *win, void **ptr)
 {
-  if (!ptr || !*ptr)
-    return;
-
   struct SidebarWindowData *wdata = *ptr;
 
   struct SbEntry **sbep = NULL;

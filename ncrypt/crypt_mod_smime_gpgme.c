@@ -34,7 +34,7 @@
 #include "crypt_mod.h"
 
 /**
- * smime_gpgme_void_passphrase - Implements CryptModuleSpecs::void_passphrase()
+ * smime_gpgme_void_passphrase - Implements CryptModuleSpecs::void_passphrase() - @ingroup crypto_void_passphrase
  *
  * This is handled by gpg-agent.
  */
@@ -43,7 +43,7 @@ static void smime_gpgme_void_passphrase(void)
 }
 
 /**
- * smime_gpgme_valid_passphrase - Implements CryptModuleSpecs::valid_passphrase()
+ * smime_gpgme_valid_passphrase - Implements CryptModuleSpecs::valid_passphrase() - @ingroup crypto_valid_passphrase
  *
  * This is handled by gpg-agent.
  */
@@ -52,11 +52,11 @@ static bool smime_gpgme_valid_passphrase(void)
   return true;
 }
 
-// clang-format off
 /**
  * CryptModSmimeGpgme - GPGME SMIME - Implements ::CryptModuleSpecs
  */
 struct CryptModuleSpecs CryptModSmimeGpgme = {
+  // clang-format off
   APPLICATION_SMIME,
 
   smime_gpgme_init,
@@ -84,5 +84,5 @@ struct CryptModuleSpecs CryptModSmimeGpgme = {
   smime_gpgme_verify_sender,
   smime_gpgme_build_smime_entity,
   NULL, /* smime_invoke_import */
+  // clang-format on
 };
-// clang-format on

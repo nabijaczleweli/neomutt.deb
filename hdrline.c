@@ -45,26 +45,32 @@
 #include "alias/lib.h"
 #include "gui/lib.h"
 #include "hdrline.h"
+#include "attach/lib.h"
+#include "color/lib.h"
 #include "ncrypt/lib.h"
-#include "context.h"
 #include "format_flags.h"
 #include "hook.h"
 #include "maillist.h"
 #include "mutt_globals.h"
-#include "mutt_menu.h"
-#include "mutt_parse.h"
 #include "mutt_thread.h"
 #include "muttlib.h"
+#include "mx.h"
 #include "sort.h"
+#include "subjectrx.h"
 #ifdef USE_NOTMUCH
 #include "notmuch/lib.h"
 #endif
 
-/* These Config Variables are only used in hdrline.c */
-struct MbTable *C_CryptChars; ///< Config: User-configurable crypto flags: signed, encrypted etc.
-struct MbTable *C_FlagChars; ///< Config: User-configurable index flags: tagged, new, etc
-struct MbTable *C_FromChars; ///< Config: User-configurable index flags: to address, cc address, etc
-struct MbTable *C_ToChars; ///< Config: Indicator characters for the 'To' field in the index
+/**
+ * struct HdrFormatInfo - Data passed to index_format_str()
+ */
+struct HdrFormatInfo
+{
+  struct Mailbox *mailbox;    ///< Current Mailbox
+  int msg_in_pager;           ///< Index of Email displayed in the Pager
+  struct Email *email;        ///< Current Email
+  const char *pager_progress; ///< String representing Pager postiion through Email
+};
 
 /**
  * enum FlagChars - Index into the `$flag_chars` variable ($flag_chars)
@@ -158,7 +164,7 @@ static size_t add_index_color(char *buf, size_t buflen, MuttFormatFlags flags, c
  * If the index is invalid, then a space character will be returned.
  * If the character selected is '\n' (Ctrl-M), then "" will be returned.
  */
-static const char *get_nth_wchar(struct MbTable *table, int index)
+static const char *get_nth_wchar(const struct MbTable *table, int index)
 {
   if (!table || !table->chars || (index < 0) || (index >= table->len))
     return " ";
@@ -186,10 +192,13 @@ static const char *make_from_prefix(enum FieldType disp)
     [DISP_FROM] = "",  [DISP_PLAIN] = "",
   };
 
-  if (!C_FromChars || !C_FromChars->chars || (C_FromChars->len == 0))
+  const struct MbTable *c_from_chars =
+      cs_subset_mbtable(NeoMutt->sub, "from_chars");
+
+  if (!c_from_chars || !c_from_chars->chars || (c_from_chars->len == 0))
     return long_prefixes[disp];
 
-  const char *pchar = get_nth_wchar(C_FromChars, disp);
+  const char *pchar = get_nth_wchar(c_from_chars, disp);
   if (mutt_str_len(pchar) == 0)
     return "";
 
@@ -295,7 +304,7 @@ static void make_from_addr(struct Envelope *env, char *buf, size_t buflen, bool 
 /**
  * user_in_addr - Do any of the addresses refer to the user?
  * @param al AddressList
- * @retval true If any of the addresses match one of the user's addresses
+ * @retval true Any of the addresses match one of the user's addresses
  */
 static bool user_in_addr(struct AddressList *al)
 {
@@ -353,33 +362,9 @@ static int user_is_recipient(struct Email *e)
 }
 
 /**
- * apply_subject_mods - Apply regex modifications to the subject
- * @param env Envelope of email
- * @retval ptr  Modified subject
- * @retval NULL No modification made
- */
-static char *apply_subject_mods(struct Envelope *env)
-{
-  if (!env)
-    return NULL;
-
-  if (STAILQ_EMPTY(&SubjectRegexList))
-    return env->subject;
-
-  if (!env->subject || (*env->subject == '\0'))
-  {
-    env->disp_subj = NULL;
-    return NULL;
-  }
-
-  env->disp_subj = mutt_replacelist_apply(&SubjectRegexList, NULL, 0, env->subject);
-  return env->disp_subj;
-}
-
-/**
  * thread_is_new - Does the email thread contain any new emails?
  * @param e Email
- * @retval true If thread contains new mail
+ * @retval true Thread contains new mail
  */
 static bool thread_is_new(struct Email *e)
 {
@@ -389,7 +374,7 @@ static bool thread_is_new(struct Email *e)
 /**
  * thread_is_old - Does the email thread contain any unread emails?
  * @param e Email
- * @retval true If thread contains unread mail
+ * @retval true Thread contains unread mail
  */
 static bool thread_is_old(struct Email *e)
 {
@@ -397,7 +382,7 @@ static bool thread_is_old(struct Email *e)
 }
 
 /**
- * index_format_str - Format a string for the index list - Implements ::format_t
+ * index_format_str - Format a string for the index list - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
  * |:--------|:-----------------------------------------------------------------
@@ -448,6 +433,7 @@ static bool thread_is_old(struct Email *e)
  * | \%zs    | Message status flags
  * | \%zt    | Message tag flags
  * | \%Z     | Combined message flags
+ * | \%\@name\@ | Insert and evaluate format-string from the matching "$index-format-hook" command
  * | \%(fmt) | Date/time when the message was received
  * | \%[fmt] | Message date/time converted to the local time zone
  * | \%{fmt} | Message date/time converted to sender's time zone
@@ -461,7 +447,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
   char fmt[128], tmp[1024];
   char *p = NULL, *tags = NULL;
   bool optional = (flags & MUTT_FORMAT_OPTIONAL);
-  int threads = ((C_Sort & SORT_MASK) == SORT_THREADS);
+  const bool threads = mutt_using_threads();
   int is_index = (flags & MUTT_FORMAT_INDEX);
   size_t colorlen;
 
@@ -476,6 +462,15 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
   const struct Address *from = TAILQ_FIRST(&e->env->from);
   const struct Address *to = TAILQ_FIRST(&e->env->to);
   const struct Address *cc = TAILQ_FIRST(&e->env->cc);
+
+  const struct MbTable *c_crypt_chars =
+      cs_subset_mbtable(NeoMutt->sub, "crypt_chars");
+  const struct MbTable *c_flag_chars =
+      cs_subset_mbtable(NeoMutt->sub, "flag_chars");
+  const struct MbTable *c_to_chars =
+      cs_subset_mbtable(NeoMutt->sub, "to_chars");
+  const char *const c_date_format =
+      cs_subset_string(NeoMutt->sub, "date_format");
 
   buf[0] = '\0';
   switch (op)
@@ -518,26 +513,17 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
     case 'B':
     case 'K':
-      if (!first_mailing_list(buf, buflen, &e->env->to) &&
-          !first_mailing_list(buf, buflen, &e->env->cc))
-      {
-        buf[0] = '\0';
-      }
-      if (buf[0] != '\0')
+      if (first_mailing_list(buf, buflen, &e->env->to) ||
+          first_mailing_list(buf, buflen, &e->env->cc))
       {
         mutt_str_copy(tmp, buf, sizeof(tmp));
         mutt_format_s(buf, buflen, prec, tmp);
-        break;
       }
-      if (op == 'K')
+      else if (optional)
       {
-        if (optional)
-          optional = false;
-        /* break if 'K' returns nothing */
-        break;
+        optional = false;
       }
-      /* if 'B' returns nothing */
-      /* fallthrough */
+      break;
 
     case 'b':
       if (m)
@@ -690,7 +676,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
         p = buf;
 
-        cp = ((op == 'd') || (op == 'D')) ? (NONULL(C_DateFormat)) : src;
+        cp = ((op == 'd') || (op == 'D')) ? (NONULL(c_date_format)) : src;
         bool do_locales;
         if (*cp == '!')
         {
@@ -1005,7 +991,9 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       if (!optional)
       {
         make_from_addr(e->env, tmp, sizeof(tmp), true);
-        if (!C_SaveAddress && (p = strpbrk(tmp, "%@")))
+        const bool c_save_address =
+            cs_subset_bool(NeoMutt->sub, "save_address");
+        if (!c_save_address && (p = strpbrk(tmp, "%@")))
           *p = '\0';
         mutt_format_s(buf, buflen, prec, tmp);
       }
@@ -1044,11 +1032,10 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
     case 's':
     {
+      subjrx_apply_mods(e->env);
       char *subj = NULL;
       if (e->env->disp_subj)
         subj = e->env->disp_subj;
-      else if (!STAILQ_EMPTY(&SubjectRegexList))
-        subj = apply_subject_mods(e->env);
       else
         subj = e->env->subject;
       if (flags & MUTT_FORMAT_TREE && !e->collapsed)
@@ -1077,21 +1064,21 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
     {
       const char *wch = NULL;
       if (e->deleted)
-        wch = get_nth_wchar(C_FlagChars, FLAG_CHAR_DELETED);
+        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED);
       else if (e->attach_del)
-        wch = get_nth_wchar(C_FlagChars, FLAG_CHAR_DELETED_ATTACH);
+        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED_ATTACH);
       else if (e->tagged)
-        wch = get_nth_wchar(C_FlagChars, FLAG_CHAR_TAGGED);
+        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_TAGGED);
       else if (e->flagged)
-        wch = get_nth_wchar(C_FlagChars, FLAG_CHAR_IMPORTANT);
+        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_IMPORTANT);
       else if (e->replied)
-        wch = get_nth_wchar(C_FlagChars, FLAG_CHAR_REPLIED);
+        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_REPLIED);
       else if (e->read && (msg_in_pager != e->msgno))
-        wch = get_nth_wchar(C_FlagChars, FLAG_CHAR_SEMPTY);
+        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_SEMPTY);
       else if (e->old)
-        wch = get_nth_wchar(C_FlagChars, FLAG_CHAR_OLD);
+        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD);
       else
-        wch = get_nth_wchar(C_FlagChars, FLAG_CHAR_NEW);
+        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW);
 
       snprintf(tmp, sizeof(tmp), "%s", wch);
       colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_FLAGS);
@@ -1118,8 +1105,8 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       int i;
       snprintf(fmt, sizeof(fmt), "%%%ss", prec);
       snprintf(buf, buflen, fmt,
-               (C_ToChars && ((i = user_is_recipient(e))) < C_ToChars->len) ?
-                   C_ToChars->chars[i] :
+               (c_to_chars && ((i = user_is_recipient(e))) < c_to_chars->len) ?
+                   c_to_chars->chars[i] :
                    " ");
       break;
     }
@@ -1177,14 +1164,19 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
     case 'X':
     {
-      int count = mutt_count_body_parts(m, e);
+      struct Message *msg = mx_msg_open(m, e->msgno);
+      if (msg)
+      {
+        int count = mutt_count_body_parts(m, e, msg->fp);
+        mx_msg_close(m, &msg);
 
-      /* The recursion allows messages without depth to return 0. */
-      if (optional)
-        optional = (count != 0);
+        /* The recursion allows messages without depth to return 0. */
+        if (optional)
+          optional = (count != 0);
 
-      snprintf(fmt, sizeof(fmt), "%%%sd", prec);
-      snprintf(buf, buflen, fmt, count);
+        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
+        snprintf(buf, buflen, fmt, count);
+      }
       break;
     }
 
@@ -1237,26 +1229,26 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       {
         const char *ch = NULL;
         if (e->deleted)
-          ch = get_nth_wchar(C_FlagChars, FLAG_CHAR_DELETED);
+          ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED);
         else if (e->attach_del)
-          ch = get_nth_wchar(C_FlagChars, FLAG_CHAR_DELETED_ATTACH);
+          ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED_ATTACH);
         else if (threads && thread_is_new(e))
-          ch = get_nth_wchar(C_FlagChars, FLAG_CHAR_NEW_THREAD);
+          ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW_THREAD);
         else if (threads && thread_is_old(e))
-          ch = get_nth_wchar(C_FlagChars, FLAG_CHAR_OLD_THREAD);
+          ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD_THREAD);
         else if (e->read && (msg_in_pager != e->msgno))
         {
           if (e->replied)
-            ch = get_nth_wchar(C_FlagChars, FLAG_CHAR_REPLIED);
+            ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_REPLIED);
           else
-            ch = get_nth_wchar(C_FlagChars, FLAG_CHAR_ZEMPTY);
+            ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_ZEMPTY);
         }
         else
         {
           if (e->old)
-            ch = get_nth_wchar(C_FlagChars, FLAG_CHAR_OLD);
+            ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD);
           else
-            ch = get_nth_wchar(C_FlagChars, FLAG_CHAR_NEW);
+            ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW);
         }
 
         snprintf(tmp, sizeof(tmp), "%s", ch);
@@ -1266,17 +1258,17 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       {
         const char *ch = "";
         if ((WithCrypto != 0) && (e->security & SEC_GOODSIGN))
-          ch = get_nth_wchar(C_CryptChars, FLAG_CHAR_CRYPT_GOOD_SIGN);
+          ch = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_GOOD_SIGN);
         else if ((WithCrypto != 0) && (e->security & SEC_ENCRYPT))
-          ch = get_nth_wchar(C_CryptChars, FLAG_CHAR_CRYPT_ENCRYPTED);
+          ch = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_ENCRYPTED);
         else if ((WithCrypto != 0) && (e->security & SEC_SIGN))
-          ch = get_nth_wchar(C_CryptChars, FLAG_CHAR_CRYPT_SIGNED);
+          ch = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_SIGNED);
         else if (((WithCrypto & APPLICATION_PGP) != 0) && ((e->security & PGP_KEY) == PGP_KEY))
         {
-          ch = get_nth_wchar(C_CryptChars, FLAG_CHAR_CRYPT_CONTAINS_KEY);
+          ch = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_CONTAINS_KEY);
         }
         else
-          ch = get_nth_wchar(C_CryptChars, FLAG_CHAR_CRYPT_NO_CRYPTO);
+          ch = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_NO_CRYPTO);
 
         snprintf(tmp, sizeof(tmp), "%s", ch);
         src++;
@@ -1285,11 +1277,11 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       {
         const char *ch = "";
         if (e->tagged)
-          ch = get_nth_wchar(C_FlagChars, FLAG_CHAR_TAGGED);
+          ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_TAGGED);
         else if (e->flagged)
-          ch = get_nth_wchar(C_FlagChars, FLAG_CHAR_IMPORTANT);
+          ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_IMPORTANT);
         else
-          ch = get_nth_wchar(C_ToChars, user_is_recipient(e));
+          ch = get_nth_wchar(c_to_chars, user_is_recipient(e));
 
         snprintf(tmp, sizeof(tmp), "%s", ch);
         src++;
@@ -1307,49 +1299,49 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       /* New/Old for threads; replied; New/Old for messages */
       const char *first = NULL;
       if (threads && thread_is_new(e))
-        first = get_nth_wchar(C_FlagChars, FLAG_CHAR_NEW_THREAD);
+        first = get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW_THREAD);
       else if (threads && thread_is_old(e))
-        first = get_nth_wchar(C_FlagChars, FLAG_CHAR_OLD_THREAD);
+        first = get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD_THREAD);
       else if (e->read && (msg_in_pager != e->msgno))
       {
         if (e->replied)
-          first = get_nth_wchar(C_FlagChars, FLAG_CHAR_REPLIED);
+          first = get_nth_wchar(c_flag_chars, FLAG_CHAR_REPLIED);
         else
-          first = get_nth_wchar(C_FlagChars, FLAG_CHAR_ZEMPTY);
+          first = get_nth_wchar(c_flag_chars, FLAG_CHAR_ZEMPTY);
       }
       else
       {
         if (e->old)
-          first = get_nth_wchar(C_FlagChars, FLAG_CHAR_OLD);
+          first = get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD);
         else
-          first = get_nth_wchar(C_FlagChars, FLAG_CHAR_NEW);
+          first = get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW);
       }
 
       /* Marked for deletion; deleted attachments; crypto */
       const char *second = "";
       if (e->deleted)
-        second = get_nth_wchar(C_FlagChars, FLAG_CHAR_DELETED);
+        second = get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED);
       else if (e->attach_del)
-        second = get_nth_wchar(C_FlagChars, FLAG_CHAR_DELETED_ATTACH);
+        second = get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED_ATTACH);
       else if ((WithCrypto != 0) && (e->security & SEC_GOODSIGN))
-        second = get_nth_wchar(C_CryptChars, FLAG_CHAR_CRYPT_GOOD_SIGN);
+        second = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_GOOD_SIGN);
       else if ((WithCrypto != 0) && (e->security & SEC_ENCRYPT))
-        second = get_nth_wchar(C_CryptChars, FLAG_CHAR_CRYPT_ENCRYPTED);
+        second = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_ENCRYPTED);
       else if ((WithCrypto != 0) && (e->security & SEC_SIGN))
-        second = get_nth_wchar(C_CryptChars, FLAG_CHAR_CRYPT_SIGNED);
+        second = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_SIGNED);
       else if (((WithCrypto & APPLICATION_PGP) != 0) && (e->security & PGP_KEY))
-        second = get_nth_wchar(C_CryptChars, FLAG_CHAR_CRYPT_CONTAINS_KEY);
+        second = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_CONTAINS_KEY);
       else
-        second = get_nth_wchar(C_CryptChars, FLAG_CHAR_CRYPT_NO_CRYPTO);
+        second = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_NO_CRYPTO);
 
       /* Tagged, flagged and recipient flag */
       const char *third = "";
       if (e->tagged)
-        third = get_nth_wchar(C_FlagChars, FLAG_CHAR_TAGGED);
+        third = get_nth_wchar(c_flag_chars, FLAG_CHAR_TAGGED);
       else if (e->flagged)
-        third = get_nth_wchar(C_FlagChars, FLAG_CHAR_IMPORTANT);
+        third = get_nth_wchar(c_flag_chars, FLAG_CHAR_IMPORTANT);
       else
-        third = get_nth_wchar(C_ToChars, user_is_recipient(e));
+        third = get_nth_wchar(c_to_chars, user_is_recipient(e));
 
       snprintf(tmp, sizeof(tmp), "%s%s%s", first, second, third);
     }
@@ -1361,6 +1353,9 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
     case '@':
     {
+      if (!m)
+        break;
+
       const char *end = src;
       static unsigned char recurse = 0;
 
@@ -1389,54 +1384,39 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
   if (optional)
   {
-    mutt_expando_format(buf, buflen, col, cols, if_str, index_format_str,
-                        (intptr_t) hfi, flags);
+    mutt_expando_format(buf, buflen, col, cols, if_str, index_format_str, data, flags);
   }
   else if (flags & MUTT_FORMAT_OPTIONAL)
   {
-    mutt_expando_format(buf, buflen, col, cols, else_str, index_format_str,
-                        (intptr_t) hfi, flags);
+    mutt_expando_format(buf, buflen, col, cols, else_str, index_format_str, data, flags);
   }
 
+  /* We return the format string, unchanged */
   return src;
 }
 
 /**
- * mutt_make_string_flags - Create formatted strings using mailbox expandos
- * @param buf    Buffer for the result
- * @param buflen Buffer length
- * @param cols   Number of screen columns (OPTIONAL)
- * @param s      printf-line format string
- * @param m      Mailbox
- * @param inpgr  Message shown in the pager
- * @param e      Email
- * @param flags  Flags, see #MuttFormatFlags
+ * mutt_make_string - Create formatted strings using mailbox expandos
+ * @param buf      Buffer for the result
+ * @param buflen   Buffer length
+ * @param cols     Number of screen columns (OPTIONAL)
+ * @param s        printf-line format string
+ * @param m        Mailbox
+ * @param inpgr    Message shown in the pager
+ * @param e        Email
+ * @param flags    Flags, see #MuttFormatFlags
+ * @param progress Pager progress string
  */
-void mutt_make_string_flags(char *buf, size_t buflen, int cols, const char *s,
-                            struct Mailbox *m, int inpgr, struct Email *e,
-                            MuttFormatFlags flags)
+void mutt_make_string(char *buf, size_t buflen, int cols, const char *s,
+                      struct Mailbox *m, int inpgr, struct Email *e,
+                      MuttFormatFlags flags, const char *progress)
 {
-  struct HdrFormatInfo hfi;
+  struct HdrFormatInfo hfi = { 0 };
 
   hfi.email = e;
   hfi.mailbox = m;
   hfi.msg_in_pager = inpgr;
-  hfi.pager_progress = 0;
+  hfi.pager_progress = progress;
 
   mutt_expando_format(buf, buflen, 0, cols, s, index_format_str, (intptr_t) &hfi, flags);
-}
-
-/**
- * mutt_make_string_info - Create pager status bar string
- * @param buf    Buffer for the result
- * @param buflen Buffer length
- * @param cols   Number of screen columns
- * @param s      printf-line format string
- * @param hfi    Mailbox data to pass to the formatter
- * @param flags  Flags, see #MuttFormatFlags
- */
-void mutt_make_string_info(char *buf, size_t buflen, int cols, const char *s,
-                           struct HdrFormatInfo *hfi, MuttFormatFlags flags)
-{
-  mutt_expando_format(buf, buflen, 0, cols, s, index_format_str, (intptr_t) hfi, flags);
 }

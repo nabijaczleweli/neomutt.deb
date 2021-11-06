@@ -28,6 +28,7 @@
  * - Backed by `unsigned char`
  * - Validator is passed `unsigned char`
  * - Valid user entry: #QuadValues
+ * - Implementation: #CstQuad
  */
 
 #include "config.h"
@@ -50,7 +51,7 @@ const char *QuadValues[] = {
 };
 
 /**
- * quad_string_set - Set a Quad-option by string - Implements ConfigSetType::string_set()
+ * quad_string_set - Set a Quad-option by string - Implements ConfigSetType::string_set() - @ingroup cfg_type_string_set
  */
 static int quad_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                            const char *value, struct Buffer *err)
@@ -98,7 +99,7 @@ static int quad_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
 }
 
 /**
- * quad_string_get - Get a Quad-option as a string - Implements ConfigSetType::string_get()
+ * quad_string_get - Get a Quad-option as a string - Implements ConfigSetType::string_get() - @ingroup cfg_type_string_get
  */
 static int quad_string_get(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, struct Buffer *result)
@@ -112,8 +113,8 @@ static int quad_string_get(const struct ConfigSet *cs, void *var,
 
   if (value >= (mutt_array_size(QuadValues) - 1))
   {
-    mutt_debug(LL_DEBUG1, "Variable has an invalid value: %d\n", value);
-    return CSR_ERR_INVALID | CSR_INV_TYPE;
+    mutt_debug(LL_DEBUG1, "Variable has an invalid value: %d\n", value); /* LCOV_EXCL_LINE */
+    return CSR_ERR_INVALID | CSR_INV_TYPE; /* LCOV_EXCL_LINE */
   }
 
   mutt_buffer_addstr(result, QuadValues[value]);
@@ -121,7 +122,7 @@ static int quad_string_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * quad_native_set - Set a Quad-option config item by int - Implements ConfigSetType::native_set()
+ * quad_native_set - Set a Quad-option config item by int - Implements ConfigSetType::native_set() - @ingroup cfg_type_native_set
  */
 static int quad_native_set(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, intptr_t value, struct Buffer *err)
@@ -148,7 +149,7 @@ static int quad_native_set(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * quad_native_get - Get an int object from a Quad-option config item - Implements ConfigSetType::native_get()
+ * quad_native_get - Get an int object from a Quad-option config item - Implements ConfigSetType::native_get() - @ingroup cfg_type_native_get
  */
 static intptr_t quad_native_get(const struct ConfigSet *cs, void *var,
                                 const struct ConfigDef *cdef, struct Buffer *err)
@@ -157,7 +158,7 @@ static intptr_t quad_native_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * quad_reset - Reset a Quad-option to its initial value - Implements ConfigSetType::reset()
+ * quad_reset - Reset a Quad-option to its initial value - Implements ConfigSetType::reset() - @ingroup cfg_type_reset
  */
 static int quad_reset(const struct ConfigSet *cs, void *var,
                       const struct ConfigDef *cdef, struct Buffer *err)
@@ -238,9 +239,9 @@ int quad_str_toggle(struct ConfigSubset *sub, const char *name, struct Buffer *e
 }
 
 /**
- * cst_quad - Config type representing a quad-option
+ * CstQuad - Config type representing a quad-option
  */
-const struct ConfigSetType cst_quad = {
+const struct ConfigSetType CstQuad = {
   DT_QUAD,
   "quad",
   quad_string_set,

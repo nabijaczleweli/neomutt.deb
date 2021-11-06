@@ -23,17 +23,34 @@
  */
 
 /**
- * @page core_mailbox Representation of a Mailbox
+ * @page core_mailbox Mailbox object
  *
  * Representation of a Mailbox
  */
 
 #include "config.h"
+#include <assert.h>
 #include <sys/stat.h>
 #include "config/lib.h"
 #include "email/lib.h"
 #include "mailbox.h"
 #include "neomutt.h"
+
+/// Lookups for Mailbox types
+static const struct Mapping MailboxTypes[] = {
+  // clang-format off
+  { "compressed", MUTT_COMPRESSED },
+  { "imap",       MUTT_IMAP },
+  { "maildir",    MUTT_MAILDIR },
+  { "mbox",       MUTT_MBOX },
+  { "mh",         MUTT_MH },
+  { "mmdf",       MUTT_MMDF },
+  { "nntp",       MUTT_NNTP },
+  { "notmuch",    MUTT_NOTMUCH },
+  { "pop",        MUTT_POP },
+  { NULL, 0 },
+  // clang-format on
+};
 
 /**
  * mailbox_gen - Get the next generation number
@@ -74,13 +91,19 @@ void mailbox_free(struct Mailbox **ptr)
 
   struct Mailbox *m = *ptr;
 
-  mailbox_changed(m, NT_MAILBOX_CLOSED);
+  mutt_debug(LL_NOTIFY, "NT_MAILBOX_DELETE: %s %p\n", mailbox_get_type_name(m->type), m);
+  struct EventMailbox ev_m = { m };
+  notify_send(m->notify, NT_MAILBOX, NT_MAILBOX_DELETE, &ev_m);
 
-  if (m->mdata && m->mdata_free)
-    m->mdata_free(&m->mdata);
+  mutt_debug(LL_NOTIFY, "NT_EMAIL_DELETE_ALL\n");
+  struct EventEmail ev_e = { 0, NULL };
+  notify_send(m->notify, NT_EMAIL, NT_EMAIL_DELETE_ALL, &ev_e);
 
   for (size_t i = 0; i < m->email_max; i++)
     email_free(&m->emails[i]);
+
+  if (m->mdata_free && m->mdata)
+    m->mdata_free(&m->mdata);
 
   mutt_buffer_dealloc(&m->pathbuf);
   cs_subset_free(&m->sub);
@@ -89,8 +112,12 @@ void mailbox_free(struct Mailbox **ptr)
   FREE(&m->emails);
   FREE(&m->v2r);
   notify_free(&m->notify);
+  mailbox_gc_run();
 
-  FREE(ptr);
+  /* The NT_MAILBOX_DELETE notification might already have caused *ptr to be NULL,
+   * so call free() on the m pointer */
+  *ptr = NULL;
+  FREE(&m);
 }
 
 /**
@@ -103,10 +130,10 @@ struct Mailbox *mailbox_find(const char *path)
   if (!path)
     return NULL;
 
-  struct stat sb;
-  struct stat tmp_sb;
+  struct stat st = { 0 };
+  struct stat st_tmp = { 0 };
 
-  if (stat(path, &sb) != 0)
+  if (stat(path, &st) != 0)
     return NULL;
 
   struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
@@ -115,8 +142,8 @@ struct Mailbox *mailbox_find(const char *path)
   struct Mailbox *m = NULL;
   STAILQ_FOREACH(np, &ml, entries)
   {
-    if ((stat(mailbox_path(np->mailbox), &tmp_sb) == 0) &&
-        (sb.st_dev == tmp_sb.st_dev) && (sb.st_ino == tmp_sb.st_ino))
+    if ((stat(mailbox_path(np->mailbox), &st_tmp) == 0) &&
+        (st.st_dev == st_tmp.st_dev) && (st.st_ino == st_tmp.st_ino))
     {
       m = np->mailbox;
       break;
@@ -165,13 +192,13 @@ struct Mailbox *mailbox_find_name(const char *name)
  */
 void mailbox_update(struct Mailbox *m)
 {
-  struct stat sb;
+  struct stat st = { 0 };
 
   if (!m)
     return;
 
-  if (stat(mailbox_path(m), &sb) == 0)
-    m->size = (off_t) sb.st_size;
+  if (stat(mailbox_path(m), &st) == 0)
+    m->size = (off_t) st.st_size;
   else
     m->size = 0;
 }
@@ -186,6 +213,7 @@ void mailbox_changed(struct Mailbox *m, enum NotifyMailbox action)
   if (!m)
     return;
 
+  mutt_debug(LL_NOTIFY, "NT_MAILBOX_CHANGE: %s %p\n", mailbox_get_type_name(m->type), m);
   struct EventMailbox ev_m = { m };
   notify_send(m->notify, NT_MAILBOX, action, &ev_m);
 }
@@ -224,4 +252,53 @@ bool mailbox_set_subset(struct Mailbox *m, struct ConfigSubset *sub)
   m->sub = cs_subset_new(m->name, sub, m->notify);
   m->sub->scope = SET_SCOPE_MAILBOX;
   return true;
+}
+
+/**
+ * struct EmailGarbageCollector - Email garbage collection
+ */
+static struct EmailGarbageCollector
+{
+  struct Email *arr[10]; ///< Array of Emails to be deleted
+  size_t idx;            ///< Current position
+} gc = { 0 };
+
+/**
+ * mailbox_gc_add - Add an Email to the garbage-collection set
+ * @param e Email
+ * @pre e != NULL
+ */
+void mailbox_gc_add(struct Email *e)
+{
+  assert(e);
+  if (gc.idx == mutt_array_size(gc.arr))
+  {
+    mailbox_gc_run();
+  }
+  gc.arr[gc.idx++] = e;
+}
+
+/**
+ * mailbox_gc_run - Run the garbage-collection
+ */
+void mailbox_gc_run(void)
+{
+  for (size_t i = 0; i < gc.idx; i++)
+  {
+    email_free(&gc.arr[i]);
+  }
+  gc.idx = 0;
+}
+
+/**
+ * mailbox_get_type_name - Get the type of a Mailbox
+ * @param type Mailbox type, e.g. #MUTT_IMAP
+ * @retval ptr  String describing Mailbox type
+ */
+const char *mailbox_get_type_name(enum MailboxType type)
+{
+  const char *name = mutt_map_get_name(type, MailboxTypes);
+  if (name)
+    return name;
+  return "UNKNOWN";
 }

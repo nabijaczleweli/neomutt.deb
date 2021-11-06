@@ -24,7 +24,7 @@
  */
 
 /**
- * @page conn_raw Low-level socket handling
+ * @page conn_raw Low-level socket code
  *
  * Low-level socket handling
  */
@@ -45,6 +45,8 @@
 #include <unistd.h>
 #include "private.h"
 #include "mutt/lib.h"
+#include "config/lib.h"
+#include "core/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
 #include "mutt_globals.h"
@@ -57,7 +59,7 @@
 #endif
 
 /**
- * socket_connect - set up to connect to a socket fd
+ * socket_connect - Set up to connect to a socket fd
  * @param fd File descriptor to connect with
  * @param sa Address info
  * @retval  0 Success
@@ -82,8 +84,10 @@ static int socket_connect(int fd, struct sockaddr *sa)
     return -1;
   }
 
-  if (C_ConnectTimeout > 0)
-    alarm(C_ConnectTimeout);
+  const short c_connect_timeout =
+      cs_subset_number(NeoMutt->sub, "connect_timeout");
+  if (c_connect_timeout > 0)
+    alarm(c_connect_timeout);
 
   mutt_sig_allow_interrupt(true);
 
@@ -99,10 +103,10 @@ static int socket_connect(int fd, struct sockaddr *sa)
   {
     save_errno = errno;
     mutt_debug(LL_DEBUG2, "Connection failed. errno: %d\n", errno);
-    SigInt = 0; /* reset in case we caught SIGINTR while in connect() */
+    SigInt = false; /* reset in case we caught SIGINTR while in connect() */
   }
 
-  if (C_ConnectTimeout > 0)
+  if (c_connect_timeout > 0)
     alarm(0);
   mutt_sig_allow_interrupt(false);
   sigprocmask(SIG_UNBLOCK, &set, NULL);
@@ -111,7 +115,7 @@ static int socket_connect(int fd, struct sockaddr *sa)
 }
 
 /**
- * raw_socket_open - Open a socket - Implements Connection::open()
+ * raw_socket_open - Open a socket - Implements Connection::open() - @ingroup connection_open
  */
 int raw_socket_open(struct Connection *conn)
 {
@@ -131,7 +135,8 @@ int raw_socket_open(struct Connection *conn)
   /* we accept v4 or v6 STREAM sockets */
   memset(&hints, 0, sizeof(hints));
 
-  if (C_UseIpv6)
+  const bool c_use_ipv6 = cs_subset_bool(NeoMutt->sub, "use_ipv6");
+  if (c_use_ipv6)
     hints.ai_family = AF_UNSPEC;
   else
     hints.ai_family = AF_INET;
@@ -177,7 +182,7 @@ int raw_socket_open(struct Connection *conn)
       rc = socket_connect(fd, cur->ai_addr);
       if (rc == 0)
       {
-        fcntl(fd, F_SETFD, FD_CLOEXEC);
+        (void) fcntl(fd, F_SETFD, FD_CLOEXEC);
         conn->fd = fd;
         break;
       }
@@ -257,7 +262,7 @@ int raw_socket_open(struct Connection *conn)
 }
 
 /**
- * raw_socket_read - Read data from a socket - Implements Connection::read()
+ * raw_socket_read - Read data from a socket - Implements Connection::read() - @ingroup connection_read
  */
 int raw_socket_read(struct Connection *conn, char *buf, size_t count)
 {
@@ -272,14 +277,14 @@ int raw_socket_read(struct Connection *conn, char *buf, size_t count)
   if (rc < 0)
   {
     mutt_error(_("Error talking to %s (%s)"), conn->account.host, strerror(errno));
-    SigInt = 0;
+    SigInt = false;
   }
   mutt_sig_allow_interrupt(false);
 
   if (SigInt)
   {
     mutt_error(_("Connection to %s has been aborted"), conn->account.host);
-    SigInt = 0;
+    SigInt = false;
     rc = -1;
   }
 
@@ -287,7 +292,7 @@ int raw_socket_read(struct Connection *conn, char *buf, size_t count)
 }
 
 /**
- * raw_socket_write - Write data to a socket - Implements Connection::write()
+ * raw_socket_write - Write data to a socket - Implements Connection::write() - @ingroup connection_write
  */
 int raw_socket_write(struct Connection *conn, const char *buf, size_t count)
 {
@@ -310,14 +315,14 @@ int raw_socket_write(struct Connection *conn, const char *buf, size_t count)
     }
 
     sent += rc;
-  } while ((sent < count) && (SigInt == 0));
+  } while ((sent < count) && !SigInt);
 
   mutt_sig_allow_interrupt(false);
   return sent;
 }
 
 /**
- * raw_socket_poll - Checks whether reads would block - Implements Connection::poll()
+ * raw_socket_poll - Checks whether reads would block - Implements Connection::poll() - @ingroup connection_poll
  */
 int raw_socket_poll(struct Connection *conn, time_t wait_secs)
 {
@@ -355,7 +360,7 @@ int raw_socket_poll(struct Connection *conn, time_t wait_secs)
 }
 
 /**
- * raw_socket_close - Close a socket - Implements Connection::close()
+ * raw_socket_close - Close a socket - Implements Connection::close() - @ingroup connection_close
  */
 int raw_socket_close(struct Connection *conn)
 {

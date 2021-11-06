@@ -23,12 +23,13 @@
  */
 
 /**
- * @page lib_imap IMAP: Network Mailbox
+ * @page lib_imap Imap Mailbox
  *
  * IMAP network mailbox
  *
  * | File              | Description              |
  * | :---------------- | :----------------------- |
+ * | imap/adata.c      | @subpage imap_adata      |
  * | imap/auth.c       | @subpage imap_auth       |
  * | imap/auth_anon.c  | @subpage imap_auth_anon  |
  * | imap/auth_cram.c  | @subpage imap_auth_cram  |
@@ -40,7 +41,9 @@
  * | imap/browse.c     | @subpage imap_browse     |
  * | imap/command.c    | @subpage imap_command    |
  * | imap/config.c     | @subpage imap_config     |
+ * | imap/edata.c      | @subpage imap_edata      |
  * | imap/imap.c       | @subpage imap_imap       |
+ * | imap/mdata.c      | @subpage imap_mdata      |
  * | imap/message.c    | @subpage imap_message    |
  * | imap/msn.c        | @subpage imap_msn        |
  * | imap/search.c     | @subpage imap_search     |
@@ -56,21 +59,15 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include "core/lib.h"
-#include "mx.h"
+#include "commands.h"
 
 struct BrowserState;
 struct Buffer;
-struct ConfigSet;
 struct ConnAccount;
+struct Email;
 struct EmailList;
 struct PatternList;
 struct stat;
-
-// These Config Variables are used outside of libimap
-extern short C_ImapKeepalive;
-extern bool  C_ImapListSubscribed;
-extern bool  C_ImapPassive;
-extern bool  C_ImapPeek;
 
 /* imap.c */
 void imap_init(void);
@@ -82,7 +79,7 @@ int imap_path_status(const char *path, bool queue);
 int imap_mailbox_status(struct Mailbox *m, bool queue);
 int imap_subscribe(char *path, bool subscribe);
 int imap_complete(char *buf, size_t buflen, const char *path);
-int imap_fast_trash(struct Mailbox *m, char *dest);
+int imap_fast_trash(struct Mailbox *m, const char *dest);
 enum MailboxType imap_path_probe(const char *path, const struct stat *st);
 int imap_path_canon(char *buf, size_t buflen);
 void imap_notify_delete_email(struct Mailbox *m, struct Email *e);
@@ -94,11 +91,8 @@ int imap_browse(const char *path, struct BrowserState *state);
 int imap_mailbox_create(const char *folder);
 int imap_mailbox_rename(const char *path);
 
-/* config.c */
-bool config_init_imap(struct ConfigSet *cs);
-
 /* message.c */
-int imap_copy_messages(struct Mailbox *m, struct EmailList *el, const char *dest, bool delete_original);
+int imap_copy_messages(struct Mailbox *m, struct EmailList *el, const char *dest, enum MessageSaveOpt save_opt);
 
 /* socket.c */
 void imap_logout_all(void);

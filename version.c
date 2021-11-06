@@ -29,13 +29,14 @@
  */
 
 #include "config.h"
+#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/utsname.h>
 #include <unistd.h>
 #include "mutt/lib.h"
-#include "gui/lib.h"
+#include "gui/lib.h" // IWYU pragma: keep
 #include "version.h"
 #include "compress/lib.h"
 #ifdef HAVE_LIBIDN
@@ -120,8 +121,8 @@ static const char *Notice =
  */
 struct CompileOptions
 {
-  const char *name;
-  int enabled; ///< 0 Disabled, 1 Enabled, 2 Devel only
+  const char *name; ///< Option name
+  int enabled;      ///< 0 Disabled, 1 Enabled, 2 Devel only
 };
 
 /* These are sorted by the display string */
@@ -166,24 +167,6 @@ static struct CompileOptions comp_opts[] = {
 #else
   { "autocrypt", 0 },
 #endif
-#ifdef HAVE_LIBUNWIND
-  { "backtrace", 2 },
-#endif
-#ifdef HAVE_BKGDSET
-  { "bkgdset", 1 },
-#else
-  { "bkgdset", 0 },
-#endif
-#ifdef HAVE_COLOR
-  { "color", 1 },
-#else
-  { "color", 0 },
-#endif
-#ifdef HAVE_CURS_SET
-  { "curs_set", 1 },
-#else
-  { "curs_set", 0 },
-#endif
 #ifdef USE_FCNTL
   { "fcntl", 1 },
 #else
@@ -218,9 +201,6 @@ static struct CompileOptions comp_opts[] = {
   { "gpgme", 1 },
 #else
   { "gpgme", 0 },
-#endif
-#ifdef USE_DEBUG_GRAPHVIZ
-  { "graphviz", 2 },
 #endif
 #ifdef USE_GSS
   { "gss", 1 },
@@ -257,11 +237,6 @@ static struct CompileOptions comp_opts[] = {
 #else
   { "lua", 0 },
 #endif
-#ifdef HAVE_META
-  { "meta", 1 },
-#else
-  { "meta", 0 },
-#endif
 #ifdef MIXMASTER
   { "mixmaster", 1 },
 #else
@@ -272,9 +247,6 @@ static struct CompileOptions comp_opts[] = {
 #else
   { "nls", 0 },
 #endif
-#ifdef USE_DEBUG_NOTIFY
-  { "notify", 2 },
-#endif
 #ifdef USE_NOTMUCH
   { "notmuch", 1 },
 #else
@@ -284,9 +256,6 @@ static struct CompileOptions comp_opts[] = {
   { "openssl", 1 },
 #else
   { "openssl", 0 },
-#endif
-#ifdef USE_DEBUG_PARSE_TEST
-  { "parse-test", 2 },
 #endif
 #ifdef HAVE_PCRE2
   { "pcre2", 1 },
@@ -314,20 +283,29 @@ static struct CompileOptions comp_opts[] = {
 #else
   { "sqlite", 0 },
 #endif
-#ifdef HAVE_START_COLOR
-  { "start_color", 1 },
-#else
-  { "start_color", 0 },
-#endif
 #ifdef SUN_ATTACHMENT
   { "sun_attachment", 1 },
 #else
   { "sun_attachment", 0 },
 #endif
-#ifdef HAVE_TYPEAHEAD
-  { "typeahead", 1 },
-#else
-  { "typeahead", 0 },
+  { NULL, 0 },
+};
+
+static struct CompileOptions debug_opts[] = {
+#ifdef USE_ASAN
+  { "asan", 2 },
+#endif
+#ifdef HAVE_LIBUNWIND
+  { "backtrace", 2 },
+#endif
+#ifdef USE_DEBUG_GRAPHVIZ
+  { "graphviz", 2 },
+#endif
+#ifdef USE_DEBUG_NOTIFY
+  { "notify", 2 },
+#endif
+#ifdef USE_DEBUG_PARSE_TEST
+  { "parse-test", 2 },
 #endif
 #ifdef USE_DEBUG_WINDOW
   { "window", 2 },
@@ -383,9 +361,9 @@ static void print_compile_options(struct CompileOptions *co, FILE *fp)
         break;
       case 2: // Devel only
         if (tty)
-          fmt = "\033[1;36m!%s\033[0m "; // Escape, cyan
+          fmt = "\033[1;36m%s\033[0m "; // Escape, cyan
         else
-          fmt = "!%s ";
+          fmt = "%s ";
         break;
     }
     fprintf(fp, fmt, co[i].name);
@@ -416,15 +394,16 @@ static char *rstrip_in_place(char *s)
 
 /**
  * print_version - Print system and compile info to a file
- * @param fp - file to print to
+ * @param fp File to print to
+ * @retval true Text displayed
  *
  * Print information about the current system NeoMutt is running on.
  * Also print a list of all the compile-time information.
  */
-void print_version(FILE *fp)
+bool print_version(FILE *fp)
 {
   if (!fp)
-    return;
+    return false;
 
   struct utsname uts;
   bool tty = isatty(fileno(fp));
@@ -446,12 +425,8 @@ void print_version(FILE *fp)
 
   fprintf(fp, " (%s)", uts.machine);
 
-#ifdef NCURSES_VERSION
   fprintf(fp, "\nncurses: %s (compiled with %s.%d)", curses_version(),
           NCURSES_VERSION, NCURSES_VERSION_PATCH);
-#elif defined(USE_SLANG_CURSES)
-  fprintf(fp, "\nslang: %s", SLANG_VERSION_STRING);
-#endif
 
 #ifdef _LIBICONV_VERSION
   fprintf(fp, "\nlibiconv: %d.%d", _LIBICONV_VERSION >> 8, _LIBICONV_VERSION & 0xff);
@@ -514,6 +489,13 @@ void print_version(FILE *fp)
   fprintf(fp, "\n%s\n", _("Compile options:"));
   print_compile_options(comp_opts, fp);
 
+  if (debug_opts[0].name)
+  {
+    fprintf(fp, "\n%s\n", _("Debug options:"));
+    print_compile_options(debug_opts, fp);
+  }
+
+  fprintf(fp, "\n");
 #ifdef DOMAIN
   fprintf(fp, "DOMAIN=\"%s\"\n", DOMAIN);
 #endif
@@ -530,21 +512,28 @@ void print_version(FILE *fp)
 
   fprintf(fp, "\n");
   fputs(_(ReachingUs), fp);
+
+  fflush(fp);
+  return !ferror(fp);
 }
 
 /**
  * print_copyright - Print copyright message
+ * @retval true Text displayed
  *
  * Print the authors' copyright messages, the GPL license and some contact
  * information for the NeoMutt project.
  */
-void print_copyright(void)
+bool print_copyright(void)
 {
   puts(mutt_make_version());
   puts(Copyright);
   puts(_(Thanks));
   puts(_(License));
   puts(_(ReachingUs));
+
+  fflush(stdout);
+  return !ferror(stdout);
 }
 
 /**

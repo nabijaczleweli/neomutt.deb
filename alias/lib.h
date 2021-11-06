@@ -21,9 +21,9 @@
  */
 
 /**
- * @page lib_alias ALIAS: Email Aliases
+ * @page lib_alias Alias
  *
- * Email Aliases
+ * Email Aliases (Address Book)
  *
  * | File                | Description                |
  * | :------------------ | :------------------------- |
@@ -44,15 +44,13 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "mutt_commands.h"
-#include "sort.h"
-#include "gui.h"
+#include "core/command.h"
 
 struct Address;
 struct AddressList;
 struct AliasViewArray;
 struct Buffer;
-struct ConfigSet;
+struct ConfigSubset;
 struct Envelope;
 
 void alias_init    (void);
@@ -75,8 +73,6 @@ int  query_complete(char *buf, size_t buflen, struct ConfigSubset *sub);
 void query_index   (struct ConfigSubset *sub);
 
 struct Address *alias_reverse_lookup(const struct Address *addr);
-
-bool config_init_alias(struct ConfigSet *cs);
 
 void alias_array_sort(struct AliasViewArray *ava, const struct ConfigSubset *sub);
 

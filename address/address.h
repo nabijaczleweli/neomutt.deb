@@ -26,6 +26,7 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include "mutt/lib.h"
 
 /**
@@ -43,7 +44,7 @@ struct Address
 TAILQ_HEAD(AddressList, Address);
 
 /**
- * enum AddressError - possible values for AddressError
+ * enum AddressError - Possible values for AddressError
  */
 enum AddressError
 {
@@ -62,9 +63,12 @@ extern const char AddressSpecials[];
 #define address_error(num) AddressErrors[num]
 
 /**
- * typedef addr_predicate_t - Test an Address for some condition
+ * @defgroup addr_predicate_api Address Predicate API
+ *
+ * Prototype for an Address Test function
+ *
  * @param a Address to test
- * @retval bool True if Address matches the test
+ * @retval true Address matches the test
  */
 typedef bool (*addr_predicate_t)(const struct Address *a);
 

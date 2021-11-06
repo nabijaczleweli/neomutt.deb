@@ -25,7 +25,10 @@
 
 #include "config.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include "mutt/lib.h"
+
+struct ConfigSubset;
 
 /**
  * enum MuttWindowOrientation - Which way does the Window expand?
@@ -91,24 +94,28 @@ enum WindowType
   // Common Windows
   WT_CUSTOM,          ///< Window with a custom drawing function
   WT_HELP_BAR,        ///< Help Bar containing list of useful key bindings
-  WT_INDEX,           ///< An Index Window containing a selection list
-  WT_INDEX_BAR,       ///< Index Bar containing status info about the Index
+  WT_INDEX,           ///< A panel containing the Index Window
+  WT_MENU,            ///< An Window containing a Menu
   WT_MESSAGE,         ///< Window for messages/errors and command entry
-  WT_PAGER,           ///< Window containing paged free-form text
-  WT_PAGER_BAR,       ///< Pager Bar containing status info about the Pager
+  WT_PAGER,           ///< A panel containing the Pager Window
   WT_SIDEBAR,         ///< Side panel containing Accounts or groups of data
+  WT_STATUS_BAR,      ///< Status Bar containing extra info about the Index/Pager/etc
 };
 
 TAILQ_HEAD(MuttWindowList, MuttWindow);
 
-typedef uint8_t WindowActionFlags; ///< Actions waiting to be performed on a MuttWindow
+typedef uint8_t WindowActionFlags; ///< Flags for Actions waiting to be performed on a MuttWindow, e.g. #WA_REFLOW
 #define WA_NO_FLAGS        0       ///< No flags are set
 #define WA_REFLOW    (1 << 0)      ///< Reflow the Window and its children
 #define WA_RECALC    (1 << 1)      ///< Recalculate the contents of the Window
 #define WA_REPAINT   (1 << 2)      ///< Redraw the contents of the Window
 
 /**
- * struct MuttWindow - A division of the screen
+ * @defgroup window_api Window API
+ *
+ * The Window API
+ *
+ * A division of the screen.
  *
  * Windows for different parts of the screen
  */
@@ -128,9 +135,9 @@ struct MuttWindow
   struct MuttWindow *parent;         ///< Parent Window
   struct MuttWindowList children;    ///< Children Windows
 
-  struct Notify *notify;             ///< Notifications system
+  struct Notify *notify;             ///< Notifications: #NotifyWindow, #EventWindow
 
-  struct MuttWindow *focus;          ///< Focussed Window
+  struct MuttWindow *focus;          ///< Focused Window
   int help_menu;                     ///< Menu for key bindings, e.g. #MENU_PAGER
   const struct Mapping *help_data;   ///< Data for the Help Bar
 
@@ -138,13 +145,24 @@ struct MuttWindow
   void *wdata;                       ///< Private data
 
   /**
+   * @defgroup window_wdata_free wdata_free()
+   * @ingroup window_api
+   *
    * wdata_free - Free the private data attached to the MuttWindow
    * @param win Window
    * @param ptr Window data to free
+   *
+   * **Contract**
+   * - @a win  is not NULL
+   * - @a ptr  is not NULL
+   * - @a *ptr is not NULL
    */
   void (*wdata_free)(struct MuttWindow *win, void **ptr);
 
   /**
+   * @defgroup window_recalc recalc()
+   * @ingroup window_api
+   *
    * recalc - Recalculate the Window data
    * @param win Window
    * @retval  0 Success
@@ -153,6 +171,9 @@ struct MuttWindow
   int (*recalc)(struct MuttWindow *win);
 
   /**
+   * @defgroup window_repaint repaint()
+   * @ingroup window_api
+   *
    * repaint - Repaint the Window
    * @param win Window
    * @retval  0 Success
@@ -161,7 +182,7 @@ struct MuttWindow
   int (*repaint)(struct MuttWindow *win);
 };
 
-typedef uint8_t WindowNotifyFlags; ///< Changes to a MuttWindow
+typedef uint8_t WindowNotifyFlags; ///< Flags for Changes to a MuttWindow, e.g. #WN_TALLER
 #define WN_NO_FLAGS        0       ///< No flags are set
 #define WN_TALLER    (1 << 0)      ///< Window became taller
 #define WN_SHORTER   (1 << 1)      ///< Window became shorter
@@ -175,10 +196,13 @@ typedef uint8_t WindowNotifyFlags; ///< Changes to a MuttWindow
  * enum NotifyWindow - Window notification types
  *
  * Observers of #NT_WINDOW will be passed an #EventWindow.
+ *
+ * @note Delete notifications are sent **before** the object is deleted.
+ * @note Other notifications are sent **after** the event.
  */
 enum NotifyWindow
 {
-  NT_WINDOW_NEW = 1, ///< New Window has been added
+  NT_WINDOW_ADD = 1, ///< New Window has been added
   NT_WINDOW_DELETE,  ///< Window is about to be deleted
   NT_WINDOW_STATE,   ///< Window state has changed, e.g. #WN_VISIBLE
   NT_WINDOW_DIALOG,  ///< A new Dialog Window has been created, e.g. #WT_DLG_INDEX
@@ -194,44 +218,40 @@ struct EventWindow
   WindowNotifyFlags flags; ///< Attributes of Window that changed
 };
 
-extern struct MuttWindow *RootWindow;
-extern struct MuttWindow *AllDialogsWindow;
-extern struct MuttWindow *MessageWindow;
-
 // Functions that deal with the Window
 void               mutt_window_add_child          (struct MuttWindow *parent, struct MuttWindow *child);
 void               mutt_window_free               (struct MuttWindow **ptr);
-void               mutt_window_free_all           (void);
 void               mutt_window_get_coords         (struct MuttWindow *win, int *col, int *row);
-void               mutt_window_init               (void);
 struct MuttWindow *mutt_window_new                (enum WindowType type, enum MuttWindowOrientation orient, enum MuttWindowSize size, int cols, int rows);
 void               mutt_window_reflow             (struct MuttWindow *win);
-void               mutt_window_reflow_message_rows(int mw_rows);
 struct MuttWindow *mutt_window_remove_child       (struct MuttWindow *parent, struct MuttWindow *child);
-void               mutt_window_set_root           (int cols, int rows);
 int                mutt_window_wrap_cols          (int width, short wrap);
 
 // Functions for drawing on the Window
-int  mutt_window_addch    (int ch);
-int  mutt_window_addnstr  (const char *str, int num);
-int  mutt_window_addstr   (const char *str);
+int  mutt_window_addch    (struct MuttWindow *win, int ch);
+int  mutt_window_addnstr  (struct MuttWindow *win, const char *str, int num);
+int  mutt_window_addstr   (struct MuttWindow *win, const char *str);
 void mutt_window_clearline(struct MuttWindow *win, int row);
 void mutt_window_clear    (struct MuttWindow *win);
 void mutt_window_clrtoeol (struct MuttWindow *win);
 int  mutt_window_move     (struct MuttWindow *win, int col, int row);
-void mutt_window_move_abs (int col, int row);
 int  mutt_window_mvaddstr (struct MuttWindow *win, int col, int row, const char *str);
 int  mutt_window_mvprintw (struct MuttWindow *win, int col, int row, const char *fmt, ...);
-int  mutt_window_printf   (const char *format, ...);
+int  mutt_window_printf   (struct MuttWindow *win, const char *format, ...);
 bool mutt_window_is_visible(struct MuttWindow *win);
 
 void               mutt_winlist_free (struct MuttWindowList *head);
-struct MuttWindow *mutt_window_find  (struct MuttWindow *root, enum WindowType type);
+struct MuttWindow *window_find_child (struct MuttWindow *win, enum WindowType type);
+struct MuttWindow *window_find_parent(struct MuttWindow *win, enum WindowType type);
 void               window_notify_all (struct MuttWindow *win);
 void               window_set_visible(struct MuttWindow *win, bool visible);
-void               window_set_focus  (struct MuttWindow *win);
+struct MuttWindow *window_set_focus  (struct MuttWindow *win);
 struct MuttWindow *window_get_focus  (void);
+bool               window_is_focused (struct MuttWindow *win);
 
-void window_redraw(struct MuttWindow *win, bool force);
+void window_redraw(struct MuttWindow *win);
+void window_invalidate_all(void);
+const char *mutt_window_win_name(const struct MuttWindow *win);
+bool window_status_on_top(struct MuttWindow *panel, struct ConfigSubset *sub);
 
 #endif /* MUTT_MUTT_WINDOW_H */

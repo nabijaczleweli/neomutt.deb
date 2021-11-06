@@ -27,17 +27,18 @@
  */
 
 #include "config.h"
+#include <stddef.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
+#include "color/lib.h"
 #include "context.h"
-#include "mutt_globals.h"
 
-extern const struct Mapping Fields[];
-extern const struct Mapping ComposeFields[];
+extern const struct Mapping ColorFields[];
+extern const struct Mapping ComposeColorFields[];
 
 static const char *get_event_type(enum NotifyType type)
 {
@@ -66,7 +67,7 @@ static const char *get_event_type(enum NotifyType type)
   }
 }
 
-static const char *get_mailbox_type(enum MailboxType type)
+const char *get_mailbox_type(enum MailboxType type)
 {
   switch (type)
   {
@@ -116,8 +117,6 @@ static const char *get_config_type(int id)
       return "set";
     case NT_CONFIG_RESET:
       return "reset";
-    case NT_CONFIG_INITIAL_SET:
-      return "initial_set";
     default:
       return "UNKNOWN";
   }
@@ -129,10 +128,8 @@ static const char *get_mailbox_event(int id)
   {
     case NT_MAILBOX_ADD:
       return "add";
-    case NT_MAILBOX_REMOVE:
-      return "remove";
-    case NT_MAILBOX_CLOSED:
-      return "closed";
+    case NT_MAILBOX_DELETE:
+      return "delete";
     case NT_MAILBOX_INVALID:
       return "invalid";
     case NT_MAILBOX_RESORT:
@@ -150,10 +147,10 @@ static const char *get_context(int id)
 {
   switch (id)
   {
-    case NT_CONTEXT_CLOSE:
-      return "close";
-    case NT_CONTEXT_OPEN:
-      return "open";
+    case NT_CONTEXT_DELETE:
+      return "delete";
+    case NT_CONTEXT_ADD:
+      return "add";
     default:
       return "UNKNOWN";
   }
@@ -179,11 +176,11 @@ static void notify_dump_color(struct NotifyCallback *nc)
     color = "ALL";
 
   if (!color)
-    color = mutt_map_get_name(ev_c->color, Fields);
+    color = mutt_map_get_name(ev_c->color, ColorFields);
 
   if (!color)
   {
-    color = mutt_map_get_name(ev_c->color, ComposeFields);
+    color = mutt_map_get_name(ev_c->color, ComposeColorFields);
     scope = "compose ";
   }
 
@@ -221,8 +218,8 @@ static void notify_dump_context(struct NotifyCallback *nc)
   struct EventContext *ev_c = nc->event_data;
 
   const char *path = "NONE";
-  if (ev_c->context && ev_c->context->mailbox)
-    path = mailbox_path(ev_c->context->mailbox);
+  if (ev_c->ctx && ev_c->ctx->mailbox)
+    path = mailbox_path(ev_c->ctx->mailbox);
 
   mutt_debug(LL_DEBUG1, "    Context: %s %s\n", get_context(nc->event_subtype), path);
 }
@@ -260,7 +257,7 @@ static void notify_dump_window_state(struct NotifyCallback *nc)
 
   struct Buffer buf = mutt_buffer_make(128);
 
-  mutt_buffer_add_printf(&buf, "[%s] ", win_name(win));
+  mutt_buffer_add_printf(&buf, "[%s] ", mutt_window_win_name(win));
 
   if (flags & WN_VISIBLE)
     mutt_buffer_addstr(&buf, "visible ");
@@ -301,9 +298,9 @@ static void notify_dump_window_focus(struct NotifyCallback *nc)
   {
     struct MuttWindow *dlg = dialog_find(win);
     if (dlg && (dlg != win))
-      mutt_buffer_add_printf(&buf, "%s:", win_name(dlg));
+      mutt_buffer_add_printf(&buf, "%s:", mutt_window_win_name(dlg));
 
-    mutt_buffer_add_printf(&buf, "%s ", win_name(win));
+    mutt_buffer_add_printf(&buf, "%s ", mutt_window_win_name(win));
 
     mutt_buffer_add_printf(&buf, "(C%d,R%d) [%dx%d]", win->state.col_offset,
                            win->state.row_offset, win->state.cols, win->state.rows);
@@ -318,7 +315,7 @@ static void notify_dump_window_focus(struct NotifyCallback *nc)
   mutt_buffer_dealloc(&buf);
 }
 
-int debug_notify_observer(struct NotifyCallback *nc)
+int debug_all_observer(struct NotifyCallback *nc)
 {
   mutt_debug(LL_DEBUG1, "\033[1;31mNotification:\033[0m %s\n", get_event_type(nc->event_type));
 
@@ -363,5 +360,6 @@ int debug_notify_observer(struct NotifyCallback *nc)
 
   mutt_debug(LL_DEBUG1, "    Global Data: %p\n", nc->global_data);
 
+  mutt_debug(LL_DEBUG5, "debug done\n");
   return 0;
 }

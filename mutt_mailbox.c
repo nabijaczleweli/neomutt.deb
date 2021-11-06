@@ -28,16 +28,13 @@
 #include "config.h"
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/time.h>
 #include <time.h>
 #include <utime.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt_mailbox.h"
-#include "mbox/lib.h"
-#include "mutt_globals.h"
-#include "mutt_menu.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "protos.h"
@@ -47,26 +44,50 @@ static time_t MailboxStatsTime = 0; ///< last time we check performed mail_check
 static short MailboxCount = 0;  ///< how many boxes with new mail
 static short MailboxNotify = 0; ///< # of unnotified new boxes
 
-/* These Config Variables are only used in mutt_mailbox.c */
-short C_MailCheck; ///< Config: Number of seconds before NeoMutt checks for new mail
-bool C_MailCheckStats;          ///< Config: Periodically check for new mail
-short C_MailCheckStatsInterval; ///< Config: How often to check for new mail
+/**
+ * is_same_mailbox - Compare two Mailboxes to see if they're equal
+ * @param m1  First mailbox
+ * @param m2  Second mailbox
+ * @param st1 stat() info for first mailbox
+ * @param st2 stat() info for second mailbox
+ * @retval true  Mailboxes are the same
+ * @retval false Mailboxes are different
+ */
+static bool is_same_mailbox(struct Mailbox *m1, struct Mailbox *m2,
+                            struct stat *st1, struct stat *st2)
+{
+  if (!m1 || mutt_buffer_is_empty(&m1->pathbuf) || !m2 ||
+      mutt_buffer_is_empty(&m2->pathbuf) || (m1->type != m2->type))
+  {
+    return false;
+  }
+
+  const bool uses_protocol = (m2->type == MUTT_IMAP) || (m2->type == MUTT_NNTP) ||
+                             (m2->type == MUTT_NOTMUCH) || (m2->type == MUTT_POP);
+
+  if (uses_protocol)
+    return mutt_str_equal(mailbox_path(m1), mailbox_path(m2));
+  else
+    return ((st1->st_dev == st2->st_dev) && (st1->st_ino == st2->st_ino));
+}
 
 /**
  * mailbox_check - Check a mailbox for new mail
  * @param m_cur       Current Mailbox
  * @param m_check     Mailbox to check
- * @param ctx_sb      stat() info for the current Mailbox
+ * @param st_ctx      stat() info for the current Mailbox
  * @param check_stats If true, also count the total, new and flagged messages
  */
 static void mailbox_check(struct Mailbox *m_cur, struct Mailbox *m_check,
-                          struct stat *ctx_sb, bool check_stats)
+                          struct stat *st_ctx, bool check_stats)
 {
-  struct stat sb = { 0 };
+  struct stat st = { 0 };
 
   enum MailboxType mb_type = mx_path_probe(mailbox_path(m_check));
 
-  if ((m_cur == m_check) && C_MailCheckRecent)
+  const bool c_mail_check_recent =
+      cs_subset_bool(NeoMutt->sub, "mail_check_recent");
+  if ((m_cur == m_check) && c_mail_check_recent)
     m_check->has_new = false;
 
   switch (mb_type)
@@ -78,8 +99,8 @@ static void mailbox_check(struct Mailbox *m_cur, struct Mailbox *m_check,
       m_check->type = mb_type;
       break;
     default:
-      if ((stat(mailbox_path(m_check), &sb) != 0) ||
-          ((m_check->type == MUTT_UNKNOWN) && S_ISREG(sb.st_mode) && (sb.st_size == 0)) ||
+      if ((stat(mailbox_path(m_check), &st) != 0) ||
+          ((m_check->type == MUTT_UNKNOWN) && S_ISREG(st.st_mode) && (st.st_size == 0)) ||
           ((m_check->type == MUTT_UNKNOWN) &&
            ((m_check->type = mx_path_probe(mailbox_path(m_check))) <= 0)))
       {
@@ -93,29 +114,32 @@ static void mailbox_check(struct Mailbox *m_cur, struct Mailbox *m_check,
       break; // kept for consistency.
   }
 
+  const bool c_check_mbox_size =
+      cs_subset_bool(NeoMutt->sub, "check_mbox_size");
+
   /* check to see if the folder is the currently selected folder before polling */
-  if (!m_cur || mutt_buffer_is_empty(&m_cur->pathbuf) ||
-      (((m_check->type == MUTT_IMAP) || (m_check->type == MUTT_NNTP) ||
-        (m_check->type == MUTT_NOTMUCH) || (m_check->type == MUTT_POP)) ?
-           !mutt_str_equal(mailbox_path(m_check), mailbox_path(m_cur)) :
-           ((sb.st_dev != ctx_sb->st_dev) || (sb.st_ino != ctx_sb->st_ino))))
+  if (!is_same_mailbox(m_cur, m_check, st_ctx, &st))
   {
     switch (m_check->type)
     {
+      case MUTT_NOTMUCH:
+        // Remove this when non-notmuch backends only check unread, flagged,
+        // and total counts per 'mbox_check_stats' docs.
+        if (!check_stats)
+          break;
+        /* fall through */
       case MUTT_IMAP:
       case MUTT_MBOX:
       case MUTT_MMDF:
       case MUTT_MAILDIR:
       case MUTT_MH:
-      case MUTT_NOTMUCH:
-        if ((mx_mbox_check_stats(m_check, check_stats) > 0) && m_check->has_new)
-          MailboxCount++;
+        mx_mbox_check_stats(m_check, check_stats);
         break;
       default:; /* do nothing */
     }
   }
-  else if (C_CheckMboxSize && m_cur && mutt_buffer_is_empty(&m_cur->pathbuf))
-    m_check->size = (off_t) sb.st_size; /* update the size of current folder */
+  else if (c_check_mbox_size && m_cur && mutt_buffer_is_empty(&m_cur->pathbuf))
+    m_check->size = (off_t) st.st_size; /* update the size of current folder */
 
   if (!m_check->has_new)
     m_check->notified = false;
@@ -137,11 +161,11 @@ static void mailbox_check(struct Mailbox *m_cur, struct Mailbox *m_check,
  */
 int mutt_mailbox_check(struct Mailbox *m_cur, int force)
 {
-  struct stat contex_sb;
+  struct stat st_ctx = { 0 };
   time_t t;
   bool check_stats = false;
-  contex_sb.st_dev = 0;
-  contex_sb.st_ino = 0;
+  st_ctx.st_dev = 0;
+  st_ctx.st_ino = 0;
 
 #ifdef USE_IMAP
   /* update postponed count as well, on force */
@@ -153,12 +177,18 @@ int mutt_mailbox_check(struct Mailbox *m_cur, int force)
   if (TAILQ_EMPTY(&NeoMutt->accounts))
     return 0;
 
+  const short c_mail_check = cs_subset_number(NeoMutt->sub, "mail_check");
+  const bool c_mail_check_stats =
+      cs_subset_bool(NeoMutt->sub, "mail_check_stats");
+  const short c_mail_check_stats_interval =
+      cs_subset_number(NeoMutt->sub, "mail_check_stats_interval");
+
   t = mutt_date_epoch();
-  if (!force && (t - MailboxTime < C_MailCheck))
+  if (!force && (t - MailboxTime < c_mail_check))
     return MailboxCount;
 
   if ((force & MUTT_MAILBOX_CHECK_FORCE_STATS) ||
-      (C_MailCheckStats && ((t - MailboxStatsTime) >= C_MailCheckStatsInterval)))
+      (c_mail_check_stats && ((t - MailboxStatsTime) >= c_mail_check_stats_interval)))
   {
     check_stats = true;
     MailboxStatsTime = t;
@@ -173,10 +203,10 @@ int mutt_mailbox_check(struct Mailbox *m_cur, int force)
 #ifdef USE_NNTP
       || (m_cur->type == MUTT_NNTP)
 #endif
-      || stat(mailbox_path(m_cur), &contex_sb) != 0)
+      || stat(mailbox_path(m_cur), &st_ctx) != 0)
   {
-    contex_sb.st_dev = 0;
-    contex_sb.st_ino = 0;
+    st_ctx.st_dev = 0;
+    st_ctx.st_ino = 0;
   }
 
   struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
@@ -187,8 +217,10 @@ int mutt_mailbox_check(struct Mailbox *m_cur, int force)
     if (np->mailbox->flags & MB_HIDDEN)
       continue;
 
-    mailbox_check(m_cur, np->mailbox, &contex_sb,
-                  check_stats || (!np->mailbox->first_check_stats_done && C_MailCheckStats));
+    mailbox_check(m_cur, np->mailbox, &st_ctx,
+                  check_stats || (!np->mailbox->first_check_stats_done && c_mail_check_stats));
+    if (np->mailbox->has_new)
+      MailboxCount++;
     np->mailbox->first_check_stats_done = true;
   }
   neomutt_mailboxlist_clear(&ml);
@@ -199,7 +231,7 @@ int mutt_mailbox_check(struct Mailbox *m_cur, int force)
 /**
  * mutt_mailbox_notify - Notify the user if there's new mail
  * @param m_cur Current Mailbox
- * @retval true If there is new mail
+ * @retval true There is new mail
  */
 bool mutt_mailbox_notify(struct Mailbox *m_cur)
 {
@@ -212,7 +244,7 @@ bool mutt_mailbox_notify(struct Mailbox *m_cur)
 
 /**
  * mutt_mailbox_list - List the mailboxes with new mail
- * @retval true If there is new mail
+ * @retval true There is new mail
  */
 bool mutt_mailbox_list(void)
 {
@@ -238,8 +270,8 @@ bool mutt_mailbox_list(void)
     mutt_buffer_strcpy(path, mailbox_path(np->mailbox));
     mutt_buffer_pretty_mailbox(path);
 
-    if (!first && (MessageWindow->state.cols >= 7) &&
-        ((pos + mutt_buffer_len(path)) >= ((size_t) MessageWindow->state.cols - 7)))
+    const size_t width = msgwin_get_width();
+    if (!first && (width >= 7) && ((pos + mutt_buffer_len(path)) >= (width - 7)))
     {
       break;
     }
@@ -298,7 +330,50 @@ void mutt_mailbox_set_notified(struct Mailbox *m)
 }
 
 /**
- * mutt_mailbox_next - incoming folders completion routine
+ * find_next_mailbox - Find the next mailbox with new or unread mail.
+ * @param s         Buffer containing name of current mailbox
+ * @param find_new  Boolean controlling new or unread check.
+ * @retval ptr Mailbox
+ *
+ * Given a folder name, find the next incoming folder with new or unread mail.
+ * The Mailbox will be returned and a pretty version of the path put into s.
+ */
+static struct Mailbox *find_next_mailbox(struct Buffer *s, bool find_new)
+{
+  bool found = false;
+  for (int pass = 0; pass < 2; pass++)
+  {
+    struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
+    neomutt_mailboxlist_get_all(&ml, NeoMutt, MUTT_MAILBOX_ANY);
+    struct MailboxNode *np = NULL;
+    STAILQ_FOREACH(np, &ml, entries)
+    {
+      // Match only real mailboxes if looking for new mail.
+      if (find_new && np->mailbox->type == MUTT_NOTMUCH)
+        continue;
+
+      mutt_buffer_expand_path(&np->mailbox->pathbuf);
+      struct Mailbox *m_cur = np->mailbox;
+
+      if ((found || (pass > 0)) && (find_new ? m_cur->has_new : m_cur->msg_unread > 0))
+      {
+        mutt_buffer_strcpy(s, mailbox_path(np->mailbox));
+        mutt_buffer_pretty_mailbox(s);
+        struct Mailbox *m_result = np->mailbox;
+        neomutt_mailboxlist_clear(&ml);
+        return m_result;
+      }
+      if (mutt_str_equal(mutt_buffer_string(s), mailbox_path(np->mailbox)))
+        found = true;
+    }
+    neomutt_mailboxlist_clear(&ml);
+  }
+
+  return NULL;
+}
+
+/**
+ * mutt_mailbox_next - Incoming folders completion routine
  * @param m_cur Current Mailbox
  * @param s     Buffer containing name of current mailbox
  * @retval ptr Mailbox
@@ -312,33 +387,33 @@ struct Mailbox *mutt_mailbox_next(struct Mailbox *m_cur, struct Buffer *s)
 
   if (mutt_mailbox_check(m_cur, 0) > 0)
   {
-    bool found = false;
-    for (int pass = 0; pass < 2; pass++)
-    {
-      struct MailboxList ml = STAILQ_HEAD_INITIALIZER(ml);
-      neomutt_mailboxlist_get_all(&ml, NeoMutt, MUTT_MAILBOX_ANY);
-      struct MailboxNode *np = NULL;
-      STAILQ_FOREACH(np, &ml, entries)
-      {
-        if (np->mailbox->type == MUTT_NOTMUCH) /* only match real mailboxes */
-          continue;
-        mutt_buffer_expand_path(&np->mailbox->pathbuf);
-        if ((found || (pass > 0)) && np->mailbox->has_new)
-        {
-          mutt_buffer_strcpy(s, mailbox_path(np->mailbox));
-          mutt_buffer_pretty_mailbox(s);
-          struct Mailbox *m_result = np->mailbox;
-          neomutt_mailboxlist_clear(&ml);
-          return m_result;
-        }
-        if (mutt_str_equal(mutt_buffer_string(s), mailbox_path(np->mailbox)))
-          found = true;
-      }
-      neomutt_mailboxlist_clear(&ml);
-    }
+    struct Mailbox *m_res = find_next_mailbox(s, true);
+    if (m_res)
+      return m_res;
 
     mutt_mailbox_check(m_cur, MUTT_MAILBOX_CHECK_FORCE); /* mailbox was wrong - resync things */
   }
+
+  mutt_buffer_reset(s); // no folders with new mail
+  return NULL;
+}
+
+/**
+ * mutt_mailbox_next_unread - Find next mailbox with unread mail
+ * @param m_cur Current Mailbox
+ * @param s     Buffer containing name of current mailbox
+ * @retval ptr Mailbox
+ *
+ * Given a folder name, find the next mailbox with unread mail.
+ * The Mailbox will be returned and a pretty version of the path put into s.
+ */
+struct Mailbox *mutt_mailbox_next_unread(struct Mailbox *m_cur, struct Buffer *s)
+{
+  mutt_buffer_expand_path(s);
+
+  struct Mailbox *m_res = find_next_mailbox(s, false);
+  if (m_res)
+    return m_res;
 
   mutt_buffer_reset(s); // no folders with new mail
   return NULL;
@@ -360,7 +435,9 @@ void mutt_mailbox_cleanup(const char *path, struct stat *st)
   struct utimbuf ut;
 #endif
 
-  if (C_CheckMboxSize)
+  const bool c_check_mbox_size =
+      cs_subset_bool(NeoMutt->sub, "check_mbox_size");
+  if (c_check_mbox_size)
   {
     struct Mailbox *m = mailbox_find(path);
     if (m && !m->has_new)

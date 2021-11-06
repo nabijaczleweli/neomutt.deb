@@ -47,17 +47,15 @@
 #include "mutt.h"
 #include "sendlib.h"
 #include "lib.h"
+#include "attach/lib.h"
 #include "ncrypt/lib.h"
-#include "context.h"
 #include "copy.h"
 #include "handler.h"
 #include "mutt_globals.h"
 #include "mutt_mailbox.h"
-#include "mutt_parse.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "options.h"
-#include "state.h"
 
 /**
  * struct ContentState - Info about the body of an email
@@ -232,7 +230,7 @@ static size_t convert_file_to(FILE *fp, const char *fromcode, int ncodes,
   size_t ret;
 
   const iconv_t cd1 = mutt_ch_iconv_open("utf-8", fromcode, MUTT_ICONV_NO_FLAGS);
-  if (cd1 == (iconv_t)(-1))
+  if (cd1 == (iconv_t) (-1))
     return -1;
 
   iconv_t *cd = mutt_mem_calloc(ncodes, sizeof(iconv_t));
@@ -247,8 +245,8 @@ static size_t convert_file_to(FILE *fp, const char *fromcode, int ncodes,
     else
     {
       /* Special case for conversion to UTF-8 */
-      cd[i] = (iconv_t)(-1);
-      score[i] = (size_t)(-1);
+      cd[i] = (iconv_t) (-1);
+      score[i] = (size_t) (-1);
     }
   }
 
@@ -266,10 +264,10 @@ static size_t convert_file_to(FILE *fp, const char *fromcode, int ncodes,
     size_t obl = sizeof(bufu);
     n = iconv(cd1, (ICONV_CONST char **) ((ibl != 0) ? &ib : 0), &ibl, &ob, &obl);
     /* assert(n == (size_t)(-1) || !n); */
-    if ((n == (size_t)(-1)) && (((errno != EINVAL) && (errno != E2BIG)) || (ib == bufi)))
+    if ((n == (size_t) (-1)) && (((errno != EINVAL) && (errno != E2BIG)) || (ib == bufi)))
     {
       /* assert(errno == EILSEQ || (errno == EINVAL && ib == bufi && ibl < sizeof(bufi))); */
-      ret = (size_t)(-1);
+      ret = (size_t) (-1);
       break;
     }
     const size_t ubl1 = ob - bufu;
@@ -277,17 +275,17 @@ static size_t convert_file_to(FILE *fp, const char *fromcode, int ncodes,
     /* Convert from UTF-8 */
     for (int i = 0; i < ncodes; i++)
     {
-      if ((cd[i] != (iconv_t)(-1)) && (score[i] != (size_t)(-1)))
+      if ((cd[i] != (iconv_t) (-1)) && (score[i] != (size_t) (-1)))
       {
         const char *ub = bufu;
         size_t ubl = ubl1;
         ob = bufo;
         obl = sizeof(bufo);
         n = iconv(cd[i], (ICONV_CONST char **) ((ibl || ubl) ? &ub : 0), &ubl, &ob, &obl);
-        if (n == (size_t)(-1))
+        if (n == (size_t) (-1))
         {
           /* assert(errno == E2BIG || (BUGGY_ICONV && (errno == EILSEQ || errno == ENOENT))); */
-          score[i] = (size_t)(-1);
+          score[i] = (size_t) (-1);
         }
         else
         {
@@ -295,7 +293,7 @@ static size_t convert_file_to(FILE *fp, const char *fromcode, int ncodes,
           update_content_info(&infos[i], &states[i], bufo, ob - bufo);
         }
       }
-      else if ((cd[i] == (iconv_t)(-1)) && (score[i] == (size_t)(-1)))
+      else if ((cd[i] == (iconv_t) (-1)) && (score[i] == (size_t) (-1)))
       {
         /* Special case for conversion to UTF-8 */
         update_content_info(&infos[i], &states[i], bufu, ubl1);
@@ -317,19 +315,19 @@ static size_t convert_file_to(FILE *fp, const char *fromcode, int ncodes,
   if (ret == 0)
   {
     /* Find best score */
-    ret = (size_t)(-1);
+    ret = (size_t) (-1);
     for (int i = 0; i < ncodes; i++)
     {
-      if ((cd[i] == (iconv_t)(-1)) && (score[i] == (size_t)(-1)))
+      if ((cd[i] == (iconv_t) (-1)) && (score[i] == (size_t) (-1)))
       {
         /* Special case for conversion to UTF-8 */
         *tocode = i;
         ret = 0;
         break;
       }
-      else if ((cd[i] == (iconv_t)(-1)) || (score[i] == (size_t)(-1)))
+      else if ((cd[i] == (iconv_t) (-1)) || (score[i] == (size_t) (-1)))
         continue;
-      else if ((ret == (size_t)(-1)) || (score[i] < ret))
+      else if ((ret == (size_t) (-1)) || (score[i] < ret))
       {
         *tocode = i;
         ret = score[i];
@@ -337,7 +335,7 @@ static size_t convert_file_to(FILE *fp, const char *fromcode, int ncodes,
           break;
       }
     }
-    if (ret != (size_t)(-1))
+    if (ret != (size_t) (-1))
     {
       memcpy(info, &infos[*tocode], sizeof(struct Content));
       update_content_info(info, &states[*tocode], 0, 0); /* EOF */
@@ -345,7 +343,7 @@ static size_t convert_file_to(FILE *fp, const char *fromcode, int ncodes,
   }
 
   for (int i = 0; i < ncodes; i++)
-    if (cd[i] != (iconv_t)(-1))
+    if (cd[i] != (iconv_t) (-1))
       iconv_close(cd[i]);
 
   iconv_close(cd1);
@@ -410,7 +408,7 @@ static size_t convert_file_from_to(FILE *fp, const char *fromcodes, const char *
       tcode[i] = mutt_str_dup(c);
   }
 
-  ret = (size_t)(-1);
+  ret = (size_t) (-1);
   if (fromcode)
   {
     /* Try each fromcode in turn */
@@ -425,7 +423,7 @@ static size_t convert_file_from_to(FILE *fp, const char *fromcodes, const char *
         fcode = mutt_str_dup(c);
 
       ret = convert_file_to(fp, fcode, ncodes, (char const *const *) tcode, &cn, info);
-      if (ret != (size_t)(-1))
+      if (ret != (size_t) (-1))
       {
         *fromcode = fcode;
         *tocode = tcode[cn];
@@ -439,7 +437,7 @@ static size_t convert_file_from_to(FILE *fp, const char *fromcodes, const char *
   {
     /* There is only one fromcode */
     ret = convert_file_to(fp, fromcodes, ncodes, (char const *const *) tcode, &cn, info);
-    if (ret != (size_t)(-1))
+    if (ret != (size_t) (-1))
     {
       *tocode = tcode[cn];
       tcode[cn] = 0;
@@ -475,20 +473,20 @@ struct Content *mutt_get_content_info(const char *fname, struct Body *b,
   char buf[100];
   size_t r;
 
-  struct stat sb;
+  struct stat st = { 0 };
 
   if (b && !fname)
     fname = b->filename;
   if (!fname)
     return NULL;
 
-  if (stat(fname, &sb) == -1)
+  if (stat(fname, &st) == -1)
   {
     mutt_error(_("Can't stat %s: %s"), fname, strerror(errno));
     return NULL;
   }
 
-  if (!S_ISREG(sb.st_mode))
+  if (!S_ISREG(st.st_mode))
   {
     mutt_error(_("%s isn't a regular file"), fname);
     return NULL;
@@ -503,19 +501,20 @@ struct Content *mutt_get_content_info(const char *fname, struct Body *b,
 
   info = mutt_mem_calloc(1, sizeof(struct Content));
 
-  const char *c_charset = cs_subset_string(sub, "charset");
+  const char *const c_charset = cs_subset_string(sub, "charset");
 
   if (b && (b->type == TYPE_TEXT) && (!b->noconv && !b->force_charset))
   {
-    const char *c_attach_charset = cs_subset_string(sub, "attach_charset");
-    const char *c_send_charset = cs_subset_string(sub, "send_charset");
+    const char *const c_attach_charset =
+        cs_subset_string(sub, "attach_charset");
+    const char *const c_send_charset = cs_subset_string(sub, "send_charset");
 
     char *chs = mutt_param_get(&b->parameter, "charset");
     const char *fchs =
         b->use_disp ? (c_attach_charset ? c_attach_charset : c_charset) : c_charset;
     if (c_charset && (chs || c_send_charset) &&
         (convert_file_from_to(fp, fchs, chs ? chs : c_send_charset, &fromcode,
-                              &tocode, info) != (size_t)(-1)))
+                              &tocode, info) != (size_t) (-1)))
     {
       if (!chs)
       {
@@ -686,7 +685,7 @@ static void transform_to_7bit(struct Body *a, FILE *fp_in, struct ConfigSubset *
 {
   struct Buffer *buf = NULL;
   struct State s = { 0 };
-  struct stat sb;
+  struct stat st = { 0 };
 
   for (; a; a = a->next)
   {
@@ -723,12 +722,12 @@ static void transform_to_7bit(struct Body *a, FILE *fp_in, struct ConfigSubset *
       a->filename = mutt_buffer_strdup(buf);
       mutt_buffer_pool_release(&buf);
       a->unlink = true;
-      if (stat(a->filename, &sb) == -1)
+      if (stat(a->filename, &st) == -1)
       {
         mutt_perror("stat");
         return;
       }
-      a->length = sb.st_size;
+      a->length = st.st_size;
 
       mutt_update_encoding(a, sub);
       if (a->encoding == ENC_8BIT)
@@ -750,7 +749,7 @@ void mutt_message_to_7bit(struct Body *a, FILE *fp, struct ConfigSubset *sub)
   struct Buffer temp = mutt_buffer_make(0);
   FILE *fp_in = NULL;
   FILE *fp_out = NULL;
-  struct stat sb;
+  struct stat st = { 0 };
 
   if (!a->filename && fp)
     fp_in = fp;
@@ -762,13 +761,13 @@ void mutt_message_to_7bit(struct Body *a, FILE *fp, struct ConfigSubset *sub)
   else
   {
     a->offset = 0;
-    if (stat(a->filename, &sb) == -1)
+    if (stat(a->filename, &st) == -1)
     {
       mutt_perror("stat");
       mutt_file_fclose(&fp_in);
       goto cleanup;
     }
-    a->length = sb.st_size;
+    a->length = st.st_size;
   }
 
   /* Avoid buffer pool due to recursion */
@@ -780,7 +779,11 @@ void mutt_message_to_7bit(struct Body *a, FILE *fp, struct ConfigSubset *sub)
     goto cleanup;
   }
 
-  fseeko(fp_in, a->offset, SEEK_SET);
+  if (fseeko(fp_in, a->offset, SEEK_SET) != 0)
+  {
+    mutt_perror("fseeko");
+    goto cleanup;
+  }
   a->parts = mutt_rfc822_parse_message(fp_in, a);
 
   transform_to_7bit(a->parts, fp_in, sub);
@@ -804,12 +807,12 @@ void mutt_message_to_7bit(struct Body *a, FILE *fp, struct ConfigSubset *sub)
     unlink(a->filename);
   a->filename = mutt_buffer_strdup(&temp);
   a->unlink = true;
-  if (stat(a->filename, &sb) == -1)
+  if (stat(a->filename, &st) == -1)
   {
     mutt_perror("stat");
     goto cleanup;
   }
-  a->length = sb.st_size;
+  a->length = st.st_size;
   mutt_body_free(&a->parts);
   a->email->body = NULL;
 
@@ -827,7 +830,7 @@ cleanup:
 }
 
 /**
- * set_encoding - determine which Content-Transfer-Encoding to use
+ * set_encoding - Determine which Content-Transfer-Encoding to use
  * @param[in]  b    Body of email
  * @param[out] info Info about the email
  * @param[in]  sub  Config Subset
@@ -973,7 +976,13 @@ struct Body *mutt_make_message_attach(struct Mailbox *m, struct Email *e,
 
   mutt_buffer_pool_release(&buf);
 
-  mutt_parse_mime_message(m, e);
+  struct Message *msg = mx_msg_open(m, e->msgno);
+  if (!msg)
+  {
+    mutt_body_free(&body);
+    return NULL;
+  }
+  mutt_parse_mime_message(e, msg->fp);
 
   CopyHeaderFlags chflags = CH_XMIT;
   cmflags = MUTT_CM_NO_FLAGS;
@@ -1012,7 +1021,8 @@ struct Body *mutt_make_message_attach(struct Mailbox *m, struct Email *e,
     }
   }
 
-  mutt_copy_message(fp, m, e, cmflags, chflags, 0);
+  mutt_copy_message(fp, e, msg, cmflags, chflags, 0);
+  mx_msg_close(m, &msg);
 
   fflush(fp);
   rewind(fp);
@@ -1046,7 +1056,7 @@ static void run_mime_type_query(struct Body *att, struct ConfigSubset *sub)
   pid_t pid;
   struct Buffer *cmd = mutt_buffer_pool_get();
 
-  const char *c_mime_type_query_command =
+  const char *const c_mime_type_query_command =
       cs_subset_string(sub, "mime_type_query_command");
 
   mutt_buffer_file_expand_fmt_quote(cmd, c_mime_type_query_command, att->filename);
@@ -1082,10 +1092,13 @@ static void run_mime_type_query(struct Body *att, struct ConfigSubset *sub)
  */
 struct Body *mutt_make_file_attach(const char *path, struct ConfigSubset *sub)
 {
+  if (!path || (path[0] == '\0'))
+    return NULL;
+
   struct Body *att = mutt_body_new();
   att->filename = mutt_str_dup(path);
 
-  const char *c_mime_type_query_command =
+  const char *const c_mime_type_query_command =
       cs_subset_string(sub, "mime_type_query_command");
   const bool c_mime_type_query_first =
       cs_subset_bool(sub, "mime_type_query_first");
@@ -1145,7 +1158,7 @@ static void encode_headers(struct ListHead *h, struct ConfigSubset *sub)
   char *p = NULL;
   int i;
 
-  const char *c_send_charset = cs_subset_string(sub, "send_charset");
+  const char *const c_send_charset = cs_subset_string(sub, "send_charset");
 
   struct ListNode *np = NULL;
   STAILQ_FOREACH(np, h, entries)
@@ -1181,7 +1194,7 @@ static void encode_headers(struct ListHead *h, struct ConfigSubset *sub)
  */
 const char *mutt_fqdn(bool may_hide_host, const struct ConfigSubset *sub)
 {
-  const char *c_hostname = cs_subset_string(sub, "hostname");
+  const char *const c_hostname = cs_subset_string(sub, "hostname");
   if (!c_hostname || (c_hostname[0] == '@'))
     return NULL;
 
@@ -1291,6 +1304,7 @@ void mutt_unprepare_envelope(struct Envelope *env)
 /**
  * bounce_message - Bounce an email message
  * @param fp          Handle of message
+ * @param m           Mailbox
  * @param e           Email
  * @param to          Address to bounce to
  * @param resent_from Address of new sender
@@ -1299,9 +1313,9 @@ void mutt_unprepare_envelope(struct Envelope *env)
  * @retval  0 Success
  * @retval -1 Failure
  */
-static int bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
-                          const char *resent_from, struct AddressList *env_from,
-                          struct ConfigSubset *sub)
+static int bounce_message(FILE *fp, struct Mailbox *m, struct Email *e,
+                          struct AddressList *to, const char *resent_from,
+                          struct AddressList *env_from, struct ConfigSubset *sub)
 {
   if (!e)
     return -1;
@@ -1319,11 +1333,16 @@ static int bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
     if (!c_bounce_delivered)
       chflags |= CH_WEED_DELIVERED;
 
-    fseeko(fp, e->offset, SEEK_SET);
+    if (fseeko(fp, e->offset, SEEK_SET) != 0)
+    {
+      (void) mutt_file_fclose(&fp_tmp);
+      mutt_perror("fseeko");
+      return -1;
+    }
     fprintf(fp_tmp, "Resent-From: %s\n", resent_from);
 
     struct Buffer *date = mutt_buffer_pool_get();
-    mutt_date_make_date(date);
+    mutt_date_make_date(date, cs_subset_bool(sub, "local_date_header"));
     fprintf(fp_tmp, "Resent-Date: %s\n", mutt_buffer_string(date));
     mutt_buffer_pool_release(&date);
 
@@ -1342,7 +1361,7 @@ static int bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
       return -1;
     }
 #ifdef USE_SMTP
-    const char *c_smtp_url = cs_subset_string(sub, "smtp_url");
+    const char *const c_smtp_url = cs_subset_string(sub, "smtp_url");
     if (c_smtp_url)
     {
       rc = mutt_smtp_send(env_from, to, NULL, NULL, mutt_buffer_string(tempfile),
@@ -1351,7 +1370,7 @@ static int bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
     else
 #endif
     {
-      rc = mutt_invoke_sendmail(env_from, to, NULL, NULL, mutt_buffer_string(tempfile),
+      rc = mutt_invoke_sendmail(m, env_from, to, NULL, NULL, mutt_buffer_string(tempfile),
                                 (e->body->encoding == ENC_8BIT), sub);
     }
   }
@@ -1363,14 +1382,15 @@ static int bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
 /**
  * mutt_bounce_message - Bounce an email message
  * @param fp  Handle of message
+ * @param m   Mailbox
  * @param e   Email
  * @param to  AddressList to bounce to
  * @param sub Config Subset
  * @retval  0 Success
  * @retval -1 Failure
  */
-int mutt_bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
-                        struct ConfigSubset *sub)
+int mutt_bounce_message(FILE *fp, struct Mailbox *m, struct Email *e,
+                        struct AddressList *to, struct ConfigSubset *sub)
 {
   if (!fp || !e || !to || TAILQ_EMPTY(to))
     return -1;
@@ -1384,15 +1404,15 @@ int mutt_bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
   struct AddressList from_list = TAILQ_HEAD_INITIALIZER(from_list);
   mutt_addrlist_append(&from_list, from);
 
-  /* mutt_default_from() does not use $realname if the real name is not set
+  /* mutt_default_from() does not use $real_name if the real name is not set
    * in $from, so we add it here.  The reason it is not added in
    * mutt_default_from() is that during normal sending, we execute
-   * send-hooks and set the realname last so that it can be changed based
+   * send-hooks and set the real_name last so that it can be changed based
    * upon message criteria.  */
   if (!from->personal)
   {
-    const char *c_realname = cs_subset_string(sub, "realname");
-    from->personal = mutt_str_dup(c_realname);
+    const char *const c_real_name = cs_subset_string(sub, "real_name");
+    from->personal = mutt_str_dup(c_real_name);
   }
 
   mutt_addrlist_qualify(&from_list, fqdn);
@@ -1417,7 +1437,7 @@ int mutt_bounce_message(FILE *fp, struct Email *e, struct AddressList *to,
   struct AddressList resent_to = TAILQ_HEAD_INITIALIZER(resent_to);
   mutt_addrlist_copy(&resent_to, to, false);
   rfc2047_encode_addrlist(&resent_to, "Resent-To");
-  int rc = bounce_message(fp, e, &resent_to, resent_from, &from_list, sub);
+  int rc = bounce_message(fp, m, e, &resent_to, resent_from, &from_list, sub);
   mutt_addrlist_clear(&resent_to);
   mutt_addrlist_clear(&from_list);
 
@@ -1513,7 +1533,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
   FILE *fp_tmp = NULL;
   int rc = -1;
   bool need_mailbox_cleanup = false;
-  struct stat st;
+  struct stat st = { 0 };
   MsgOpenFlags onm_flags;
 
   if (post)
@@ -1524,17 +1544,15 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
 #endif
   struct Mailbox *m_fcc = mx_path_resolve(path);
   bool old_append = m_fcc->append;
-  struct Context *ctx_fcc = mx_mbox_open(m_fcc, MUTT_APPEND | MUTT_QUIET);
-  if (!ctx_fcc)
+  if (!mx_mbox_open(m_fcc, MUTT_APPEND | MUTT_QUIET))
   {
     mutt_debug(LL_DEBUG1, "unable to open mailbox %s in append-mode, aborting\n", path);
-    mailbox_free(&m_fcc);
     goto done;
   }
 
   /* We need to add a Content-Length field to avoid problems where a line in
    * the message body begins with "From " */
-  if ((ctx_fcc->mailbox->type == MUTT_MMDF) || (ctx_fcc->mailbox->type == MUTT_MBOX))
+  if ((m_fcc->type == MUTT_MMDF) || (m_fcc->type == MUTT_MBOX))
   {
     tempfile = mutt_buffer_pool_get();
     mutt_buffer_mktemp(tempfile);
@@ -1542,7 +1560,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
     if (!fp_tmp)
     {
       mutt_perror(mutt_buffer_string(tempfile));
-      mx_mbox_close(&ctx_fcc);
+      mx_mbox_close(m_fcc);
       goto done;
     }
     /* remember new mail status before appending message */
@@ -1554,11 +1572,11 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
   onm_flags = MUTT_ADD_FROM;
   if (post)
     onm_flags |= MUTT_SET_DRAFT;
-  msg = mx_msg_open_new(ctx_fcc->mailbox, e, onm_flags);
+  msg = mx_msg_open_new(m_fcc, e, onm_flags);
   if (!msg)
   {
     mutt_file_fclose(&fp_tmp);
-    mx_mbox_close(&ctx_fcc);
+    mx_mbox_close(m_fcc);
     goto done;
   }
 
@@ -1585,7 +1603,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
   if (post && fcc)
     fprintf(msg->fp, "X-Mutt-Fcc: %s\n", fcc);
 
-  if ((ctx_fcc->mailbox->type == MUTT_MMDF) || (ctx_fcc->mailbox->type == MUTT_MBOX))
+  if ((m_fcc->type == MUTT_MMDF) || (m_fcc->type == MUTT_MBOX))
     fprintf(msg->fp, "Status: RO\n");
 
   /* (postponement) if the mail is to be signed or encrypted, save this info */
@@ -1600,7 +1618,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
     {
       fputc('S', msg->fp);
 
-      const char *c_pgp_sign_as = cs_subset_string(sub, "pgp_sign_as");
+      const char *const c_pgp_sign_as = cs_subset_string(sub, "pgp_sign_as");
       if (c_pgp_sign_as)
         fprintf(msg->fp, "<%s>", c_pgp_sign_as);
     }
@@ -1623,7 +1641,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
     {
       fputc('E', msg->fp);
 
-      const char *c_smime_encrypt_with =
+      const char *const c_smime_encrypt_with =
           cs_subset_string(sub, "smime_encrypt_with");
       if (c_smime_encrypt_with)
         fprintf(msg->fp, "C<%s>", c_smime_encrypt_with);
@@ -1634,7 +1652,8 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
     {
       fputc('S', msg->fp);
 
-      const char *c_smime_sign_as = cs_subset_string(sub, "smime_sign_as");
+      const char *const c_smime_sign_as =
+          cs_subset_string(sub, "smime_sign_as");
       if (c_smime_sign_as)
         fprintf(msg->fp, "<%s>", c_smime_sign_as);
     }
@@ -1679,9 +1698,9 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
       mutt_debug(LL_DEBUG1, "%s: write failed\n", mutt_buffer_string(tempfile));
       mutt_file_fclose(&fp_tmp);
       unlink(mutt_buffer_string(tempfile));
-      mx_msg_commit(ctx_fcc->mailbox, msg); /* XXX really? */
-      mx_msg_close(ctx_fcc->mailbox, &msg);
-      mx_mbox_close(&ctx_fcc);
+      mx_msg_commit(m_fcc, msg); /* XXX really? */
+      mx_msg_close(m_fcc, &msg);
+      mx_mbox_close(m_fcc);
       goto done;
     }
 
@@ -1712,12 +1731,12 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
     rc = mutt_write_mime_body(e->body, msg->fp, sub);
   }
 
-  if (mx_msg_commit(ctx_fcc->mailbox, msg) != 0)
+  if (mx_msg_commit(m_fcc, msg) != 0)
     rc = -1;
   else if (finalpath)
     *finalpath = mutt_str_dup(msg->committed_path);
-  mx_msg_close(ctx_fcc->mailbox, &msg);
-  mx_mbox_close(&ctx_fcc);
+  mx_msg_close(m_fcc, &msg);
+  mx_mbox_close(m_fcc);
 
   if (!post && need_mailbox_cleanup)
     mutt_mailbox_cleanup(path, &st);
@@ -1726,8 +1745,10 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
     set_noconv_flags(e->body, false);
 
 done:
-  if (m_fcc)
-    m_fcc->append = old_append;
+  m_fcc->append = old_append;
+  if (m_fcc->flags == MB_HIDDEN)
+    mailbox_free(&m_fcc);
+
 #ifdef RECORD_FOLDER_HOOK
   /* We ran a folder hook for the destination mailbox,
    * now we run it for the user's current mailbox */

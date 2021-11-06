@@ -2,12 +2,12 @@
 
 [![Stars](https://img.shields.io/github/stars/neomutt/neomutt.svg?style=social&label=Stars)](https://github.com/neomutt/neomutt "Give us a Star")
 [![Twitter](https://img.shields.io/twitter/follow/NeoMutt_Org.svg?style=social&label=Follow)](https://twitter.com/NeoMutt_Org "Follow us on Twitter")
-[![Contributors](https://img.shields.io/badge/Contributors-202-orange.svg)](https://github.com/neomutt/neomutt/blob/master/AUTHORS.md "All of NeoMutt's Contributors")
+[![Contributors](https://img.shields.io/badge/Contributors-218-orange.svg)](https://github.com/neomutt/neomutt/blob/master/AUTHORS.md "All of NeoMutt's Contributors")
 [![Release](https://img.shields.io/github/release/neomutt/neomutt.svg)](https://github.com/neomutt/neomutt/releases/latest "Latest Release Notes")
-[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://github.com/neomutt/neomutt/blob/master/LICENCE.md "Copyright Statement")
-[![Code build](https://img.shields.io/travis/com/neomutt/neomutt/master?label=code)](https://travis-ci.com/neomutt/neomutt "Latest Automatic Code Build")
+[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://github.com/neomutt/neomutt/blob/master/LICENSE.md "Copyright Statement")
+[![Code build](https://img.shields.io/travis/com/neomutt/neomutt/master?label=code)](https://app.travis-ci.com/github/neomutt/neomutt "Latest Automatic Code Build")
 [![Coverity Scan](https://img.shields.io/coverity/scan/8495.svg)](https://scan.coverity.com/projects/neomutt-neomutt "Latest Code Static Analysis")
-[![Website build](https://img.shields.io/travis/neomutt/neomutt.github.io.svg?label=website)](https://travis-ci.com/neomutt/neomutt.github.io "Latest Website Test")
+[![Website build](https://img.shields.io/travis/neomutt/neomutt.github.io.svg?label=website)](https://app.travis-ci.com/github/neomutt/neomutt.github.io "Latest Website Test")
 
 ## What is NeoMutt?
 
@@ -45,15 +45,17 @@ sorted through them, fixed them up and documented them.
 | New Mail                 | Execute a command upon the receipt of new mail.
 | NNTP                     | Talk to a Usenet news server
 | Notmuch                  | Email search engine
+| Pager Read Delay         | Delay when the pager marks a previewed message as read
 | Progress Bar             | Show a visual progress bar on slow operations
 | Quasi-Delete             | Mark emails that should be hidden, but not deleted
-| Reply With X-Orig-To     | Direct reply to email using X-Original-To header
+| Reply With X-Original-To | Direct reply to email using X-Original-To header
 | Sensible Browser         | Make the file browser behave
 | Sidebar                  | Panel containing list of Mailboxes
 | Skip Quoted              | Leave some context visible
 | Status Color             | Custom rules for theming the status bar
 | TLS-SNI                  | Negotiate with a server for a TLS/SSL certificate
 | Trash Folder             | Automatically move deleted emails to a trash bin
+| Use Threads              | Improve the experience with viewing threads in the index
 
 ## Contributed Scripts and Config
 
@@ -67,9 +69,9 @@ sorted through them, fixed them up and documented them.
 
 ## How to Install NeoMutt?
 
-NeoMutt may be packaged for your distribution, and otherwise it can be built from
-source. Please refer to the instructions on the
-[distro page](https://neomutt.org/distro.html).
+NeoMutt may be packaged for your distribution, and otherwise it can be
+[built from source](https://neomutt.org/dev/build/build). Please refer to the
+instructions on the [distro page](https://neomutt.org/distro.html).
 
 ## Where is NeoMutt?
 
@@ -77,7 +79,7 @@ source. Please refer to the instructions on the
 - Releases:        https://github.com/neomutt/neomutt/releases/latest
 - Questions/Bugs:  https://github.com/neomutt/neomutt/issues
 - Website:         https://neomutt.org
-- IRC:             [irc://irc.freenode.net/neomutt](https://webchat.freenode.net/ "IRC Web Client") - please be patient.
+- IRC:             [irc://irc.libera.chat/neomutt](https://kiwiirc.com/nextclient/irc.libera.chat/#neomutt "IRC Web Client") - please be patient.
   We're a small group, so our answer might take some time.
 - Mailinglists:    [neomutt-users](mailto:neomutt-users-request@neomutt.org?subject=subscribe)
   and [neomutt-devel](mailto:neomutt-devel-request@neomutt.org?subject=subscribe)

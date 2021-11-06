@@ -21,7 +21,7 @@
  */
 
 /**
- * @page lib_config CONFIG: Flexible handling of config items
+ * @page lib_config Config
  *
  * User configurable variables.
  *
@@ -49,6 +49,7 @@
 #ifndef MUTT_CONFIG_LIB_H
 #define MUTT_CONFIG_LIB_H
 
+#include <stdbool.h>
 // IWYU pragma: begin_exports
 #include "address.h"
 #include "bool.h"
@@ -67,9 +68,12 @@
 // IWYU pragma: end_exports
 
 /**
- * module_init_config_t - Prototype for a config definition function
+ * @defgroup cfg_module_api Config Module API
+ *
+ * Prototype for a Config Definition Function
+ *
  * @param cs Config items
- * @retval bool true if all the config variables were registered
+ * @retval true All the config variables were registered
  */
 typedef bool (*module_init_config_t)(struct ConfigSet *cs);
 

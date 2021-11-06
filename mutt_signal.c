@@ -30,17 +30,22 @@
 #include <stddef.h>
 #include <errno.h>
 #include <signal.h>
+#include <stdbool.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
+#include "core/lib.h"
 #include "gui/lib.h"
-#include "debug/lib.h"
-#include "mutt_attach.h"
+#include "attach/lib.h"
 #include "mutt_globals.h"
 #include "protos.h" // IWYU pragma: keep
+#ifdef USE_DEBUG_GRAPHVIZ
+#include "debug/lib.h"
+#endif
 
 static int IsEndwin = 0;
 
 /**
- * curses_signal_handler - Catch signals and relay the info to the main program - Implements ::sig_handler_t
+ * curses_signal_handler - Catch signals and relay the info to the main program - Implements ::sig_handler_t - @ingroup sig_handler_api
  * @param sig Signal number, e.g. SIGINT
  */
 static void curses_signal_handler(int sig)
@@ -50,13 +55,16 @@ static void curses_signal_handler(int sig)
   switch (sig)
   {
     case SIGTSTP: /* user requested a suspend */
-      if (!C_Suspend)
+    {
+      const bool c_suspend = cs_subset_bool(NeoMutt->sub, "suspend");
+      if (!c_suspend)
         break;
       IsEndwin = isendwin();
       mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
       if (!IsEndwin)
         endwin();
       kill(0, SIGSTOP);
+    }
       /* fallthrough */
 
     case SIGCONT:
@@ -65,22 +73,22 @@ static void curses_signal_handler(int sig)
       mutt_curses_set_cursor(MUTT_CURSOR_RESTORE_LAST);
       /* We don't receive SIGWINCH when suspended; however, no harm is done by
        * just assuming we received one, and triggering the 'resize' anyway. */
-      SigWinch = 1;
+      SigWinch = true;
       break;
 
     case SIGWINCH:
-      SigWinch = 1;
+      SigWinch = true;
       break;
 
     case SIGINT:
-      SigInt = 1;
+      SigInt = true;
       break;
   }
   errno = save_errno;
 }
 
 /**
- * curses_exit_handler - Notify the user and shutdown gracefully - Implements ::sig_handler_t
+ * curses_exit_handler - Notify the user and shutdown gracefully - Implements ::sig_handler_t - @ingroup sig_handler_api
  * @param sig Signal number, e.g. SIGTERM
  */
 static void curses_exit_handler(int sig)
@@ -92,7 +100,7 @@ static void curses_exit_handler(int sig)
 }
 
 /**
- * curses_segv_handler - Catch a segfault and print a backtrace - Implements ::sig_handler_t
+ * curses_segv_handler - Catch a segfault and print a backtrace - Implements ::sig_handler_t - @ingroup sig_handler_api
  * @param sig Signal number, e.g. SIGSEGV
  */
 static void curses_segv_handler(int sig)
@@ -103,7 +111,7 @@ static void curses_segv_handler(int sig)
   show_backtrace();
 #endif
 #ifdef USE_DEBUG_GRAPHVIZ
-  dump_graphviz("segfault");
+  dump_graphviz("segfault", NULL);
 #endif
 
   struct sigaction act;
@@ -115,31 +123,10 @@ static void curses_segv_handler(int sig)
   raise(sig);
 }
 
-#ifdef USE_SLANG_CURSES
-/**
- * mutt_intr_hook - Workaround handler for slang
- * @retval -1 Always
- */
-static int mutt_intr_hook(void)
-{
-  return -1;
-}
-#endif /* USE_SLANG_CURSES */
-
 /**
  * mutt_signal_init - Initialise the signal handling
  */
 void mutt_signal_init(void)
 {
   mutt_sig_init(curses_signal_handler, curses_exit_handler, curses_segv_handler);
-
-#ifdef USE_SLANG_CURSES
-  /* This bit of code is required because of the implementation of
-   * SLcurses_wgetch().  If a signal is received (like SIGWINCH) when we
-   * are in blocking mode, SLsys_getkey() will not return an error unless
-   * a handler function is defined and it returns -1.  This is needed so
-   * that if the user resizes the screen while at a prompt, it will just
-   * abort and go back to the main-menu.  */
-  SLang_getkey_intr_hook = mutt_intr_hook;
-#endif
 }

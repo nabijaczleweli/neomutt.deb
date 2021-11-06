@@ -35,29 +35,25 @@
 #include <unistd.h>
 #include "mutt/lib.h"
 #include "address/lib.h"
+#include "config/lib.h"
 #include "email/lib.h"
+#include "core/lib.h"
 #include "alias/lib.h"
 #include "mutt.h"
 #include "hook.h"
+#include "attach/lib.h"
 #include "ncrypt/lib.h"
 #include "pattern/lib.h"
 #include "context.h"
 #include "format_flags.h"
 #include "hdrline.h"
 #include "init.h"
-#include "mutt_attach.h"
-#include "mutt_commands.h"
 #include "mutt_globals.h"
 #include "muttlib.h"
 #include "mx.h"
 #ifdef USE_COMP_MBOX
 #include "compmbox/lib.h"
 #endif
-
-/* These Config Variables are only used in hook.c */
-char *C_DefaultHook; ///< Config: Pattern to use for hooks that only have a simple regex
-bool C_ForceName; ///< Config: Save outgoing mail in a folder of their name
-bool C_SaveName; ///< Config: Save outgoing message to mailbox of recipient's name if it exists
 
 /**
  * struct Hook - A list of user hooks
@@ -78,7 +74,7 @@ static struct HashTable *IdxFmtHooks = NULL;
 static HookFlags current_hook_type = MUTT_HOOK_NO_FLAGS;
 
 /**
- * mutt_parse_hook - Parse the 'hook' family of commands - Implements Command::parse()
+ * mutt_parse_hook - Parse the 'hook' family of commands - Implements Command::parse() - @ingroup command_parse
  *
  * This is used by 'account-hook', 'append-hook' and many more.
  */
@@ -88,8 +84,10 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
   struct Hook *hook = NULL;
   int rc = MUTT_CMD_ERROR;
   bool pat_not = false;
+  bool use_regex = true;
   regex_t *rx = NULL;
   struct PatternList *pat = NULL;
+  const bool folder_or_mbox = (data & (MUTT_FOLDER_HOOK | MUTT_MBOX_HOOK));
 
   struct Buffer *cmd = mutt_buffer_pool_get();
   struct Buffer *pattern = mutt_buffer_pool_get();
@@ -104,6 +102,18 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
     }
 
     mutt_extract_token(pattern, s, MUTT_TOKEN_NO_FLAGS);
+    if (folder_or_mbox &&
+        mutt_str_equal(mutt_buffer_string(pattern), "-noregex"))
+    {
+      use_regex = false;
+      if (!MoreArgs(s))
+      {
+        mutt_buffer_printf(err, _("%s: too few arguments"), buf->data);
+        rc = MUTT_CMD_WARNING;
+        goto cleanup;
+      }
+      mutt_extract_token(pattern, s, MUTT_TOKEN_NO_FLAGS);
+    }
 
     if (!MoreArgs(s))
     {
@@ -133,7 +143,9 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
     goto cleanup;
   }
 
-  if (data & (MUTT_FOLDER_HOOK | MUTT_MBOX_HOOK))
+  const char *const c_default_hook =
+      cs_subset_string(NeoMutt->sub, "default_hook");
+  if (folder_or_mbox)
   {
     /* Accidentally using the ^ mailbox shortcut in the .neomuttrc is a
      * common mistake */
@@ -145,7 +157,7 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
 
     struct Buffer *tmp = mutt_buffer_pool_get();
     mutt_buffer_copy(tmp, pattern);
-    mutt_buffer_expand_path_regex(tmp, true);
+    mutt_buffer_expand_path_regex(tmp, use_regex);
 
     /* Check for other mailbox shortcuts that expand to the empty string.
      * This is likely a mistake too */
@@ -156,7 +168,14 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
       goto cleanup;
     }
 
-    mutt_buffer_copy(pattern, tmp);
+    if (use_regex)
+    {
+      mutt_buffer_copy(pattern, tmp);
+    }
+    else
+    {
+      mutt_file_sanitize_regex(pattern, mutt_buffer_string(tmp));
+    }
     mutt_buffer_pool_release(&tmp);
   }
 #ifdef USE_COMP_MBOX
@@ -169,14 +188,14 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
     }
   }
 #endif
-  else if (C_DefaultHook && (~data & MUTT_GLOBAL_HOOK) &&
+  else if (c_default_hook && (~data & MUTT_GLOBAL_HOOK) &&
            !(data & (MUTT_CHARSET_HOOK | MUTT_ICONV_HOOK | MUTT_ACCOUNT_HOOK)) &&
            (!WithCrypto || !(data & MUTT_CRYPT_HOOK)))
   {
     /* At this stage remain only message-hooks, reply-hooks, send-hooks,
      * send2-hooks, save-hooks, and fcc-hooks: All those allowing full
      * patterns. If given a simple regex, we expand $default_hook.  */
-    mutt_check_simple(pattern, C_DefaultHook);
+    mutt_check_simple(pattern, c_default_hook);
   }
 
   if (data & (MUTT_MBOX_HOOK | MUTT_SAVE_HOOK | MUTT_FCC_HOOK))
@@ -247,7 +266,8 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
     else
       comp_flags = MUTT_PC_FULL_MSG;
 
-    pat = mutt_pattern_comp(mutt_buffer_string(pattern), comp_flags, err);
+    pat = mutt_pattern_comp(ctx_mailbox(Context), Context ? Context->menu : NULL,
+                            mutt_buffer_string(pattern), comp_flags, err);
     if (!pat)
       goto cleanup;
   }
@@ -320,9 +340,9 @@ void mutt_delete_hooks(HookFlags type)
 }
 
 /**
- * delete_idxfmt_hooklist - Delete a index-format-hook from the Hash Table - Implements ::hash_hdata_free_t
+ * idxfmt_hashelem_free - Delete an index-format-hook from the Hash Table - Implements ::hash_hdata_free_t - @ingroup hash_hdata_free_api
  */
-static void delete_idxfmt_hooklist(int type, void *obj, intptr_t data)
+static void idxfmt_hashelem_free(int type, void *obj, intptr_t data)
 {
   struct HookList *hl = obj;
   struct Hook *h = NULL;
@@ -346,7 +366,7 @@ static void delete_idxfmt_hooks(void)
 }
 
 /**
- * mutt_parse_idxfmt_hook - Parse the 'index-format-hook' command - Implements Command::parse()
+ * mutt_parse_idxfmt_hook - Parse the 'index-format-hook' command - Implements Command::parse() - @ingroup command_parse
  */
 enum CommandResult mutt_parse_idxfmt_hook(struct Buffer *buf, struct Buffer *s,
                                           intptr_t data, struct Buffer *err)
@@ -361,7 +381,7 @@ enum CommandResult mutt_parse_idxfmt_hook(struct Buffer *buf, struct Buffer *s,
   if (!IdxFmtHooks)
   {
     IdxFmtHooks = mutt_hash_new(30, MUTT_HASH_STRDUP_KEYS);
-    mutt_hash_set_destructor(IdxFmtHooks, delete_idxfmt_hooklist, 0);
+    mutt_hash_set_destructor(IdxFmtHooks, idxfmt_hashelem_free, 0);
   }
 
   if (!MoreArgs(s))
@@ -393,8 +413,10 @@ enum CommandResult mutt_parse_idxfmt_hook(struct Buffer *buf, struct Buffer *s,
     goto out;
   }
 
-  if (C_DefaultHook)
-    mutt_check_simple(pattern, C_DefaultHook);
+  const char *const c_default_hook =
+      cs_subset_string(NeoMutt->sub, "default_hook");
+  if (c_default_hook)
+    mutt_check_simple(pattern, c_default_hook);
 
   /* check to make sure that a matching hook doesn't already exist */
   struct Hook *hook = NULL;
@@ -416,8 +438,10 @@ enum CommandResult mutt_parse_idxfmt_hook(struct Buffer *buf, struct Buffer *s,
    * matching.  This of course is slower, but index-format-hook is commonly
    * used for date ranges, and they need to be evaluated relative to "now", not
    * the hook compilation time.  */
-  struct PatternList *pat = mutt_pattern_comp(
-      mutt_buffer_string(pattern), MUTT_PC_FULL_MSG | MUTT_PC_PATTERN_DYNAMIC, err);
+  struct PatternList *pat =
+      mutt_pattern_comp(ctx_mailbox(Context), Context ? Context->menu : NULL,
+                        mutt_buffer_string(pattern),
+                        MUTT_PC_FULL_MSG | MUTT_PC_PATTERN_DYNAMIC, err);
   if (!pat)
     goto out;
 
@@ -448,7 +472,7 @@ out:
 }
 
 /**
- * mutt_parse_unhook - Parse the 'unhook' command - Implements Command::parse()
+ * mutt_parse_unhook - Parse the 'unhook' command - Implements Command::parse() - @ingroup command_parse
  */
 enum CommandResult mutt_parse_unhook(struct Buffer *buf, struct Buffer *s,
                                      intptr_t data, struct Buffer *err)
@@ -612,13 +636,13 @@ void mutt_message_hook(struct Mailbox *m, struct Email *e, HookFlags type)
  * @param path    Buffer for path
  * @param pathlen Length of buffer
  * @param type    Hook type, see #HookFlags
- * @param ctx     Mailbox Context
+ * @param m       Mailbox
  * @param e       Email
  * @retval  0 Success
  * @retval -1 Failure
  */
 static int addr_hook(char *path, size_t pathlen, HookFlags type,
-                     struct Context *ctx, struct Email *e)
+                     struct Mailbox *m, struct Email *e)
 {
   struct Hook *hook = NULL;
   struct PatternCache cache = { 0 };
@@ -631,12 +655,10 @@ static int addr_hook(char *path, size_t pathlen, HookFlags type,
 
     if (hook->type & type)
     {
-      struct Mailbox *m = ctx ? ctx->mailbox : NULL;
       if ((mutt_pattern_exec(SLIST_FIRST(hook->pattern), 0, m, e, &cache) > 0) ^
           hook->regex.pat_not)
       {
-        mutt_make_string_flags(path, pathlen, 0, hook->command, m,
-                               ctx ? ctx->msg_in_pager : -1, e, MUTT_FORMAT_PLAIN);
+        mutt_make_string(path, pathlen, 0, hook->command, m, -1, e, MUTT_FORMAT_PLAIN, NULL);
         return 0;
       }
     }
@@ -654,7 +676,7 @@ static int addr_hook(char *path, size_t pathlen, HookFlags type,
 void mutt_default_save(char *path, size_t pathlen, struct Email *e)
 {
   *path = '\0';
-  if (addr_hook(path, pathlen, MUTT_SAVE_HOOK, Context, e) == 0)
+  if (addr_hook(path, pathlen, MUTT_SAVE_HOOK, ctx_mailbox(Context), e) == 0)
     return;
 
   struct Envelope *env = e->env;
@@ -698,18 +720,22 @@ void mutt_select_fcc(struct Buffer *path, struct Email *e)
     const struct Address *to = TAILQ_FIRST(&e->env->to);
     const struct Address *cc = TAILQ_FIRST(&e->env->cc);
     const struct Address *bcc = TAILQ_FIRST(&e->env->bcc);
-    if ((C_SaveName || C_ForceName) && (to || cc || bcc))
+    const bool c_save_name = cs_subset_bool(NeoMutt->sub, "save_name");
+    const bool c_force_name = cs_subset_bool(NeoMutt->sub, "force_name");
+    const char *const c_record = cs_subset_string(NeoMutt->sub, "record");
+    if ((c_save_name || c_force_name) && (to || cc || bcc))
     {
       const struct Address *addr = to ? to : (cc ? cc : bcc);
       struct Buffer *buf = mutt_buffer_pool_get();
       mutt_safe_path(buf, addr);
-      mutt_buffer_concat_path(path, NONULL(C_Folder), mutt_buffer_string(buf));
+      const char *const c_folder = cs_subset_string(NeoMutt->sub, "folder");
+      mutt_buffer_concat_path(path, NONULL(c_folder), mutt_buffer_string(buf));
       mutt_buffer_pool_release(&buf);
-      if (!C_ForceName && (mx_access(mutt_buffer_string(path), W_OK) != 0))
-        mutt_buffer_strcpy(path, C_Record);
+      if (!c_force_name && (mx_access(mutt_buffer_string(path), W_OK) != 0))
+        mutt_buffer_strcpy(path, c_record);
     }
     else
-      mutt_buffer_strcpy(path, C_Record);
+      mutt_buffer_strcpy(path, c_record);
   }
   else
     mutt_buffer_fix_dptr(path);

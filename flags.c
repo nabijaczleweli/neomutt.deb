@@ -35,13 +35,10 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
-#include "context.h"
-#include "index.h"
+#include "index/lib.h"
 #include "keymap.h"
-#include "mutt_globals.h"
-#include "mutt_menu.h"
+#include "mutt_thread.h"
 #include "protos.h"
-#include "sort.h"
 
 /**
  * mutt_set_flag_update - Set a flag on an email
@@ -75,7 +72,8 @@ void mutt_set_flag_update(struct Mailbox *m, struct Email *e,
 
       if (bf)
       {
-        if (!e->deleted && !m->readonly && (!e->flagged || !C_FlagSafe))
+        const bool c_flag_safe = cs_subset_bool(NeoMutt->sub, "flag_safe");
+        if (!e->deleted && !m->readonly && (!e->flagged || !c_flag_safe))
         {
           e->deleted = true;
           update = true;
@@ -332,6 +330,8 @@ void mutt_set_flag_update(struct Mailbox *m, struct Email *e,
   if (update)
   {
     mutt_set_header_color(m, e);
+    struct EventMailbox ev_m = { m };
+    notify_send(m->notify, NT_MAILBOX, NT_MAILBOX_CHANGE, &ev_m);
   }
 
   /* if the message status has changed, we need to invalidate the cached
@@ -366,6 +366,7 @@ void mutt_emails_set_flag(struct Mailbox *m, struct EmailList *el,
 
 /**
  * mutt_thread_set_flag - Set a flag on an entire thread
+ * @param m         Mailbox
  * @param e         Email
  * @param flag      Flag to set, e.g. #MUTT_DELETE
  * @param bf        true: set the flag; false: clear the flag
@@ -373,12 +374,13 @@ void mutt_emails_set_flag(struct Mailbox *m, struct EmailList *el,
  * @retval  0 Success
  * @retval -1 Failure
  */
-int mutt_thread_set_flag(struct Email *e, enum MessageType flag, bool bf, bool subthread)
+int mutt_thread_set_flag(struct Mailbox *m, struct Email *e,
+                         enum MessageType flag, bool bf, bool subthread)
 {
   struct MuttThread *start = NULL;
   struct MuttThread *cur = e->thread;
 
-  if ((C_Sort & SORT_MASK) != SORT_THREADS)
+  if (!mutt_using_threads())
   {
     mutt_error(_("Threading is not enabled"));
     return -1;
@@ -390,7 +392,7 @@ int mutt_thread_set_flag(struct Email *e, enum MessageType flag, bool bf, bool s
   start = cur;
 
   if (cur->message && (cur != e->thread))
-    mutt_set_flag(Context->mailbox, cur->message, flag, bf);
+    mutt_set_flag(m, cur->message, flag, bf);
 
   cur = cur->child;
   if (!cur)
@@ -399,7 +401,7 @@ int mutt_thread_set_flag(struct Email *e, enum MessageType flag, bool bf, bool s
   while (true)
   {
     if (cur->message && (cur != e->thread))
-      mutt_set_flag(Context->mailbox, cur->message, flag, bf);
+      mutt_set_flag(m, cur->message, flag, bf);
 
     if (cur->child)
       cur = cur->child;
@@ -419,7 +421,7 @@ int mutt_thread_set_flag(struct Email *e, enum MessageType flag, bool bf, bool s
 done:
   cur = e->thread;
   if (cur->message)
-    mutt_set_flag(Context->mailbox, cur->message, flag, bf);
+    mutt_set_flag(m, cur->message, flag, bf);
   return 0;
 }
 
@@ -433,31 +435,34 @@ done:
  */
 int mutt_change_flag(struct Mailbox *m, struct EmailList *el, bool bf)
 {
+  struct MuttWindow *win = msgwin_get_window();
+  if (!win)
+    return -1;
+
   if (!m || !el || STAILQ_EMPTY(el))
     return -1;
 
   enum MessageType flag = MUTT_NONE;
   struct KeyEvent event;
 
-  mutt_window_mvprintw(MessageWindow, 0, 0,
-                       "%s? (D/N/O/r/*/!): ", bf ? _("Set flag") : _("Clear flag"));
-  mutt_window_clrtoeol(MessageWindow);
-  mutt_refresh();
+  struct MuttWindow *old_focus = window_set_focus(win);
+
+  mutt_window_mvprintw(win, 0, 0, "%s? (D/N/O/r/*/!): ", bf ? _("Set flag") : _("Clear flag"));
+  mutt_window_clrtoeol(win);
+  window_redraw(NULL);
 
   do
   {
     event = mutt_getch();
-  } while (event.ch == -2);
-  int i = event.ch;
-  if (i < 0)
-  {
-    mutt_window_clearline(MessageWindow, 0);
+  } while (event.ch == -2); // Timeout
+
+  window_set_focus(old_focus);
+  msgwin_clear_text();
+
+  if (event.ch < 0) // SIGINT, Abort key (Ctrl-G)
     return -1;
-  }
 
-  mutt_window_clearline(MessageWindow, 0);
-
-  switch (i)
+  switch (event.ch)
   {
     case 'd':
     case 'D':

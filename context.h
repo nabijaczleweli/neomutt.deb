@@ -30,7 +30,6 @@ struct Email;
 struct EmailList;
 struct Mailbox;
 struct NotifyCallback;
-struct ThreadsContext;
 
 /**
  * struct Context - The "current" mailbox
@@ -47,8 +46,8 @@ struct Context
 
   bool collapsed : 1;                ///< Are all threads collapsed?
 
-  struct Mailbox *mailbox;
-  struct Notify *notify;             ///< Notifications handler
+  struct Mailbox *mailbox;           ///< Current Mailbox
+  struct Notify *notify;             ///< Notifications: #NotifyContext, #EventContext
 };
 
 /**
@@ -58,8 +57,9 @@ struct Context
  */
 enum NotifyContext
 {
-  NT_CONTEXT_OPEN = 1, ///< The Context has been opened
-  NT_CONTEXT_CLOSE,    ///< The Context is about to be destroyed
+  NT_CONTEXT_ADD = 1, ///< The Context has been opened
+  NT_CONTEXT_DELETE,  ///< The Context is about to be destroyed
+  NT_CONTEXT_CHANGE,  ///< The Context has changed
 };
 
 /**
@@ -67,7 +67,7 @@ enum NotifyContext
  */
 struct EventContext
 {
-  struct Context *context; ///< The Context this Event relates to
+  struct Context *ctx; ///< The Context this Event relates to
 };
 
 void            ctx_free            (struct Context **ptr);
@@ -77,7 +77,7 @@ void            ctx_update          (struct Context *ctx);
 bool            ctx_has_limit       (const struct Context *ctx);
 struct Mailbox* ctx_mailbox         (struct Context *ctx);
 
-bool message_is_tagged (struct Context *ctx, struct Email *e);
+bool message_is_tagged(struct Email *e);
 struct Email *mutt_get_virt_email(struct Mailbox *m, int vnum);
 
 int  el_add_tagged  (struct EmailList *el, struct Context *ctx, struct Email *e, bool use_tagged);

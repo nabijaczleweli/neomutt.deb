@@ -22,7 +22,7 @@
  */
 
 /**
- * @page imap_auth_plain IMAP plain authentication method
+ * @page imap_auth_plain Plain authentication
  *
  * IMAP plain authentication method
  */
@@ -31,6 +31,7 @@
 #include "private.h"
 #include "mutt/lib.h"
 #include "conn/lib.h"
+#include "adata.h"
 #include "auth.h"
 #include "mutt_logging.h"
 #include "mutt_socket.h"

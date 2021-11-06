@@ -428,7 +428,7 @@ bool mutt_path_to_absolute(char *path, const char *reference)
 }
 
 /**
- * mutt_path_realpath - resolve path, unraveling symlinks
+ * mutt_path_realpath - Resolve path, unraveling symlinks
  * @param buf Buffer containing path
  * @retval num String length of resolved path
  * @retval 0   Error, buf is not overwritten
@@ -453,10 +453,9 @@ size_t mutt_path_realpath(char *buf)
 /**
  * mutt_path_parent - Find the parent of a path
  * @param buf    Buffer for the result
- * @param buflen Length of buffer
  * @retval true  Success
  */
-bool mutt_path_parent(char *buf, size_t buflen)
+bool mutt_path_parent(char *buf)
 {
   if (!buf)
     return false;
@@ -482,14 +481,13 @@ bool mutt_path_parent(char *buf, size_t buflen)
 /**
  * mutt_path_abbr_folder - Create a folder abbreviation
  * @param buf    Path to modify
- * @param buflen Length of buffer
  * @param folder Base path for '=' substitution
  * @retval true Path was abbreviated
  *
  * Abbreviate a path using '=' to represent the 'folder'.
  * If the folder path is passed, it won't be abbreviated to just '='
  */
-bool mutt_path_abbr_folder(char *buf, size_t buflen, const char *folder)
+bool mutt_path_abbr_folder(char *buf, const char *folder)
 {
   if (!buf || !folder)
     return false;

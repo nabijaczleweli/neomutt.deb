@@ -23,7 +23,7 @@
  */
 
 /**
- * @page lib_sidebar SIDEBAR: Display the mailboxes in a side panel
+ * @page lib_sidebar Sidebar
  *
  * Display the mailboxes in a side panel
  *
@@ -44,10 +44,9 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "mutt_commands.h"
+#include "core/lib.h"
 
 struct Buffer;
-struct ConfigSet;
 struct MuttWindow;
 
 void sb_init    (void);
@@ -58,7 +57,5 @@ struct Mailbox *sb_get_highlight (struct MuttWindow *win);
 
 enum CommandResult sb_parse_unwhitelist(struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
 enum CommandResult sb_parse_whitelist  (struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
-
-bool config_init_sidebar(struct ConfigSet *cs);
 
 #endif /* MUTT_SIDEBAR_LIB_H */

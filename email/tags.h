@@ -26,9 +26,6 @@
 #include <stdbool.h>
 #include "mutt/lib.h"
 
-/* These Config Variables are only used in email/tags.c */
-extern struct Slist *C_HiddenTags;
-
 extern struct HashTable *TagTransforms;
 
 /**
@@ -52,5 +49,6 @@ char *driver_tags_get_transformed    (struct TagList *list);
 char *driver_tags_get_transformed_for(struct TagList *list, const char *name);
 char *driver_tags_get_with_hidden    (struct TagList *list);
 bool  driver_tags_replace            (struct TagList *list, char *tags);
+void  driver_tags_add                (struct TagList *list, char *tag);
 
 #endif /* MUTT_EMAIL_TAGS_H */

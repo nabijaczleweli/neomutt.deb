@@ -21,7 +21,7 @@
  */
 
 /**
- * @page autocrypt_autocrypt Autocrypt end-to-end encryption
+ * @page autocrypt_autocrypt Autocrypt shared code
  *
  * Autocrypt end-to-end encryption
  */
@@ -29,6 +29,7 @@
 #include "config.h"
 #include <errno.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -37,12 +38,14 @@
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
+#include "core/lib.h"
 #include "gui/lib.h"
-#include "autocrypt/lib.h"
-#include "hcache/lib.h"
+#include "lib.h"
+#include "index/lib.h"
 #include "ncrypt/lib.h"
+#include "question/lib.h"
 #include "send/lib.h"
-#include "mutt_globals.h"
+#include "browser.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "options.h"
@@ -56,9 +59,11 @@
 static int autocrypt_dir_init(bool can_create)
 {
   int rc = 0;
-  struct stat sb;
+  struct stat st = { 0 };
 
-  if (stat(C_AutocryptDir, &sb) == 0)
+  const char *const c_autocrypt_dir =
+      cs_subset_path(NeoMutt->sub, "autocrypt_dir");
+  if (stat(c_autocrypt_dir, &st) == 0)
     return 0;
 
   if (!can_create)
@@ -68,14 +73,14 @@ static int autocrypt_dir_init(bool can_create)
   /* L10N: s is a directory.  NeoMutt is looking for a directory it needs
      for some reason (e.g. autocrypt, header cache, bcache), but it
      doesn't exist.  The prompt is asking whether to create the directory */
-  mutt_buffer_printf(prompt, _("%s does not exist. Create it?"), C_AutocryptDir);
+  mutt_buffer_printf(prompt, _("%s does not exist. Create it?"), c_autocrypt_dir);
   if (mutt_yesorno(mutt_buffer_string(prompt), MUTT_YES) == MUTT_YES)
   {
-    if (mutt_file_mkdir(C_AutocryptDir, S_IRWXU) < 0)
+    if (mutt_file_mkdir(c_autocrypt_dir, S_IRWXU) < 0)
     {
       /* L10N: mkdir() on the directory %s failed.  The second %s is the
          error message returned by libc */
-      mutt_error(_("Can't create %s: %s"), C_AutocryptDir, strerror(errno));
+      mutt_error(_("Can't create %s: %s"), c_autocrypt_dir, strerror(errno));
       rc = -1;
     }
   }
@@ -95,7 +100,10 @@ int mutt_autocrypt_init(bool can_create)
   if (AutocryptDB)
     return 0;
 
-  if (!C_Autocrypt || !C_AutocryptDir)
+  const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
+  const char *const c_autocrypt_dir =
+      cs_subset_path(NeoMutt->sub, "autocrypt_dir");
+  if (!c_autocrypt || !c_autocrypt_dir)
     return -1;
 
   OptIgnoreMacroEvents = true;
@@ -122,7 +130,7 @@ int mutt_autocrypt_init(bool can_create)
 bail:
   OptIgnoreMacroEvents = false;
   OptMenuPopClearScreen = false;
-  C_Autocrypt = false;
+  cs_subset_str_native_set(NeoMutt->sub, "autocrypt", false, NULL);
   mutt_autocrypt_db_close();
   return -1;
 }
@@ -164,11 +172,13 @@ int mutt_autocrypt_account_init(bool prompt)
   struct Buffer *keyid = mutt_buffer_pool_get();
   struct Buffer *keydata = mutt_buffer_pool_get();
 
-  if (C_From)
+  const struct Address *c_from = cs_subset_address(NeoMutt->sub, "from");
+  if (c_from)
   {
-    addr = mutt_addr_copy(C_From);
-    if (!addr->personal && C_Realname)
-      addr->personal = mutt_str_dup(C_Realname);
+    addr = mutt_addr_copy(c_from);
+    const char *const c_real_name = cs_subset_string(NeoMutt->sub, "real_name");
+    if (!addr->personal && c_real_name)
+      addr->personal = mutt_str_dup(c_real_name);
   }
 
   struct AddressList al = TAILQ_HEAD_INITIALIZER(al);
@@ -229,12 +239,16 @@ int mutt_autocrypt_account_init(bool prompt)
 
 cleanup:
   if (rc == 0)
+  {
     /* L10N: Message displayed after an autocrypt account is successfully created.  */
     mutt_message(_("Autocrypt account creation succeeded"));
+  }
   else
+  {
     /* L10N: Error message displayed if creating an autocrypt account failed
        or was aborted by the user.  */
     mutt_error(_("Autocrypt account creation aborted"));
+  }
 
   mutt_autocrypt_db_account_free(&account);
   mutt_addrlist_clear(&al);
@@ -259,7 +273,8 @@ int mutt_autocrypt_process_autocrypt_header(struct Email *e, struct Envelope *en
   bool update_db = false, insert_db = false, insert_db_history = false, import_gpg = false;
   int rc = -1;
 
-  if (!C_Autocrypt)
+  const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
+  if (!c_autocrypt)
     return 0;
 
   if (mutt_autocrypt_init(false))
@@ -407,7 +422,8 @@ int mutt_autocrypt_process_gossip_header(struct Email *e, struct Envelope *prot_
   bool update_db = false, insert_db = false, insert_db_history = false, import_gpg = false;
   int rc = -1;
 
-  if (!C_Autocrypt)
+  const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
+  if (!c_autocrypt)
     return 0;
 
   if (mutt_autocrypt_init(false))
@@ -562,7 +578,8 @@ enum AutocryptRec mutt_autocrypt_ui_recommendation(struct Email *e, char **keyli
   struct AddressList recips = TAILQ_HEAD_INITIALIZER(recips);
   struct Buffer *keylist_buf = NULL;
 
-  if (!C_Autocrypt || mutt_autocrypt_init(false) || !e)
+  const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
+  if (!c_autocrypt || mutt_autocrypt_init(false) || !e)
   {
     if (keylist)
     {
@@ -690,7 +707,8 @@ int mutt_autocrypt_set_sign_as_default_key(struct Email *e)
   int rc = -1;
   struct AutocryptAccount *account = NULL;
 
-  if (!C_Autocrypt || mutt_autocrypt_init(false) || !e)
+  const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
+  if (!c_autocrypt || mutt_autocrypt_init(false) || !e)
     return -1;
 
   struct Address *from = TAILQ_FIRST(&e->env->from);
@@ -755,7 +773,8 @@ int mutt_autocrypt_write_autocrypt_header(struct Envelope *env, FILE *fp)
   int rc = -1;
   struct AutocryptAccount *account = NULL;
 
-  if (!C_Autocrypt || mutt_autocrypt_init(false) || !env)
+  const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
+  if (!c_autocrypt || mutt_autocrypt_init(false) || !env)
     return -1;
 
   struct Address *from = TAILQ_FIRST(&env->from);
@@ -789,7 +808,8 @@ cleanup:
  */
 int mutt_autocrypt_write_gossip_headers(struct Envelope *env, FILE *fp)
 {
-  if (!C_Autocrypt || mutt_autocrypt_init(false) || !env)
+  const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
+  if (!c_autocrypt || mutt_autocrypt_init(false) || !env)
     return -1;
 
   for (struct AutocryptHeader *gossip = env->autocrypt_gossip; gossip;
@@ -815,7 +835,8 @@ int mutt_autocrypt_generate_gossip_list(struct Email *e)
   struct AutocryptAccount *account = NULL;
   struct Address *recip = NULL;
 
-  if (!C_Autocrypt || mutt_autocrypt_init(false) || !e)
+  const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
+  if (!c_autocrypt || mutt_autocrypt_init(false) || !e)
     return -1;
 
   struct Envelope *mime_headers = e->body->mime_headers;
@@ -889,6 +910,32 @@ int mutt_autocrypt_generate_gossip_list(struct Email *e)
 }
 
 /**
+ * get_current_mailbox - Get the current Mailbox
+ * @retval ptr Current Mailbox
+ *
+ * Search for the last (most recent) dialog that has an Index.
+ * Then return the Mailbox from its shared data.
+ */
+static struct Mailbox *get_current_mailbox(void)
+{
+  if (!AllDialogsWindow)
+    return NULL;
+
+  struct MuttWindow *np = NULL;
+  TAILQ_FOREACH_REVERSE(np, &AllDialogsWindow->children, MuttWindowList, entries)
+  {
+    struct MuttWindow *win = window_find_child(np, WT_DLG_INDEX);
+    if (win)
+    {
+      struct IndexSharedData *shared = win->wdata;
+      return shared->mailbox;
+    }
+  }
+
+  return NULL;
+}
+
+/**
  * mutt_autocrypt_scan_mailboxes - Scan mailboxes for Autocrypt headers
  *
  * This is invoked during the first autocrypt initialization,
@@ -901,8 +948,9 @@ int mutt_autocrypt_generate_gossip_list(struct Email *e)
 void mutt_autocrypt_scan_mailboxes(void)
 {
 #ifdef USE_HCACHE
-  char *old_hdrcache = C_HeaderCache;
-  C_HeaderCache = NULL;
+  const char *c_header_cache = cs_subset_path(NeoMutt->sub, "header_cache");
+  char *old_hdrcache = mutt_str_dup(c_header_cache);
+  c_header_cache = NULL;
 #endif
 
   struct Buffer *folderbuf = mutt_buffer_pool_get();
@@ -915,17 +963,19 @@ void mutt_autocrypt_scan_mailboxes(void)
       mutt_yesorno(_("Scan a mailbox for autocrypt headers?"), MUTT_YES);
   while (scan == MUTT_YES)
   {
+    struct Mailbox *m = get_current_mailbox();
     // L10N: The prompt for a mailbox to scan for Autocrypt: headers
-    if ((!mutt_buffer_enter_fname(_("Scan mailbox"), folderbuf, true)) &&
+    if ((!mutt_buffer_enter_fname(_("Scan mailbox"), folderbuf, true, m, false,
+                                  NULL, NULL, MUTT_SEL_NO_FLAGS)) &&
         (!mutt_buffer_is_empty(folderbuf)))
     {
       mutt_buffer_expand_path_regex(folderbuf, false);
-      struct Mailbox *m = mx_path_resolve(mutt_buffer_string(folderbuf));
+      struct Mailbox *m_ac = mx_path_resolve(mutt_buffer_string(folderbuf));
       /* NOTE: I am purposely *not* executing folder hooks here,
        * as they can do all sorts of things like push into the getch() buffer.
        * Authentication should be in account-hooks. */
-      struct Context *ctx = mx_mbox_open(m, MUTT_READONLY);
-      mx_mbox_close(&ctx);
+      mx_mbox_open(m_ac, MUTT_READONLY);
+      mx_mbox_close(m_ac);
       mutt_buffer_reset(folderbuf);
     }
 
@@ -938,7 +988,8 @@ void mutt_autocrypt_scan_mailboxes(void)
   }
 
 #ifdef USE_HCACHE
-  C_HeaderCache = old_hdrcache;
+  cs_subset_str_native_set(NeoMutt->sub, "header_cache", (intptr_t) old_hdrcache, NULL);
+  old_hdrcache = NULL;
 #endif
   mutt_buffer_pool_release(&folderbuf);
 }

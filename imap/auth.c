@@ -23,7 +23,7 @@
  */
 
 /**
- * @page imap_auth IMAP authenticator multiplexor
+ * @page imap_auth Authenticator multiplexor
  *
  * IMAP authenticator multiplexor
  */
@@ -32,6 +32,8 @@
 #include <string.h>
 #include "private.h"
 #include "mutt/lib.h"
+#include "config/lib.h"
+#include "core/lib.h"
 #include "auth.h"
 
 /**
@@ -52,11 +54,12 @@ struct ImapAuth
 };
 
 /**
- * imap_authenticators - Accepted authentication methods
+ * ImapAuthenticators - Accepted authentication methods
  */
-static const struct ImapAuth imap_authenticators[] = {
+static const struct ImapAuth ImapAuthenticators[] = {
   // clang-format off
   { imap_auth_oauth, "oauthbearer" },
+  { imap_auth_xoauth2, "xoauth2" },
   { imap_auth_plain, "plain" },
 #ifdef USE_SASL
   { imap_auth_sasl, NULL },
@@ -77,16 +80,16 @@ static const struct ImapAuth imap_authenticators[] = {
 /**
  * imap_auth_is_valid - Check if string is a valid imap authentication method
  * @param authenticator Authenticator string to check
- * @retval bool True if argument is a valid auth method
+ * @retval true Argument is a valid auth method
  *
  * Validate whether an input string is an accepted imap authentication method as
- * defined by #imap_authenticators.
+ * defined by #ImapAuthenticators.
  */
 bool imap_auth_is_valid(const char *authenticator)
 {
-  for (size_t i = 0; i < mutt_array_size(imap_authenticators); i++)
+  for (size_t i = 0; i < mutt_array_size(ImapAuthenticators); i++)
   {
-    const struct ImapAuth *auth = &imap_authenticators[i];
+    const struct ImapAuth *auth = &ImapAuthenticators[i];
     if (auth->method && mutt_istr_equal(auth->method, authenticator))
       return true;
   }
@@ -106,19 +109,21 @@ int imap_authenticate(struct ImapAccountData *adata)
 {
   int rc = IMAP_AUTH_FAILURE;
 
-  if (C_ImapAuthenticators && (C_ImapAuthenticators->count > 0))
+  const struct Slist *c_imap_authenticators =
+      cs_subset_slist(NeoMutt->sub, "imap_authenticators");
+  if (c_imap_authenticators && (c_imap_authenticators->count > 0))
   {
     mutt_debug(LL_DEBUG2, "Trying user-defined imap_authenticators\n");
 
     /* Try user-specified list of authentication methods */
     struct ListNode *np = NULL;
-    STAILQ_FOREACH(np, &C_ImapAuthenticators->head, entries)
+    STAILQ_FOREACH(np, &c_imap_authenticators->head, entries)
     {
       mutt_debug(LL_DEBUG2, "Trying method %s\n", np->data);
 
-      for (size_t i = 0; i < mutt_array_size(imap_authenticators); i++)
+      for (size_t i = 0; i < mutt_array_size(ImapAuthenticators); i++)
       {
-        const struct ImapAuth *auth = &imap_authenticators[i];
+        const struct ImapAuth *auth = &ImapAuthenticators[i];
         if (!auth->method || mutt_istr_equal(auth->method, np->data))
         {
           rc = auth->authenticate(adata, np->data);
@@ -135,9 +140,9 @@ int imap_authenticate(struct ImapAccountData *adata)
     /* Fall back to default: any authenticator */
     mutt_debug(LL_DEBUG2, "Trying pre-defined imap_authenticators\n");
 
-    for (size_t i = 0; i < mutt_array_size(imap_authenticators); i++)
+    for (size_t i = 0; i < mutt_array_size(ImapAuthenticators); i++)
     {
-      rc = imap_authenticators[i].authenticate(adata, NULL);
+      rc = ImapAuthenticators[i].authenticate(adata, NULL);
       if (rc == IMAP_AUTH_SUCCESS)
         return rc;
     }

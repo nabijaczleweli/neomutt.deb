@@ -27,14 +27,15 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "mutt/lib.h"
-#include "mutt_commands.h"
+#include "core/lib.h"
+#include "menu/lib.h"
 
 #define MUTT_UNBIND  1<<0
 #define MUTT_UNMACRO 1<<1
 /* maximal length of a key binding sequence used for buffer in km_bindkey */
 #define MAX_SEQ 8
 
-/* type for key storage, the rest of neomutt works fine with int type */
+/// Type for key storage, the rest of neomutt works fine with int type
 typedef short keycode_t;
 
 void init_extended_keys(void);
@@ -66,43 +67,13 @@ struct KeyEvent
   int op; ///< function op
 };
 
-/**
- * enum MenuType - Types of GUI selections
- */
-enum MenuType
-{
-  MENU_ALIAS,            ///< Select an email address by its alias
-  MENU_ATTACH,           ///< Select an attachment
-  MENU_COMPOSE,          ///< Compose an email
-  MENU_EDITOR,           ///< Text entry area
-  MENU_FOLDER,           ///< General file/mailbox browser
-  MENU_GENERIC,          ///< Generic selection list
-  MENU_MAIN,             ///< Index panel (list of emails)
-  MENU_PAGER,            ///< Pager pager (email viewer)
-  MENU_POSTPONE,         ///< Select a postponed email
-  MENU_QUERY,            ///< Select from results of external query
-  MENU_PGP,              ///< PGP encryption menu
-  MENU_SMIME,            ///< SMIME encryption menu
-#ifdef CRYPT_BACKEND_GPGME
-  MENU_KEY_SELECT_PGP,   ///< Select a PGP key
-  MENU_KEY_SELECT_SMIME, ///< Select a SMIME key
-#endif
-#ifdef MIXMASTER
-  MENU_MIX,              ///< Create/edit a Mixmaster chain
-#endif
-#ifdef USE_AUTOCRYPT
-  MENU_AUTOCRYPT_ACCT,   ///< Autocrypt Account menu
-#endif
-  MENU_MAX,
-};
-
 int km_expand_key(char *s, size_t len, struct Keymap *map);
 struct Keymap *km_find_func(enum MenuType menu, int func);
 void km_init(void);
 void km_error_key(enum MenuType menu);
 void mutt_what_key(void);
 void mutt_init_abort_key(void);
-int mutt_abort_key_config_observer(struct NotifyCallback *nc);
+int main_config_observer(struct NotifyCallback *nc);
 
 enum CommandResult km_bind(char *s, enum MenuType menu, int op, char *macro, char *desc);
 int km_dokey(enum MenuType menu);
@@ -138,16 +109,18 @@ struct EventBinding
  * enum NotifyBinding - Key Binding notification types
  *
  * Observers of #NT_BINDING will be passed an #EventBinding.
+ *
+ * @note Notifications are sent **after** the event.
  */
 enum NotifyBinding
 {
-  NT_BINDING_NEW = 1,    ///< A key binding has been created
-  NT_BINDING_DELETED,    ///< A key binding has been deleted
-  NT_BINDING_DELETE_ALL, ///< All key bindings are about to be deleted
+  NT_BINDING_ADD = 1,    ///< Key binding has been added
+  NT_BINDING_DELETE,     ///< Key binding has been deleted
+  NT_BINDING_DELETE_ALL, ///< All key bindings have been deleted
 
-  NT_MACRO_NEW,          ///< A key macro has been created
-  NT_MACRO_DELETED,      ///< A key macro has been deleted
-  NT_MACRO_DELETE_ALL,   ///< All key macros are about to be deleted
+  NT_MACRO_ADD,          ///< Key macro has been added
+  NT_MACRO_DELETE,       ///< Key macro has been deleted
+  NT_MACRO_DELETE_ALL,   ///< All key macros have been deleted
 };
 
 const struct Binding *km_get_table(enum MenuType menu);

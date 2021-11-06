@@ -35,35 +35,37 @@
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
-#include "gui/lib.h"
 #include "mutt.h"
 #include "icommands.h"
+#include "menu/lib.h"
+#include "pager/lib.h"
 #include "functions.h"
 #include "init.h"
 #include "keymap.h"
 #include "muttlib.h"
 #include "opcodes.h"
-#include "pager.h"
 #include "version.h"
 
 // clang-format off
 static enum CommandResult icmd_bind   (struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
 static enum CommandResult icmd_set    (struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
 static enum CommandResult icmd_version(struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
+// clang-format on
 
 /**
  * ICommandList - All available informational commands
  *
  * @note These commands take precedence over conventional NeoMutt rc-lines
  */
-const struct ICommand ICommandList[] = {
+static const struct ICommand ICommandList[] = {
+  // clang-format off
   { "bind",     icmd_bind,     0 },
   { "macro",    icmd_bind,     1 },
   { "set",      icmd_set,      0 },
   { "version",  icmd_version,  0 },
-  { NULL,       NULL,          0 },
+  { NULL, NULL, 0 },
+  // clang-format on
 };
-// clang-format on
 
 /**
  * mutt_parse_icommand - Parse an informational command
@@ -180,7 +182,8 @@ static void dump_macro(struct Buffer *buf, struct Mapping *menu, struct Keymap *
  * @param buf   Output buffer
  * @param menu  Menu to dump
  * @param bind  If true it's :bind, else :macro
- * @retval bool true if menu is empty, false if not
+ * @retval true  Menu is empty
+ * @retval false Menu is not empty
  */
 static bool dump_menu(struct Buffer *buf, struct Mapping *menu, bool bind)
 {
@@ -213,7 +216,7 @@ static void dump_all_menus(struct Buffer *buf, bool bind)
 {
   for (int i = 0; i < MENU_MAX; i++)
   {
-    const char *menu_name = mutt_map_get_name(i, Menus);
+    const char *menu_name = mutt_map_get_name(i, MenuNames);
     struct Mapping menu = { menu_name, i };
 
     const bool empty = dump_menu(buf, &menu, bind);
@@ -253,7 +256,7 @@ static enum CommandResult icmd_bind(struct Buffer *buf, struct Buffer *s,
   }
   else
   {
-    const int menu_index = mutt_map_get_value(buf->data, Menus);
+    const int menu_index = mutt_map_get_value(buf->data, MenuNames);
     if (menu_index == -1)
     {
       // L10N: '%s' is the (misspelled) name of the menu, e.g. 'index' or 'pager'
@@ -290,7 +293,16 @@ static enum CommandResult icmd_bind(struct Buffer *buf, struct Buffer *s,
   mutt_file_fclose(&fp_out);
   mutt_buffer_dealloc(&filebuf);
 
-  if (mutt_do_pager((bind) ? "bind" : "macro", tempfile, MUTT_PAGER_NO_FLAGS, NULL) == -1)
+  struct PagerData pdata = { 0 };
+  struct PagerView pview = { &pdata };
+
+  pdata.fname = tempfile;
+
+  pview.banner = (bind) ? "bind" : "macro";
+  pview.flags = MUTT_PAGER_NO_FLAGS;
+  pview.mode = PAGER_MODE_OTHER;
+
+  if (mutt_do_pager(&pview, NULL) == -1)
   {
     // L10N: '%s' is the file name of the temporary file
     mutt_buffer_printf(err, _("Could not create temporary file %s"), tempfile);
@@ -329,7 +341,17 @@ static enum CommandResult icmd_set(struct Buffer *buf, struct Buffer *s,
     dump_config(NeoMutt->sub->cs, CS_DUMP_ONLY_CHANGED, fp_out);
 
   mutt_file_fclose(&fp_out);
-  mutt_do_pager("set", tempfile, MUTT_PAGER_NO_FLAGS, NULL);
+
+  struct PagerData pdata = { 0 };
+  struct PagerView pview = { &pdata };
+
+  pdata.fname = tempfile;
+
+  pview.banner = "set";
+  pview.flags = MUTT_PAGER_NO_FLAGS;
+  pview.mode = PAGER_MODE_OTHER;
+
+  mutt_do_pager(&pview, NULL);
 
   return MUTT_CMD_SUCCESS;
 }
@@ -354,7 +376,16 @@ static enum CommandResult icmd_version(struct Buffer *buf, struct Buffer *s,
   print_version(fp_out);
   mutt_file_fclose(&fp_out);
 
-  if (mutt_do_pager("version", tempfile, MUTT_PAGER_NO_FLAGS, NULL) == -1)
+  struct PagerData pdata = { 0 };
+  struct PagerView pview = { &pdata };
+
+  pdata.fname = tempfile;
+
+  pview.banner = "version";
+  pview.flags = MUTT_PAGER_NO_FLAGS;
+  pview.mode = PAGER_MODE_OTHER;
+
+  if (mutt_do_pager(&pview, NULL) == -1)
   {
     // L10N: '%s' is the file name of the temporary file
     mutt_buffer_printf(err, _("Could not create temporary file %s"), tempfile);

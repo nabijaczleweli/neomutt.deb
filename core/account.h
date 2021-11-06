@@ -39,12 +39,16 @@ struct Account
   char *name;                     ///< Name of Account
   struct ConfigSubset *sub;       ///< Inherited config items
   struct MailboxList mailboxes;   ///< List of Mailboxes
-  struct Notify *notify;          ///< Notifications handler
+  struct Notify *notify;          ///< Notifications: #NotifyAccount, #EventAccount
   void *adata;                    ///< Private data (for Mailbox backends)
 
   /**
    * adata_free - Free the private data attached to the Account
    * @param ptr Private data to be freed
+   *
+   * **Contract**
+   * - @a ptr  is not NULL
+   * - @a *ptr is not NULL
    */
   void (*adata_free)(void **ptr);
 
@@ -56,12 +60,16 @@ TAILQ_HEAD(AccountList, Account);
  * enum NotifyAccount - Types of Account Event
  *
  * Observers of #NT_ACCOUNT will be passed an #EventAccount.
+ *
+ * @note Delete notifications are sent **before** the object is deleted.
+ * @note Other notifications are sent **after** the event.
  */
 enum NotifyAccount
 {
-  NT_ACCOUNT_ADD = 1, ///< A new Account has been created
-  NT_ACCOUNT_REMOVE,  ///< An Account is about to be destroyed
-  NT_ACCOUNT_CHANGED, ///< An Account has changed
+  NT_ACCOUNT_ADD = 1,    ///< Account has been added
+  NT_ACCOUNT_DELETE,     ///< Account is about to be deleted
+  NT_ACCOUNT_DELETE_ALL, ///< All Accounts are about to be deleted
+  NT_ACCOUNT_CHANGE,     ///< Account has been changed
 };
 
 /**

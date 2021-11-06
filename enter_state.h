@@ -24,19 +24,19 @@
 #define MUTT_ENTER_STATE_H
 
 #include <stddef.h>
-#include <wchar.h>
+#include <wchar.h> // IWYU pragma: keep
 
 /**
  * struct EnterState - Keep our place when entering a string
  */
 struct EnterState
 {
-  wchar_t *wbuf;
-  size_t wbuflen;
-  size_t lastchar;
-  size_t curpos;
-  size_t begin;
-  int tabs;
+  wchar_t *wbuf;   ///< Buffer for the string being entered
+  size_t wbuflen;  ///< Length of buffer
+  size_t lastchar; ///< Position of the last character
+  size_t curpos;   ///< Position of the cursor
+  size_t begin;    ///< Position of the start
+  int tabs;        ///< Number of times the user has hit tab
 };
 
 void mutt_enter_state_free(struct EnterState **ptr);

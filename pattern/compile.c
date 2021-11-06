@@ -39,14 +39,14 @@
 #include "private.h"
 #include "mutt/lib.h"
 #include "address/lib.h"
-#include "email/lib.h"
+#include "config/lib.h"
+#include "email/lib.h" // IWYU pragma: keep
 #include "core/lib.h"
 #include "mutt.h"
 #include "lib.h"
+#include "menu/lib.h"
 #include "context.h"
 #include "init.h"
-#include "mutt_globals.h"
-#include "mutt_menu.h"
 
 // clang-format off
 typedef uint16_t ParseDateRangeFlags; ///< Flags for parse_date_range(), e.g. #MUTT_PDR_MINUS
@@ -75,7 +75,7 @@ enum EatRangeError
 #define MEGA 1048576
 
 /**
- * eat_regex - Parse a regex - Implements ::eat_arg_t
+ * eat_regex - Parse a regex - Implements ::eat_arg_t - @ingroup eat_arg_api
  */
 static bool eat_regex(struct Pattern *pat, PatternCompFlags flags,
                       struct Buffer *s, struct Buffer *err)
@@ -129,7 +129,7 @@ static bool eat_regex(struct Pattern *pat, PatternCompFlags flags,
 }
 
 /**
- * add_query_msgid - Parse a Message-Id and add it to a list - Implements ::mutt_file_map_t
+ * add_query_msgid - Parse a Message-Id and add it to a list - Implements ::mutt_file_map_t - @ingroup mutt_file_map_api
  * @retval true Always
  */
 static bool add_query_msgid(char *line, int line_num, void *user_data)
@@ -144,16 +144,24 @@ static bool add_query_msgid(char *line, int line_num, void *user_data)
 }
 
 /**
- * eat_query - Parse a query for an external search program - Implements ::eat_arg_t
+ * eat_query - Parse a query for an external search program - Implements ::eat_arg_t - @ingroup eat_arg_api
+ * @param pat   Pattern to store the results in
+ * @param flags Flags, e.g. #MUTT_PC_PATTERN_DYNAMIC
+ * @param s     String to parse
+ * @param err   Buffer for error messages
+ * @param m     Mailbox
+ * @retval true The pattern was read successfully
  */
 static bool eat_query(struct Pattern *pat, PatternCompFlags flags,
-                      struct Buffer *s, struct Buffer *err)
+                      struct Buffer *s, struct Buffer *err, struct Mailbox *m)
 {
   struct Buffer cmd_buf;
   struct Buffer tok_buf;
   FILE *fp = NULL;
 
-  if (!C_ExternalSearchCommand)
+  const char *const c_external_search_command =
+      cs_subset_string(NeoMutt->sub, "external_search_command");
+  if (!c_external_search_command)
   {
     mutt_buffer_printf(err, "%s", _("No search command defined"));
     return false;
@@ -175,21 +183,20 @@ static bool eat_query(struct Pattern *pat, PatternCompFlags flags,
   }
 
   mutt_buffer_init(&cmd_buf);
-  mutt_buffer_addstr(&cmd_buf, C_ExternalSearchCommand);
+  mutt_buffer_addstr(&cmd_buf, c_external_search_command);
   mutt_buffer_addch(&cmd_buf, ' ');
 
-  struct Mailbox *m = ctx_mailbox(Context);
-  if (!m)
-  {
-    mutt_buffer_addch(&cmd_buf, '/');
-  }
-  else
+  if (m)
   {
     char *escaped_folder = mutt_path_escape(mailbox_path(m));
     mutt_debug(LL_DEBUG2, "escaped folder path: %s\n", escaped_folder);
     mutt_buffer_addch(&cmd_buf, '\'');
     mutt_buffer_addstr(&cmd_buf, escaped_folder);
     mutt_buffer_addch(&cmd_buf, '\'');
+  }
+  else
+  {
+    mutt_buffer_addch(&cmd_buf, '/');
   }
   mutt_buffer_addch(&cmd_buf, ' ');
   mutt_buffer_addstr(&cmd_buf, tok_buf.data);
@@ -615,7 +622,7 @@ bool eval_date_minmax(struct Pattern *pat, const char *s, struct Buffer *err)
 }
 
 /**
- * eat_range - Parse a number range - Implements ::eat_arg_t
+ * eat_range - Parse a number range - Implements ::eat_arg_t - @ingroup eat_arg_api
  */
 static bool eat_range(struct Pattern *pat, PatternCompFlags flags,
                       struct Buffer *s, struct Buffer *err)
@@ -719,16 +726,17 @@ static int report_regerror(int regerr, regex_t *preg, struct Buffer *err)
 }
 
 /**
- * is_context_available - Do we need a Context for this Pattern?
+ * is_menu_available - Do we need a Context for this Pattern?
  * @param s      String to check
  * @param pmatch Regex matches
  * @param kind   Range type, e.g. #RANGE_K_REL
  * @param err    Buffer for error messages
- * @retval false If context is required, but not available
+ * @param menu   Current Menu
+ * @retval false Context is required, but not available
  * @retval true  Otherwise
  */
-static bool is_context_available(struct Buffer *s, regmatch_t pmatch[],
-                                 int kind, struct Buffer *err)
+static bool is_menu_available(struct Buffer *s, regmatch_t pmatch[], int kind,
+                              struct Buffer *err, struct Menu *menu)
 {
   const char *context_req_chars[] = {
     [RANGE_K_REL] = ".0123456789",
@@ -738,7 +746,7 @@ static bool is_context_available(struct Buffer *s, regmatch_t pmatch[],
     [RANGE_K_BARE] = ".",
   };
 
-  /* First decide if we're going to need the context at all.
+  /* First decide if we're going to need the menu at all.
    * Relative patterns need it if they contain a dot or a number.
    * Absolute patterns only need it if they contain a dot. */
   char *context_loc = strpbrk(s->dptr + pmatch[0].rm_so, context_req_chars[kind]);
@@ -746,7 +754,7 @@ static bool is_context_available(struct Buffer *s, regmatch_t pmatch[],
     return true;
 
   /* We need a current message.  Do we actually have one? */
-  if (Context && Context->menu)
+  if (menu)
     return true;
 
   /* Nope. */
@@ -760,9 +768,12 @@ static bool is_context_available(struct Buffer *s, regmatch_t pmatch[],
  * @param pmatch Array of regex matches
  * @param group  Index of regex match to use
  * @param kind   Range type, e.g. #RANGE_K_REL
+ * @param m      Mailbox
+ * @param menu   Current Menu
  * @retval num Parse number
  */
-static int scan_range_num(struct Buffer *s, regmatch_t pmatch[], int group, int kind)
+static int scan_range_num(struct Buffer *s, regmatch_t pmatch[], int group,
+                          int kind, struct Mailbox *m, struct Menu *menu)
 {
   int num = (int) strtol(&s->dptr[pmatch[group].rm_so], NULL, 0);
   unsigned char c = (unsigned char) (s->dptr[pmatch[group].rm_eo - 1]);
@@ -774,7 +785,7 @@ static int scan_range_num(struct Buffer *s, regmatch_t pmatch[], int group, int 
   {
     case RANGE_K_REL:
     {
-      struct Email *e = mutt_get_virt_email(Context->mailbox, Context->menu->current);
+      struct Email *e = mutt_get_virt_email(m, menu_get_index(menu));
       return num + EMSG(e);
     }
     case RANGE_K_LT:
@@ -793,9 +804,12 @@ static int scan_range_num(struct Buffer *s, regmatch_t pmatch[], int group, int 
  * @param grp    Which regex match to use
  * @param side   Which side of the range is this?  #RANGE_S_LEFT or #RANGE_S_RIGHT
  * @param kind   Range type, e.g. #RANGE_K_REL
+ * @param m      Mailbox
+ * @param menu   Current Menu
  * @retval num Index number for the message specified
  */
-static int scan_range_slot(struct Buffer *s, regmatch_t pmatch[], int grp, int side, int kind)
+static int scan_range_slot(struct Buffer *s, regmatch_t pmatch[], int grp,
+                           int side, int kind, struct Mailbox *m, struct Menu *menu)
 {
   /* This means the left or right subpattern was empty, e.g. ",." */
   if ((pmatch[grp].rm_so == -1) || (pmatch[grp].rm_so == pmatch[grp].rm_eo))
@@ -803,7 +817,7 @@ static int scan_range_slot(struct Buffer *s, regmatch_t pmatch[], int grp, int s
     if (side == RANGE_S_LEFT)
       return 1;
     if (side == RANGE_S_RIGHT)
-      return Context->mailbox->msg_count;
+      return m->msg_count;
   }
   /* We have something, so determine what */
   unsigned char c = (unsigned char) (s->dptr[pmatch[grp].rm_so]);
@@ -812,18 +826,18 @@ static int scan_range_slot(struct Buffer *s, regmatch_t pmatch[], int grp, int s
     case RANGE_CIRCUM:
       return 1;
     case RANGE_DOLLAR:
-      return Context->mailbox->msg_count;
+      return m->msg_count;
     case RANGE_DOT:
     {
-      struct Email *e = mutt_get_virt_email(Context->mailbox, Context->menu->current);
+      struct Email *e = mutt_get_virt_email(m, menu_get_index(menu));
       return EMSG(e);
     }
     case RANGE_LT:
     case RANGE_GT:
-      return scan_range_num(s, pmatch, grp + 1, kind);
+      return scan_range_num(s, pmatch, grp + 1, kind, m, menu);
     default:
       /* Only other possibility: a number */
-      return scan_range_num(s, pmatch, grp, kind);
+      return scan_range_num(s, pmatch, grp, kind, m, menu);
   }
 }
 
@@ -846,14 +860,16 @@ static void order_range(struct Pattern *pat)
  * @param s    String to parse
  * @param kind Range type, e.g. #RANGE_K_REL
  * @param err  Buffer for error messages
+ * @param m    Mailbox
+ * @param menu Current Menu
  * @retval num EatRangeError code, e.g. #RANGE_E_OK
  */
 static int eat_range_by_regex(struct Pattern *pat, struct Buffer *s, int kind,
-                              struct Buffer *err)
+                              struct Buffer *err, struct Mailbox *m, struct Menu *menu)
 {
   int regerr;
   regmatch_t pmatch[RANGE_RX_GROUPS];
-  struct RangeRegex *pspec = &range_regexes[kind];
+  struct RangeRegex *pspec = &RangeRegexes[kind];
 
   /* First time through, compile the big regex */
   if (!pspec->ready)
@@ -870,23 +886,26 @@ static int eat_range_by_regex(struct Pattern *pat, struct Buffer *s, int kind,
   if (regerr != 0)
     return report_regerror(regerr, &pspec->cooked, err);
 
-  if (!is_context_available(s, pmatch, kind, err))
+  if (!is_menu_available(s, pmatch, kind, err, menu))
     return RANGE_E_CTX;
 
   /* Snarf the contents of the two sides of the range. */
-  pat->min = scan_range_slot(s, pmatch, pspec->lgrp, RANGE_S_LEFT, kind);
-  pat->max = scan_range_slot(s, pmatch, pspec->rgrp, RANGE_S_RIGHT, kind);
+  pat->min = scan_range_slot(s, pmatch, pspec->lgrp, RANGE_S_LEFT, kind, m, menu);
+  pat->max = scan_range_slot(s, pmatch, pspec->rgrp, RANGE_S_RIGHT, kind, m, menu);
   mutt_debug(LL_DEBUG1, "pat->min=%d pat->max=%d\n", pat->min, pat->max);
 
   /* Special case for a bare 0. */
   if ((kind == RANGE_K_BARE) && (pat->min == 0) && (pat->max == 0))
   {
-    if (!Context->menu)
+    if (!m || !menu)
     {
       mutt_buffer_strcpy(err, _("No current message"));
       return RANGE_E_CTX;
     }
-    struct Email *e = mutt_get_virt_email(Context->mailbox, Context->menu->current);
+    struct Email *e = mutt_get_virt_email(m, menu_get_index(menu));
+    if (!e)
+      return RANGE_E_CTX;
+
     pat->max = EMSG(e);
     pat->min = pat->max;
   }
@@ -900,19 +919,27 @@ static int eat_range_by_regex(struct Pattern *pat, struct Buffer *s, int kind,
 }
 
 /**
- * eat_message_range - Parse a range of message numbers - Implements ::eat_arg_t
+ * eat_message_range - Parse a range of message numbers - Implements ::eat_arg_t - @ingroup eat_arg_api
+ * @param pat   Pattern to store the results in
+ * @param flags Flags, e.g. #MUTT_PC_PATTERN_DYNAMIC
+ * @param s     String to parse
+ * @param err   Buffer for error messages
+ * @param m     Mailbox
+ * @param menu  Current Menu
+ * @retval true The pattern was read successfully
  */
 static bool eat_message_range(struct Pattern *pat, PatternCompFlags flags,
-                              struct Buffer *s, struct Buffer *err)
+                              struct Buffer *s, struct Buffer *err,
+                              struct Mailbox *m, struct Menu *menu)
 {
-  bool skip_quote = false;
-
-  /* We need a Context for pretty much anything. */
-  if (!Context)
+  if (!m || !menu)
   {
+    // We need these for pretty much anything
     mutt_buffer_strcpy(err, _("No Context"));
     return false;
   }
+
+  bool skip_quote = false;
 
   /* If simple_search is set to "~m %s", the range will have double quotes
    * around it...  */
@@ -924,7 +951,7 @@ static bool eat_message_range(struct Pattern *pat, PatternCompFlags flags,
 
   for (int i_kind = 0; i_kind != RANGE_K_INVALID; i_kind++)
   {
-    switch (eat_range_by_regex(pat, s, i_kind, err))
+    switch (eat_range_by_regex(pat, s, i_kind, err, m, menu))
     {
       case RANGE_E_CTX:
         /* This means it matched syntactically but lacked context.
@@ -944,7 +971,7 @@ static bool eat_message_range(struct Pattern *pat, PatternCompFlags flags,
 }
 
 /**
- * eat_date - Parse a date pattern - Implements ::eat_arg_t
+ * eat_date - Parse a date pattern - Implements ::eat_arg_t - @ingroup eat_arg_api
  */
 static bool eat_date(struct Pattern *pat, PatternCompFlags flags,
                      struct Buffer *s, struct Buffer *err)
@@ -1055,12 +1082,15 @@ static struct PatternList *mutt_pattern_node_new(void)
 
 /**
  * mutt_pattern_comp - Create a Pattern
+ * @param m     Mailbox
+ * @param menu  Current Menu
  * @param s     Pattern string
  * @param flags Flags, e.g. #MUTT_PC_FULL_MSG
  * @param err   Buffer for error messages
  * @retval ptr Newly allocated Pattern
  */
-struct PatternList *mutt_pattern_comp(const char *s, PatternCompFlags flags, struct Buffer *err)
+struct PatternList *mutt_pattern_comp(struct Mailbox *m, struct Menu *menu, const char *s,
+                                      PatternCompFlags flags, struct Buffer *err)
 {
   /* curlist when assigned will always point to a list containing at least one node
    * with a Pattern value.  */
@@ -1078,7 +1108,7 @@ struct PatternList *mutt_pattern_comp(const char *s, PatternCompFlags flags, str
   char *buf = NULL;
   struct Buffer ps;
 
-  if (!s || !*s)
+  if (!s || (s[0] == '\0'))
   {
     mutt_buffer_strcpy(err, _("empty pattern"));
     return NULL;
@@ -1180,7 +1210,7 @@ struct PatternList *mutt_pattern_comp(const char *s, PatternCompFlags flags, str
           is_alias = false;
           /* compile the sub-expression */
           buf = mutt_strn_dup(ps.dptr + 1, p - (ps.dptr + 1));
-          tmp2 = mutt_pattern_comp(buf, flags, err);
+          tmp2 = mutt_pattern_comp(m, menu, buf, flags, err);
           if (!tmp2)
           {
             FREE(&buf);
@@ -1189,6 +1219,7 @@ struct PatternList *mutt_pattern_comp(const char *s, PatternCompFlags flags, str
           FREE(&buf);
           pat->child = tmp2;
           ps.dptr = p + 1; /* restore location */
+          SKIPWS(ps.dptr);
           break;
         }
         if (implicit && pat_or)
@@ -1264,11 +1295,11 @@ struct PatternList *mutt_pattern_comp(const char *s, PatternCompFlags flags, str
                 goto cleanup;
               break;
             case EAT_MESSAGE_RANGE:
-              if (!eat_message_range(pat, flags, &ps, err))
+              if (!eat_message_range(pat, flags, &ps, err, m, menu))
                 goto cleanup;
               break;
             case EAT_QUERY:
-              if (!eat_query(pat, flags, &ps, err))
+              if (!eat_query(pat, flags, &ps, err, m))
                 goto cleanup;
               break;
             default:
@@ -1289,7 +1320,7 @@ struct PatternList *mutt_pattern_comp(const char *s, PatternCompFlags flags, str
         }
         /* compile the sub-expression */
         buf = mutt_strn_dup(ps.dptr + 1, p - (ps.dptr + 1));
-        tmp = mutt_pattern_comp(buf, flags, err);
+        tmp = mutt_pattern_comp(m, menu, buf, flags, err);
         FREE(&buf);
         if (!tmp)
           goto cleanup;
@@ -1307,6 +1338,7 @@ struct PatternList *mutt_pattern_comp(const char *s, PatternCompFlags flags, str
         all_addr = false;
         is_alias = false;
         ps.dptr = p + 1; /* restore location */
+        SKIPWS(ps.dptr);
         break;
       }
 

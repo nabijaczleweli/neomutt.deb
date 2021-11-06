@@ -28,18 +28,19 @@
  * - Backed by `char *`
  * - Empty string is stored as `NULL`
  * - Validator is passed `char *`, which may be `NULL`
+ * - Data is freed when `ConfigSet` is freed
+ * - Implementation: #CstString
  */
 
 #include "config.h"
 #include <stddef.h>
-#include <limits.h>
 #include <stdint.h>
 #include "mutt/lib.h"
 #include "set.h"
 #include "types.h"
 
 /**
- * string_destroy - Destroy a String - Implements ConfigSetType::destroy()
+ * string_destroy - Destroy a String - Implements ConfigSetType::destroy() - @ingroup cfg_type_destroy
  */
 static void string_destroy(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef)
 {
@@ -47,18 +48,11 @@ static void string_destroy(const struct ConfigSet *cs, void *var, const struct C
   if (!*str)
     return;
 
-  /* Don't free strings from the var definition */
-  if (*(char **) var == (char *) cdef->initial)
-  {
-    *(char **) var = NULL;
-    return;
-  }
-
   FREE(var);
 }
 
 /**
- * string_string_set - Set a String by string - Implements ConfigSetType::string_set()
+ * string_string_set - Set a String by string - Implements ConfigSetType::string_set() - @ingroup cfg_type_string_set
  */
 static int string_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                              const char *value, struct Buffer *err)
@@ -98,22 +92,18 @@ static int string_string_set(const struct ConfigSet *cs, void *var, struct Confi
   }
   else
   {
-    /* we're already using the initial value */
-    if (*(char **) cdef->var == (char *) cdef->initial)
-      *(char **) cdef->var = mutt_str_dup((char *) cdef->initial);
-
     if (cdef->type & DT_INITIAL_SET)
       FREE(&cdef->initial);
 
     cdef->type |= DT_INITIAL_SET;
-    cdef->initial = IP mutt_str_dup(value);
+    cdef->initial = (intptr_t) mutt_str_dup(value);
   }
 
   return rc;
 }
 
 /**
- * string_string_get - Get a String as a string - Implements ConfigSetType::string_get()
+ * string_string_get - Get a String as a string - Implements ConfigSetType::string_get() - @ingroup cfg_type_string_get
  */
 static int string_string_get(const struct ConfigSet *cs, void *var,
                              const struct ConfigDef *cdef, struct Buffer *result)
@@ -133,7 +123,7 @@ static int string_string_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * string_native_set - Set a String config item by string - Implements ConfigSetType::native_set()
+ * string_native_set - Set a String config item by string - Implements ConfigSetType::native_set() - @ingroup cfg_type_native_set
  */
 static int string_native_set(const struct ConfigSet *cs, void *var,
                              const struct ConfigDef *cdef, intptr_t value,
@@ -176,7 +166,7 @@ static int string_native_set(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * string_native_get - Get a string from a String config item - Implements ConfigSetType::native_get()
+ * string_native_get - Get a string from a String config item - Implements ConfigSetType::native_get() - @ingroup cfg_type_native_get
  */
 static intptr_t string_native_get(const struct ConfigSet *cs, void *var,
                                   const struct ConfigDef *cdef, struct Buffer *err)
@@ -187,7 +177,7 @@ static intptr_t string_native_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * string_string_plus_equals - Concat String to a string - Implements ConfigSetType::string_plus_equals
+ * string_string_plus_equals - Concat String to a string - Implements ConfigSetType::string_plus_equals() - @ingroup cfg_type_string_plus_equals
  */
 static int string_string_plus_equals(const struct ConfigSet *cs, void *var,
                                      const struct ConfigDef *cdef,
@@ -225,26 +215,32 @@ static int string_string_plus_equals(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * string_reset - Reset a String to its initial value - Implements ConfigSetType::reset()
+ * string_reset - Reset a String to its initial value - Implements ConfigSetType::reset() - @ingroup cfg_type_reset
  */
 static int string_reset(const struct ConfigSet *cs, void *var,
                         const struct ConfigDef *cdef, struct Buffer *err)
 {
   int rc = CSR_SUCCESS;
 
-  const char *str = (const char *) cdef->initial;
+  const char *str = mutt_str_dup((const char *) cdef->initial);
   if (!str)
     rc |= CSR_SUC_EMPTY;
 
   if (mutt_str_equal(str, (*(char **) var)))
+  {
+    FREE(&str);
     return rc | CSR_SUC_NO_CHANGE;
+  }
 
   if (cdef->validator)
   {
     rc = cdef->validator(cs, cdef, cdef->initial, err);
 
     if (CSR_RESULT(rc) != CSR_SUCCESS)
+    {
+      FREE(&str);
       return rc | CSR_INV_VALIDATOR;
+    }
   }
 
   string_destroy(cs, var, cdef);
@@ -257,9 +253,9 @@ static int string_reset(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * cst_string - Config type representing a string
+ * CstString - Config type representing a string
  */
-const struct ConfigSetType cst_string = {
+const struct ConfigSetType CstString = {
   DT_STRING,
   "string",
   string_string_set,

@@ -21,39 +21,53 @@
  */
 
 /**
- * @page debug_graphviz Create a GraphViz dot file
+ * @page debug_graphviz GraphViz dot file
  *
  * Create a GraphViz dot file from the NeoMutt objects
  */
 
 #include "config.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
 #include "mutt/lib.h"
+#include "address/lib.h"
+#include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
 #include "conn/lib.h"
 #include "lib.h"
 #include "compmbox/lib.h"
+#include "imap/lib.h"
+#include "maildir/lib.h"
 #include "mbox/lib.h"
+#include "ncrypt/lib.h"
 #include "nntp/lib.h"
 #include "notmuch/lib.h"
+#include "pop/lib.h"
 #include "context.h"
-#include "imap/private.h"
-#include "maildir/edata.h"
-#include "maildir/mdata.h"
-#include "maildir/private.h"
-#include "mutt_globals.h"
-#include "notmuch/private.h"
-#include "pop/private.h"
+#include "imap/adata.h"      // IWYU pragma: keep
+#include "imap/mdata.h"      // IWYU pragma: keep
+#include "imap/private.h"    // IWYU pragma: keep
+#include "maildir/edata.h"   // IWYU pragma: keep
+#include "maildir/mdata.h"   // IWYU pragma: keep
+#include "maildir/private.h" // IWYU pragma: keep
+#include "nntp/adata.h"      // IWYU pragma: keep
+#include "nntp/mdata.h"      // IWYU pragma: keep
+#include "notmuch/adata.h"   // IWYU pragma: keep
+#include "notmuch/mdata.h"   // IWYU pragma: keep
+#include "notmuch/private.h" // IWYU pragma: keep
+#include "pop/adata.h"       // IWYU pragma: keep
+#include "pop/private.h"     // IWYU pragma: keep
 
 // #define GV_HIDE_CONTEXT
 #define GV_HIDE_CONTEXT_CONTENTS
 // #define GV_HIDE_MBOX
 // #define GV_HIDE_NEOMUTT
 // #define GV_HIDE_CONFIG
+// #define GV_HIDE_ADATA
 // #define GV_HIDE_MDATA
 
 static void dot_email(FILE *fp, struct Email *e, struct ListHead *links);
@@ -151,6 +165,7 @@ static void dot_type_bool(FILE *fp, const char *name, bool val)
   fprintf(fp, "\t\t</tr>\n");
 }
 
+#ifndef GV_HIDE_ADATA
 static void dot_type_char(FILE *fp, const char *name, char ch)
 {
   fprintf(fp, "\t\t<tr>\n");
@@ -159,6 +174,7 @@ static void dot_type_char(FILE *fp, const char *name, char ch)
   fprintf(fp, "\t\t\t<td border=\"0\" align=\"left\">%c</td>\n", ch);
   fprintf(fp, "\t\t</tr>\n");
 }
+#endif
 
 static void dot_type_date(char *buf, size_t buflen, time_t timestamp)
 {
@@ -229,10 +245,12 @@ static void dot_type_string(FILE *fp, const char *name, const char *str, bool fo
   fprintf(fp, "\t\t</tr>\n");
 }
 
+#ifndef GV_HIDE_MDATA
 static void dot_type_umask(char *buf, size_t buflen, int umask)
 {
   snprintf(buf, buflen, "0%03o", umask);
 }
+#endif
 
 static void dot_ptr_name(char *buf, size_t buflen, const void *ptr)
 {
@@ -405,6 +423,7 @@ static void dot_path_imap(char *buf, size_t buflen, const char *path)
   url_free(&u);
 }
 
+#ifndef GV_HIDE_CONFIG
 static void dot_config(FILE *fp, const char *name, int type,
                        struct ConfigSubset *sub, struct ListHead *links)
 {
@@ -445,6 +464,7 @@ static void dot_config(FILE *fp, const char *name, int type,
         }
       }
     }
+    FREE(&list);
   }
   else
   {
@@ -460,6 +480,7 @@ static void dot_config(FILE *fp, const char *name, int type,
   dot_object_footer(fp);
   mutt_buffer_dealloc(&value);
 }
+#endif
 
 static void dot_comp(FILE *fp, struct CompressInfo *ci, struct ListHead *links)
 {
@@ -514,6 +535,7 @@ static void dot_mailbox_type(FILE *fp, const char *name, enum MailboxType type)
   fprintf(fp, "\t\t</tr>\n");
 }
 
+#ifndef GV_HIDE_MDATA
 static void dot_mailbox_imap(FILE *fp, struct ImapMboxData *mdata, struct ListHead *links)
 {
   dot_object_header(fp, mdata, "ImapMboxData", "#60c060");
@@ -577,12 +599,13 @@ static void dot_mailbox_notmuch(FILE *fp, struct NmMboxData *mdata, struct ListH
   dot_object_footer(fp);
 }
 
-static void dot_mailbox_pop(FILE *fp, struct PopAccountData *mdata, struct ListHead *links)
+static void dot_mailbox_pop(FILE *fp, struct PopAccountData *adata, struct ListHead *links)
 {
-  dot_object_header(fp, mdata, "PopAccountData", "#60c060");
-  dot_ptr(fp, "conn", mdata->conn, "#ff8080");
+  dot_object_header(fp, adata, "PopAccountData", "#60c060");
+  dot_ptr(fp, "conn", adata->conn, "#ff8080");
   dot_object_footer(fp);
 }
+#endif
 
 static void dot_mailbox(FILE *fp, struct Mailbox *m, struct ListHead *links)
 {
@@ -611,6 +634,7 @@ static void dot_mailbox(FILE *fp, struct Mailbox *m, struct ListHead *links)
   dot_ptr(fp, "mdata", m->mdata, NULL);
 #endif
   dot_ptr(fp, "account", m->account, "#80ffff");
+  dot_type_number(fp, "opened", m->opened);
 
   dot_type_number(fp, "msg_count", m->msg_count);
   // dot_type_number(fp, "msg_unread", m->msg_unread);
@@ -721,6 +745,7 @@ static void dot_mailbox_list(FILE *fp, struct MailboxList *ml, struct ListHead *
   }
 }
 
+#ifndef GV_HIDE_ADATA
 static void dot_connection(FILE *fp, struct Connection *c, struct ListHead *links)
 {
   dot_object_header(fp, c, "Connection", "#ff8080");
@@ -845,6 +870,7 @@ static void dot_account_pop(FILE *fp, struct PopAccountData *adata, struct ListH
     dot_add_link(links, adata, adata->conn, "PopAccountData->conn", false, NULL);
   }
 }
+#endif
 
 static void dot_account(FILE *fp, struct Account *a, struct ListHead *links)
 {
@@ -854,6 +880,7 @@ static void dot_account(FILE *fp, struct Account *a, struct ListHead *links)
   // dot_ptr(fp, "adata", a->adata, "#60c0c0");
   dot_object_footer(fp);
 
+#ifndef GV_HIDE_ADATA
   if (a->adata)
   {
     if (a->type == MUTT_IMAP)
@@ -869,6 +896,7 @@ static void dot_account(FILE *fp, struct Account *a, struct ListHead *links)
 
     dot_add_link(links, a, a->adata, "Account->adata", false, NULL);
   }
+#endif
 
 #ifndef GV_HIDE_CONFIG
   if (a->name)
@@ -917,6 +945,7 @@ static void dot_account_list(FILE *fp, struct AccountList *al, struct ListHead *
   }
 }
 
+#ifndef GV_HIDE_CONTEXT
 static void dot_context(FILE *fp, struct Context *ctx, struct ListHead *links)
 {
   dot_object_header(fp, ctx, "Context", "#ff80ff");
@@ -928,8 +957,9 @@ static void dot_context(FILE *fp, struct Context *ctx, struct ListHead *links)
 #endif
   dot_object_footer(fp);
 }
+#endif
 
-void dump_graphviz(const char *title)
+void dump_graphviz(const char *title, struct Context *ctx)
 {
   char name[256] = { 0 };
   struct ListHead links = STAILQ_HEAD_INITIALIZER(links);
@@ -974,15 +1004,15 @@ void dump_graphviz(const char *title)
   dot_account_list(fp, &NeoMutt->accounts, &links);
 
 #ifndef GV_HIDE_CONTEXT
-  if (Context)
-    dot_context(fp, Context, &links);
+  if (ctx)
+    dot_context(fp, ctx, &links);
 
 #ifndef GV_HIDE_NEOMUTT
   /* Globals */
   fprintf(fp, "\t{ rank=same ");
-  if (Context)
+  if (ctx)
   {
-    dot_ptr_name(name, sizeof(name), Context);
+    dot_ptr_name(name, sizeof(name), ctx);
     fprintf(fp, "%s ", name);
   }
   dot_ptr_name(name, sizeof(name), NeoMutt);
@@ -1265,6 +1295,8 @@ static void dot_envelope(FILE *fp, struct Envelope *env, struct ListHead *links)
   dot_type_string(fp, "disp_subj", env->disp_subj, false);
   dot_type_string(fp, "followup_to", env->followup_to, false);
   dot_type_string(fp, "list_post", env->list_post, false);
+  dot_type_string(fp, "list_subscribe", env->list_subscribe, false);
+  dot_type_string(fp, "list_unsubscribe", env->list_unsubscribe, false);
   dot_type_string(fp, "message_id", env->message_id, false);
   dot_type_string(fp, "newsgroups", env->newsgroups, false);
   dot_type_string(fp, "organization", env->organization, false);
@@ -1360,9 +1392,9 @@ static void dot_email(FILE *fp, struct Email *e, struct ListHead *links)
   dot_type_number(fp, "score", e->score);
   dot_type_number(fp, "attach_total", e->attach_total);
 
-  struct MaildirEmailData *edata = maildir_edata_get(e);
-  if (edata)
-    dot_type_string(fp, "maildir_flags", edata->maildir_flags, false);
+  // struct MaildirEmailData *edata = maildir_edata_get(e);
+  // if (edata)
+  //   dot_type_string(fp, "maildir_flags", edata->maildir_flags, false);
 
   if (e->date_sent != 0)
   {

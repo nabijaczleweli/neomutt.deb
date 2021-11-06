@@ -79,7 +79,7 @@ vim: ts=2 sw=2 sts=2 expandtab:
             <para>
               For the IRC user community, visit channel
               <emphasis>#neomutt</emphasis> on
-              <ulink url="https://webchat.freenode.net">irc.freenode.net</ulink>.
+              <ulink url="https://kiwiirc.com/nextclient/irc.libera.chat/#neomutt">irc.libera.chat</ulink>.
             </para>
           </listitem>
         </varlistentry>
@@ -181,7 +181,7 @@ vim: ts=2 sw=2 sts=2 expandtab:
     <sect1 id="copyright">
       <title>Copyright</title>
       <para>
-        NeoMutt is Copyright © 1996-2020 Michael R. Elkins
+        NeoMutt is Copyright © 1996-2021 Michael R. Elkins
         <email>me@neomutt.org</email> and others.
       </para>
       <para>
@@ -440,13 +440,13 @@ Seas          1/7|  4      Sep 25  Grace Hall       ( 27)  Capybara
           </para>
 
 <screen>
-bind index,pager \CP sidebar-prev       <emphasis role="comment"># Ctrl-Shift-P – Previous Mailbox</emphasis>
-bind index,pager \CN sidebar-next       <emphasis role="comment"># Ctrl-Shift-N – Next Mailbox</emphasis>
-bind index,pager \CO sidebar-open       <emphasis role="comment"># Ctrl-Shift-O – Open Highlighted Mailbox</emphasis>
+bind index,pager \CP sidebar-prev       <emphasis role="comment"># Ctrl-P – Previous Mailbox</emphasis>
+bind index,pager \CN sidebar-next       <emphasis role="comment"># Ctrl-N – Next Mailbox</emphasis>
+bind index,pager \CO sidebar-open       <emphasis role="comment"># Ctrl-O – Open Highlighted Mailbox</emphasis>
 </screen>
 
           <para>
-            Press <quote>Ctrl-Shift-N</quote> (Next mailbox) twice will move
+            Pressing <quote>Ctrl-N</quote> (Next mailbox) twice will move
             the Sidebar <emphasis role="bold">highlight</emphasis> to down to
             the <quote>Seas</quote> mailbox.
           </para>
@@ -473,7 +473,7 @@ Cars            4|  3    ! Aug 16  Ewan Brown       (333)  Hummingbird
             </para>
           </note>
           <para>
-            Press <quote>Ctrl-Shift-O</quote>
+            Press <quote>Ctrl-O</quote>
             (<literal>&lt;sidebar-open&gt;</literal>) to open the highlighted
             mailbox.
           </para>
@@ -672,7 +672,7 @@ bind index,pager B sidebar-toggle-visible   <emphasis role="comment"># Use 'B' t
             <para>
               Finally, you might want to change the divider character. By
               default, Sidebar draws an ASCII line between it and the Index
-              panel If your terminal supports it, you can use a Unicode
+              panel. If your terminal supports it, you can use a Unicode
               line-drawing character.
             </para>
 
@@ -817,13 +817,6 @@ set sidebar_divider_char = '│'          <emphasis role="comment"># Pretty line
                     <entry>* ‡</entry>
                     <entry>
                       Number of tagged messages in the mailbox
-                    </entry>
-                  </row>
-                  <row>
-                    <entry>%Z</entry>
-                    <entry>* †</entry>
-                    <entry>
-                      Number of new messages in the mailbox (unread, unseen)
                     </entry>
                   </row>
                   <row>
@@ -1084,7 +1077,7 @@ sidebar_whitelist +fruit +fruit/apple   <emphasis role="comment"># Always displa
 <screen>
 color sidebar_indicator default color17     <emphasis role="comment"># Dark blue background</emphasis>
 color sidebar_highlight white   color238    <emphasis role="comment"># Grey background</emphasis>
-color sidebar_spoolfile yellow  default     <emphasis role="comment"># Yellow</emphasis>
+color sidebar_spool_file yellow  default     <emphasis role="comment"># Yellow</emphasis>
 color sidebar_unread    cyan    default     <emphasis role="comment"># Light blue</emphasis>
 color sidebar_new       green   default     <emphasis role="comment"># Green</emphasis>
 color sidebar_ordinary  default default     <emphasis role="comment"># Default colors</emphasis>
@@ -1137,8 +1130,8 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
                 </row>
                 <row>
                   <entry></entry>
-                  <entry><literal>sidebar_spoolfile</literal></entry>
-                  <entry>Mailbox is the spoolfile (receives incoming mail)</entry>
+                  <entry><literal>sidebar_spool_file</literal></entry>
+                  <entry>Mailbox is the spool_file (receives incoming mail)</entry>
                 </row>
                 <row>
                   <entry>Lowest</entry>
@@ -1224,7 +1217,7 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
         <title>Compose Menu</title>
         <para>
           The compose menu features a split screen containing the information
-          which really matter before actually sending a message by mail: who
+          which really matters before actually sending a message by mail: who
           gets the message as what (recipients and who gets what kind of copy).
           Additionally, users may set security options like deciding whether to
           sign, encrypt or sign and encrypt a message with/for what keys. Also,
@@ -1255,7 +1248,7 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
           receiving messages of arbitrary MIME types. The attachment menu
           displays a message's structure in detail: what content parts are
           attached to which parent part (which gives a true tree structure),
-          which type is of what type and what size. Single parts may saved,
+          which part is of what type and what size. Single parts may saved,
           deleted or modified to offer great and easy access to message's
           internals.
         </para>
@@ -1513,6 +1506,12 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
             </tbody>
           </tgroup>
         </table>
+        <para>
+          <literal>^G</literal> is the generic <quote>abort</quote> key
+          in NeoMutt.  In addition to the line editor, it can also be used
+          to abort prompts.  Generally, typing <literal>^G</literal> at a
+          confirmation prompt or line editor should abort the entire action.
+        </para>
         <para>
           You can remap the <emphasis>editor</emphasis> functions using the
           <link linkend="bind"><command>bind</command></link> command. For
@@ -1936,7 +1935,10 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
         </para>
         <para>
           Also, the internal pager supports a couple other advanced features.
-          For one, it will accept and translate the <quote>standard</quote>
+          For one, you can set <link linkend="pager-read-delay">$pager_read_delay</link>
+          to operate in a preview mode, where new messages are not marked
+          read unless you remain on the message for a certain length of time.
+          Additionally, it will accept and translate the <quote>standard</quote>
           nroff sequences for bold and underline. These sequences are a series
           of either the letter, backspace (<quote>^H</quote>), the letter
           again for bold or the letter, backspace, <quote>_</quote> for
@@ -2468,6 +2470,30 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
           </varlistentry>
           <varlistentry>
             <term>
+              <literal>&lt;list-subscribe&gt;</literal>
+              <anchor id="list-subscribe" />
+            </term>
+            <listitem>
+              <para>
+                Send an email to the address specified in the List-Subscribe
+                header as specified in RFC2369.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>
+              <literal>&lt;list-unsubscribe&gt;</literal>
+              <anchor id="list-unsubscribe" />
+            </term>
+            <listitem>
+              <para>
+                Send an email to the address specified in the List-Unsubscribe
+                header as specified in RFC2369.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>
               <literal>&lt;pipe-message&gt;</literal> (default: |)
               <anchor id="pipe-message" />
             </term>
@@ -2530,13 +2556,9 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
             </term>
             <listitem>
               <para>
-                This function will skip past the headers of the current message.
-              </para>
-              <para>
-                The variable
-                <link linkend="toggle-quoted-show-levels">$toggle_quoted_show_levels</link>
-                can be used to show some context by continuing to show that number of levels
-                rather than hiding all quoted levels.
+                This function will skip to the first line of the body,
+                past the headers of the current message, regardless of
+                current position.
               </para>
             </listitem>
           </varlistentry>
@@ -2567,8 +2589,17 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
             </term>
             <listitem>
               <para>
-                This function will go to the next line of non-quoted text which
-                comes after a line of quoted text in the internal pager.
+                This function will make the internal pager go forward
+                to the next segment of non-quoted body text (whether
+                the first line of the body after headers, or following
+                a line of quoted text), or print a message if no
+                further unquoted text can be found.
+              </para>
+              <para>
+                The variable
+                <link linkend="pager-skip-quoted-context">$pager_skip_quoted_context</link>
+                can be used to show some quoted context prior to the
+                selected line.
               </para>
             </listitem>
           </varlistentry>
@@ -2584,6 +2615,12 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
                 This function toggles the display of the quoted material in the message.
                 It is particularly useful when being interested in just the response and
                 there is a large amount of quoted text in the way.
+              </para>
+              <para>
+                The variable
+                <link linkend="toggle-quoted-show-levels">$toggle_quoted_show_levels</link>
+                can be used to show some context by continuing to show that number of levels
+                rather than hiding all quoted levels.
               </para>
             </listitem>
           </varlistentry>
@@ -2616,7 +2653,7 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
             <tbody>
               <row>
                 <entry>m</entry>
-                <entry><literal>&lt;compose&gt;</literal></entry>
+                <entry><literal>&lt;mail&gt;</literal></entry>
                 <entry>compose a new message</entry>
               </row>
               <row>
@@ -2637,7 +2674,17 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
               <row>
                 <entry>L</entry>
                 <entry><literal>&lt;list-reply&gt;</literal></entry>
-                <entry>reply to mailing list address</entry>
+                <entry>reply to a mailing list</entry>
+              </row>
+              <row>
+                <entry>L</entry>
+                <entry><literal>&lt;list-subscribe&gt;</literal></entry>
+                <entry>send a subscription email to a mailing list</entry>
+              </row>
+              <row>
+                <entry>L</entry>
+                <entry><literal>&lt;list-unsubscribe&gt;</literal></entry>
+                <entry>send an unsubscription email to a mailing list</entry>
               </row>
               <row>
                 <entry>f</entry>
@@ -2673,9 +2720,9 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
           forwarding a message. You again have the chance to adjust recipients,
           subject, and security settings right before actually sending the
           message. See also
-          <link linkend="askcc">$askcc</link>,
-          <link linkend="askbcc">$askbcc</link>,
-          <link linkend="autoedit">$autoedit</link>,
+          <link linkend="ask-cc">$ask_cc</link>,
+          <link linkend="ask-bcc">$ask_bcc</link>,
+          <link linkend="auto-edit">$auto_edit</link>,
           <link linkend="bounce">$bounce</link>,
           <link linkend="fast-reply">$fast_reply</link>, and
           <link linkend="include">$include</link> for changing how and if
@@ -3358,6 +3405,12 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
       <title>Encryption and Signing</title>
 
       <para>
+      NeoMutt supports encrypting and signing emails when used interactively.
+      In batch mode, cryptographic operations are disabled, so these options
+      can't be used to sign an email sent via a cron job, for instance.
+      </para>
+
+      <para>
         OpenPGP and S/MIME are enabled in one of two ways: <quote>classic
         mode</quote> or GPGME.  The former invokes external programs to perform
         the various operations; it is better tested and more flexible, but
@@ -3636,9 +3689,8 @@ set crypt_use_gpgme
           <link linkend="mailcap-path">$mailcap_path</link>,
           <link linkend="news-server">$news_server</link>,
           <link linkend="shell">shell</link>,
-          <link linkend="spoolfile">$spoolfile</link>,
+          <link linkend="spool-file">$spool_file</link>,
           <link linkend="tmpdir">$tmpdir</link>,
-          <link linkend="visual">$visual</link>.
         </para>
         <para>
           Finally, it's possible to
@@ -3713,7 +3765,7 @@ set crypt_use_gpgme
       </para>
       <example id="ex-rc-multiple-cmds">
         <title>Multiple configuration commands per line</title>
-        <screen>set realname='John Smith' ; ignore x-</screen>
+        <screen>set real_name='John Smith' ; ignore x-</screen>
       </example>
       <para>
         The hash mark, or pound sign (<quote>#</quote>), is used as
@@ -3748,7 +3800,7 @@ my_hdr X-Disclaimer: Why are you listening to me?   <emphasis role="comment"># T
       </para>
       <example id="ex-rc-quote">
         <title>Escaping quotes in configuration files</title>
-        <screen>set realname="Michael \"MuttDude\" Elkins"</screen>
+        <screen>set real_name="Michael \"MuttDude\" Elkins"</screen>
       </example>
       <para>
         <quote>\\</quote> means to insert a literal <quote>\</quote> into the
@@ -4100,7 +4152,7 @@ set alias_file=~/.mail_aliases
       </para>
       <para>
         In the alias menu, you can select as many aliases as you want with the
-        <literal>select-entry</literal> key (default: &lt;Return&gt;), and use
+        <literal>tag-entry</literal> key (default: &lt;Space&gt; or t), and use
         the <emphasis>exit</emphasis> key (default: q) to return to the address
         prompt.
       </para>
@@ -4560,8 +4612,11 @@ bind index gg first-entry
       </para>
       <cmdsynopsis>
         <command>folder-hook</command>
+        <arg choice="opt">
+          <replaceable class="parameter">-noregex</replaceable>
+        </arg>
         <arg choice="plain">
-          <replaceable class="parameter">regex</replaceable>
+          <replaceable class="parameter">pattern</replaceable>
         </arg>
         <arg choice="plain">
           <replaceable class="parameter">command</replaceable>
@@ -4571,9 +4626,11 @@ bind index gg first-entry
         It is often desirable to change settings based on which mailbox you are
         reading. The <command>folder-hook</command> command provides a method
         by which you can execute any configuration command.
-        <emphasis>regex</emphasis> is a regular expression specifying in which
-        mailboxes to execute <emphasis>command</emphasis> before loading. If
-        a mailbox matches multiple <command>folder-hook</command>s, they are
+        The <emphasis>command</emphasis> is executed before loading any mailboxes
+        matching <emphasis>pattern</emphasis>. The <emphasis>-noregex</emphasis>
+        switch controls whether <emphasis>pattern</emphasis> is matched using
+        a simple string comparison or a full regex match.
+        If a mailbox matches multiple <command>folder-hook</command>s, they are
         executed in the order given in the <literal>.neomuttrc</literal>.
       </para>
       <para>
@@ -4585,7 +4642,7 @@ bind index gg first-entry
       <note>
         <para>
           If you use the <quote>!</quote> shortcut for
-          <link linkend="spoolfile">$spoolfile</link> at the beginning of the
+          <link linkend="spool-file">$spool_file</link> at the beginning of the
           pattern, you must place it inside of double or single quotes in order
           to distinguish it from the logical <emphasis>not</emphasis> operator
           for the expression.
@@ -5180,7 +5237,7 @@ uncolor index_date
                 <entry>Mailboxes that have no new/flagged mails, etc</entry>
               </row>
               <row>
-                <entry>sidebar_spoolfile</entry>
+                <entry>sidebar_spool_file</entry>
                 <entry>Mailbox that receives incoming mail</entry>
               </row>
               <row>
@@ -5528,6 +5585,12 @@ uncolor status *
           not affected by this, NeoMutt tries to implement standards compliant
           folding.)
         </para>
+        <para>
+          Despite not being a real header, NeoMutt will also display an mbox
+          &quot;From_&quot; line in the pager along with other headers.  This
+          line can be manipulated with <command>ignore/unignore</command> and
+          <command>hdr_order/unhdr_order</command> commands.
+        </para>
       </sect2>
 
       <sect2 id="ignore">
@@ -5588,6 +5651,12 @@ unignore posted-to:
 </screen>
 
         </example>
+        <para>
+          The above example will show &quot;From:&quot; headers as well as mbox
+          &quot;From_&quot; lines.  To hide the latter, instead use
+          &quot;<literal>unignore from: date subject to cc</literal>&quot; on
+          the second line.
+        </para>
       </sect2>
 
       <sect2 id="hdr-order">
@@ -5849,8 +5918,11 @@ unignore posted-to:
       </para>
       <cmdsynopsis>
         <command>mbox-hook</command>
+        <arg choice="opt">
+          <replaceable class="parameter">-noregex</replaceable>
+        </arg>
         <arg choice="plain">
-          <replaceable class="parameter">regex</replaceable>
+          <replaceable class="parameter">pattern</replaceable>
         </arg>
         <arg choice="plain">
           <replaceable class="parameter">mailbox</replaceable>
@@ -5859,10 +5931,12 @@ unignore posted-to:
       <para>
         This command is used to move read messages from a specified mailbox to
         a different mailbox automatically when you quit or change folders.
-        <emphasis>regex</emphasis> is a regular expression specifying the
-        mailbox to treat as a <quote>spool</quote> mailbox and
-        <emphasis>mailbox</emphasis> specifies where mail should be saved when
-        read.
+        <emphasis>pattern</emphasis> is used to specifying the mailbox to
+        treat as a <quote>spool</quote> mailbox and <emphasis>mailbox</emphasis>
+        specifies where mail should be saved when read.
+        The <emphasis>-noregex</emphasis> switch controls whether
+        <emphasis>pattern</emphasis> is matched using a simple string
+        comparison or a full regex match.
       </para>
       <para>
         The regex parameter has
@@ -5954,7 +6028,7 @@ unignore posted-to:
           <link linkend="shortcuts">shortcut characters</link> (such as
           <quote>=</quote> and <quote>!</quote>), any variable definition that
           affects these characters (like <link linkend="folder">$folder</link>
-          and <link linkend="spoolfile">$spoolfile</link>) should be set before
+          and <link linkend="spool-file">$spool_file</link>) should be set before
           the <command>mailboxes</command> command. If none of these shortcuts
           are used, a local path should be absolute as otherwise NeoMutt tries
           to find it relative to the directory from where NeoMutt was started
@@ -6203,7 +6277,7 @@ save-hook aol\\.com$ +spam
           postponed draft. Adding a recipient after replying or editing the
           message will not cause any
           <command>send-hook</command> to be executed, similarly if
-          <link linkend="autoedit">$autoedit</link> is set (as then the initial
+          <link linkend="auto-edit">$auto_edit</link> is set (as then the initial
           list of recipients is empty). Also note that
           <link linkend="my-hdr"><command>my_hdr</command></link> commands
           which modify recipient headers, or the message's subject, don't have
@@ -6276,7 +6350,7 @@ message-hook '~f freshmeat-news' 'set pager="less \"+/^  subject: .*\""'
         crypt-hooks result in the use of multiple keyids for a recipient.
         During key selection, NeoMutt will confirm whether each crypt-hook is
         to be used (unless the
-        <link linkend="crypt-confirmhook">$crypt_confirmhook</link> option is
+        <link linkend="crypt-confirm-hook">$crypt_confirm_hook</link> option is
         unset). If all crypt-hooks for a recipient are declined, NeoMutt will
         use the original recipient address for key selection instead.
       </para>
@@ -6738,7 +6812,7 @@ set spam_separator=", "
             <term>e-mail address</term>
             <listitem>
               <para>
-                An email address either with or without realname. The older
+                An email address either with or without real_name. The older
                 <quote><literal>user@example.org (Joe User)</literal></quote>
                 form is supported but strongly deprecated.
               </para>
@@ -6824,15 +6898,15 @@ set spam_separator=", "
         <para>
           This command is used to set (and unset)
           <link linkend="variables">configuration variables</link>. There are
-          four basic types of variables: boolean, number, string, string list
+          several basic types of variables: boolean, number, string, string list
           and quadoption. <emphasis>boolean</emphasis> variables can be
           <emphasis>set</emphasis> (true) or <emphasis>unset</emphasis>
           (false). <emphasis>number</emphasis> variables can be assigned
-          a positive integer value. Value of number variables can be
+          a positive integer value. The value of numeric variables can be
           incremented <emphasis>+=</emphasis> and decremented
           <emphasis>-=</emphasis>. <emphasis>String list</emphasis> variables
-          use <emphasis>+=</emphasis> for appending increment to the string list
-          and <emphasis>-=</emphasis> for removal decrement from the string list.
+          use <emphasis>+=</emphasis> for appending to the string list
+          and <emphasis>-=</emphasis> for removal from the string list.
           <emphasis>string</emphasis> variables
           consist of any number of printable characters and must be enclosed in
           quotes if they contain spaces or tabs. You may also use the escape
@@ -6851,7 +6925,7 @@ set spam_separator=", "
         </para>
         <para>
           Prefixing a variable with <quote>no</quote> will unset it. Example:
-          <literal><command>set</command> noaskbcc</literal>.
+          <literal><command>set</command> noask_bcc</literal>.
         </para>
         <para>
           For <emphasis>boolean</emphasis> variables, you may optionally prefix
@@ -6906,9 +6980,16 @@ set spam_separator=", "
           </para>
           <para>
             The <command>set</command> command either creates a custom
-            <literal>my_</literal> variable or changes its value if it does
-            exist already. The <command>unset</command> and
-            <command>reset</command> commands remove the variable entirely.
+            <literal>my_</literal> variable or changes its value if it
+            exists already. Use of <emphasis>+=</emphasis> will adjust
+            a custom variable using the same behavior as a string
+            variable, by appending additional characters (this is true
+            even if the current contents of the variable resemble an
+            integer, which is different than the behavior of
+            <emphasis>+=</emphasis> on built-in numeric
+            variables). The <command>unset</command> and
+            <command>reset</command> commands remove the variable
+            entirely.
           </para>
           <para>
             Since user-defined variables are expanded in the same way that
@@ -7937,7 +8018,6 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
                   <emphasis>STRING</emphasis> on the server, rather than
                   downloading each message and searching it locally.
                 </entry>
-                <entry></entry>
               </row>
               <row>
                 <entry>~B <emphasis>EXPR</emphasis></entry>
@@ -9215,7 +9295,7 @@ send-hook ~C'^b@b\.b$' my_hdr from: c@c.c
       <para>
         In <xref linkend="ex-default-hook" />, by default the value of
         <link linkend="from">$from</link> and
-        <link linkend="realname">$realname</link> is not overridden. When
+        <link linkend="real-name">$real_name</link> is not overridden. When
         sending messages either To: or Cc: to <literal>&lt;b@b.b&gt;</literal>,
         the From: header is changed to <literal>&lt;c@c.c&gt;</literal>.
       </para>
@@ -9470,7 +9550,7 @@ roessler@does-not-exist.org        Thomas Roessler mutt pgp
             <row>
               <entry><literal>!</literal></entry>
               <entry>
-                your <link linkend="spoolfile">$spoolfile</link> (incoming)
+                your <link linkend="spool-file">$spool_file</link> (incoming)
                 mailbox
               </entry>
             </row>
@@ -9528,6 +9608,18 @@ roessler@does-not-exist.org        Thomas Roessler mutt pgp
         be used to set <link linkend="record">$record</link>:
       </para>
       <screen>folder-hook . 'set record=^'</screen>
+      <para>
+        Note: the current mailbox shortcut,
+        <quote><literal>^</literal></quote>, has no value in some cases.  No
+        mailbox is opened when NeoMutt is invoked to send an email from the
+        command-line.  In interactive mode, NeoMutt reads the muttrc before
+        opening the mailbox, so immediate expansion won't work as expected
+        either.  This can be an issue when trying to directly assign to <link
+        linkend="record">$record</link>, but also affects the <link
+        linkend="fcc-hook">fcc-hook</link> mailbox, which is expanded
+        immediately too.  The folder-hook example above works because the
+        command is executed later, when the folder-hook fires.
+      </para>
     </sect1>
 
     <sect1 id="using-lists">
@@ -9779,7 +9871,7 @@ subjectrx '\[[^]]*\]:? *' '%L%R'
           <command>mailboxes</command> command. The interval depends on the
           folder type: for local/IMAP folders it consults
           <link linkend="mail-check">$mail_check</link> and
-          <link linkend="pop-checkinterval">$pop_checkinterval</link> for POP
+          <link linkend="pop-check-interval">$pop_check_interval</link> for POP
           folders.
         </para>
         <para>
@@ -9789,7 +9881,8 @@ subjectrx '\[[^]]*\]:? *' '%L%R'
           showing the files specified by the <command>mailboxes</command>
           command, and indicate which contain new messages. NeoMutt will
           automatically enter this mode when invoked from the command line with
-          the <literal>-y</literal> option.
+          the <literal>-y</literal> option, or from the index/pager via the
+          <literal>&lt;browse-mailboxes&gt;</literal> function.
         </para>
         <para>
           For the pager, index and directory browser menus, NeoMutt contains
@@ -9845,7 +9938,7 @@ subjectrx '\[[^]]*\]:? *' '%L%R'
             When using Maildir, you don't have to manually specify all your mailboxes. You can use this command instead:
           </para>
 <screen>
-mailboxes `find ~/.mail/ -type d -name cur | sort | sed -e 's:/cur/*$::' -e 's/ /\\ /g' | tr '\n' ' '`
+mailboxes `find ~/.mail/ -type d -name cur | sed -e 's:/cur/*$::' -e 's/ /\\ /g' | sort | tr '\n' ' '`
 </screen>
         </note>
       </sect2>
@@ -9969,7 +10062,7 @@ macro pager \cb |urlview\n
 
 <screen>
 echo "Sourcing muttrc file"
-unset confirmappend
+unset confirm_append
 macro index ,a "&lt;save-message&gt;=archive&lt;enter&gt;&lt;enter-command&gt;echo 'Saved to archive'&lt;enter&gt;"
 </screen>
 
@@ -9996,8 +10089,8 @@ macro index ,a "&lt;save-message&gt;=archive&lt;enter&gt;&lt;enter-command&gt;ec
         </listitem>
         <listitem>
           <para>Prompts for To, Cc, Bcc, Subject headers. See
-          <link linkend="askcc">$askcc</link>,
-          <link linkend="askbcc">$askbcc</link>,
+          <link linkend="ask-cc">$ask_cc</link>,
+          <link linkend="ask-bcc">$ask_bcc</link>,
           <link linkend="fast-reply">$fast_reply</link>.</para>
         </listitem>
         <listitem>
@@ -10037,7 +10130,7 @@ macro index ,a "&lt;save-message&gt;=archive&lt;enter&gt;&lt;enter-command&gt;ec
         </listitem>
         <listitem>
           <para>
-            <link linkend="realname">$realname</link>part of From header setting.
+            <link linkend="real-name">$real_name</link>part of From header setting.
           </para>
         </listitem>
         <listitem>
@@ -10099,7 +10192,7 @@ macro index ,a "&lt;save-message&gt;=archive&lt;enter&gt;&lt;enter-command&gt;ec
           <listitem>
             <para>
               NeoMutt normalizes all e-mail addresses to the simplest form
-              possible. If an address contains a realname, the form
+              possible. If an address contains a real_name, the form
               <emphasis>Joe User &lt;joe@example.com&gt;</emphasis> is used and
               the pure e-mail address without angle brackets otherwise, i.e.
               just <emphasis>joe@example.com</emphasis>.
@@ -10120,7 +10213,7 @@ macro index ,a "&lt;save-message&gt;=archive&lt;enter&gt;&lt;enter-command&gt;ec
               <literal>$MAILDIR</literal> is taken into account. If that isn't
               present either, NeoMutt takes the user's mailbox in the mailspool
               as determined at compile-time (which may also reside in the home
-              directory). The <link linkend="spoolfile">$spoolfile</link>
+              directory). The <link linkend="spool-file">$spool_file</link>
               setting overrides this selection. Highest priority has the
               mailbox given with the <literal>-f</literal> command line option.
             </para>
@@ -10390,7 +10483,7 @@ macro index ,a "&lt;save-message&gt;=archive&lt;enter&gt;&lt;enter-command&gt;ec
         To get most out of MIME, it's important that a MIME part's content type
         matches the content as closely as possible so that the recipient's
         client can automatically select the right viewer for the content.
-        However, there's no reliable for NeoMutt to know how to detect every
+        However, there's no reliable way for NeoMutt to know how to detect every
         possible file type. Instead, it uses a simple plain text mapping file
         that specifies what file extension corresponds to what MIME type. This
         file is called <literal>mime.types</literal>.
@@ -10885,6 +10978,18 @@ text/html; lynx %s
                   <link linkend="timeout">$timeout</link> seconds.
                 </para>
                 <screen>text/html; firefox %s &amp; x-neomutt-keep</screen>
+              </listitem>
+            </varlistentry>
+            <varlistentry>
+              <term>x-neomutt-nowrap</term>
+              <listitem>
+                <para>
+                  <literal>x-neomutt-nowrap</literal> tells the NeoMutt pager
+                  to ignore the <link linkend="wrap">$wrap</link> parameter and
+                  to assume the output from the mailcap command to already be
+                  correctly wrapped.
+                </para>
+                <screen>text/html; /usr/local/bin/w3m -s -T text/html -o display_link_number=1 %s; nametemplate=%s.html; copiousoutput; x-neomutt-nowrap;</screen>
               </listitem>
             </varlistentry>
           </variablelist>
@@ -11761,7 +11866,7 @@ smtp://user@host:587/
         <title>Tunnel</title>
         <para>
           When connecting through a <link linkend="tunnel">$tunnel</link>
-          and <link linkend="tunnel-is-secure">$tunnel_is_secure"</link> is
+          and <link linkend="tunnel-is-secure">$tunnel_is_secure</link> is
           set(the default), NeoMutt will assume the connection to the server
           through the pipe is already secured.  NeoMutt will ignore <link
           linkend="ssl-starttls">$ssl_starttls</link> and <link
@@ -11769,7 +11874,7 @@ smtp://user@host:587/
           has already been negotiated.
         </para>
         <para>
-          When <link linkend="tunnel-is-secure">$tunnel_is_secure"</link> is
+          When <link linkend="tunnel-is-secure">$tunnel_is_secure</link> is
           unset, NeoMutt will respect the values of <link
           linkend="ssl-starttls">$ssl_starttls</link> and <link
           linkend="ssl-force-tls">$ssl_force_tls</link>.  It is
@@ -11800,7 +11905,7 @@ smtp://user@host:587/
         Polling for new mail is more expensive over POP3 than locally. For this
         reason the frequency at which NeoMutt will check for mail remotely can
         be controlled by the
-        <link linkend="pop-checkinterval">$pop_checkinterval</link> variable,
+        <link linkend="pop-check-interval">$pop_check_interval</link> variable,
         which defaults to every 60 seconds.
       </para>
       <para>
@@ -11819,7 +11924,7 @@ smtp://user@host:587/
         <literal>&lt;fetch-mail&gt;</literal> function (default: G). It allows
         to connect to <link linkend="pop-host">$pop_host</link>, fetch all your
         new mail and place it in the local
-        <link linkend="spoolfile">$spoolfile</link>. After this point, NeoMutt
+        <link linkend="spool-file">$spool_file</link>. After this point, NeoMutt
         runs exactly as if the mail had always been local.
       </para>
       <note>
@@ -12012,7 +12117,7 @@ set timeout=15
     </sect1>
 
     <sect1 id="oauth">
-      <title>OAUTHBEARER Support</title>
+      <title>OAUTHBEARER and XOAUTH2 Support</title>
       <para>
         Preliminary OAUTH support for IMAP, POP, and SMTP is provided via external scripts.
       </para>
@@ -12039,8 +12144,25 @@ set imap_oauth_refresh_command="/path/to/oauth2.py --quiet --user=[email_address
 </screen>
 
       <para>
-        Substitute pop or smtp for imap in the above example to configure for
-        those.
+        For Office365, you can use the <literal>mutt_oauth2.py</literal> script
+        written by Alexander Perlis:
+        <ulink url="https://github.com/neomutt/neomutt/blob/master/contrib/oauth2/mutt_oauth2.py">https://github.com/neomutt/neomutt/blob/master/contrib/oauth2/mutt_oauth2.py</ulink>
+      </para>
+      <para>
+        You'll need to get your own oauth client credentials by following the
+        script instructions:
+        <ulink url="https://github.com/neomutt/neomutt/blob/master/contrib/oauth2/mutt_oauth2.py.README">https://github.com/neomutt/neomutt/blob/master/contrib/oauth2/mutt_oauth2.py.README</ulink>
+      </para>
+
+<screen>
+set imap_authenticators="xoauth2"
+set imap_oauth_refresh_command="/path/to/mutt_oauth2.py /path/to/token"
+</screen>
+
+      <para>
+        Substitute pop or smtp for imap in the above examples to configure for
+        those. Please note that xoauth2 support has not yet been implemented for
+        pop.
       </para>
     </sect1>
 
@@ -15051,11 +15173,6 @@ set new_mail_command = ""
                 <entry>(empty)</entry>
               </row>
               <row>
-                <entry><literal>mime_subject</literal></entry>
-                <entry>boolean</entry>
-                <entry><literal>yes</literal></entry>
-              </row>
-              <row>
                 <entry><literal>newsgroups_charset</literal></entry>
                 <entry>string</entry>
                 <entry><literal>utf-8</literal></entry>
@@ -15273,7 +15390,6 @@ set catchup_newsgroup = ask-yes
 set followup_to_poster = ask-yes
 set group_index_format = '%4C %M%N %5s  %-45.45f %d'
 set inews = ''
-set mime_subject = yes
 set newsgroups_charset = utf-8
 set newsrc = '~/.newsrc'
 set news_cache_dir = '~/.neomutt'
@@ -15841,7 +15957,9 @@ virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
                 <entry><literal>nm_default_url</literal></entry>
                 <entry>string</entry>
                 <entry>(empty)</entry>
-                <entry></entry>
+                <entry>
+                  Must use format: <literal>notmuch://&lt;absolute path&gt;</literal>
+                </entry>
               </row>
               <row>
                 <entry><literal>nm_exclude_tags</literal></entry>
@@ -15886,12 +16004,60 @@ virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
                 <entry></entry>
               </row>
               <row>
-                <entry><literal>virtual_spoolfile</literal></entry>
+                <entry><literal>virtual_spool_file</literal></entry>
                 <entry>boolean</entry>
                 <entry><literal>no</literal></entry>
                 <entry>
-                  Unnecessary since <link linkend="spoolfile">$spoolfile</link>
+                  Unnecessary since <link linkend="spool-file">$spool_file</link>
                   supports mailbox descriptions.
+                </entry>
+              </row>
+              <row>
+                <entry><literal>nm_query_window_enable</literal></entry>
+                <entry>boolean</entry>
+                <entry><literal>no</literal></entry>
+                <entry>
+                  Enables windowed notmuch queries for
+                  <literal>nm_query_window_duration = 0</literal>
+                </entry>
+              </row>
+              <row>
+                <entry><literal>nm_query_window_duration</literal></entry>
+                <entry>number</entry>
+                <entry><literal>0</literal></entry>
+                <entry>
+                  Duration between start and end dates for windowed notmuch query.
+                  This corresponds to a bounded notmuch <literal>date:</literal> query.
+                  See <literal>notmuch-search-terms</literal> manual page for more info.
+
+                  Value of <literal>0</literal> disables windowed queries unless
+                  <literal>nm_query_window_enable=yes</literal>
+                </entry>
+              </row>
+              <row>
+                <entry><literal>nm_query_window_or_terms</literal></entry>
+                <entry>string</entry>
+                <entry><literal>(empty)</literal></entry>
+                <entry>
+                  Additional notmuch search terms to always include in the
+                  window even if they're outside the date range. This turns the
+                  window from <literal>date:...</literal> to
+                  <literal>date:... or (additional search terms.)</literal>
+
+                  For example, to always include flagged, unread emails, set to
+                  <literal>tag:flagged and tag:unread</literal>
+                </entry>
+              </row>
+              <row>
+                <entry><literal>nm_query_window_timebase</literal></entry>
+                <entry>string</entry>
+                <entry><literal>week</literal></entry>
+                <entry>
+                  Time base for windowed notmuch queries.
+
+                  Must be one of: <literal>hour</literal>, <literal>day</literal>,
+                  <literal>week</literal>, <literal>month</literal>, or
+                  <literal>year</literal>
                 </entry>
               </row>
             </tbody>
@@ -15974,6 +16140,14 @@ virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
                 <entry>
                   generate virtual folder by moving the query's time window
                   backward
+                </entry>
+              </row>
+              <row>
+                <entry>index</entry>
+                <entry><literal>&lt;vfolder-window-reset&gt;</literal></entry>
+                <entry>
+                  generate virtual folder by moving the query's time window to
+                  the present
                 </entry>
               </row>
             </tbody>
@@ -16083,13 +16257,17 @@ set nm_unread_tag = unread
 <emphasis role="comment"># %*X  soft-fill with character ``X'' as pad</emphasis>
 set vfolder_format = "%6n(%6N) %f"
 <emphasis role="comment"># When set, NeoMutt will use the first virtual mailbox (see virtual-mailboxes)</emphasis>
-<emphasis role="comment"># as a spoolfile.</emphasis>
-set virtual_spoolfile = no
+<emphasis role="comment"># as a spool_file.</emphasis>
+set virtual_spool_file = no
 <emphasis role="comment"># setup time window preferences</emphasis>
 <emphasis role="comment"># first setup the duration, and then the time unit of that duration</emphasis>
 <emphasis role="comment"># when set to 0 (the default) the search window feature is disabled</emphasis>
+<emphasis role="comment"># unless explicitly enabled with nm_query_window_enable.</emphasis>
+set nm_query_window_enable=yes
 set nm_query_window_duration=2
 set nm_query_window_timebase="week" # or "hour", "day", "week", "month", "year"
+<emphasis role="comment"># Extend query window to always show mail matching these terms.</emphasis>
+set nm_query_window_or_terms="tag:unread and tag:flagged"
 <emphasis role="comment"># --------------------------------------------------------------------------</emphasis>
 <emphasis role="comment"># FUNCTIONS – shown with an example mapping</emphasis>
 <emphasis role="comment"># --------------------------------------------------------------------------</emphasis>
@@ -16146,6 +16324,88 @@ bind index &gt; vfolder-window-forward
           Raghavendra D Prabhu, Sami Farin, Stefan Assmann, Stefan Kuhn,
           Tim Stoakes, Vladimir Marek, Víctor Manuel Jáquez Leal,
           Richard Russon, Bernard 'Guyzmo' Pratz
+        </para>
+      </sect2>
+    </sect1>
+
+    <sect1 id="pager-read-delay-feature">
+      <title>Pager Read Delay Feature</title>
+      <subtitle>Delay when the pager marks a previewed message as
+      read</subtitle>
+
+      <sect2 id="pager-read-delay-support">
+        <title>Support</title>
+        <para>
+          <emphasis role="bold">Since:</emphasis> NeoMutt 2021-06-16
+        </para>
+        <para>
+          <emphasis role="bold">Dependencies:</emphasis> None
+        </para>
+      </sect2>
+
+      <sect2 id="pager-read-delay-intro">
+        <title>Introduction</title>
+        <para>
+          The <quote>Pager Read Delay</quote> feature adds a new
+          config variable to allow the pager to operate in a preview
+          mode.  A new message is not marked as read merely because
+          the pager opened it, but only after the pager remains on the
+          message for a given length of time.
+        </para>
+      </sect2>
+
+      <sect2 id="pager-read-delay-functions">
+        <title>Functions</title>
+        <para>
+          The <quote>Pager Read Delay</quote> feature adds no new
+          functions to NeoMutt.  Existing pager functions for navigating
+          to a different message now check whether to mark a message
+          as read.
+        </para>
+      </sect2>
+
+      <sect2 id="pager-read-delay-variables">
+        <title>Variables</title>
+        <para>
+          The <quote>Pager Read Delay</quote> feature adds one new
+          config variable,
+          <link linkend="pager-read-delay">$pager_read_delay</link>, which
+          is an integer for how many seconds the pager must remain on
+          a given message before marking it as read.  The variable
+          defaults to 0 for the original behavior of marking a message
+          as read the moment the pager visits it.
+        </para>
+      </sect2>
+
+      <sect2 id="pager-read-delay-neomuttrc">
+        <title>neomuttrc</title>
+
+<screen>
+<emphasis role="comment"># Example NeoMutt config file for the pager-read-delay feature.</emphasis>
+
+<emphasis role="comment"># Stay at least 5 seconds on a message before the pager marks it as read</emphasis>
+set pager_read_delay = 5
+
+<emphasis role="comment"># vim: syntax=neomuttrc</emphasis>
+</screen>
+
+      </sect2>
+
+      <sect2 id="pager-read-delay-known-bugs">
+        <title>Known Bugs</title>
+        <para>
+          When <link linkend="pager-index-lines">$pager_index_lines</link> is
+          non-zero, the <quote>N</quote> status indicator from the
+          <quote>%Z</quote> expando of <link
+          linkend="index-format">$index_format</link> does not
+          actively reflect the current new/read status of the message.
+        </para>
+      </sect2>
+
+      <sect2 id="pager-read-delay-credits">
+        <title>Credits</title>
+        <para>
+          Eric Blake
         </para>
       </sect2>
     </sect1>
@@ -16797,7 +17057,7 @@ set sort_browser="reverse-size"
                 </entry>
               </row>
               <row>
-                <entry><literal>sidebar_spoolfile</literal></entry>
+                <entry><literal>sidebar_spool_file</literal></entry>
                 <entry>default</entry>
                 <entry>
                   Mailbox that receives incoming mail
@@ -16972,8 +17232,8 @@ color sidebar_flagged red black
 color sidebar_new green black
 <emphasis role="comment"># Color to give mailboxes containing no new/flagged mail, etc.</emphasis>
 color sidebar_ordinary color245 default
-<emphasis role="comment"># Color to give the spoolfile mailbox</emphasis>
-color sidebar_spoolfile color207 default
+<emphasis role="comment"># Color to give the spool_file mailbox</emphasis>
+color sidebar_spool_file color207 default
 <emphasis role="comment"># Color to give mailboxes containing no unread mail</emphasis>
 color sidebar_unread color136 default
 <emphasis role="comment"># --------------------------------------------------------------------------</emphasis>
@@ -17028,12 +17288,16 @@ color sidebar_unread color136 default
 
     <sect1 id="skip-quoted-patch">
       <title>Skip Quoted Feature</title>
-      <subtitle>Leave some context visible</subtitle>
+      <subtitle>Managing quoted text in the pager</subtitle>
 
       <sect2 id="skip-quoted-support">
         <title>Support</title>
         <para>
-          <emphasis role="bold">Since:</emphasis> NeoMutt 2016-03-28
+          <emphasis role="bold">Since:</emphasis>
+          <literal>$skip_quoted_offset</literal> in NeoMutt
+          2016-03-28, <literal>$toggle_quoted_show_levels</literal> in
+          NeoMutt 2019-10-25, <literal>&lt;skip-headers&gt;</literal>
+          in NeoMutt 2021-02-05
         </para>
         <para>
           <emphasis role="bold">Dependencies:</emphasis> None
@@ -17043,15 +17307,55 @@ color sidebar_unread color136 default
       <sect2 id="skip-quoted-intro">
         <title>Introduction</title>
         <para>
-          When viewing an email, the <literal>&lt;skip-to-quoted&gt;</literal>
-          function (by default the <literal>S</literal> key) will scroll past
-          any email headers or quoted text. Sometimes, a little context is
-          useful.
+          When viewing an email, the
+          <literal>&lt;skip-quoted&gt;</literal> function (by default
+          the <literal>S</literal> key) will scroll past any email
+          headers or quoted text. Sometimes, a little context is
+          useful.  By setting the
+          <literal>$skip_quoted_offset</literal> variable, you can
+          select how much of the quoted text is left visible.
         </para>
         <para>
-          By setting the <literal>$skip_quoted_offset</literal> variable, you
-          can select how much of the quoted text is left visible.
+          When using the <literal>&lt;toggle-quoted&gt;</literal>
+          function (by default the <literal>T</literal> key), it can
+          be convenient to hide text that has been quoted multiple
+          times while still leaving quoted text that is relevant to
+          the unquoted reply intact.  This can be done by setting the
+          <literal>$toggle_quoted_show_levels</literal> variable.
         </para>
+        <para>
+          Also, it can be handy to jump directly to the start of the
+          email body with the <literal>&lt;skip-headers&gt;</literal>
+          function (by default the <literal>H</literal>key).
+        </para>
+      </sect2>
+
+      <sect2 id="skip-quoted-functions">
+        <title>Functions</title>
+
+        <table id="table-quoted-functions">
+          <title>Skip Quoted Functions</title>
+          <tgroup cols="4">
+            <thead>
+              <row>
+                <entry>Menus</entry>
+                <entry>Default Key</entry>
+                <entry>Function</entry>
+                <entry>Description</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry>pager</entry>
+                <entry>H</entry>
+                <entry><literal>&lt;skip-headers&gt;</literal></entry>
+                <entry>
+                  jump to first line after headers
+                </entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
       </sect2>
 
       <sect2 id="skip-quoted-variables">
@@ -17069,7 +17373,17 @@ color sidebar_unread color136 default
             </thead>
             <tbody>
               <row>
+                <entry><literal>pager_skip_quoted_context</literal></entry>
+                <entry>number</entry>
+                <entry>0</entry>
+              </row>
+              <row>
                 <entry><literal>skip_quoted_offset</literal></entry>
+                <entry>synonym</entry>
+                <entry>pager_skip_quoted_context</entry>
+              </row>
+              <row>
+                <entry><literal>toggle_quoted_show_levels</literal></entry>
                 <entry>number</entry>
                 <entry>0</entry>
               </row>
@@ -17085,11 +17399,17 @@ color sidebar_unread color136 default
 <emphasis role="comment"># Example NeoMutt config file for the skip-quoted feature.</emphasis>
 
 <emphasis role="comment"># The 'S' (skip-quoted) command scrolls the pager past the quoted text (usually</emphasis>
-<emphasis role="comment"># indented with '&gt; '. Setting 'skip_quoted_offset' leaves some lines of quoted</emphasis>
-<emphasis role="comment"># text on screen for context.</emphasis>
+<emphasis role="comment"># indented with '&gt; '. Setting 'pager_skip_quoted_context leaves some lines</emphasis>
+<emphasis role="comment"># of quoted text on screen for context.</emphasis>
 
 <emphasis role="comment"># Show three quoted lines before the reply</emphasis>
-set skip_quoted_offset = 3
+set pager_skip_quoted_context = 3
+
+<emphasis role="comment"># The 'T' (toggle-quoted) command hides quoted text, but can</emphasis>
+<emphasis role="comment"># be limited to only hiding deeply-nested quotes.</emphasis>
+
+<emphasis role="comment"># Preserve the first level of quoted text</emphasis>
+set toggle_quoted_show_levels = 1
 
 <emphasis role="comment"># vim: syntax=neomuttrc</emphasis>
 </screen>
@@ -17212,8 +17532,9 @@ set skip_quoted_offset = 3
 set status_format='-%r-NeoMutt: %f [Msgs:%?M?%M/?%m%?n? New:%n?%?o? Old:%o?%?d? Del:%d?%?F? \
   Flag:%F?%?t? Tag:%t?%?p? Post:%p?%?b? Inc:%b?%?l? %l?]---(%s/%S)-%&gt;-(%P)---'
 set index_format='%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?) %s'
-set sort=threads
-set sort_aux=last-date-received
+set use_threads=yes
+set sort=last-date-received
+set sort_aux=date
 <emphasis role="comment"># 'status color' can take up to 2 extra parameters</emphasis>
 <emphasis role="comment"># color status foreground background [ regex [ num ]]</emphasis>
 <emphasis role="comment"># 0 extra parameters</emphasis>
@@ -17512,6 +17833,220 @@ bind index D purge-message
       </sect2>
     </sect1>
 
+    <sect1 id="use-threads-feature">
+      <title>Use Threads Feature</title>
+      <subtitle>Improve the experience with viewing threads in the
+      index</subtitle>
+
+      <sect2 id="use-threads-support">
+        <title>Support</title>
+        <para>
+          <emphasis role="bold">Since:</emphasis> NeoMutt 2021-08-01
+        </para>
+        <para>
+          <emphasis role="bold">Dependencies:</emphasis> None
+        </para>
+      </sect2>
+
+      <sect2 id="use-threads-intro">
+        <title>Introduction</title>
+        <para>
+          The <quote>Use Threads</quote> feature adds a new config
+          variable to allow more precise control of how threads are
+          displayed in the index.  Whether threads are in use is now
+          orthogonal from how messages are sorted.
+        </para>
+      </sect2>
+
+      <sect2 id="use-thread-functions">
+        <title>Functions</title>
+        <para>
+          The <quote>Use Threads</quote> feature adds no new functions
+          to NeoMutt.  The existing functions
+          <literal>&lt;sort-mailbox&gt;</literal> and
+          <literal>&lt;sort-reverse&gt;</literal> are updated to
+          toggle the state of <literal>$use_threads</literal> once it
+          has been set, while preserving backwards-compatible behavior
+          on <literal>$sort</literal> if this feature is not used.
+        </para>
+      </sect2>
+
+      <sect2 id="use-threads-variables">
+        <title>Variables</title>
+        <para>
+          The <quote>Use Threads</quote> feature adds one new config
+          variable, <link linkend="use-threads">$use_threads</link>,
+          which is an enumeration of possible thread views.  The
+          variable defaults to unset for the original behavior of
+          overloading <link linkend="sort">$sort=threads</link> to
+          enable sorting.  It can be set to <literal>flat</literal>
+          (or <literal>no</literal>) for an unthreaded view based on
+          <literal>$sort</literal>, to <literal>threads</literal> (or
+          <literal>yes</literal>) for a threaded view where roots
+          appear above children, or to <literal>reverse</literal> for
+          a threaded view where children appear above roots.
+        </para>
+        <para>
+          When sorting by threads, the value of <link
+          linkend="sort">$sort</link> determines which thread floats
+          to the top.  If <literal>$sort</literal> does not contain
+          <literal>reverse-</literal>, the latest thread goes to the
+          bottom for <literal>use_threads=threads</literal> and to the
+          top for <literal>use_threads=reverse</literal>; the
+          direction of float is swapped if <literal>$sort</literal>
+          also uses <literal>reverse-</literal>.  If
+          <literal>$sort</literal> includes <literal>last-</literal>,
+          the overall thread is sorted by its descendant at any depth
+          which would sort last in a flat view; otherwise, the overall
+          thread is sorted solely by the thread root.  The
+          <literal>last-</literal> prefix is ignored when
+          <literal>use_threads=flat</literal>.
+        </para>
+        <para>
+          Within a single thread, the value of <link
+          linkend="sort-aux">$sort_aux</link> determines how siblings
+          are sorted.  The same prefixes apply as for
+          <literal>$sort</literal>, although it is less common to use
+          the <literal>last-</literal> prefix.
+        </para>
+        <para>
+          The <quote>Use Threads</quote> feature also modifies the
+          existing config variable <link
+          linkend="status-format">$status_format</link>, adding the
+          <literal>%T</literal> expando which shows the current
+          threading method.
+        </para>
+      </sect2>
+
+      <sect2 id="use-threads-value">
+        <title>Use Threads</title>
+
+        <table>
+          <title>Use Threads</title>
+          <tgroup cols="3">
+            <thead>
+              <row>
+                <entry>Name</entry>
+                <entry>Type</entry>
+                <entry>Default</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry><literal>use_threads</literal></entry>
+                <entry>enum</entry>
+                <entry><literal>unset</literal></entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+      </sect2>
+
+      <sect2 id="use-threads-neomuttrc">
+        <title>neomuttrc</title>
+
+<screen>
+<emphasis role="comment"># Example NeoMutt config file for the use-threads feature.</emphasis>
+
+<emphasis role="comment"># ------------------------------------------------------------</emphasis>
+<emphasis role="comment"># Default configuration: flat view sorted by date</emphasis>
+<emphasis role="comment"># selecting threads with &lt;sort-mailbox&gt; changes $sort</emphasis>
+<emphasis role="comment">#set use_threads=unset sort=date sort_aux=date</emphasis>
+<emphasis role="comment"># Modern configuration: explicit flat view sorted by date</emphasis>
+<emphasis role="comment"># selecting threads with &lt;sort-mailbox&gt; changes $use_threads</emphasis>
+<emphasis role="comment">set use_threads=no sort=date sort_aux=date</emphasis>
+<emphasis role="comment">#   Anne     12:01  cover letter for thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:02  part 1 of thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:03  part 2 of thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:04  part 3 of thread 1</emphasis>
+<emphasis role="comment">#   Barbara  12:05  thread 2</emphasis>
+<emphasis role="comment">#   Claire   12:06  thread 3</emphasis>
+<emphasis role="comment">#   Diane    12:07  re: part 2 of thread 1</emphasis>
+<emphasis role="comment">#   Erica    12:08  re: thread 2</emphasis>
+
+<emphasis role="comment"># ------------------------------------------------------------</emphasis>
+<emphasis role="comment"># Legacy configuration: sorting threads by date started</emphasis>
+<emphasis role="comment">#set sort=threads sort_aux=date</emphasis>
+<emphasis role="comment"># Modern configuration for the same</emphasis>
+<emphasis role="comment"># Latest root message sorts last</emphasis>
+set use_threads=yes sort=date sort_aux=date
+<emphasis role="comment">#   Anne     12:01  cover letter for thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:02  |-&gt;part 1 of thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:03  |-&gt;part 2 of thread 1</emphasis>
+<emphasis role="comment">#   Diane    12:07  | `-&gt;re: part 2 of thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:04  `-&gt;part 3 of thread 1</emphasis>
+<emphasis role="comment">#   Barbara  12:05  thread 2</emphasis>
+<emphasis role="comment">#   Erica    12:08  `-&gt;re: thread 2</emphasis>
+<emphasis role="comment">#   Claire   12:06  thread 3</emphasis>
+
+<emphasis role="comment"># ------------------------------------------------------------</emphasis>
+<emphasis role="comment"># Legacy configuration: display threads upside-down</emphasis>
+<emphasis role="comment">#set sort=reverse-threads sort_aux=date</emphasis>
+<emphasis role="comment"># Modern configuration for the same</emphasis>
+<emphasis role="comment"># Latest root message sorts first</emphasis>
+set use_threads=reverse sort=date sort_aux=date
+<emphasis role="comment">#   Claire   12:06  thread 3</emphasis>
+<emphasis role="comment">#   Erica    12:08  ,-&gt;re: thread 2</emphasis>
+<emphasis role="comment">#   Barbara  12:05  thread 2</emphasis>
+<emphasis role="comment">#   Anne     12:04  ,-&gt;part 3 of thread 1</emphasis>
+<emphasis role="comment">#   Diane    12:07  | ,-&gt;re: part 2 of thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:03  |-&gt;part 2 of thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:02  |-&gt;part 1 of thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:01  cover letter for thread 1</emphasis>
+
+<emphasis role="comment"># ------------------------------------------------------------</emphasis>
+<emphasis role="comment"># Legacy configuration: recently active thread/subthread first</emphasis>
+<emphasis role="comment">#set sort=threads sort_aux=reverse-last-date</emphasis>
+<emphasis role="comment"># Modern configuration for the same</emphasis>
+<emphasis role="comment"># Note that subthreads are also rearranged</emphasis>
+set use_threads=threads sort=reverse-last-date sort_aux=reverse-last-date
+<emphasis role="comment">#   Barbara  12:05  thread 2</emphasis>
+<emphasis role="comment">#   Erica    12:08  `-&gt;re: thread 2</emphasis>
+<emphasis role="comment">#   Anne     12:01  cover letter for thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:03  |-&gt;part 2 of thread 1</emphasis>
+<emphasis role="comment">#   Diane    12:07  | `-&gt;re: part 2 of thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:04  |-&gt;part 3 of thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:02  `-&gt;part 1 of thread 1</emphasis>
+<emphasis role="comment">#   Claire   12:06  thread 3</emphasis>
+
+<emphasis role="comment"># ------------------------------------------------------------</emphasis>
+<emphasis role="comment"># Modern configuration: threads keep date order, recently active thread last</emphasis>
+<emphasis role="comment"># (not possible with legacy configuration)</emphasis>
+set use_threads=threads sort=last-date sort_aux=date
+<emphasis role="comment">#   Claire   12:06  thread 3</emphasis>
+<emphasis role="comment">#   Anne     12:01  cover letter for thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:02  |-&gt;part 1 of thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:03  |-&gt;part 2 of thread 1</emphasis>
+<emphasis role="comment">#   Diane    12:07  | `-&gt;re: part 2 of thread 1</emphasis>
+<emphasis role="comment">#   Anne     12:04  `-&gt;part 3 of thread 1</emphasis>
+<emphasis role="comment">#   Barbara  12:05  thread 2</emphasis>
+<emphasis role="comment">#   Erica    12:08  `-&gt;re: thread 2</emphasis>
+
+<emphasis role="comment"># vim: syntax=neomuttrc</emphasis>
+</screen>
+
+      </sect2>
+
+      <sect2 id="use-threads-known-bugs">
+        <title>Known Bugs</title>
+        <para>
+          Even though <literal>use_threads</literal> accepts the
+          values <literal>yes</literal> and <literal>no</literal>, it
+          does not behave like a boolean or quad-option variable.  A
+          bare <literal>set use_threads</literal> performs a query
+          rather than setting it to <literal>yes</literal>, and the
+          variable is not usable with <literal>toggle</literal>.
+        </para>
+      </sect2>
+
+      <sect2 id="use-threads-credits">
+        <title>Credits</title>
+        <para>
+          Eric Blake
+        </para>
+      </sect2>
+    </sect1>
+
     <sect1 id="autocryptdoc">
       <title>Autocrypt</title>
 
@@ -17737,11 +18272,11 @@ bind index D purge-message
           if <link linkend="autocrypt-reply">$autocrypt_reply</link> is
           <emphasis>set</emphasis>, autocrypt mode will be forced on,
           overriding the settings
-          <link linkend="crypt-autosign">$crypt_autosign</link>,
-          <link linkend="crypt-autoencrypt">$crypt_autoencrypt</link>,
-          <link linkend="crypt-replyencrypt">$crypt_replyencrypt</link>,
-          <link linkend="crypt-replysign">$crypt_replysign</link>,
-          <link linkend="crypt-replysignencrypted">$crypt_replysignencrypted</link>, and
+          <link linkend="crypt-auto-sign">$crypt_auto_sign</link>,
+          <link linkend="crypt-auto-encrypt">$crypt_auto_encrypt</link>,
+          <link linkend="crypt-reply-encrypt">$crypt_reply_encrypt</link>,
+          <link linkend="crypt-reply-sign">$crypt_reply_sign</link>,
+          <link linkend="crypt-reply-sign-encrypted">$crypt_reply_sign_encrypted</link>, and
           <link linkend="crypt-opportunistic-encrypt">$crypt_opportunistic_encrypt</link>.
         </para>
         <para>

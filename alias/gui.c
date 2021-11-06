@@ -21,82 +21,77 @@
  */
 
 /**
- * @page alias_gui Shared code for the Alias and Query Dialogs
+ * @page alias_gui Shared code for alias dialogs
  *
  * Shared code for the Alias and Query Dialogs
  */
 
 #include "config.h"
-#include <stdlib.h>
-#include <string.h>
+#include <stdio.h>
 #include "mutt/lib.h"
-#include "address/lib.h"
 #include "config/lib.h"
+#include "gui/lib.h"
 #include "gui.h"
 #include "lib.h"
-#include "alias.h"
-#include "mutt_menu.h"
-#include "sort.h"
+#include "menu/lib.h"
 
 /**
- * alias_config_observer - Listen for `sort_alias` configuration changes and reorders menu items accordingly
+ * alias_config_observer - Notification that a Config Variable has changed - Implements ::observer_t - @ingroup observer_api
+ *
+ * The Address Book Window is affected by changes to `$sort_alias`.
  */
 int alias_config_observer(struct NotifyCallback *nc)
 {
-  if (!nc->event_data)
+  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
     return -1;
-  if (nc->event_type != NT_CONFIG)
+
+  struct EventConfig *ev_c = nc->event_data;
+
+  if (!mutt_str_equal(ev_c->name, "sort_alias"))
     return 0;
 
-  struct EventConfig *ec = nc->event_data;
+  struct Menu *menu = nc->global_data;
 
-  if (!mutt_str_equal(ec->name, "sort_alias"))
-    return 0;
+  menu_queue_redraw(menu, MENU_REDRAW_FULL);
+  mutt_debug(LL_DEBUG5, "config done, request WA_RECALC, MENU_REDRAW_FULL\n");
 
-  struct AliasMenuData *mdata = nc->global_data;
+  return 0;
+}
+
+/**
+ * alias_set_title - Create a title string for the Menu
+ * @param sbar      Simple Bar Window
+ * @param menu_name Menu name
+ * @param limit     Limit being applied
+ */
+void alias_set_title(struct MuttWindow *sbar, char *menu_name, char *limit)
+{
+  if (!limit)
+  {
+    sbar_set_title(sbar, menu_name);
+    return;
+  }
+
+  char buf[256] = { 0 };
+
+  int len = snprintf(buf, sizeof(buf), "%s - ", menu_name);
+
+  snprintf(buf + len, sizeof(buf) - len, _("Limit: %s"), limit);
+
+  sbar_set_title(sbar, buf);
+}
+
+/**
+ * alias_recalc - Recalculate the display of the Alias Window - Implements MuttWindow::recalc() - @ingroup window_recalc
+ */
+int alias_recalc(struct MuttWindow *win)
+{
+  struct Menu *menu = win->wdata;
+  struct AliasMenuData *mdata = menu->mdata;
 
   alias_array_sort(&mdata->ava, mdata->sub);
 
+  win->actions |= WA_REPAINT;
+  mutt_debug(LL_DEBUG5, "recalc done, request WA_REPAINT\n");
   return 0;
-}
-
-/**
- * alias_color_observer - Listen for color configuration changes and refreshes the menu
- */
-int alias_color_observer(struct NotifyCallback *nc)
-{
-  if ((nc->event_type != NT_COLOR) || !nc->event_data || !nc->global_data)
-    return -1;
-
-  struct Menu *menu = nc->global_data;
-  menu->redraw = REDRAW_FULL;
-
-  return 0;
-}
-
-/**
- * menu_create_alias_title - Create a title string for the Menu
- * @param menu_name Menu name
- * @param limit     Limit being applied
- *
- * @note Caller must free the returned string
- */
-char *menu_create_alias_title(char *menu_name, char *limit)
-{
-  if (limit)
-  {
-    char *tmp_str = NULL;
-    char *new_title = NULL;
-
-    mutt_str_asprintf(&tmp_str, _("Limit: %s"), limit);
-    mutt_str_asprintf(&new_title, "%s - %s", menu_name, tmp_str);
-
-    FREE(&tmp_str);
-
-    return new_title;
-  }
-  else
-  {
-    return strdup(menu_name);
-  }
 }

@@ -38,13 +38,11 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "mutt.h"
-#include "maildir/lib.h"
-#include "edata.h"
+#include "lib.h"
 #include "mdata.h"
 #include "mdemail.h"
 #include "mx.h"
 #include "protos.h"
-#include "sequence.h"
 
 /**
  * mh_umask - Create a umask from the mailbox directory
@@ -57,7 +55,7 @@ mode_t mh_umask(struct Mailbox *m)
   if (mdata && mdata->mh_umask)
     return mdata->mh_umask;
 
-  struct stat st;
+  struct stat st = { 0 };
   if (stat(mailbox_path(m), &st) != 0)
   {
     mutt_debug(LL_DEBUG1, "stat failed on %s\n", mailbox_path(m));
@@ -118,7 +116,7 @@ int maildir_move_to_mailbox(struct Mailbox *m, struct MdEmailArray *mda)
  * @param m     Mailbox
  * @param e_old Old Email
  * @param e_new New Email
- * @retval true  If the flags changed
+ * @retval true  The flags changed
  * @retval false Otherwise
  */
 bool maildir_update_flags(struct Mailbox *m, struct Email *e_old, struct Email *e_new)

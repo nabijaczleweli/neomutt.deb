@@ -22,9 +22,15 @@
  */
 
 /**
- * @page lib_helpbar HELPBAR: One-liner Help
+ * @page lib_helpbar Help bar
  *
- * One-liner Help
+ * Help line showing key bindings
+ *
+ * This one-line Window lives at the top of the screen.
+ * It displays some commonly-used key bindings for the current screen.
+ *
+ * This Window is event-driven.
+ * @sa @subpage helpbar_helpbar
  *
  * | File              | Description              |
  * | :---------------- | :----------------------- |
@@ -36,11 +42,6 @@
 #ifndef MUTT_HELPBAR_LIB_H
 #define MUTT_HELPBAR_LIB_H
 
-#include <stdbool.h>
-
-struct ConfigSet;
-
-struct MuttWindow *helpbar_create(void);
-bool config_init_helpbar(struct ConfigSet *cs);
+struct MuttWindow *helpbar_new(void);
 
 #endif /* MUTT_HELPBAR_LIB_H */

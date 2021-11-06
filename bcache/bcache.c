@@ -1,6 +1,6 @@
 /**
  * @file
- * Body Caching - local copies of email bodies
+ * Body Caching (local copies of email bodies)
  *
  * @authors
  * Copyright (C) 2006-2007,2009,2017 Brendan Cully <brendan@kublai.com>
@@ -22,37 +22,34 @@
  */
 
 /**
- * @page bcache_bcache Body Caching - local copies of email bodies
+ * @page bcache_bcache Body Cache functions
  *
- * Body Caching - local copies of email bodies
+ * Body Caching (Local copies of email bodies)
  */
 
 #include "config.h"
 #include <dirent.h>
 #include <errno.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
 #include "email/lib.h"
-#include "bcache/lib.h"
+#include "core/lib.h"
+#include "lib.h"
 #include "mutt_account.h"
 #include "muttlib.h"
 
 struct ConnAccount;
-
-/* These Config Variables are only used in bcache.c */
-bool C_MessageCacheClean; ///< Config: (imap/pop) Clean out obsolete entries from the message cache
-char *C_MessageCachedir; ///< Config: (imap/pop) Directory for the message cache
 
 /**
  * struct BodyCache - Local cache of email bodies
  */
 struct BodyCache
 {
-  char *path;
+  char *path; ///< On-disk path to the file
 };
 
 /**
@@ -68,13 +65,15 @@ static int bcache_path(struct ConnAccount *account, const char *mailbox, struct 
   char host[256];
   struct Url url = { 0 };
 
-  if (!account || !C_MessageCachedir || !bcache)
+  const char *const c_message_cachedir =
+      cs_subset_path(NeoMutt->sub, "message_cachedir");
+  if (!account || !c_message_cachedir || !bcache)
     return -1;
 
-  struct stat sb;
-  if (!((stat(C_MessageCachedir, &sb) == 0) && S_ISDIR(sb.st_mode)))
+  struct stat st = { 0 };
+  if (!((stat(c_message_cachedir, &st) == 0) && S_ISDIR(st.st_mode)))
   {
-    mutt_error(_("Cache disabled, $message_cachedir isn't a directory: %s"), C_MessageCachedir);
+    mutt_error(_("Cache disabled, $message_cachedir isn't a directory: %s"), c_message_cachedir);
     return -1;
   }
 
@@ -93,7 +92,7 @@ static int bcache_path(struct ConnAccount *account, const char *mailbox, struct 
   struct Buffer *dst = mutt_buffer_pool_get();
   mutt_encode_path(path, NONULL(mailbox));
 
-  mutt_buffer_printf(dst, "%s/%s%s", C_MessageCachedir, host, mutt_buffer_string(path));
+  mutt_buffer_printf(dst, "%s/%s%s", c_message_cachedir, host, mutt_buffer_string(path));
   if (*(dst->dptr - 1) != '/')
     mutt_buffer_addch(dst, '/');
 
@@ -213,10 +212,10 @@ FILE *mutt_bcache_put(struct BodyCache *bcache, const char *id)
   struct Buffer *path = mutt_buffer_pool_get();
   mutt_buffer_printf(path, "%s%s%s", bcache->path, id, ".tmp");
 
-  struct stat sb;
-  if (stat(bcache->path, &sb) == 0)
+  struct stat st = { 0 };
+  if (stat(bcache->path, &st) == 0)
   {
-    if (!S_ISDIR(sb.st_mode))
+    if (!S_ISDIR(st.st_mode))
     {
       mutt_error(_("Message cache isn't a directory: %s"), bcache->path);
       return NULL;
@@ -295,7 +294,7 @@ int mutt_bcache_exists(struct BodyCache *bcache, const char *id)
   mutt_buffer_addstr(path, id);
 
   int rc = 0;
-  struct stat st;
+  struct stat st = { 0 };
   if (stat(mutt_buffer_string(path), &st) < 0)
     rc = -1;
   else

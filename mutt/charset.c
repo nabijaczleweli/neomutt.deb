@@ -35,6 +35,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include "config/lib.h"
+#include "core/lib.h"
 #include "charset.h"
 #include "buffer.h"
 #include "memory.h"
@@ -48,9 +50,6 @@
 #ifndef EILSEQ
 #define EILSEQ EINVAL
 #endif
-
-char *C_AssumedCharset; ///< Config: If a message is missing a character set, assume this character set
-char *C_Charset; ///< Config: Default character set for displaying text on screen
 
 /**
  * ReplacementChar - When a Unicode character can't be displayed, use this instead
@@ -87,7 +86,6 @@ struct MimeNames
   const char *pref;
 };
 
-// clang-format off
 /**
  * PreferredMimeNames - Lookup table of preferred charsets
  *
@@ -98,8 +96,8 @@ struct MimeNames
  * @note It includes only the subset of character sets for which a preferred
  * MIME name is given.
  */
-const struct MimeNames PreferredMimeNames[] =
-{
+const struct MimeNames PreferredMimeNames[] = {
+  // clang-format off
   { "ansi_x3.4-1968",        "us-ascii"      },
   { "iso-ir-6",              "us-ascii"      },
   { "iso_646.irv:1991",      "us-ascii"      },
@@ -238,9 +236,9 @@ const struct MimeNames PreferredMimeNames[] =
    * character set naming, please add it above this comment, and submit a patch
    * to <neomutt-devel@neomutt.org> */
 
-  { NULL,                     NULL           },
+  { NULL, NULL },
+  // clang-format on
 };
-// clang-format on
 
 /**
  * lookup_new - Create a new Lookup
@@ -318,7 +316,10 @@ int mutt_ch_convert_nonmime_string(char **ps)
 
   const char *c1 = NULL;
 
-  for (const char *c = C_AssumedCharset; c; c = c1 ? c1 + 1 : 0)
+  const char *const c_assumed_charset =
+      cs_subset_string(NeoMutt->sub, "assumed_charset");
+  const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
+  for (const char *c = c_assumed_charset; c; c = c1 ? c1 + 1 : 0)
   {
     c1 = strchr(c, ':');
     size_t n = c1 ? c1 - c : mutt_str_len(c);
@@ -327,16 +328,18 @@ int mutt_ch_convert_nonmime_string(char **ps)
     char *fromcode = mutt_mem_malloc(n + 1);
     mutt_str_copy(fromcode, c, n + 1);
     char *s = mutt_strn_dup(u, ulen);
-    int m = mutt_ch_convert_string(&s, fromcode, C_Charset, MUTT_ICONV_NO_FLAGS);
+    int m = mutt_ch_convert_string(&s, fromcode, c_charset, MUTT_ICONV_NO_FLAGS);
     FREE(&fromcode);
-    FREE(&s);
     if (m == 0)
     {
+      FREE(ps);
+      *ps = s;
       return 0;
     }
+    FREE(&s);
   }
   mutt_ch_convert_string(ps, (const char *) mutt_ch_get_default_charset(),
-                         C_Charset, MUTT_ICONV_HOOK_FROM);
+                         c_charset, MUTT_ICONV_HOOK_FROM);
   return -1;
 }
 
@@ -354,7 +357,7 @@ void mutt_ch_canonical_charset(char *buf, size_t buflen, const char *name)
   if (!buf || !name)
     return;
 
-  char in[1024], scratch[1024];
+  char in[1024], scratch[1024 + 10];
 
   mutt_str_copy(in, name, sizeof(in));
   char *ext = strchr(in, '/');
@@ -440,13 +443,21 @@ bool mutt_ch_chscmp(const char *cs1, const char *cs2)
 char *mutt_ch_get_default_charset(void)
 {
   static char fcharset[128];
-  const char *c = C_AssumedCharset;
+  const char *const c_assumed_charset =
+      cs_subset_string(NeoMutt->sub, "assumed_charset");
+  const char *c = c_assumed_charset;
   const char *c1 = NULL;
 
   if (c)
   {
     c1 = strchr(c, ':');
-    mutt_str_copy(fcharset, c, c1 ? (c1 - c + 1) : sizeof(fcharset));
+
+    size_t copysize;
+    if (c1)
+      copysize = MIN((c1 - c + 1), sizeof(fcharset));
+    else
+      copysize = sizeof(fcharset);
+    mutt_str_copy(fcharset, c, copysize);
     return fcharset;
   }
   return strcpy(fcharset, "us-ascii");
@@ -836,7 +847,7 @@ bool mutt_ch_check_charset(const char *cs, bool strict)
   }
 
   iconv_t cd = mutt_ch_iconv_open(cs, cs, MUTT_ICONV_NO_FLAGS);
-  if (cd != (iconv_t)(-1))
+  if (cd != (iconv_t) (-1))
   {
     iconv_close(cd);
     return true;

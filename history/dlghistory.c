@@ -1,6 +1,6 @@
 /**
  * @file
- * History selection dialog
+ * History Selection Dialog
  *
  * @authors
  * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
@@ -21,9 +21,38 @@
  */
 
 /**
- * @page history_dlghistory History selection dialog
+ * @page history_dlghistory History Selection Dialog
  *
- * History selection dialog
+ * The History Selection Dialog lets the user choose a string from the history,
+ * e.g. a past command.
+ *
+ * This is a @ref gui_simple
+ *
+ * ## Windows
+ *
+ * | Name                     | Type           | See Also             |
+ * | :----------------------- | :------------- | :------------------- |
+ * | History Selection Dialog | WT_DLG_HISTORY | dlg_select_history() |
+ *
+ * **Parent**
+ * - @ref gui_dialog
+ *
+ * **Children**
+ * - See: @ref gui_simple
+ *
+ * ## Data
+ * - #Menu
+ * - #Menu::mdata
+ * - `char **matches`
+ *
+ * The @ref gui_simple holds a Menu.  The History Selection Dialog stores its
+ * data (`char **matches`) in Menu::mdata.
+ *
+ * ## Events
+ *
+ * None.  The dialog is not affected by any config or colours and doesn't
+ * support sorting.  Once constructed, the events are handled by the Menu (part
+ * of the @ref gui_simple).
  */
 
 #include "config.h"
@@ -32,11 +61,9 @@
 #include <stdio.h>
 #include "mutt/lib.h"
 #include "gui/lib.h"
-#include "mutt.h"
-#include "history/lib.h"
+#include "lib.h"
+#include "menu/lib.h"
 #include "format_flags.h"
-#include "keymap.h"
-#include "mutt_menu.h"
 #include "muttlib.h"
 #include "opcodes.h"
 
@@ -52,7 +79,7 @@ static const struct Mapping HistoryHelp[] = {
 };
 
 /**
- * history_format_str - Format a string for the history list - Implements ::format_t
+ * history_format_str - Format a string for the history list - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
  * |:--------|:--------------
@@ -76,14 +103,14 @@ static const char *history_format_str(char *buf, size_t buflen, size_t col, int 
 }
 
 /**
- * history_make_entry - Format a menu item for the history list - Implements Menu::make_entry()
+ * history_make_entry - Format a menu item for the history list - Implements Menu::make_entry() - @ingroup menu_make_entry
  */
-static void history_make_entry(char *buf, size_t buflen, struct Menu *menu, int line)
+static void history_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
 {
   char *entry = ((char **) menu->mdata)[line];
 
-  mutt_expando_format(buf, buflen, 0, menu->win_index->state.cols, "%s",
-                      history_format_str, (intptr_t) entry, MUTT_FORMAT_ARROWCURSOR);
+  mutt_expando_format(buf, buflen, 0, menu->win->state.cols, "%s", history_format_str,
+                      (intptr_t) entry, MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
@@ -95,30 +122,30 @@ static void history_make_entry(char *buf, size_t buflen, struct Menu *menu, int 
  */
 void dlg_select_history(char *buf, size_t buflen, char **matches, int match_count)
 {
-  bool done = false;
+  struct MuttWindow *dlg = simple_dialog_new(MENU_GENERIC, WT_DLG_HISTORY, HistoryHelp);
+
+  struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
   char title[256];
-
   snprintf(title, sizeof(title), _("History '%s'"), buf);
+  sbar_set_title(sbar, title);
 
-  struct Menu *menu = mutt_menu_new(MENU_GENERIC);
-  struct MuttWindow *dlg = dialog_create_simple_index(menu, WT_DLG_HISTORY);
-  dlg->help_data = HistoryHelp;
-  dlg->help_menu = MENU_GENERIC;
-
+  struct Menu *menu = dlg->wdata;
   menu->make_entry = history_make_entry;
-  menu->title = title;
-  mutt_menu_push_current(menu);
-
   menu->max = match_count;
   menu->mdata = matches;
 
+  bool done = false;
   while (!done)
   {
-    switch (mutt_menu_loop(menu))
+    switch (menu_loop(menu))
     {
       case OP_GENERIC_SELECT_ENTRY:
-        mutt_str_copy(buf, matches[menu->current], buflen);
-        /* fall through */
+      {
+        const int index = menu_get_index(menu);
+        mutt_str_copy(buf, matches[index], buflen);
+        done = true;
+        break;
+      }
 
       case OP_EXIT:
         done = true;
@@ -126,7 +153,5 @@ void dlg_select_history(char *buf, size_t buflen, char **matches, int match_coun
     }
   }
 
-  mutt_menu_pop_current(menu);
-  mutt_menu_free(&menu);
-  dialog_destroy_simple_index(&dlg);
+  simple_dialog_free(&dlg);
 }

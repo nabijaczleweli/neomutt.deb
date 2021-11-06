@@ -21,7 +21,7 @@
  */
 
 /**
- * @page imap_auth_sasl IMAP SASL authentication method
+ * @page imap_auth_sasl SASL authentication
  *
  * IMAP SASL authentication method
  */
@@ -36,6 +36,7 @@
 #include "private.h"
 #include "mutt/lib.h"
 #include "conn/lib.h"
+#include "adata.h"
 #include "auth.h"
 #include "mutt_socket.h"
 

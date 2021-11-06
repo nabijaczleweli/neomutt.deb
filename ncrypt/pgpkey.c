@@ -29,12 +29,10 @@
  */
 
 #include "config.h"
-#include <ctype.h>
 #include <locale.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -50,18 +48,11 @@
 #include "lib.h"
 #include "send/lib.h"
 #include "crypt.h"
-#include "format_flags.h"
 #include "gnupgparse.h"
-#include "keymap.h"
-#include "mutt_globals.h"
 #include "mutt_logging.h"
-#include "mutt_menu.h"
 #include "muttlib.h"
-#include "opcodes.h"
 #include "options.h"
-#include "pager.h"
 #include "pgpinvoke.h"
-#include "protos.h"
 #ifdef CRYPT_BACKEND_CLASSIC_PGP
 #include "pgp.h"
 #include "pgplib.h"
@@ -74,13 +65,13 @@ struct PgpCache
 {
   char *what;
   char *dflt;
-  struct PgpCache *next;
+  struct PgpCache *next; ///< Linked list
 };
 
 static struct PgpCache *id_defaults = NULL;
 
 // clang-format off
-typedef uint8_t PgpKeyValidFlags; ///< Pgp Key valid fields, e.g. #PGP_KV_VALID
+typedef uint8_t PgpKeyValidFlags; ///< Flags for valid Pgp Key fields, e.g. #PGP_KV_VALID
 #define PGP_KV_NO_FLAGS       0   ///< No flags are set
 #define PGP_KV_VALID    (1 << 0)  ///< PGP Key ID is valid
 #define PGP_KV_ADDR     (1 << 1)  ///< PGP Key address is valid
@@ -105,7 +96,7 @@ struct PgpKeyInfo *pgp_principal_key(struct PgpKeyInfo *key)
 /**
  * pgp_key_is_valid - Is a PGP key valid?
  * @param k Key to examine
- * @retval true If key is valid
+ * @retval true Key is valid
  */
 bool pgp_key_is_valid(struct PgpKeyInfo *k)
 {
@@ -121,7 +112,7 @@ bool pgp_key_is_valid(struct PgpKeyInfo *k)
 /**
  * pgp_id_is_strong - Is a PGP key strong?
  * @param uid UID of a PGP key
- * @retval true If key is strong
+ * @retval true Key is strong
  */
 bool pgp_id_is_strong(struct PgpUid *uid)
 {
@@ -134,7 +125,7 @@ bool pgp_id_is_strong(struct PgpUid *uid)
 /**
  * pgp_id_is_valid - Is a PGP key valid
  * @param uid UID of a PGP key
- * @retval true If key is valid
+ * @retval true Key is valid
  */
 bool pgp_id_is_valid(struct PgpUid *uid)
 {
@@ -211,8 +202,10 @@ struct PgpKeyInfo *pgp_ask_for_key(char *tag, char *whatfor, KeyFlags abilities,
   while (true)
   {
     resp[0] = '\0';
-    if (mutt_get_field(tag, resp, sizeof(resp), MUTT_COMP_NO_FLAGS) != 0)
+    if (mutt_get_field(tag, resp, sizeof(resp), MUTT_COMP_NO_FLAGS, false, NULL, NULL) != 0)
+    {
       return NULL;
+    }
 
     if (whatfor)
     {
@@ -238,14 +231,14 @@ struct PgpKeyInfo *pgp_ask_for_key(char *tag, char *whatfor, KeyFlags abilities,
 }
 
 /**
- * pgp_class_make_key_attachment - Implements CryptModuleSpecs::pgp_make_key_attachment()
+ * pgp_class_make_key_attachment - Implements CryptModuleSpecs::pgp_make_key_attachment() - @ingroup crypto_pgp_make_key_attachment
  */
 struct Body *pgp_class_make_key_attachment(void)
 {
   struct Body *att = NULL;
   char buf[1024];
   char tmp[256];
-  struct stat sb;
+  struct stat st = { 0 };
   pid_t pid;
   OptPgpCheckTrust = false;
   struct Buffer *tempf = NULL;
@@ -304,8 +297,8 @@ struct Body *pgp_class_make_key_attachment(void)
   att->description = mutt_str_dup(buf);
   mutt_update_encoding(att, NeoMutt->sub);
 
-  stat(mutt_buffer_string(tempf), &sb);
-  att->length = sb.st_size;
+  stat(mutt_buffer_string(tempf), &st);
+  att->length = st.st_size;
 
 cleanup:
   mutt_buffer_pool_release(&tempf);
@@ -376,7 +369,7 @@ struct PgpKeyInfo *pgp_getkeybyaddr(struct Address *a, KeyFlags abilities,
   struct PgpUid *q = NULL;
 
   if (a->mailbox)
-    pgp_add_string_to_hints(a->mailbox, &hints);
+    mutt_list_insert_tail(&hints, mutt_str_dup(a->mailbox));
   if (a->personal)
     pgp_add_string_to_hints(a->personal, &hints);
 
@@ -389,7 +382,7 @@ struct PgpKeyInfo *pgp_getkeybyaddr(struct Address *a, KeyFlags abilities,
   if (!keys)
     return NULL;
 
-  mutt_debug(LL_DEBUG5, "looking for %s <%s>\n", a->personal, a->mailbox);
+  mutt_debug(LL_DEBUG5, "looking for %s <%s>\n", NONULL(a->personal), NONULL(a->mailbox));
 
   for (k = keys; k; k = kn)
   {
@@ -449,12 +442,14 @@ struct PgpKeyInfo *pgp_getkeybyaddr(struct Address *a, KeyFlags abilities,
   {
     if (oppenc_mode)
     {
+      const bool c_crypt_opportunistic_encrypt_strong_keys = cs_subset_bool(
+          NeoMutt->sub, "crypt_opportunistic_encrypt_strong_keys");
       if (the_strong_valid_key)
       {
         pgp_remove_key(&matches, the_strong_valid_key);
         k = the_strong_valid_key;
       }
-      else if (a_valid_addrmatch_key && !C_CryptOpportunisticEncryptStrongKeys)
+      else if (a_valid_addrmatch_key && !c_crypt_opportunistic_encrypt_strong_keys)
       {
         pgp_remove_key(&matches, a_valid_addrmatch_key);
         k = a_valid_addrmatch_key;

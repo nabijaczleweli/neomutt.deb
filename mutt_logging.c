@@ -39,14 +39,13 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt_logging.h"
+#include "color/lib.h"
 #include "mutt_globals.h"
 #include "muttlib.h"
 #include "options.h"
 
 uint64_t LastError = 0; ///< Time of the last error message (in milliseconds since the Unix epoch)
 
-short C_DebugLevel = 0;   ///< Config: Logging level for debug logs
-char *C_DebugFile = NULL; ///< Config: File to save debug logs
 char *CurrentFile = NULL; ///< The previous log file name
 const int NumOfLogs = 5;  ///< How many log files to rotate
 
@@ -59,8 +58,9 @@ const int NumOfLogs = 5;  ///< How many log files to rotate
  */
 static void error_pause(void)
 {
+  const short c_sleep_time = cs_subset_number(NeoMutt->sub, "sleep_time");
   const uint64_t elapsed = mutt_date_epoch_ms() - LastError;
-  const uint64_t sleep = C_SleepTime * S_TO_MS;
+  const uint64_t sleep = c_sleep_time * S_TO_MS;
   if ((LastError == 0) || (elapsed >= sleep))
     return;
 
@@ -97,7 +97,7 @@ static const char *rotate_logs(const char *file, int count)
 
     mutt_buffer_expand_path(old_file);
     mutt_buffer_expand_path(new_file);
-    rename(mutt_buffer_string(old_file), mutt_buffer_string(new_file));
+    (void) rename(mutt_buffer_string(old_file), mutt_buffer_string(new_file));
   }
 
   file = mutt_buffer_strdup(old_file);
@@ -118,16 +118,17 @@ void mutt_clear_error(void)
 
   ErrorBufMessage = false;
   if (!OptNoCurses)
-    mutt_window_clearline(MessageWindow, 0);
+    msgwin_clear_text();
 }
 
 /**
- * log_disp_curses - Display a log line in the message line - Implements ::log_dispatcher_t
+ * log_disp_curses - Display a log line in the message line - Implements ::log_dispatcher_t - @ingroup logging_api
  */
 int log_disp_curses(time_t stamp, const char *file, int line,
                     const char *function, enum LogLevel level, ...)
 {
-  if (level > C_DebugLevel)
+  const short c_debug_level = cs_subset_number(NeoMutt->sub, "debug_level");
+  if (level > c_debug_level)
     return 0;
 
   char buf[1024];
@@ -166,31 +167,29 @@ int log_disp_curses(time_t stamp, const char *file, int line,
   if ((level > LL_ERROR) && OptMsgErr && !dupe)
     error_pause();
 
-  mutt_simple_format(ErrorBuf, sizeof(ErrorBuf), 0,
-                     MessageWindow ? MessageWindow->state.cols : sizeof(ErrorBuf),
+  size_t width = msgwin_get_width();
+  mutt_simple_format(ErrorBuf, sizeof(ErrorBuf), 0, width ? width : sizeof(ErrorBuf),
                      JUSTIFY_LEFT, 0, buf, sizeof(buf), false);
   ErrorBufMessage = true;
 
   if (!OptKeepQuiet)
   {
+    enum ColorId color = MT_COLOR_NORMAL;
     switch (level)
     {
       case LL_ERROR:
         mutt_beep(false);
-        mutt_curses_set_color(MT_COLOR_ERROR);
+        color = MT_COLOR_ERROR;
         break;
       case LL_WARNING:
-        mutt_curses_set_color(MT_COLOR_WARNING);
+        color = MT_COLOR_WARNING;
         break;
       default:
-        mutt_curses_set_color(MT_COLOR_MESSAGE);
+        color = MT_COLOR_MESSAGE;
         break;
     }
 
-    mutt_window_mvaddstr(MessageWindow, 0, 0, ErrorBuf);
-    mutt_curses_set_color(MT_COLOR_NORMAL);
-    mutt_window_clrtoeol(MessageWindow);
-    mutt_refresh();
+    msgwin_set_text(color, ErrorBuf);
   }
 
   if ((level <= LL_ERROR) && !dupe)
@@ -229,23 +228,23 @@ void mutt_log_stop(void)
 /**
  * mutt_log_set_file - Change the logging file
  * @param file Name to use
- * @param verbose If true, then log the event
  * @retval  0 Success, file opened
  * @retval -1 Error, see errno
  *
  * Close the old log, rotate the new logs and open the new log.
  */
-int mutt_log_set_file(const char *file, bool verbose)
+int mutt_log_set_file(const char *file)
 {
-  if (!mutt_str_equal(CurrentFile, C_DebugFile))
+  const char *const c_debug_file = cs_subset_path(NeoMutt->sub, "debug_file");
+  if (!mutt_str_equal(CurrentFile, c_debug_file))
   {
-    const char *name = rotate_logs(C_DebugFile, NumOfLogs);
+    const char *name = rotate_logs(c_debug_file, NumOfLogs);
     if (!name)
       return -1;
 
     log_file_set_filename(name, false);
     FREE(&name);
-    mutt_str_replace(&CurrentFile, C_DebugFile);
+    mutt_str_replace(&CurrentFile, c_debug_file);
   }
 
   cs_subset_str_string_set(NeoMutt->sub, "debug_file", file, NULL);
@@ -263,7 +262,10 @@ int mutt_log_set_file(const char *file, bool verbose)
 int mutt_log_set_level(enum LogLevel level, bool verbose)
 {
   if (!CurrentFile)
-    mutt_log_set_file(C_DebugFile, false);
+  {
+    const char *const c_debug_file = cs_subset_path(NeoMutt->sub, "debug_file");
+    mutt_log_set_file(c_debug_file);
+  }
 
   if (log_file_set_level(level, verbose) != 0)
     return -1;
@@ -281,23 +283,25 @@ int mutt_log_set_level(enum LogLevel level, bool verbose)
  */
 int mutt_log_start(void)
 {
-  if (C_DebugLevel < 1)
+  const short c_debug_level = cs_subset_number(NeoMutt->sub, "debug_level");
+  if (c_debug_level < 1)
     return 0;
 
   if (log_file_running())
     return 0;
 
-  mutt_log_set_file(C_DebugFile, false);
+  const char *const c_debug_file = cs_subset_path(NeoMutt->sub, "debug_file");
+  mutt_log_set_file(c_debug_file);
 
   /* This will trigger the file creation */
-  if (log_file_set_level(C_DebugLevel, true) < 0)
+  if (log_file_set_level(c_debug_level, true) < 0)
     return -1;
 
   return 0;
 }
 
 /**
- * level_validator - Validate the "debug_level" config variable - Implements ConfigDef::validator()
+ * level_validator - Validate the "debug_level" config variable - Implements ConfigDef::validator() - @ingroup cfg_def_validator
  */
 int level_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
                     intptr_t value, struct Buffer *err)
@@ -312,21 +316,30 @@ int level_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
 }
 
 /**
- * mutt_log_observer - Listen for config changes affecting the log file - Implements ::observer_t
+ * main_log_observer - Notification that a Config Variable has changed - Implements ::observer_t - @ingroup observer_api
  */
-int mutt_log_observer(struct NotifyCallback *nc)
+int main_log_observer(struct NotifyCallback *nc)
 {
-  if (!nc->event_data)
+  if ((nc->event_type != NT_CONFIG) || !nc->event_data)
     return -1;
-  if (nc->event_type != NT_CONFIG)
+
+  struct EventConfig *ev_c = nc->event_data;
+
+  if (mutt_str_equal(ev_c->name, "debug_file"))
+  {
+    const char *const c_debug_file = cs_subset_path(NeoMutt->sub, "debug_file");
+    mutt_log_set_file(c_debug_file);
+  }
+  else if (mutt_str_equal(ev_c->name, "debug_level"))
+  {
+    const short c_debug_level = cs_subset_number(NeoMutt->sub, "debug_level");
+    mutt_log_set_level(c_debug_level, true);
+  }
+  else
+  {
     return 0;
+  }
 
-  struct EventConfig *ec = nc->event_data;
-
-  if (mutt_str_equal(ec->name, "debug_file"))
-    mutt_log_set_file(C_DebugFile, true);
-  else if (mutt_str_equal(ec->name, "debug_level"))
-    mutt_log_set_level(C_DebugLevel, true);
-
+  mutt_debug(LL_DEBUG5, "log done\n");
   return 0;
 }

@@ -1,6 +1,6 @@
 /**
  * @file
- * GUI parts of Connection Library
+ * Certificate Verification Dialog
  *
  * @authors
  * Copyright (C) 2017 Richard Russon <rich@flatcap.org>
@@ -21,9 +21,33 @@
  */
 
 /**
- * @page conn_gui GUI parts of Connection Library
+ * @page conn_gui Certificate Verification Dialog
  *
- * GUI parts of Connection Library
+ * The Certificate Verification Dialog lets the user check the details of a
+ * certificate.
+ *
+ * This is a @ref gui_simple
+ *
+ * ## Windows
+ *
+ * | Name                            | Type               | See Also                 |
+ * | :------------------------------ | :----------------- | :----------------------- |
+ * | Certificate Verification Dialog | WT_DLG_CERTIFICATE | dlg_verify_certificate() |
+ *
+ * **Parent**
+ * - @ref gui_dialog
+ *
+ * **Children**
+ * - See: @ref gui_simple
+ *
+ * ## Data
+ *
+ * None.
+ *
+ * ## Events
+ *
+ * None.  Once constructed, the events are handled by the Menu
+ * (part of the @ref gui_simple).
  */
 
 #include "config.h"
@@ -31,13 +55,9 @@
 #include <stdio.h>
 #include "mutt/lib.h"
 #include "gui/lib.h"
-#include "lib.h"
-#include "keymap.h"
-#include "mutt_globals.h"
-#include "mutt_menu.h"
+#include "menu/lib.h"
 #include "opcodes.h"
 #include "options.h"
-#include "protos.h"
 #include "ssl.h"
 
 #ifdef USE_SSL
@@ -70,20 +90,18 @@ static const struct Mapping VerifyHelp[] = {
 int dlg_verify_certificate(const char *title, struct ListHead *list,
                            bool allow_always, bool allow_skip)
 {
-  struct Menu *menu = mutt_menu_new(MENU_GENERIC);
-  struct MuttWindow *dlg = dialog_create_simple_index(menu, WT_DLG_CERTIFICATE);
-  dlg->help_data = VerifyHelp;
-  dlg->help_menu = MENU_GENERIC;
+  struct MuttWindow *dlg = simple_dialog_new(MENU_GENERIC, WT_DLG_CERTIFICATE, VerifyHelp);
 
-  mutt_menu_push_current(menu);
+  struct Menu *menu = dlg->wdata;
+
+  struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
+  sbar_set_title(sbar, title);
 
   struct ListNode *np = NULL;
   STAILQ_FOREACH(np, list, entries)
   {
-    mutt_menu_add_dialog_row(menu, NONULL(np->data));
+    menu_add_dialog_row(menu, NONULL(np->data));
   }
-
-  menu->title = title;
 
   if (allow_always)
   {
@@ -130,7 +148,7 @@ int dlg_verify_certificate(const char *title, struct ListHead *list,
   int rc = 0;
   while (rc == 0)
   {
-    switch (mutt_menu_loop(menu))
+    switch (menu_loop(menu))
     {
       case -1:         // Abort: Ctrl-G
       case OP_EXIT:    // Q)uit
@@ -150,9 +168,7 @@ int dlg_verify_certificate(const char *title, struct ListHead *list,
   }
   OptIgnoreMacroEvents = old_ime;
 
-  mutt_menu_pop_current(menu);
-  mutt_menu_free(&menu);
-  dialog_destroy_simple_index(&dlg);
+  simple_dialog_free(&dlg);
 
   return rc;
 }

@@ -21,18 +21,21 @@
  */
 
 /**
- * @page lib_gui GUI: Graphical code
+ * @page lib_gui Graphical code
  *
- * Curses and Window code.
+ * Curses and Window code
  *
  * | File                | Description                |
  * | :------------------ | :------------------------- |
- * | gui/color.c         | @subpage gui_color         |
  * | gui/curs_lib.c      | @subpage gui_curs_lib      |
  * | gui/dialog.c        | @subpage gui_dialog        |
+ * | gui/msgwin.c        | @subpage gui_msgwin        |
  * | gui/mutt_curses.c   | @subpage gui_curses        |
  * | gui/mutt_window.c   | @subpage gui_window        |
  * | gui/reflow.c        | @subpage gui_reflow        |
+ * | gui/rootwin.c       | @subpage gui_rootwin       |
+ * | gui/sbar.c          | @subpage gui_sbar          |
+ * | gui/simple.c        | @subpage gui_simple        |
  * | gui/terminal.c      | @subpage gui_terminal      |
  */
 
@@ -40,12 +43,15 @@
 #define MUTT_GUI_LIB_H
 
 // IWYU pragma: begin_exports
-#include "color.h"
 #include "curs_lib.h"
 #include "dialog.h"
+#include "msgwin.h"
 #include "mutt_curses.h"
 #include "mutt_window.h"
 #include "reflow.h"
+#include "rootwin.h"
+#include "sbar.h"
+#include "simple.h"
 #include "terminal.h"
 // IWYU pragma: end_exports
 

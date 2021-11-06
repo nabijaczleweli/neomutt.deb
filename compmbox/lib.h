@@ -22,7 +22,7 @@
  */
 
 /**
- * @page lib_compmbox COMPMBOX: Compressed Mailbox
+ * @page lib_compmbox Compressed Mailbox
  *
  * Compressed mbox local mailbox type
  *
@@ -36,9 +36,7 @@
 
 #include <stdbool.h>
 #include <stdio.h>
-#include "mx.h"
-
-struct Mailbox;
+#include "core/lib.h"
 
 /**
  * struct CompressInfo - Private data for compress

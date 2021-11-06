@@ -24,14 +24,13 @@
 #define MUTT_ALIAS_GUI_H
 
 #include <stdbool.h>
-#include "sort.h"
-#include "core/neomutt.h"
-#include "mutt/array.h"
+#include "mutt/lib.h"
 
 struct Alias;
+struct MuttWindow;
 
 /**
- * AliasView - GUI data wrapping an Alias
+ * struct AliasView - GUI data wrapping an Alias
  */
 struct AliasView
 {
@@ -44,27 +43,25 @@ struct AliasView
   bool is_visible  : 1; ///< Is visible?
   struct Alias *alias;  ///< Alias
 };
-
 ARRAY_HEAD(AliasViewArray, struct AliasView);
 
 /**
- *  AliasMenuData - AliasView array wrapper with Pattern information
+ * struct AliasMenuData - AliasView array wrapper with Pattern information - @extends Menu
  */
 struct AliasMenuData
 {
   char *str;                 ///< String representing the limit being used
-  struct Pattern *pat;       ///< Pattern object
   struct AliasViewArray ava; ///< Array of AliasView
   struct ConfigSubset *sub;  ///< Config items
 };
 
 int alias_config_observer(struct NotifyCallback *nc);
-int alias_color_observer (struct NotifyCallback *nc);
 
 int  alias_array_alias_add    (struct AliasViewArray *ava, struct Alias *alias);
 int  alias_array_alias_delete (struct AliasViewArray *ava, struct Alias *alias);
 int  alias_array_count_visible(struct AliasViewArray *ava);
 
-char *menu_create_alias_title(char *menu_name, char *limit);
+void alias_set_title(struct MuttWindow *sbar, char *menu_name, char *limit);
+int alias_recalc(struct MuttWindow *win);
 
 #endif /* MUTT_ALIAS_GUI_H */

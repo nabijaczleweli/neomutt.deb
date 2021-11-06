@@ -21,9 +21,9 @@
  */
 
 /**
- * @page helpbar_wdata Help Bar Window data
+ * @page helpbar_wdata Data for the Help Bar
  *
- * Help Bar Window data
+ * #HelpbarWindowData stores the state of the Help Bar.
  */
 
 #include "config.h"
@@ -42,13 +42,10 @@ struct HelpbarWindowData *helpbar_wdata_new(void)
 }
 
 /**
- * helpbar_wdata_free - Free Helpbar Window data - Implements MuttWindow::wdata_free()
+ * helpbar_wdata_free - Free Helpbar Window data - Implements MuttWindow::wdata_free() - @ingroup window_wdata_free
  */
 void helpbar_wdata_free(struct MuttWindow *win, void **ptr)
 {
-  if (!ptr || !*ptr)
-    return;
-
   struct HelpbarWindowData *wdata = *ptr;
 
   // We don't own the help_data

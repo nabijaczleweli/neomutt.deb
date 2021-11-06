@@ -35,13 +35,12 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 #include "mutt/lib.h"
 #include "lib.h"
-#include "mutt_globals.h"
 
 /**
  * struct StoreDbCtx - Berkeley DB context
@@ -85,16 +84,16 @@ static void dbt_empty_init(DBT *dbt)
 }
 
 /**
- * store_bdb_open - Implements StoreOps::open()
+ * store_bdb_open - Implements StoreOps::open() - @ingroup store_open
  */
 static void *store_bdb_open(const char *path)
 {
   if (!path)
     return NULL;
 
-  struct stat sb;
+  struct stat st = { 0 };
   int ret;
-  u_int32_t createflags = DB_CREATE;
+  uint32_t createflags = DB_CREATE;
 
   struct StoreDbCtx *ctx = mutt_mem_malloc(sizeof(struct StoreDbCtx));
 
@@ -126,7 +125,7 @@ static void *store_bdb_open(const char *path)
   if (ret)
     goto fail_env;
 
-  if ((stat(path, &sb) != 0) && (errno == ENOENT))
+  if ((stat(path, &st) != 0) && (errno == ENOENT))
   {
     createflags |= DB_EXCL;
     ctx->db->set_pagesize(ctx->db, pagesize);
@@ -154,7 +153,7 @@ fail_close:
 }
 
 /**
- * store_bdb_fetch - Implements StoreOps::fetch()
+ * store_bdb_fetch - Implements StoreOps::fetch() - @ingroup store_fetch
  */
 static void *store_bdb_fetch(void *store, const char *key, size_t klen, size_t *vlen)
 {
@@ -177,7 +176,7 @@ static void *store_bdb_fetch(void *store, const char *key, size_t klen, size_t *
 }
 
 /**
- * store_bdb_free - Implements StoreOps::free()
+ * store_bdb_free - Implements StoreOps::free() - @ingroup store_free
  */
 static void store_bdb_free(void *store, void **ptr)
 {
@@ -185,7 +184,7 @@ static void store_bdb_free(void *store, void **ptr)
 }
 
 /**
- * store_bdb_store - Implements StoreOps::store()
+ * store_bdb_store - Implements StoreOps::store() - @ingroup store_store
  */
 static int store_bdb_store(void *store, const char *key, size_t klen, void *value, size_t vlen)
 {
@@ -208,7 +207,7 @@ static int store_bdb_store(void *store, const char *key, size_t klen, void *valu
 }
 
 /**
- * store_bdb_delete_record - Implements StoreOps::delete_record()
+ * store_bdb_delete_record - Implements StoreOps::delete_record() - @ingroup store_delete_record
  */
 static int store_bdb_delete_record(void *store, const char *key, size_t klen)
 {
@@ -224,7 +223,7 @@ static int store_bdb_delete_record(void *store, const char *key, size_t klen)
 }
 
 /**
- * store_bdb_close - Implements StoreOps::close()
+ * store_bdb_close - Implements StoreOps::close() - @ingroup store_close
  */
 static void store_bdb_close(void **ptr)
 {
@@ -243,7 +242,7 @@ static void store_bdb_close(void **ptr)
 }
 
 /**
- * store_bdb_version - Implements StoreOps::version()
+ * store_bdb_version - Implements StoreOps::version() - @ingroup store_version
  */
 static const char *store_bdb_version(void)
 {

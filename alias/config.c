@@ -21,52 +21,54 @@
  */
 
 /**
- * @page alias_config Config used by libaddress
+ * @page alias_config Alias Config
  *
- * Config used by libaddress
+ * Config used by libalias
  */
 
 #include "config.h"
+#include <stddef.h>
 #include <config/lib.h>
 #include <stdbool.h>
+#include "mutt/lib.h"
 
 /**
- * SortAliasMethods - Sort methods for email aliases
+ * struct SortAliasMethods - Sort methods for email aliases
  */
 const struct Mapping SortAliasMethods[] = {
   // clang-format off
   { "address",  SORT_ADDRESS },
   { "alias",    SORT_ALIAS },
   { "unsorted", SORT_ORDER },
-  { NULL,       0 },
+  { NULL, 0 },
   // clang-format on
 };
 
-struct ConfigDef AliasVars[] = {
+static struct ConfigDef AliasVars[] = {
   // clang-format off
-  { "alias_file", DT_PATH|DT_PATH_FILE, NULL, IP "~/.neomuttrc", 0, NULL,
+  { "alias_file", DT_PATH|DT_PATH_FILE, IP "~/.neomuttrc", 0, NULL,
     "Save new aliases to this file"
   },
-  { "alias_format", DT_STRING|DT_NOT_EMPTY, NULL, IP "%3n %f%t %-15a %-56r | %c", 0, NULL,
+  { "alias_format", DT_STRING|DT_NOT_EMPTY, IP "%3n %f%t %-15a %-56r | %c", 0, NULL,
     "printf-like format string for the alias menu"
   },
-  { "sort_alias", DT_SORT|DT_SORT_REVERSE, NULL, SORT_ALIAS, IP SortAliasMethods, NULL,
+  { "sort_alias", DT_SORT|DT_SORT_REVERSE, SORT_ALIAS, IP SortAliasMethods, NULL,
     "Sort method for the alias menu"
   },
-  { "query_command", DT_STRING|DT_COMMAND, NULL, 0, 0, NULL,
+  { "query_command", DT_STRING|DT_COMMAND, 0, 0, NULL,
     "External command to query and external address book"
   },
-  { "query_format", DT_STRING|DT_NOT_EMPTY, NULL, IP "%3c %t %-25.25n %-25.25a | %e", 0, NULL,
+  { "query_format", DT_STRING|DT_NOT_EMPTY, IP "%3c %t %-25.25n %-25.25a | %e", 0, NULL,
     "printf-like format string for the query menu (address book)"
   },
-  { NULL, 0, NULL, 0, 0, NULL, NULL },
+  { NULL },
   // clang-format on
 };
 
 /**
- * config_init_alias - Register alias config variables - Implements ::module_init_config_t
+ * config_init_alias - Register alias config variables - Implements ::module_init_config_t - @ingroup cfg_module_api
  */
 bool config_init_alias(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, AliasVars, DT_NO_VARIABLE);
+  return cs_register_variables(cs, AliasVars, 0);
 }

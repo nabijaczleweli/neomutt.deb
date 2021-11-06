@@ -21,14 +21,14 @@
  */
 
 /**
- * @page conn_sasl SASL authentication support
+ * @page conn_sasl SASL authentication
  *
  * SASL can stack a protection layer on top of an existing connection.  To
  * handle this, we store a saslconn_t in conn->sockdata, and write wrappers
  * which en/decode the read/write stream, then replace sockdata with an
  * embedded copy of the old sockdata and call the underlying functions (which
  * we've also preserved). I thought about trying to make a general stackable
- * connection system, but it seemed like overkill - something is wrong if we
+ * connection system, but it seemed like overkill. Something is wrong if we
  * have 15 filters on top of a socket. Anyway, anything else which wishes to
  * stack can use the same method. The only disadvantage is we have to write
  * wrappers for all the socket methods, even if we only stack over read and
@@ -55,7 +55,7 @@
 #include "options.h"
 
 /**
- * struct SaslSockData - SASL authentication API
+ * struct SaslSockData - SASL authentication API - @extends Connection
  */
 struct SaslSockData
 {
@@ -64,42 +64,42 @@ struct SaslSockData
   const unsigned int *pbufsize;
 
   /* read buffer */
-  const char *buf;
-  unsigned int blen;
-  unsigned int bpos;
+  const char *buf;   ///< Buffer for data read from the connection
+  unsigned int blen; ///< Size of the read buffer
+  unsigned int bpos; ///< Current read position
 
   void *sockdata; ///< Underlying socket data
 
   /**
-   * open - Open a socket Connection - Implements Connection::open()
+   * open - Open a socket Connection - Implements Connection::open() - @ingroup connection_open
    */
   int (*open)(struct Connection *conn);
 
   /**
-   * read - Read from a socket Connection - Implements Connection::read()
+   * read - Read from a socket Connection - Implements Connection::read() - @ingroup connection_read
    */
   int (*read)(struct Connection *conn, char *buf, size_t count);
 
   /**
-   * write - Write to a socket Connection - Implements Connection::write()
+   * write - Write to a socket Connection - Implements Connection::write() - @ingroup connection_write
    */
   int (*write)(struct Connection *conn, const char *buf, size_t count);
 
   /**
-   * poll - Check whether a socket read would block - Implements Connection::poll()
+   * poll - Check whether a socket read would block - Implements Connection::poll() - @ingroup connection_poll
    */
   int (*poll)(struct Connection *conn, time_t wait_secs);
 
   /**
-   * close - Close a socket Connection - Implements Connection::close()
+   * close - Close a socket Connection - Implements Connection::close() - @ingroup connection_close
    */
   int (*close)(struct Connection *conn);
 };
 
 /**
- * sasl_authenticators - Authenticaion methods supported by Cyrus SASL
+ * SaslAuthenticators - Authenticaion methods supported by Cyrus SASL
  */
-static const char *const sasl_authenticators[] = {
+static const char *const SaslAuthenticators[] = {
   "ANONYMOUS",     "CRAM-MD5",       "DIGEST-MD5",    "EXTERNAL",
   "GS2-IAKERB",    "GS2-KRB5",       "GSS-SPNEGO",    "GSSAPI",
   "LOGIN",         "NTLM",           "OTP-MD4",       "OTP-MD5",
@@ -113,7 +113,10 @@ static const char *const sasl_authenticators[] = {
  * a protection buffer. */
 #define MUTT_SASL_MAXBUF 65536
 
-#define IP_PORT_BUFLEN 1024
+/* used to hold a string "host;port"
+ * where host is size NI_MAXHOST-1 and port is size NI_MAXSERV-1
+ * plus two bytes for the ';' and trailing \0 */
+#define IP_PORT_BUFLEN (NI_MAXHOST + NI_MAXSERV)
 
 static sasl_callback_t MuttSaslCallbacks[5];
 
@@ -122,13 +125,13 @@ static sasl_secret_t *secret_ptr = NULL;
 /**
  * sasl_auth_validator - Validate an auth method against Cyrus SASL methods
  * @param authenticator Name of the authenticator to validate
- * @retval bool True if argument matches an accepted auth method
+ * @retval true Argument matches an accepted auth method
  */
 bool sasl_auth_validator(const char *authenticator)
 {
-  for (size_t i = 0; i < mutt_array_size(sasl_authenticators); i++)
+  for (size_t i = 0; i < mutt_array_size(SaslAuthenticators); i++)
   {
-    const char *auth = sasl_authenticators[i];
+    const char *auth = SaslAuthenticators[i];
     if (mutt_istr_equal(auth, authenticator))
       return true;
   }
@@ -230,7 +233,7 @@ static int iptostring(const struct sockaddr *addr, socklen_t addrlen, char *out,
 }
 
 /**
- * mutt_sasl_cb_log - callback to log SASL messages
+ * mutt_sasl_cb_log - Callback to log SASL messages
  * @param context  Supplied context, always NULL
  * @param priority Debug level
  * @param message  Message
@@ -271,7 +274,7 @@ static int mutt_sasl_cb_log(void *context, int priority, const char *message)
  * mutt_sasl_start - Initialise SASL library
  * @retval num SASL error code, e.g. SASL_OK
  *
- * Call before doing an SASL exchange - initialises library (if necessary).
+ * Call before doing an SASL exchange (initialises library if necessary).
  */
 static int mutt_sasl_start(void)
 {
@@ -306,7 +309,7 @@ static int mutt_sasl_start(void)
 }
 
 /**
- * mutt_sasl_cb_authname - callback to retrieve authname or user from ConnAccount
+ * mutt_sasl_cb_authname - Callback to retrieve authname or user from ConnAccount
  * @param[in]  context ConnAccount
  * @param[in]  id      Field to get.  SASL_CB_USER or SASL_CB_AUTHNAME
  * @param[out] result  Resulting string
@@ -417,7 +420,7 @@ static sasl_callback_t *mutt_sasl_get_callbacks(struct ConnAccount *cac)
 }
 
 /**
- * mutt_sasl_conn_open - empty wrapper for underlying open function - Implements Connection::open()
+ * mutt_sasl_conn_open - Empty wrapper for underlying open function - Implements Connection::open() - @ingroup connection_open
  *
  * We don't know in advance that a connection will use SASL, so we replace
  * conn's methods with sasl methods when authentication is successful, using
@@ -434,7 +437,7 @@ static int mutt_sasl_conn_open(struct Connection *conn)
 }
 
 /**
- * mutt_sasl_conn_close - close SASL connection - Implements Connection::close()
+ * mutt_sasl_conn_close - Close SASL connection - Implements Connection::close() - @ingroup connection_close
  *
  * Calls underlying close function and disposes of the sasl_conn_t object, then
  * restores connection to pre-sasl state
@@ -462,7 +465,7 @@ static int mutt_sasl_conn_close(struct Connection *conn)
 }
 
 /**
- * mutt_sasl_conn_read - Read data from an SASL connection - Implements Connection::read()
+ * mutt_sasl_conn_read - Read data from an SASL connection - Implements Connection::read() - @ingroup connection_read
  */
 static int mutt_sasl_conn_read(struct Connection *conn, char *buf, size_t count)
 {
@@ -526,7 +529,7 @@ out:
 }
 
 /**
- * mutt_sasl_conn_write - Write to an SASL connection - Implements Connection::write()
+ * mutt_sasl_conn_write - Write to an SASL connection - Implements Connection::write() - @ingroup connection_write
  */
 static int mutt_sasl_conn_write(struct Connection *conn, const char *buf, size_t count)
 {
@@ -576,7 +579,7 @@ fail:
 }
 
 /**
- * mutt_sasl_conn_poll - Check an SASL connection for data - Implements Connection::poll()
+ * mutt_sasl_conn_poll - Check an SASL connection for data - Implements Connection::poll() - @ingroup connection_poll
  */
 static int mutt_sasl_conn_poll(struct Connection *conn, time_t wait_secs)
 {
@@ -706,8 +709,11 @@ int mutt_sasl_interact(sasl_interact_t *interaction)
 
     snprintf(prompt, sizeof(prompt), "%s: ", interaction->prompt);
     resp[0] = '\0';
-    if (OptNoCurses || mutt_get_field(prompt, resp, sizeof(resp), MUTT_COMP_NO_FLAGS))
+    if (OptNoCurses || mutt_get_field(prompt, resp, sizeof(resp),
+                                      MUTT_COMP_NO_FLAGS, false, NULL, NULL))
+    {
       return SASL_FAIL;
+    }
 
     interaction->len = mutt_str_len(resp) + 1;
     char *result = mutt_mem_malloc(interaction->len);

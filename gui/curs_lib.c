@@ -22,17 +22,14 @@
  */
 
 /**
- * @page gui_curs_lib GUI miscellaneous curses (window drawing) routines
+ * @page gui_curs_lib Window drawing code
  *
  * GUI miscellaneous curses (window drawing) routines
  */
 
 #include "config.h"
-#include <stddef.h>
-#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <langinfo.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -46,20 +43,20 @@
 #include "core/lib.h"
 #include "mutt.h"
 #include "curs_lib.h"
+#include "color/lib.h"
+#include "menu/lib.h"
+#include "question/lib.h"
 #include "browser.h"
-#include "color.h"
-#include "dialog.h"
 #include "enter_state.h"
 #include "keymap.h"
+#include "msgwin.h"
 #include "mutt_curses.h"
 #include "mutt_globals.h"
 #include "mutt_logging.h"
-#include "mutt_menu.h"
 #include "mutt_thread.h"
 #include "mutt_window.h"
 #include "opcodes.h"
 #include "options.h"
-#include "pager.h"
 #include "protos.h"
 #ifdef HAVE_ISWBLANK
 #include <wctype.h>
@@ -68,29 +65,37 @@
 #include "monitor.h"
 #endif
 
-/* These Config Variables are only used in curs_lib.c */
-bool C_MetaKey; ///< Config: Interpret 'ALT-x' as 'ESC-x'
-
-/* not possible to unget more than one char under some curses libs, and it
- * is impossible to unget function keys in SLang, so roll our own input
- * buffering routines.
- */
+/* not possible to unget more than one char under some curses libs, so roll our
+ * own input buffering routines.  */
 
 /* These are used for macros and exec/push commands.
- * They can be temporarily ignored by setting OptIgnoreMacroEvents
- */
+ * They can be temporarily ignored by setting OptIgnoreMacroEvents */
 static size_t MacroBufferCount = 0;
 static size_t MacroBufferLen = 0;
 static struct KeyEvent *MacroEvents;
 
 /* These are used in all other "normal" situations, and are not
- * ignored when setting OptIgnoreMacroEvents
- */
+ * ignored when setting OptIgnoreMacroEvents */
 static size_t UngetCount = 0;
 static size_t UngetLen = 0;
 static struct KeyEvent *UngetKeyEvents;
 
 int MuttGetchTimeout = -1;
+
+/// Help Bar for the Command Line Editor
+static const struct Mapping EditorHelp[] = {
+  // clang-format off
+  { N_("Complete"),    OP_EDITOR_COMPLETE },
+  { N_("Hist Up"),     OP_EDITOR_HISTORY_UP },
+  { N_("Hist Down"),   OP_EDITOR_HISTORY_DOWN },
+  { N_("Hist Search"), OP_EDITOR_HISTORY_SEARCH },
+  { N_("Begin Line"),  OP_EDITOR_BOL },
+  { N_("End Line"),    OP_EDITOR_EOL },
+  { N_("Kill Line"),   OP_EDITOR_KILL_LINE },
+  { N_("Kill Word"),   OP_EDITOR_KILL_WORD },
+  { NULL, 0 },
+  // clang-format on
+};
 
 /**
  * mutt_beep - Irritate the user
@@ -98,7 +103,8 @@ int MuttGetchTimeout = -1;
  */
 void mutt_beep(bool force)
 {
-  if (force || C_Beep)
+  const bool c_beep = cs_subset_bool(NeoMutt->sub, "beep");
+  if (force || c_beep)
     beep();
 }
 
@@ -131,7 +137,7 @@ void mutt_need_hard_redraw(void)
 {
   keypad(stdscr, true);
   clearok(stdscr, true);
-  mutt_menu_set_current_redraw_full();
+  window_redraw(NULL);
 }
 
 /**
@@ -198,19 +204,19 @@ struct KeyEvent mutt_getch(void)
   if (!OptIgnoreMacroEvents && MacroBufferCount)
     return MacroEvents[--MacroBufferCount];
 
-  SigInt = 0;
+  SigInt = false;
 
   mutt_sig_allow_interrupt(true);
 #ifdef KEY_RESIZE
   /* ncurses 4.2 sends this when the screen is resized */
   ch = KEY_RESIZE;
   while (ch == KEY_RESIZE)
-#endif /* KEY_RESIZE */
+#endif
 #ifdef USE_INOTIFY
     ch = mutt_monitor_getch();
 #else
   ch = getch();
-#endif /* USE_INOTIFY */
+#endif
   mutt_sig_allow_interrupt(false);
 
   if (SigInt)
@@ -229,7 +235,8 @@ struct KeyEvent mutt_getch(void)
     return timeout;
   }
 
-  if ((ch & 0x80) && C_MetaKey)
+  const bool c_meta_key = cs_subset_bool(NeoMutt->sub, "meta_key");
+  if ((ch & 0x80) && c_meta_key)
   {
     /* send ALT-x as ESC-x */
     ch &= ~0x80;
@@ -245,57 +252,75 @@ struct KeyEvent mutt_getch(void)
 }
 
 /**
- * mutt_buffer_get_field_full - Ask the user for a string
+ * mutt_buffer_get_field - Ask the user for a string
  * @param[in]  field    Prompt
  * @param[in]  buf      Buffer for the result
  * @param[in]  complete Flags, see #CompletionFlags
  * @param[in]  multiple Allow multiple selections
+ * @param[in]  m        Mailbox
  * @param[out] files    List of files selected
  * @param[out] numfiles Number of files selected
  * @retval 1  Redraw the screen and call the function again
  * @retval 0  Selection made
  * @retval -1 Aborted
  */
-int mutt_buffer_get_field_full(const char *field, struct Buffer *buf, CompletionFlags complete,
-                               bool multiple, char ***files, int *numfiles)
+int mutt_buffer_get_field(const char *field, struct Buffer *buf, CompletionFlags complete,
+                          bool multiple, struct Mailbox *m, char ***files, int *numfiles)
 {
+  struct MuttWindow *win = msgwin_get_window();
+  if (!win)
+    return -1;
+
   int ret;
   int col;
 
   struct EnterState *es = mutt_enter_state_new();
 
+  const struct Mapping *old_help = win->help_data;
+  int old_menu = win->help_menu;
+
+  win->help_data = EditorHelp;
+  win->help_menu = MENU_EDITOR;
+  struct MuttWindow *old_focus = window_set_focus(win);
+
+  window_redraw(NULL);
   do
   {
     if (SigWinch)
     {
-      SigWinch = 0;
+      SigWinch = false;
       mutt_resize_screen();
       clearok(stdscr, true);
-      mutt_menu_current_redraw();
+      window_redraw(NULL);
     }
-    mutt_window_clearline(MessageWindow, 0);
-    mutt_curses_set_color(MT_COLOR_PROMPT);
-    mutt_window_addstr(field);
-    mutt_curses_set_color(MT_COLOR_NORMAL);
+    mutt_window_clearline(win, 0);
+    mutt_curses_set_color_by_id(MT_COLOR_PROMPT);
+    mutt_window_addstr(win, field);
+    mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
     mutt_refresh();
-    mutt_window_get_coords(MessageWindow, &col, NULL);
+    mutt_window_get_coords(win, &col, NULL);
     ret = mutt_enter_string_full(buf->data, buf->dsize, col, complete, multiple,
-                                 files, numfiles, es);
+                                 m, files, numfiles, es);
   } while (ret == 1);
+
+  win->help_data = old_help;
+  win->help_menu = old_menu;
+  mutt_window_move(win, 0, 0);
+  mutt_window_clearline(win, 0);
+  window_set_focus(old_focus);
 
   if (ret == 0)
     mutt_buffer_fix_dptr(buf);
   else
     mutt_buffer_reset(buf);
 
-  mutt_window_clearline(MessageWindow, 0);
   mutt_enter_state_free(&es);
 
   return ret;
 }
 
 /**
- * mutt_get_field_full - Ask the user for a string
+ * mutt_get_field - Ask the user for a string
  * @param[in]  field    Prompt
  * @param[in]  buf      Buffer for the result
  * @param[in]  buflen   Length of buffer
@@ -307,8 +332,8 @@ int mutt_buffer_get_field_full(const char *field, struct Buffer *buf, Completion
  * @retval 0  Selection made
  * @retval -1 Aborted
  */
-int mutt_get_field_full(const char *field, char *buf, size_t buflen, CompletionFlags complete,
-                        bool multiple, char ***files, int *numfiles)
+int mutt_get_field(const char *field, char *buf, size_t buflen,
+                   CompletionFlags complete, bool multiple, char ***files, int *numfiles)
 {
   if (!buf)
     return -1;
@@ -318,7 +343,7 @@ int mutt_get_field_full(const char *field, char *buf, size_t buflen, CompletionF
     .dptr = buf + mutt_str_len(buf),
     .dsize = buflen,
   };
-  return mutt_buffer_get_field_full(field, &tmp, complete, multiple, files, numfiles);
+  return mutt_buffer_get_field(field, &tmp, complete, multiple, NULL, files, numfiles);
 }
 
 /**
@@ -340,7 +365,7 @@ int mutt_get_field_unbuffered(const char *msg, char *buf, size_t buflen, Complet
     OptIgnoreMacroEvents = true;
     reset_ignoremacro = true;
   }
-  int rc = mutt_get_field(msg, buf, buflen, flags);
+  int rc = mutt_get_field(msg, buf, buflen, flags, false, NULL, NULL);
   if (reset_ignoremacro)
     OptIgnoreMacroEvents = false;
 
@@ -371,167 +396,6 @@ void mutt_edit_file(const char *editor, const char *file)
 }
 
 /**
- * mutt_yesorno - Ask the user a Yes/No question
- * @param msg Prompt
- * @param def Default answer, #MUTT_YES or #MUTT_NO (see #QuadOption)
- * @retval num Selection made, see #QuadOption
- */
-enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
-{
-  struct KeyEvent ch;
-  char *yes = _("yes");
-  char *no = _("no");
-  char *answer_string = NULL;
-  int answer_string_wid, msg_wid;
-  size_t trunc_msg_len;
-  bool redraw = true;
-  int prompt_lines = 1;
-
-  char *expr = NULL;
-  regex_t reyes;
-  regex_t reno;
-  char answer[2];
-
-  answer[1] = '\0';
-
-  bool reyes_ok = (expr = nl_langinfo(YESEXPR)) && (expr[0] == '^') &&
-                  (REG_COMP(&reyes, expr, REG_NOSUB) == 0);
-  bool reno_ok = (expr = nl_langinfo(NOEXPR)) && (expr[0] == '^') &&
-                 (REG_COMP(&reno, expr, REG_NOSUB) == 0);
-
-  /* In order to prevent the default answer to the question to wrapped
-   * around the screen in the even the question is wider than the screen,
-   * ensure there is enough room for the answer and truncate the question
-   * to fit.  */
-  mutt_str_asprintf(&answer_string, " ([%s]/%s): ", (def == MUTT_YES) ? yes : no,
-                    (def == MUTT_YES) ? no : yes);
-  answer_string_wid = mutt_strwidth(answer_string);
-  msg_wid = mutt_strwidth(msg);
-
-  while (true)
-  {
-    if (redraw || SigWinch)
-    {
-      redraw = false;
-      if (SigWinch)
-      {
-        SigWinch = 0;
-        mutt_resize_screen();
-        clearok(stdscr, true);
-        mutt_menu_current_redraw();
-      }
-      if (MessageWindow->state.cols)
-      {
-        prompt_lines = (msg_wid + answer_string_wid + MessageWindow->state.cols - 1) /
-                       MessageWindow->state.cols;
-        prompt_lines = MAX(1, MIN(3, prompt_lines));
-      }
-      if (prompt_lines != MessageWindow->state.rows)
-      {
-        mutt_window_reflow_message_rows(prompt_lines);
-        mutt_menu_current_redraw();
-      }
-
-      /* maxlen here is sort of arbitrary, so pick a reasonable upper bound */
-      trunc_msg_len = mutt_wstr_trunc(
-          msg, (size_t) 4 * prompt_lines * MessageWindow->state.cols,
-          ((size_t) prompt_lines * MessageWindow->state.cols) - answer_string_wid, NULL);
-
-      mutt_window_move(MessageWindow, 0, 0);
-      mutt_curses_set_color(MT_COLOR_PROMPT);
-      mutt_window_addnstr(msg, trunc_msg_len);
-      mutt_window_addstr(answer_string);
-      mutt_curses_set_color(MT_COLOR_NORMAL);
-      mutt_window_clrtoeol(MessageWindow);
-    }
-
-    mutt_refresh();
-    /* SigWinch is not processed unless timeout is set */
-    mutt_getch_timeout(30 * 1000);
-    ch = mutt_getch();
-    mutt_getch_timeout(-1);
-    if (ch.ch == -2)
-      continue;
-    if (CI_is_return(ch.ch))
-      break;
-    if (ch.ch < 0)
-    {
-      def = MUTT_ABORT;
-      break;
-    }
-
-    answer[0] = ch.ch;
-    if (reyes_ok ? (regexec(&reyes, answer, 0, 0, 0) == 0) : (tolower(ch.ch) == 'y'))
-    {
-      def = MUTT_YES;
-      break;
-    }
-    else if (reno_ok ? (regexec(&reno, answer, 0, 0, 0) == 0) : (tolower(ch.ch) == 'n'))
-    {
-      def = MUTT_NO;
-      break;
-    }
-    else
-    {
-      mutt_beep(false);
-    }
-  }
-
-  FREE(&answer_string);
-
-  if (reyes_ok)
-    regfree(&reyes);
-  if (reno_ok)
-    regfree(&reno);
-
-  if (MessageWindow->state.rows == 1)
-  {
-    mutt_window_clearline(MessageWindow, 0);
-  }
-  else
-  {
-    mutt_window_reflow_message_rows(1);
-    mutt_menu_current_redraw();
-  }
-
-  if (def == MUTT_ABORT)
-  {
-    /* when the users cancels with ^G, clear the message stored with
-     * mutt_message() so it isn't displayed when the screen is refreshed. */
-    mutt_clear_error();
-  }
-  else
-  {
-    mutt_window_addstr((char *) ((def == MUTT_YES) ? yes : no));
-    mutt_refresh();
-  }
-  return def;
-}
-
-/**
- * query_quadoption - Ask the user a quad-question
- * @param opt    Option to use
- * @param prompt Message to show to the user
- * @retval #QuadOption Result, e.g. #MUTT_NO
- */
-enum QuadOption query_quadoption(enum QuadOption opt, const char *prompt)
-{
-  switch (opt)
-  {
-    case MUTT_YES:
-    case MUTT_NO:
-      return opt;
-
-    default:
-      opt = mutt_yesorno(prompt, (opt == MUTT_ASKYES) ? MUTT_YES : MUTT_NO);
-      mutt_window_clearline(MessageWindow, 0);
-      return opt;
-  }
-
-  /* not reached */
-}
-
-/**
  * mutt_query_exit - Ask the user if they want to leave NeoMutt
  *
  * This function is called when the user presses the abort key.
@@ -540,7 +404,8 @@ void mutt_query_exit(void)
 {
   mutt_flushinp();
   mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
-  if (C_Timeout)
+  const short c_timeout = cs_subset_number(NeoMutt->sub, "timeout");
+  if (c_timeout)
     mutt_getch_timeout(-1); /* restore blocking operation */
   if (mutt_yesorno(_("Exit NeoMutt?"), MUTT_YES) == MUTT_YES)
   {
@@ -548,25 +413,11 @@ void mutt_query_exit(void)
   }
   mutt_clear_error();
   mutt_curses_set_cursor(MUTT_CURSOR_RESTORE_LAST);
-  SigInt = 0;
+  SigInt = false;
 }
 
 /**
- * mutt_show_error - Show the user an error message
- */
-void mutt_show_error(void)
-{
-  if (OptKeepQuiet || !ErrorBufMessage)
-    return;
-
-  mutt_curses_set_color(OptMsgErr ? MT_COLOR_ERROR : MT_COLOR_MESSAGE);
-  mutt_window_mvaddstr(MessageWindow, 0, 0, ErrorBuf);
-  mutt_curses_set_color(MT_COLOR_NORMAL);
-  mutt_window_clrtoeol(MessageWindow);
-}
-
-/**
- * mutt_endwin - Shutdown curses/slang
+ * mutt_endwin - Shutdown curses
  */
 void mutt_endwin(void)
 {
@@ -647,151 +498,54 @@ int mutt_any_key_to_continue(const char *s)
 }
 
 /**
- * mutt_dlg_dopager_observer - Listen for config changes affecting the dopager menus - Implements ::observer_t
- */
-static int mutt_dlg_dopager_observer(struct NotifyCallback *nc)
-{
-  if (!nc->event_data || !nc->global_data)
-    return -1;
-  if (nc->event_type != NT_CONFIG)
-    return 0;
-
-  struct EventConfig *ec = nc->event_data;
-  struct MuttWindow *dlg = nc->global_data;
-
-  if (!mutt_str_equal(ec->name, "status_on_top"))
-    return 0;
-
-  struct MuttWindow *win_first = TAILQ_FIRST(&dlg->children);
-  if (!win_first)
-    return -1;
-
-  if ((C_StatusOnTop && (win_first->type == WT_PAGER)) ||
-      (!C_StatusOnTop && (win_first->type != WT_PAGER)))
-  {
-    // Swap the Index and the IndexBar Windows
-    TAILQ_REMOVE(&dlg->children, win_first, entries);
-    TAILQ_INSERT_TAIL(&dlg->children, win_first, entries);
-  }
-
-  mutt_window_reflow(dlg);
-  return 0;
-}
-
-/**
- * mutt_do_pager - Display some page-able text to the user
- * @param banner   Message for status bar
- * @param tempfile File to display
- * @param do_color Flags, see #PagerFlags
- * @param info     Info about current mailbox (OPTIONAL)
- * @retval  0 Success
- * @retval -1 Error
- */
-int mutt_do_pager(const char *banner, const char *tempfile, PagerFlags do_color,
-                  struct Pager *info)
-{
-  struct Pager info2 = { 0 };
-  if (!info)
-    info = &info2;
-
-  struct MuttWindow *dlg =
-      mutt_window_new(WT_DLG_DO_PAGER, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-
-  struct MuttWindow *pager =
-      mutt_window_new(WT_PAGER, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
-  dlg->focus = pager;
-
-  struct MuttWindow *pbar =
-      mutt_window_new(WT_PAGER_BAR, MUTT_WIN_ORIENT_VERTICAL,
-                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
-
-  if (C_StatusOnTop)
-  {
-    mutt_window_add_child(dlg, pbar);
-    mutt_window_add_child(dlg, pager);
-  }
-  else
-  {
-    mutt_window_add_child(dlg, pager);
-    mutt_window_add_child(dlg, pbar);
-  }
-
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, mutt_dlg_dopager_observer, dlg);
-  dialog_push(dlg);
-
-  info->win_ibar = NULL;
-  info->win_index = NULL;
-  info->win_pbar = pbar;
-  info->win_pager = pager;
-
-  int rc;
-
-  if (!C_Pager || mutt_str_equal(C_Pager, "builtin"))
-    rc = mutt_pager(banner, tempfile, do_color, info);
-  else
-  {
-    struct Buffer *cmd = mutt_buffer_pool_get();
-
-    mutt_endwin();
-    mutt_buffer_file_expand_fmt_quote(cmd, C_Pager, tempfile);
-    if (mutt_system(mutt_buffer_string(cmd)) == -1)
-    {
-      mutt_error(_("Error running \"%s\""), mutt_buffer_string(cmd));
-      rc = -1;
-    }
-    else
-      rc = 0;
-    mutt_file_unlink(tempfile);
-    mutt_buffer_pool_release(&cmd);
-  }
-
-  dialog_pop();
-  notify_observer_remove(NeoMutt->notify, mutt_dlg_dopager_observer, dlg);
-  mutt_window_free(&dlg);
-  return rc;
-}
-
-/**
- * mutt_buffer_enter_fname_full - Ask the user to select a file
+ * mutt_buffer_enter_fname - Ask the user to select a file
  * @param[in]  prompt   Prompt
  * @param[in]  fname    Buffer for the result
  * @param[in]  mailbox  If true, select mailboxes
  * @param[in]  multiple Allow multiple selections
+ * @param[in]  m        Mailbox
  * @param[out] files    List of files selected
  * @param[out] numfiles Number of files selected
  * @param[in]  flags    Flags, see #SelectFileFlags
  * @retval  0 Success
  * @retval -1 Error
  */
-int mutt_buffer_enter_fname_full(const char *prompt, struct Buffer *fname,
-                                 bool mailbox, bool multiple, char ***files,
-                                 int *numfiles, SelectFileFlags flags)
+int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
+                            bool mailbox, struct Mailbox *m, bool multiple,
+                            char ***files, int *numfiles, SelectFileFlags flags)
 {
-  struct KeyEvent ch;
+  struct MuttWindow *win = msgwin_get_window();
+  if (!win)
+    return -1;
 
-  mutt_curses_set_color(MT_COLOR_PROMPT);
-  mutt_window_mvaddstr(MessageWindow, 0, 0, prompt);
-  mutt_window_addstr(_(" ('?' for list): "));
-  mutt_curses_set_color(MT_COLOR_NORMAL);
+  struct KeyEvent ch;
+  struct MuttWindow *old_focus = window_set_focus(win);
+
+  mutt_curses_set_color_by_id(MT_COLOR_PROMPT);
+  mutt_window_mvaddstr(win, 0, 0, prompt);
+  mutt_window_addstr(win, _(" ('?' for list): "));
+  mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
   if (!mutt_buffer_is_empty(fname))
-    mutt_window_addstr(mutt_buffer_string(fname));
-  mutt_window_clrtoeol(MessageWindow);
+    mutt_window_addstr(win, mutt_buffer_string(fname));
+  mutt_window_clrtoeol(win);
   mutt_refresh();
 
   do
   {
     ch = mutt_getch();
-  } while (ch.ch == -2);
+  } while (ch.ch == -2); // Timeout
+
+  mutt_window_move(win, 0, 0);
+  mutt_window_clrtoeol(win);
+  mutt_refresh();
+  window_set_focus(old_focus);
+
   if (ch.ch < 0)
   {
-    mutt_window_clearline(MessageWindow, 0);
     return -1;
   }
   else if (ch.ch == '?')
   {
-    mutt_refresh();
     mutt_buffer_reset(fname);
 
     if (flags == MUTT_SEL_NO_FLAGS)
@@ -800,7 +554,7 @@ int mutt_buffer_enter_fname_full(const char *prompt, struct Buffer *fname,
       flags |= MUTT_SEL_MULTI;
     if (mailbox)
       flags |= MUTT_SEL_MAILBOX;
-    mutt_buffer_select_file(fname, flags, files, numfiles);
+    mutt_buffer_select_file(fname, flags, m, files, numfiles);
   }
   else
   {
@@ -813,8 +567,8 @@ int mutt_buffer_enter_fname_full(const char *prompt, struct Buffer *fname,
       mutt_unget_event(0, ch.op);
 
     mutt_buffer_alloc(fname, 1024);
-    if (mutt_buffer_get_field_full(pc, fname, (mailbox ? MUTT_EFILE : MUTT_FILE) | MUTT_CLEAR,
-                                   multiple, files, numfiles) != 0)
+    if (mutt_buffer_get_field(pc, fname, (mailbox ? MUTT_EFILE : MUTT_FILE) | MUTT_CLEAR,
+                              multiple, m, files, numfiles) != 0)
     {
       mutt_buffer_reset(fname);
     }
@@ -924,153 +678,27 @@ void mutt_flushinp(void)
 }
 
 /**
- * mutt_multi_choice - Offer the user a multiple choice question
- * @param prompt  Message prompt
- * @param letters Allowable selection keys
- * @retval >=0 0-based user selection
- * @retval  -1 Selection aborted
- */
-int mutt_multi_choice(const char *prompt, const char *letters)
-{
-  struct KeyEvent ch;
-  int choice;
-  bool redraw = true;
-  int prompt_lines = 1;
-
-  bool opt_cols = ((Colors->defs[MT_COLOR_OPTIONS] != 0) &&
-                   (Colors->defs[MT_COLOR_OPTIONS] != Colors->defs[MT_COLOR_PROMPT]));
-
-  while (true)
-  {
-    if (redraw || SigWinch)
-    {
-      redraw = false;
-      if (SigWinch)
-      {
-        SigWinch = 0;
-        mutt_resize_screen();
-        clearok(stdscr, true);
-        mutt_menu_current_redraw();
-      }
-      if (MessageWindow->state.cols)
-      {
-        int width = mutt_strwidth(prompt) + 2; // + '?' + space
-        /* If we're going to colour the options,
-         * make an assumption about the modified prompt size. */
-        if (opt_cols)
-          width -= 2 * mutt_str_len(letters);
-
-        prompt_lines =
-            (width + MessageWindow->state.cols - 1) / MessageWindow->state.cols;
-        prompt_lines = MAX(1, MIN(3, prompt_lines));
-      }
-      if (prompt_lines != MessageWindow->state.rows)
-      {
-        mutt_window_reflow_message_rows(prompt_lines);
-        mutt_menu_current_redraw();
-      }
-
-      mutt_window_move(MessageWindow, 0, 0);
-
-      if ((Colors->defs[MT_COLOR_OPTIONS] != 0) &&
-          (Colors->defs[MT_COLOR_OPTIONS] != Colors->defs[MT_COLOR_PROMPT]))
-      {
-        char *cur = NULL;
-
-        while ((cur = strchr(prompt, '(')))
-        {
-          // write the part between prompt and cur using MT_COLOR_PROMPT
-          mutt_curses_set_color(MT_COLOR_PROMPT);
-          mutt_window_addnstr(prompt, cur - prompt);
-
-          if (isalnum(cur[1]) && (cur[2] == ')'))
-          {
-            // we have a single letter within parentheses
-            mutt_curses_set_color(MT_COLOR_OPTIONS);
-            mutt_window_addch(cur[1]);
-            prompt = cur + 3;
-          }
-          else
-          {
-            // we have a parenthesis followed by something else
-            mutt_window_addch(cur[0]);
-            prompt = cur + 1;
-          }
-        }
-      }
-
-      mutt_curses_set_color(MT_COLOR_PROMPT);
-      mutt_window_addstr(prompt);
-      mutt_curses_set_color(MT_COLOR_NORMAL);
-
-      mutt_window_addch(' ');
-      mutt_window_clrtoeol(MessageWindow);
-    }
-
-    mutt_refresh();
-    /* SigWinch is not processed unless timeout is set */
-    mutt_getch_timeout(30 * 1000);
-    ch = mutt_getch();
-    mutt_getch_timeout(-1);
-    if (ch.ch == -2)
-      continue;
-    /* (ch.ch == 0) is technically possible.  Treat the same as < 0 (abort) */
-    if ((ch.ch <= 0) || CI_is_return(ch.ch))
-    {
-      choice = -1;
-      break;
-    }
-    else
-    {
-      char *p = strchr(letters, ch.ch);
-      if (p)
-      {
-        choice = p - letters + 1;
-        break;
-      }
-      else if ((ch.ch <= '9') && (ch.ch > '0'))
-      {
-        choice = ch.ch - '0';
-        if (choice <= mutt_str_len(letters))
-          break;
-      }
-    }
-    mutt_beep(false);
-  }
-  if (MessageWindow->state.rows == 1)
-  {
-    mutt_window_clearline(MessageWindow, 0);
-  }
-  else
-  {
-    mutt_window_reflow_message_rows(1);
-    mutt_menu_current_redraw();
-  }
-  mutt_refresh();
-  return choice;
-}
-
-/**
- * mutt_addwch - addwch would be provided by an up-to-date curses library
- * @param wc Wide char to display
+ * mutt_addwch - Addwch would be provided by an up-to-date curses library
+ * @param win Window
+ * @param wc  Wide char to display
  * @retval  0 Success
  * @retval -1 Error
  */
-int mutt_addwch(wchar_t wc)
+int mutt_addwch(struct MuttWindow *win, wchar_t wc)
 {
   char buf[MB_LEN_MAX * 2];
   mbstate_t mbstate;
   size_t n1, n2;
 
   memset(&mbstate, 0, sizeof(mbstate));
-  if (((n1 = wcrtomb(buf, wc, &mbstate)) == (size_t)(-1)) ||
-      ((n2 = wcrtomb(buf + n1, 0, &mbstate)) == (size_t)(-1)))
+  if (((n1 = wcrtomb(buf, wc, &mbstate)) == (size_t) (-1)) ||
+      ((n2 = wcrtomb(buf + n1, 0, &mbstate)) == (size_t) (-1)))
   {
     return -1; /* ERR */
   }
   else
   {
-    return mutt_window_addstr(buf);
+    return mutt_window_addstr(win, buf);
   }
 }
 
@@ -1107,12 +735,12 @@ void mutt_simple_format(char *buf, size_t buflen, int min_width, int max_width,
   char *p = buf;
   for (; n && (k = mbrtowc(&wc, s, n, &mbstate1)); s += k, n -= k)
   {
-    if ((k == (size_t)(-1)) || (k == (size_t)(-2)))
+    if ((k == (size_t) (-1)) || (k == (size_t) (-2)))
     {
-      if ((k == (size_t)(-1)) && (errno == EILSEQ))
+      if ((k == (size_t) (-1)) && (errno == EILSEQ))
         memset(&mbstate1, 0, sizeof(mbstate1));
 
-      k = (k == (size_t)(-1)) ? 1 : n;
+      k = (k == (size_t) (-1)) ? 1 : n;
       wc = ReplacementChar;
     }
     if (escaped)
@@ -1260,10 +888,11 @@ void mutt_format_s_tree(char *buf, size_t buflen, const char *prec, const char *
 
 /**
  * mutt_paddstr - Display a string on screen, padded if necessary
- * @param n Final width of field
- * @param s String to display
+ * @param win Window
+ * @param n   Final width of field
+ * @param s   String to display
  */
-void mutt_paddstr(int n, const char *s)
+void mutt_paddstr(struct MuttWindow *win, int n, const char *s)
 {
   wchar_t wc;
   size_t k;
@@ -1273,11 +902,11 @@ void mutt_paddstr(int n, const char *s)
   memset(&mbstate, 0, sizeof(mbstate));
   for (; len && (k = mbrtowc(&wc, s, len, &mbstate)); s += k, len -= k)
   {
-    if ((k == (size_t)(-1)) || (k == (size_t)(-2)))
+    if ((k == (size_t) (-1)) || (k == (size_t) (-2)))
     {
-      if (k == (size_t)(-1))
+      if (k == (size_t) (-1))
         memset(&mbstate, 0, sizeof(mbstate));
-      k = (k == (size_t)(-1)) ? 1 : len;
+      k = (k == (size_t) (-1)) ? 1 : len;
       wc = ReplacementChar;
     }
     if (!IsWPrint(wc))
@@ -1287,12 +916,12 @@ void mutt_paddstr(int n, const char *s)
     {
       if (w > n)
         break;
-      mutt_window_addnstr((char *) s, k);
+      mutt_window_addnstr(win, (char *) s, k);
       n -= w;
     }
   }
   while (n-- > 0)
-    mutt_window_addch(' ');
+    mutt_window_addch(win, ' ');
 }
 
 /**
@@ -1321,11 +950,11 @@ size_t mutt_wstr_trunc(const char *src, size_t maxlen, size_t maxwid, size_t *wi
   memset(&mbstate, 0, sizeof(mbstate));
   for (w = 0; n && (cl = mbrtowc(&wc, src, n, &mbstate)); src += cl, n -= cl)
   {
-    if ((cl == (size_t)(-1)) || (cl == (size_t)(-2)))
+    if ((cl == (size_t) (-1)) || (cl == (size_t) (-2)))
     {
-      if (cl == (size_t)(-1))
+      if (cl == (size_t) (-1))
         memset(&mbstate, 0, sizeof(mbstate));
-      cl = (cl == (size_t)(-1)) ? 1 : n;
+      cl = (cl == (size_t) (-1)) ? 1 : n;
       wc = ReplacementChar;
     }
     cw = wcwidth(wc);
@@ -1389,11 +1018,11 @@ int mutt_strnwidth(const char *s, size_t n)
       continue;
     }
 
-    if ((k == (size_t)(-1)) || (k == (size_t)(-2)))
+    if ((k == (size_t) (-1)) || (k == (size_t) (-2)))
     {
-      if (k == (size_t)(-1))
+      if (k == (size_t) (-1))
         memset(&mbstate, 0, sizeof(mbstate));
-      k = (k == (size_t)(-1)) ? 1 : n;
+      k = (k == (size_t) (-1)) ? 1 : n;
       wc = ReplacementChar;
     }
     if (!IsWPrint(wc))

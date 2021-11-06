@@ -31,18 +31,17 @@
 #include <stdio.h>
 #include "mutt/lib.h"
 #include "address/lib.h"
+#include "config/lib.h"
 #include "core/lib.h"
 #include "mutt.h"
 #include "lib.h"
 #include "alias.h"
 #include "command_parse.h"
 #include "init.h"
-#include "mutt_commands.h"
-#include "mutt_logging.h"
 #include "reverse.h"
 
 /**
- * parse_alias - Parse the 'alias' command - Implements Command::parse()
+ * parse_alias - Parse the 'alias' command - Implements Command::parse() - @ingroup command_parse
  *
  * e.g. "alias jim James Smith <js@example.com> # Pointy-haired boss"
  */
@@ -104,7 +103,7 @@ enum CommandResult parse_alias(struct Buffer *buf, struct Buffer *s,
     /* override the previous value */
     mutt_addrlist_clear(&tmp->addr);
     FREE(&tmp->comment);
-    event = NT_ALIAS_CHANGED;
+    event = NT_ALIAS_CHANGE;
   }
   else
   {
@@ -112,13 +111,14 @@ enum CommandResult parse_alias(struct Buffer *buf, struct Buffer *s,
     tmp = alias_new();
     tmp->name = name;
     TAILQ_INSERT_TAIL(&Aliases, tmp, entries);
-    event = NT_ALIAS_NEW;
+    event = NT_ALIAS_ADD;
   }
   tmp->addr = al;
 
   mutt_grouplist_add_addrlist(&gl, &tmp->addr);
 
-  if (C_DebugLevel > LL_DEBUG4)
+  const short c_debug_level = cs_subset_number(NeoMutt->sub, "debug_level");
+  if (c_debug_level > LL_DEBUG4)
   {
     /* A group is terminated with an empty address, so check a->mailbox */
     struct Address *a = NULL;
@@ -143,8 +143,10 @@ enum CommandResult parse_alias(struct Buffer *buf, struct Buffer *s,
 
   alias_reverse_add(tmp);
 
-  struct EventAlias ea = { tmp };
-  notify_send(NeoMutt->notify, NT_ALIAS, event, &ea);
+  mutt_debug(LL_NOTIFY, "%s: %s\n",
+             (event == NT_ALIAS_ADD) ? "NT_ALIAS_ADD" : "NT_ALIAS_CHANGE", tmp->name);
+  struct EventAlias ev_a = { tmp };
+  notify_send(NeoMutt->notify, NT_ALIAS, event, &ev_a);
 
   return MUTT_CMD_SUCCESS;
 
@@ -154,7 +156,7 @@ bail:
 }
 
 /**
- * parse_unalias - Parse the 'unalias' command - Implements Command::parse()
+ * parse_unalias - Parse the 'unalias' command - Implements Command::parse() - @ingroup command_parse
  */
 enum CommandResult parse_unalias(struct Buffer *buf, struct Buffer *s,
                                  intptr_t data, struct Buffer *err)

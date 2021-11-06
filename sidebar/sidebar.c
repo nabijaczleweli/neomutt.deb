@@ -30,14 +30,16 @@
  */
 
 #include "config.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include "private.h"
 #include "mutt/lib.h"
+#include "config/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
-#include "context.h"
-#include "mutt_globals.h"
+#include "index/lib.h"
+#include "mutt_commands.h"
 
 struct ListHead SidebarWhitelist = STAILQ_HEAD_INITIALIZER(SidebarWhitelist); ///< List of mailboxes to always display in the sidebar
 
@@ -55,7 +57,9 @@ static const struct Command sb_commands[] = {
  */
 struct Mailbox *sb_get_highlight(struct MuttWindow *win)
 {
-  if (!C_SidebarVisible)
+  const bool c_sidebar_visible =
+      cs_subset_bool(NeoMutt->sub, "sidebar_visible");
+  if (!c_sidebar_visible)
     return NULL;
 
   struct SidebarWindowData *wdata = sb_wdata_get(win);
@@ -82,9 +86,17 @@ void sb_add_mailbox(struct SidebarWindowData *wdata, struct Mailbox *m)
   if (!m)
     return;
 
+  struct SbEntry **sbep = NULL;
+  ARRAY_FOREACH(sbep, &wdata->entries)
+  {
+    if ((*sbep)->mailbox == m)
+      return;
+  }
+
   /* Any new/deleted mailboxes will cause a refresh.  As long as
    * they're valid, our pointers will be updated in prepare_sidebar() */
 
+  struct IndexSharedData *shared = wdata->shared;
   struct SbEntry *entry = mutt_mem_calloc(1, sizeof(struct SbEntry));
   entry->mailbox = m;
 
@@ -92,8 +104,8 @@ void sb_add_mailbox(struct SidebarWindowData *wdata, struct Mailbox *m)
     wdata->top_index = ARRAY_SIZE(&wdata->entries);
   if (wdata->bot_index < 0)
     wdata->bot_index = ARRAY_SIZE(&wdata->entries);
-  if ((wdata->opn_index < 0) && Context &&
-      mutt_str_equal(m->realpath, Context->mailbox->realpath))
+  if ((wdata->opn_index < 0) && shared->mailbox &&
+      mutt_str_equal(m->realpath, shared->mailbox->realpath))
   {
     wdata->opn_index = ARRAY_SIZE(&wdata->entries);
   }
@@ -111,47 +123,47 @@ void sb_remove_mailbox(struct SidebarWindowData *wdata, struct Mailbox *m)
   struct SbEntry **sbep = NULL;
   ARRAY_FOREACH(sbep, &wdata->entries)
   {
-    if (mutt_str_equal((*sbep)->mailbox->realpath, m->realpath))
+    if ((*sbep)->mailbox != m)
+      continue;
+
+    struct SbEntry *sbe_remove = *sbep;
+    ARRAY_REMOVE(&wdata->entries, sbep);
+    FREE(&sbe_remove);
+
+    if (wdata->opn_index == ARRAY_FOREACH_IDX)
     {
-      struct SbEntry *sbe_remove = *sbep;
-      ARRAY_REMOVE(&wdata->entries, sbep);
-      FREE(&sbe_remove);
-
-      if (wdata->opn_index == ARRAY_FOREACH_IDX)
-      {
-        // Open item was deleted
-        wdata->opn_index = -1;
-      }
-      else if ((wdata->opn_index > 0) && (wdata->opn_index > ARRAY_FOREACH_IDX))
-      {
-        // Open item is still visible, so adjust the index
-        wdata->opn_index--;
-      }
-
-      if (wdata->hil_index == ARRAY_FOREACH_IDX)
-      {
-        // If possible, keep the highlight where it is
-        struct SbEntry **sbep_cur = ARRAY_GET(&wdata->entries, ARRAY_FOREACH_IDX);
-        if (!sbep_cur)
-        {
-          // The last entry was deleted, so backtrack
-          select_prev(wdata);
-        }
-        else if ((*sbep)->is_hidden)
-        {
-          // Find the next unhidden entry, or the previous
-          if (!select_next(wdata))
-            if (!select_prev(wdata))
-              wdata->hil_index = -1;
-        }
-      }
-      else if ((wdata->hil_index > 0) && (wdata->hil_index > ARRAY_FOREACH_IDX))
-      {
-        // Highlighted item is still visible, so adjust the index
-        wdata->hil_index--;
-      }
-      break;
+      // Open item was deleted
+      wdata->opn_index = -1;
     }
+    else if ((wdata->opn_index > 0) && (wdata->opn_index > ARRAY_FOREACH_IDX))
+    {
+      // Open item is still visible, so adjust the index
+      wdata->opn_index--;
+    }
+
+    if (wdata->hil_index == ARRAY_FOREACH_IDX)
+    {
+      // If possible, keep the highlight where it is
+      struct SbEntry **sbep_cur = ARRAY_GET(&wdata->entries, ARRAY_FOREACH_IDX);
+      if (!sbep_cur)
+      {
+        // The last entry was deleted, so backtrack
+        select_prev(wdata);
+      }
+      else if ((*sbep)->is_hidden)
+      {
+        // Find the next unhidden entry, or the previous
+        if (!select_next(wdata))
+          if (!select_prev(wdata))
+            wdata->hil_index = -1;
+      }
+    }
+    else if ((wdata->hil_index > 0) && (wdata->hil_index > ARRAY_FOREACH_IDX))
+    {
+      // Highlighted item is still visible, so adjust the index
+      wdata->hil_index--;
+    }
+    break;
   }
 }
 
@@ -188,7 +200,8 @@ void sb_init(void)
   COMMANDS_REGISTER(sb_commands);
 
   // Listen for dialog creation events
-  notify_observer_add(AllDialogsWindow->notify, NT_WINDOW, sb_insertion_observer, NULL);
+  notify_observer_add(AllDialogsWindow->notify, NT_WINDOW,
+                      sb_insertion_window_observer, NULL);
 }
 
 /**
@@ -197,6 +210,6 @@ void sb_init(void)
 void sb_shutdown(void)
 {
   if (AllDialogsWindow)
-    notify_observer_remove(AllDialogsWindow->notify, sb_insertion_observer, NULL);
+    notify_observer_remove(AllDialogsWindow->notify, sb_insertion_window_observer, NULL);
   mutt_list_free(&SidebarWhitelist);
 }

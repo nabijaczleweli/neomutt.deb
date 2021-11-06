@@ -21,7 +21,7 @@
  */
 
 /**
- * @page lib_history HISTORY: Read/write command history from/to a file
+ * @page lib_history History
  *
  * Read/write command history from/to a file
  *
@@ -36,13 +36,7 @@
 #define MUTT_HISTORY_LIB_H
 
 #include <stdbool.h>
-
-struct ConfigSet;
-
-extern short C_History;
-extern char *C_HistoryFile;
-extern bool  C_HistoryRemoveDups;
-extern short C_SaveHistory;
+#include <stdlib.h>
 
 /**
  * enum HistoryClass - Type to differentiate different histories
@@ -73,6 +67,5 @@ void  mutt_hist_save_scratch(enum HistoryClass hclass, const char *str);
 int   mutt_hist_search      (const char *search_buf, enum HistoryClass hclass, char **matches);
 
 void dlg_select_history(char *buf, size_t buflen, char **matches, int match_count);
-bool config_init_history(struct ConfigSet *cs);
 
 #endif /* MUTT_HISTORY_LIB_H */

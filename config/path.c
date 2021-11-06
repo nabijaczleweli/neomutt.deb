@@ -29,6 +29,7 @@
  * - Empty path is stored as `NULL`
  * - Validator is passed `char *`, which may be `NULL`
  * - Data is freed when `ConfigSet` is freed
+ * - Implementation: #CstPath
  */
 
 #include "config.h"
@@ -67,7 +68,7 @@ static char *path_tidy(const char *path, bool is_dir)
 }
 
 /**
- * path_destroy - Destroy a Path - Implements ConfigSetType::destroy()
+ * path_destroy - Destroy a Path - Implements ConfigSetType::destroy() - @ingroup cfg_type_destroy
  */
 static void path_destroy(const struct ConfigSet *cs, void *var, const struct ConfigDef *cdef)
 {
@@ -79,7 +80,7 @@ static void path_destroy(const struct ConfigSet *cs, void *var, const struct Con
 }
 
 /**
- * path_string_set - Set a Path by string - Implements ConfigSetType::string_set()
+ * path_string_set - Set a Path by string - Implements ConfigSetType::string_set() - @ingroup cfg_type_string_set
  */
 static int path_string_set(const struct ConfigSet *cs, void *var, struct ConfigDef *cdef,
                            const char *value, struct Buffer *err)
@@ -111,11 +112,11 @@ static int path_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
 
     path_destroy(cs, var, cdef);
 
-    char *str = path_tidy(value, cdef->type & DT_PATH_DIR);
+    const char *str = path_tidy(value, cdef->type & DT_PATH_DIR);
     if (!str)
       rc |= CSR_SUC_EMPTY;
 
-    *(char **) var = str;
+    *(const char **) var = str;
   }
   else
   {
@@ -123,14 +124,14 @@ static int path_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
       FREE(&cdef->initial);
 
     cdef->type |= DT_INITIAL_SET;
-    cdef->initial = IP mutt_str_dup(value);
+    cdef->initial = (intptr_t) mutt_str_dup(value);
   }
 
   return rc;
 }
 
 /**
- * path_string_get - Get a Path as a string - Implements ConfigSetType::string_get()
+ * path_string_get - Get a Path as a string - Implements ConfigSetType::string_get() - @ingroup cfg_type_string_get
  */
 static int path_string_get(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, struct Buffer *result)
@@ -150,12 +151,12 @@ static int path_string_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * path_native_set - Set a Path config item by string - Implements ConfigSetType::native_set()
+ * path_native_set - Set a Path config item by string - Implements ConfigSetType::native_set() - @ingroup cfg_type_native_set
  */
 static int path_native_set(const struct ConfigSet *cs, void *var,
                            const struct ConfigDef *cdef, intptr_t value, struct Buffer *err)
 {
-  char *str = (char *) value;
+  const char *str = (const char *) value;
 
   /* Store empty paths as NULL */
   if (str && (str[0] == '\0'))
@@ -192,7 +193,7 @@ static int path_native_set(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * path_native_get - Get a string from a Path config item - Implements ConfigSetType::native_get()
+ * path_native_get - Get a string from a Path config item - Implements ConfigSetType::native_get() - @ingroup cfg_type_native_get
  */
 static intptr_t path_native_get(const struct ConfigSet *cs, void *var,
                                 const struct ConfigDef *cdef, struct Buffer *err)
@@ -203,7 +204,7 @@ static intptr_t path_native_get(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * path_reset - Reset a Path to its initial value - Implements ConfigSetType::reset()
+ * path_reset - Reset a Path to its initial value - Implements ConfigSetType::reset() - @ingroup cfg_type_reset
  */
 static int path_reset(const struct ConfigSet *cs, void *var,
                       const struct ConfigDef *cdef, struct Buffer *err)
@@ -241,9 +242,9 @@ static int path_reset(const struct ConfigSet *cs, void *var,
 }
 
 /**
- * cst_path - Config type representing a path
+ * CstPath - Config type representing a path
  */
-const struct ConfigSetType cst_path = {
+const struct ConfigSetType CstPath = {
   DT_PATH,
   "path",
   path_string_set,

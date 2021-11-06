@@ -1,6 +1,6 @@
 /**
  * @file
- * Manage the Sidebar Window
+ * Sidebar Window
  *
  * @authors
  * Copyright (C) 2004 Justin Hibbits <jrh29@po.cwru.edu>
@@ -25,9 +25,44 @@
  */
 
 /**
- * @page sidebar_window Manage the Sidebar Window
+ * @page sidebar_window Sidebar Window
  *
- * Manage the Sidebar Window
+ * The Sidebar Window is an interactive window that displays a list of
+ * mailboxes to the user.
+ *
+ * ## Windows
+ *
+ * | Name           | Type       | See Also          |
+ * | :------------- | :--------- | :---------------- |
+ * | Sidebar Window | WT_SIDEBAR | mutt_window_new() |
+ *
+ * **Parent**
+ * - @ref index_dialog
+ *
+ * **Children**
+ *
+ * None.
+ *
+ * ## Data
+ * - #SidebarWindowData
+ *
+ * The Sidebar Window stores its data (#SidebarWindowData) in MuttWindow::wdata.
+ *
+ * ## Events
+ *
+ * Once constructed, it is controlled by the following events:
+ *
+ * | Event Type            | Handler               |
+ * | :-------------------- | :-------------------- |
+ * | #NT_ACCOUNT           | sb_account_observer() |
+ * | #NT_COLOR             | sb_color_observer()   |
+ * | #NT_COMMAND           | sb_command_observer() |
+ * | #NT_CONFIG            | sb_config_observer()  |
+ * | #NT_INDEX             | sb_index_observer()   |
+ * | #NT_MAILBOX           | sb_mailbox_observer() |
+ * | #NT_WINDOW            | sb_window_observer()  |
+ * | MuttWindow::recalc()  | sb_recalc()           |
+ * | MuttWindow::repaint() | sb_repaint()          |
  */
 
 #include "config.h"
@@ -41,10 +76,19 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
-#include "context.h"
+#include "color/lib.h"
+#include "index/lib.h"
 #include "format_flags.h"
-#include "mutt_globals.h"
 #include "muttlib.h"
+
+/**
+ * struct SidebarFormatData - Data passed to sidebar_format_str()
+ */
+struct SidebarFormatData
+{
+  struct SbEntry *entry;          ///< Info about a folder
+  struct IndexSharedData *shared; ///< Shared Index Data
+};
 
 /**
  * imap_is_prefix - Check if folder matches the beginning of mbox
@@ -104,13 +148,15 @@ static const char *abbrev_folder(const char *mbox, const char *folder, enum Mail
     return mbox + prefix;
   }
 
-  if (!C_SidebarDelimChars)
+  const char *const c_sidebar_delim_chars =
+      cs_subset_string(NeoMutt->sub, "sidebar_delim_chars");
+  if (!c_sidebar_delim_chars)
     return NULL;
 
   size_t flen = mutt_str_len(folder);
   if (flen == 0)
     return NULL;
-  if (strchr(C_SidebarDelimChars, folder[flen - 1])) // folder ends with a delimiter
+  if (strchr(c_sidebar_delim_chars, folder[flen - 1])) // folder ends with a delimiter
     flen--;
 
   size_t mlen = mutt_str_len(mbox);
@@ -121,7 +167,7 @@ static const char *abbrev_folder(const char *mbox, const char *folder, enum Mail
     return NULL;
 
   // After the match, check that mbox has a delimiter
-  if (!strchr(C_SidebarDelimChars, mbox[flen]))
+  if (!strchr(c_sidebar_delim_chars, mbox[flen]))
     return NULL;
 
   if (mlen > flen)
@@ -132,7 +178,7 @@ static const char *abbrev_folder(const char *mbox, const char *folder, enum Mail
   // mbox and folder are equal, use the chunk after the last delimiter
   while (mlen--)
   {
-    if (strchr(C_SidebarDelimChars, mbox[mlen]))
+    if (strchr(c_sidebar_delim_chars, mbox[mlen]))
     {
       return mbox + mlen + 1;
     }
@@ -177,7 +223,7 @@ static const char *abbrev_url(const char *mbox, enum MailboxType type)
 
 /**
  * add_indent - Generate the needed indentation
- * @param buf    Output bufer
+ * @param buf    Output buffer
  * @param buflen Size of output buffer
  * @param sbe    Sidebar entry
  * @retval Number of bytes written
@@ -185,9 +231,11 @@ static const char *abbrev_url(const char *mbox, enum MailboxType type)
 static size_t add_indent(char *buf, size_t buflen, const struct SbEntry *sbe)
 {
   size_t res = 0;
+  const char *const c_sidebar_indent_string =
+      cs_subset_string(NeoMutt->sub, "sidebar_indent_string");
   for (int i = 0; i < sbe->depth; i++)
   {
-    res += mutt_str_copy(buf + res, C_SidebarIndentString, buflen - res);
+    res += mutt_str_copy(buf + res, c_sidebar_indent_string, buflen - res);
   }
   return res;
 }
@@ -203,7 +251,7 @@ static enum ColorId calc_color(const struct Mailbox *m, bool current, bool highl
 {
   if (current)
   {
-    if ((Colors->defs[MT_COLOR_SIDEBAR_INDICATOR] != 0))
+    if (simple_color_is_set(MT_COLOR_SIDEBAR_INDICATOR))
       return MT_COLOR_SIDEBAR_INDICATOR;
     return MT_COLOR_INDICATOR;
   }
@@ -218,13 +266,14 @@ static enum ColorId calc_color(const struct Mailbox *m, bool current, bool highl
   if (m->msg_flagged > 0)
     return MT_COLOR_SIDEBAR_FLAGGED;
 
-  if ((Colors->defs[MT_COLOR_SIDEBAR_SPOOLFILE] != 0) &&
-      mutt_str_equal(mailbox_path(m), C_Spoolfile))
+  const char *const c_spool_file = cs_subset_string(NeoMutt->sub, "spool_file");
+  if (simple_color_is_set(MT_COLOR_SIDEBAR_SPOOLFILE) &&
+      mutt_str_equal(mailbox_path(m), c_spool_file))
   {
     return MT_COLOR_SIDEBAR_SPOOLFILE;
   }
 
-  if (Colors->defs[MT_COLOR_SIDEBAR_ORDINARY] != 0)
+  if (simple_color_is_set(MT_COLOR_SIDEBAR_ORDINARY))
     return MT_COLOR_SIDEBAR_ORDINARY;
 
   return MT_COLOR_NORMAL;
@@ -254,7 +303,7 @@ static int calc_path_depth(const char *mbox, const char *delims, const char **la
 }
 
 /**
- * sidebar_format_str - Format a string for the sidebar - Implements ::format_t
+ * sidebar_format_str - Format a string for the sidebar - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
  * |:--------|:--------------------------------------------------------
@@ -277,10 +326,12 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
                                       const char *if_str, const char *else_str,
                                       intptr_t data, MuttFormatFlags flags)
 {
-  struct SbEntry *sbe = (struct SbEntry *) data;
+  struct SidebarFormatData *sfdata = (struct SidebarFormatData *) data;
+  struct SbEntry *sbe = sfdata->entry;
+  struct IndexSharedData *shared = sfdata->shared;
   char fmt[256];
 
-  if (!sbe || !buf)
+  if (!sbe || !shared || !buf)
     return src;
 
   buf[0] = '\0'; /* Just in case there's nothing to do */
@@ -289,9 +340,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
   if (!m)
     return src;
 
-  struct Mailbox *m_ctx = ctx_mailbox(Context);
+  struct Mailbox *m_cur = shared->mailbox;
 
-  bool c = m_ctx && mutt_str_equal(m_ctx->realpath, m->realpath);
+  bool c = m_cur && mutt_str_equal(m_cur->realpath, m->realpath);
 
   bool optional = (flags & MUTT_FORMAT_OPTIONAL);
 
@@ -313,9 +364,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
       if (!optional)
       {
         snprintf(fmt, sizeof(fmt), "%%%sd", prec);
-        snprintf(buf, buflen, fmt, c ? m_ctx->msg_deleted : 0);
+        snprintf(buf, buflen, fmt, c ? m_cur->msg_deleted : 0);
       }
-      else if ((c && (m_ctx->msg_deleted == 0)) || !c)
+      else if ((c && (m_cur->msg_deleted == 0)) || !c)
         optional = false;
       break;
 
@@ -333,9 +384,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
       if (!optional)
       {
         snprintf(fmt, sizeof(fmt), "%%%sd", prec);
-        snprintf(buf, buflen, fmt, c ? m_ctx->vcount : m->msg_count);
+        snprintf(buf, buflen, fmt, c ? m_cur->vcount : m->msg_count);
       }
-      else if ((c && (m_ctx->vcount == m->msg_count)) || !c)
+      else if ((c && (m_cur->vcount == m->msg_count)) || !c)
         optional = false;
       break;
 
@@ -365,7 +416,7 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(fmt, sizeof(fmt), "%%%sd", prec);
         snprintf(buf, buflen, fmt, m->msg_unread - m->msg_new);
       }
-      else if ((c && (m_ctx->msg_unread - m_ctx->msg_new) == 0) || !c)
+      else if ((c && (m_cur->msg_unread - m_cur->msg_new) == 0) || !c)
         optional = false;
       break;
 
@@ -375,7 +426,7 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(fmt, sizeof(fmt), "%%%sd", prec);
         snprintf(buf, buflen, fmt, m->msg_count - m->msg_unread);
       }
-      else if ((c && (m_ctx->msg_count - m_ctx->msg_unread) == 0) || !c)
+      else if ((c && (m_cur->msg_count - m_cur->msg_unread) == 0) || !c)
         optional = false;
       break;
 
@@ -393,9 +444,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
       if (!optional)
       {
         snprintf(fmt, sizeof(fmt), "%%%sd", prec);
-        snprintf(buf, buflen, fmt, c ? m_ctx->msg_tagged : 0);
+        snprintf(buf, buflen, fmt, c ? m_cur->msg_tagged : 0);
       }
-      else if ((c && (m_ctx->msg_tagged == 0)) || !c)
+      else if ((c && (m_cur->msg_tagged == 0)) || !c)
         optional = false;
       break;
 
@@ -405,7 +456,7 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(fmt, sizeof(fmt), "%%%sd", prec);
         snprintf(buf, buflen, fmt, m->msg_new);
       }
-      else if ((c && (m_ctx->msg_new) == 0) || !c)
+      else if ((c && (m_cur->msg_new) == 0) || !c)
         optional = false;
       break;
 
@@ -443,15 +494,21 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
  * @param[in]  buflen  Buffer length
  * @param[in]  width   Desired width in screen cells
  * @param[in]  sbe     Mailbox object
+ * @param[in]  shared  Shared Index Data
  *
  * Take all the relevant mailbox data and the desired screen width and then get
  * mutt_expando_format to do the actual work. mutt_expando_format will callback to
  * us using sidebar_format_str() for the sidebar specific formatting characters.
  */
-static void make_sidebar_entry(char *buf, size_t buflen, int width, struct SbEntry *sbe)
+static void make_sidebar_entry(char *buf, size_t buflen, int width,
+                               struct SbEntry *sbe, struct IndexSharedData *shared)
 {
-  mutt_expando_format(buf, buflen, 0, width, NONULL(C_SidebarFormat),
-                      sidebar_format_str, IP sbe, MUTT_FORMAT_NO_FLAGS);
+  struct SidebarFormatData data = { sbe, shared };
+
+  const char *const c_sidebar_format =
+      cs_subset_string(NeoMutt->sub, "sidebar_format");
+  mutt_expando_format(buf, buflen, 0, width, NONULL(c_sidebar_format),
+                      sidebar_format_str, (intptr_t) &data, MUTT_FORMAT_NO_FLAGS);
 
   /* Force string to be exactly the right width */
   int w = mutt_strwidth(buf);
@@ -485,10 +542,13 @@ static void make_sidebar_entry(char *buf, size_t buflen, int width, struct SbEnt
 static void update_entries_visibility(struct SidebarWindowData *wdata)
 {
   /* Aliases for readability */
-  const bool new_only = C_SidebarNewMailOnly;
-  const bool non_empty_only = C_SidebarNonEmptyMailboxOnly;
+  const bool c_sidebar_new_mail_only =
+      cs_subset_bool(NeoMutt->sub, "sidebar_new_mail_only");
+  const bool c_sidebar_non_empty_mailbox_only =
+      cs_subset_bool(NeoMutt->sub, "sidebar_non_empty_mailbox_only");
   struct SbEntry *sbe = NULL;
 
+  struct IndexSharedData *shared = wdata->shared;
   struct SbEntry **sbep = NULL;
   ARRAY_FOREACH(sbep, &wdata->entries)
   {
@@ -503,7 +563,8 @@ static void update_entries_visibility(struct SidebarWindowData *wdata)
       continue;
     }
 
-    if (Context && mutt_str_equal(sbe->mailbox->realpath, Context->mailbox->realpath))
+    if (shared->mailbox &&
+        mutt_str_equal(sbe->mailbox->realpath, shared->mailbox->realpath))
     {
       /* Spool directories are always visible */
       continue;
@@ -516,13 +577,15 @@ static void update_entries_visibility(struct SidebarWindowData *wdata)
       continue;
     }
 
-    if (non_empty_only && (i != wdata->opn_index) && (sbe->mailbox->msg_count == 0))
+    if (c_sidebar_non_empty_mailbox_only && (i != wdata->opn_index) &&
+        (sbe->mailbox->msg_count == 0))
     {
       sbe->is_hidden = true;
     }
 
-    if (new_only && (i != wdata->opn_index) && (sbe->mailbox->msg_unread == 0) &&
-        (sbe->mailbox->msg_flagged == 0) && !sbe->mailbox->has_new)
+    if (c_sidebar_new_mail_only && (i != wdata->opn_index) &&
+        (sbe->mailbox->msg_unread == 0) && (sbe->mailbox->msg_flagged == 0) &&
+        !sbe->mailbox->has_new)
     {
       sbe->is_hidden = true;
     }
@@ -548,6 +611,10 @@ static bool prepare_sidebar(struct SidebarWindowData *wdata, int page_size)
     return false;
 
   struct SbEntry **sbep = NULL;
+  const bool c_sidebar_new_mail_only =
+      cs_subset_bool(NeoMutt->sub, "sidebar_new_mail_only");
+  const bool c_sidebar_non_empty_mailbox_only =
+      cs_subset_bool(NeoMutt->sub, "sidebar_non_empty_mailbox_only");
 
   sbep = (wdata->opn_index >= 0) ? ARRAY_GET(&wdata->entries, wdata->opn_index) : NULL;
   const struct SbEntry *opn_entry = sbep ? *sbep : NULL;
@@ -555,7 +622,9 @@ static bool prepare_sidebar(struct SidebarWindowData *wdata, int page_size)
   const struct SbEntry *hil_entry = sbep ? *sbep : NULL;
 
   update_entries_visibility(wdata);
-  sb_sort_entries(wdata, C_SidebarSortMethod);
+  const short c_sidebar_sort_method =
+      cs_subset_sort(NeoMutt->sub, "sidebar_sort_method");
+  sb_sort_entries(wdata, c_sidebar_sort_method);
 
   if (opn_entry || hil_entry)
   {
@@ -569,7 +638,7 @@ static bool prepare_sidebar(struct SidebarWindowData *wdata, int page_size)
   }
 
   if ((wdata->hil_index < 0) || (hil_entry && hil_entry->is_hidden) ||
-      (C_SidebarSortMethod != wdata->previous_sort))
+      (c_sidebar_sort_method != wdata->previous_sort))
   {
     if (wdata->opn_index >= 0)
       wdata->hil_index = wdata->opn_index;
@@ -586,7 +655,7 @@ static bool prepare_sidebar(struct SidebarWindowData *wdata, int page_size)
 
   /* If `$sidebar_new_mail_only` or `$sidebar_non_empty_mailbox_only` is set,
    * some entries may be hidden so we need to scan for the framing interval */
-  if (C_SidebarNewMailOnly || C_SidebarNonEmptyMailboxOnly)
+  if (c_sidebar_new_mail_only || c_sidebar_non_empty_mailbox_only)
   {
     wdata->top_index = -1;
     wdata->bot_index = -1;
@@ -614,13 +683,13 @@ static bool prepare_sidebar(struct SidebarWindowData *wdata, int page_size)
   if (wdata->bot_index > (ARRAY_SIZE(&wdata->entries) - 1))
     wdata->bot_index = ARRAY_SIZE(&wdata->entries) - 1;
 
-  wdata->previous_sort = C_SidebarSortMethod;
+  wdata->previous_sort = c_sidebar_sort_method;
 
   return (wdata->hil_index >= 0);
 }
 
 /**
- * sb_recalc - Recalculate the Sidebar display - Implements MuttWindow::recalc()
+ * sb_recalc - Recalculate the Sidebar display - Implements MuttWindow::recalc() - @ingroup window_recalc
  */
 int sb_recalc(struct MuttWindow *win)
 {
@@ -628,6 +697,7 @@ int sb_recalc(struct MuttWindow *win)
     return 0;
 
   struct SidebarWindowData *wdata = sb_wdata_get(win);
+  struct IndexSharedData *shared = wdata->shared;
 
   if (ARRAY_EMPTY(&wdata->entries))
   {
@@ -659,6 +729,7 @@ int sb_recalc(struct MuttWindow *win)
 
   int width = num_cols - wdata->divider_width;
   int row = 0;
+  struct Mailbox *m_cur = shared->mailbox;
   struct SbEntry **sbep = NULL;
   ARRAY_FOREACH_FROM(sbep, &wdata->entries, wdata->top_index)
   {
@@ -670,54 +741,63 @@ int sb_recalc(struct MuttWindow *win)
 
     struct SbEntry *entry = (*sbep);
     struct Mailbox *m = entry->mailbox;
-    struct Mailbox *m_ctx = ctx_mailbox(Context);
 
     const int entryidx = ARRAY_FOREACH_IDX;
     entry->color =
         calc_color(m, (entryidx == wdata->opn_index), (entryidx == wdata->hil_index));
 
-    if (m_ctx && (m_ctx->realpath[0] != '\0') &&
-        mutt_str_equal(m->realpath, m_ctx->realpath))
+    if (m_cur && (m_cur->realpath[0] != '\0') &&
+        mutt_str_equal(m->realpath, m_cur->realpath))
     {
-      m->msg_unread = m_ctx->msg_unread;
-      m->msg_count = m_ctx->msg_count;
-      m->msg_flagged = m_ctx->msg_flagged;
+      m->msg_unread = m_cur->msg_unread;
+      m->msg_count = m_cur->msg_count;
+      m->msg_flagged = m_cur->msg_flagged;
     }
 
     const char *path = mailbox_path(m);
 
+    const char *const c_folder = cs_subset_string(NeoMutt->sub, "folder");
     // Try to abbreviate the full path
-    const char *abbr = abbrev_folder(path, C_Folder, m->type);
+    const char *abbr = abbrev_folder(path, c_folder, m->type);
     if (!abbr)
       abbr = abbrev_url(path, m->type);
     const char *short_path = abbr ? abbr : path;
 
     /* Compute the depth */
     const char *last_part = abbr;
-    entry->depth = calc_path_depth(abbr, C_SidebarDelimChars, &last_part);
+    const char *const c_sidebar_delim_chars =
+        cs_subset_string(NeoMutt->sub, "sidebar_delim_chars");
+    entry->depth = calc_path_depth(abbr, c_sidebar_delim_chars, &last_part);
 
     const bool short_path_is_abbr = (short_path == abbr);
-    if (C_SidebarShortPath)
+    const bool c_sidebar_short_path =
+        cs_subset_bool(NeoMutt->sub, "sidebar_short_path");
+    if (c_sidebar_short_path)
     {
       short_path = last_part;
     }
 
     // Don't indent if we were unable to create an abbreviation.
     // Otherwise, the full path will be indent, and it looks unusual.
-    if (C_SidebarFolderIndent && short_path_is_abbr)
+    const bool c_sidebar_folder_indent =
+        cs_subset_bool(NeoMutt->sub, "sidebar_folder_indent");
+    if (c_sidebar_folder_indent && short_path_is_abbr)
     {
-      if (C_SidebarComponentDepth > 0)
-        entry->depth -= C_SidebarComponentDepth;
+      const short c_sidebar_component_depth =
+          cs_subset_number(NeoMutt->sub, "sidebar_component_depth");
+      if (c_sidebar_component_depth > 0)
+        entry->depth -= c_sidebar_component_depth;
     }
-    else if (!C_SidebarFolderIndent)
+    else if (!c_sidebar_folder_indent)
       entry->depth = 0;
 
     mutt_str_copy(entry->box, short_path, sizeof(entry->box));
-    make_sidebar_entry(entry->display, sizeof(entry->display), width, entry);
+    make_sidebar_entry(entry->display, sizeof(entry->display), width, entry, shared);
     row++;
   }
 
   win->actions |= WA_REPAINT;
+  mutt_debug(LL_DEBUG5, "recalc done, request WA_REPAINT\n");
   return 0;
 }
 
@@ -744,10 +824,14 @@ static int draw_divider(struct SidebarWindowData *wdata, struct MuttWindow *win,
     return 0;
 
   const int width = wdata->divider_width;
+  const char *const c_sidebar_divider_char =
+      cs_subset_string(NeoMutt->sub, "sidebar_divider_char");
 
-  mutt_curses_set_color(MT_COLOR_SIDEBAR_DIVIDER);
+  mutt_curses_set_color_by_id(MT_COLOR_SIDEBAR_DIVIDER);
 
-  const int col = C_SidebarOnRight ? 0 : (num_cols - width);
+  const bool c_sidebar_on_right =
+      cs_subset_bool(NeoMutt->sub, "sidebar_on_right");
+  const int col = c_sidebar_on_right ? 0 : (num_cols - width);
 
   for (int i = 0; i < num_rows; i++)
   {
@@ -756,18 +840,18 @@ static int draw_divider(struct SidebarWindowData *wdata, struct MuttWindow *win,
     switch (wdata->divider_type)
     {
       case SB_DIV_USER:
-        mutt_window_addstr(NONULL(C_SidebarDividerChar));
+        mutt_window_addstr(win, NONULL(c_sidebar_divider_char));
         break;
       case SB_DIV_ASCII:
-        mutt_window_addch('|');
+        mutt_window_addch(win, '|');
         break;
       case SB_DIV_UTF8:
-        mutt_window_addch(ACS_VLINE);
+        mutt_window_addch(win, ACS_VLINE);
         break;
     }
   }
 
-  mutt_curses_set_color(MT_COLOR_NORMAL);
+  mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
   return width;
 }
 
@@ -785,21 +869,23 @@ static void fill_empty_space(struct MuttWindow *win, int first_row,
                              int num_rows, int div_width, int num_cols)
 {
   /* Fill the remaining rows with blank space */
-  mutt_curses_set_color(MT_COLOR_NORMAL);
+  mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
 
-  if (!C_SidebarOnRight)
+  const bool c_sidebar_on_right =
+      cs_subset_bool(NeoMutt->sub, "sidebar_on_right");
+  if (!c_sidebar_on_right)
     div_width = 0;
   for (int r = 0; r < num_rows; r++)
   {
     mutt_window_move(win, div_width, first_row + r);
 
     for (int i = 0; i < num_cols; i++)
-      mutt_window_addch(' ');
+      mutt_window_addch(win, ' ');
   }
 }
 
 /**
- * sb_repaint - Repaint the Sidebar display - Implements MuttWindow::repaint()
+ * sb_repaint - Repaint the Sidebar display - Implements MuttWindow::repaint() - @ingroup window_repaint
  */
 int sb_repaint(struct MuttWindow *win)
 {
@@ -807,6 +893,8 @@ int sb_repaint(struct MuttWindow *win)
     return 0;
 
   struct SidebarWindowData *wdata = sb_wdata_get(win);
+  const bool c_sidebar_on_right =
+      cs_subset_bool(NeoMutt->sub, "sidebar_on_right");
 
   int row = 0;
   int num_rows = win->state.rows;
@@ -815,7 +903,7 @@ int sb_repaint(struct MuttWindow *win)
   if (wdata->top_index >= 0)
   {
     int col = 0;
-    if (C_SidebarOnRight)
+    if (c_sidebar_on_right)
       col = wdata->divider_width;
 
     struct SbEntry **sbep = NULL;
@@ -829,8 +917,8 @@ int sb_repaint(struct MuttWindow *win)
 
       struct SbEntry *entry = (*sbep);
       mutt_window_move(win, col, row);
-      mutt_curses_set_color(entry->color);
-      mutt_window_printf("%s", entry->display);
+      mutt_curses_set_color_by_id(entry->color);
+      mutt_window_printf(win, "%s", entry->display);
       mutt_refresh();
       row++;
     }
@@ -840,5 +928,6 @@ int sb_repaint(struct MuttWindow *win)
                    num_cols - wdata->divider_width);
   draw_divider(wdata, win, num_rows, num_cols);
 
+  mutt_debug(LL_DEBUG5, "repaint done\n");
   return 0;
 }

@@ -29,7 +29,9 @@
 #include "config.h"
 #include <stdio.h>
 #include <string.h>
+#include "config/lib.h"
 #include "email/lib.h"
+#include "core/lib.h"
 #include "conn/lib.h"
 #include "mutt_socket.h"
 #include "hook.h"
@@ -47,7 +49,8 @@ struct Connection *mutt_conn_new(const struct ConnAccount *cac)
 {
   enum ConnectionType conn_type;
 
-  if (C_Tunnel)
+  const char *const c_tunnel = cs_subset_string(NeoMutt->sub, "tunnel");
+  if (c_tunnel)
     conn_type = MUTT_CONNECTION_TUNNEL;
   else if (cac->flags & MUTT_ACCT_SSL)
     conn_type = MUTT_CONNECTION_SSL;
@@ -80,7 +83,7 @@ struct Connection *mutt_conn_new(const struct ConnAccount *cac)
  * find a connection off the list of connections whose account matches cac.
  * If start is not null, only search for connections after the given connection
  * (allows higher level socket code to make more fine-grained searches than
- * account info - eg in IMAP we may wish to find a connection which is not in
+ * account info. Eg in IMAP we may wish to find a connection which is not in
  * IMAP_SELECTED state)
  */
 struct Connection *mutt_conn_find(const struct ConnAccount *cac)

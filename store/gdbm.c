@@ -35,10 +35,9 @@
 #include <gdbm.h>
 #include "mutt/lib.h"
 #include "lib.h"
-#include "mutt_globals.h"
 
 /**
- * store_gdbm_open - Implements StoreOps::open()
+ * store_gdbm_open - Implements StoreOps::open() - @ingroup store_open
  */
 static void *store_gdbm_open(const char *path)
 {
@@ -56,7 +55,7 @@ static void *store_gdbm_open(const char *path)
 }
 
 /**
- * store_gdbm_fetch - Implements StoreOps::fetch()
+ * store_gdbm_fetch - Implements StoreOps::fetch() - @ingroup store_fetch
  */
 static void *store_gdbm_fetch(void *store, const char *key, size_t klen, size_t *vlen)
 {
@@ -77,7 +76,7 @@ static void *store_gdbm_fetch(void *store, const char *key, size_t klen, size_t 
 }
 
 /**
- * store_gdbm_free - Implements StoreOps::free()
+ * store_gdbm_free - Implements StoreOps::free() - @ingroup store_free
  */
 static void store_gdbm_free(void *store, void **ptr)
 {
@@ -85,7 +84,7 @@ static void store_gdbm_free(void *store, void **ptr)
 }
 
 /**
- * store_gdbm_store - Implements StoreOps::store()
+ * store_gdbm_store - Implements StoreOps::store() - @ingroup store_store
  */
 static int store_gdbm_store(void *store, const char *key, size_t klen, void *value, size_t vlen)
 {
@@ -107,7 +106,7 @@ static int store_gdbm_store(void *store, const char *key, size_t klen, void *val
 }
 
 /**
- * store_gdbm_delete_record - Implements StoreOps::delete_record()
+ * store_gdbm_delete_record - Implements StoreOps::delete_record() - @ingroup store_delete_record
  */
 static int store_gdbm_delete_record(void *store, const char *key, size_t klen)
 {
@@ -125,7 +124,7 @@ static int store_gdbm_delete_record(void *store, const char *key, size_t klen)
 }
 
 /**
- * store_gdbm_close - Implements StoreOps::close()
+ * store_gdbm_close - Implements StoreOps::close() - @ingroup store_close
  */
 static void store_gdbm_close(void **ptr)
 {
@@ -138,7 +137,7 @@ static void store_gdbm_close(void **ptr)
 }
 
 /**
- * store_gdbm_version - Implements StoreOps::version()
+ * store_gdbm_version - Implements StoreOps::version() - @ingroup store_version
  */
 static const char *store_gdbm_version(void)
 {

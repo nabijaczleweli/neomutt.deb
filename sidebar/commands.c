@@ -30,14 +30,14 @@
 #include <stdint.h>
 #include "private.h"
 #include "mutt/lib.h"
+#include "core/lib.h"
 #include "mutt.h"
 #include "lib.h"
 #include "init.h"
-#include "mutt_commands.h"
 #include "muttlib.h"
 
 /**
- * sb_parse_whitelist - Parse the 'sidebar_whitelist' command - Implements Command::parse()
+ * sb_parse_whitelist - Parse the 'sidebar_whitelist' command - Implements Command::parse() - @ingroup command_parse
  */
 enum CommandResult sb_parse_whitelist(struct Buffer *buf, struct Buffer *s,
                                       intptr_t data, struct Buffer *err)
@@ -56,7 +56,7 @@ enum CommandResult sb_parse_whitelist(struct Buffer *buf, struct Buffer *s,
 }
 
 /**
- * sb_parse_unwhitelist - Parse the 'unsidebar_whitelist' command - Implements Command::parse()
+ * sb_parse_unwhitelist - Parse the 'unsidebar_whitelist' command - Implements Command::parse() - @ingroup command_parse
  */
 enum CommandResult sb_parse_unwhitelist(struct Buffer *buf, struct Buffer *s,
                                         intptr_t data, struct Buffer *err)

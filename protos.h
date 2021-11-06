@@ -30,10 +30,9 @@
 #include <stdio.h>
 #include "mutt/lib.h"
 #include "mutt.h"
+#include "menu/lib.h"
 #include "ncrypt/lib.h"
-#include "keymap.h"
 
-struct Context;
 struct Email;
 struct EmailList;
 struct EnterState;
@@ -62,7 +61,7 @@ int mutt_ev_message(struct Mailbox *m, struct EmailList *el, enum EvMessage acti
 int mutt_system(const char *cmd);
 
 int mutt_set_xdg_path(enum XdgType type, struct Buffer *buf);
-void mutt_help(enum MenuType menu, int wraplan);
+void mutt_help(enum MenuType menu);
 void mutt_set_flag_update(struct Mailbox *m, struct Email *e, enum MessageType flag, bool bf, bool upd_mbox);
 #define mutt_set_flag(m, e, flag, bf) mutt_set_flag_update(m, e, flag, bf, true)
 void mutt_signal_init(void);
@@ -71,15 +70,17 @@ int mutt_change_flag(struct Mailbox *m, struct EmailList *el, bool bf);
 
 int mutt_complete(char *buf, size_t buflen);
 int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new, struct Email *e, bool resend);
-int mutt_enter_string(char *buf, size_t buflen, int col, CompletionFlags flags);
-int mutt_enter_string_full(char *buf, size_t buflen, int col, CompletionFlags flags, bool multiple,
-                           char ***files, int *numfiles, struct EnterState *state);
-int mutt_get_postponed(struct Context *ctx, struct Email *hdr, struct Email **cur, struct Buffer *fcc);
+int mutt_enter_string_full(char *buf, size_t buflen, int col, CompletionFlags flags,
+                           bool multiple, struct Mailbox *m, char ***files,
+                           int *numfiles, struct EnterState *state);
+int mutt_get_postponed(struct Mailbox *m_cur, struct Email *hdr, struct Email **cur, struct Buffer *fcc);
 SecurityFlags mutt_parse_crypt_hdr(const char *p, bool set_empty_signas, SecurityFlags crypt_app);
 int mutt_num_postponed(struct Mailbox *m, bool force);
-int mutt_thread_set_flag(struct Email *e, enum MessageType flag, bool bf, bool subthread);
+int mutt_thread_set_flag(struct Mailbox *m, struct Email *e, enum MessageType flag, bool bf, bool subthread);
 void mutt_update_num_postponed(void);
 int mutt_is_quote_line(char *buf, regmatch_t *pmatch);
+struct Email *dlg_select_postponed_email(struct Mailbox *m);
+extern short PostCount;
 
 #ifndef HAVE_WCSCASECMP
 int wcscasecmp(const wchar_t *a, const wchar_t *b);

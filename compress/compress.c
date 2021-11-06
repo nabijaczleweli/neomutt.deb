@@ -29,14 +29,13 @@
 #include "config.h"
 #include <stdio.h>
 #include <string.h>
-#include "private.h"
 #include "mutt/lib.h"
 #include "lib.h"
 
 /**
- * compr_ops - Backend implementations
+ * CompressOps - Backend implementations
  */
-const struct ComprOps *compr_ops[] = {
+static const struct ComprOps *CompressOps[] = {
 #ifdef HAVE_LZ4
   &compr_lz4_ops,
 #endif
@@ -58,7 +57,7 @@ const struct ComprOps *compr_ops[] = {
 const char *compress_list(void)
 {
   char tmp[256] = { 0 };
-  const struct ComprOps **ops = compr_ops;
+  const struct ComprOps **ops = CompressOps;
   size_t len = 0;
 
   for (; *ops; ops++)
@@ -80,7 +79,7 @@ const char *compress_list(void)
  */
 const struct ComprOps *compress_get_ops(const char *compr)
 {
-  const struct ComprOps **ops = compr_ops;
+  const struct ComprOps **ops = CompressOps;
 
   if (!compr || !*compr)
     return *ops;

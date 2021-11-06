@@ -29,22 +29,20 @@
 
 #include "config.h"
 #include <stddef.h>
+#include <string.h>
 #include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
+#include "core/lib.h"
 #include "alias/lib.h"
-#include "gui/lib.h"
 #include "mutt.h"
 #include "mutt_commands.h"
+#include "color/lib.h"
 #include "command_parse.h"
 #include "hook.h"
 #include "keymap.h"
 #include "mutt_globals.h"
-#include "mutt_lua.h"
 #include "score.h"
-#ifdef USE_SIDEBAR
-#include "sidebar/lib.h"
-#endif
 
 static const struct Command mutt_commands[] = {
   // clang-format off
@@ -57,9 +55,7 @@ static const struct Command mutt_commands[] = {
   { "bind",                mutt_parse_bind,        0 },
   { "cd",                  parse_cd,               0 },
   { "charset-hook",        mutt_parse_hook,        MUTT_CHARSET_HOOK },
-#ifdef HAVE_COLOR
   { "color",               mutt_parse_color,       0 },
-#endif
   { "crypt-hook",          mutt_parse_hook,        MUTT_CRYPT_HOOK },
   { "echo",                parse_echo,             0 },
   { "exec",                mutt_parse_exec,        0 },
@@ -111,9 +107,7 @@ static const struct Command mutt_commands[] = {
   { "unattachments",       parse_unattachments,    0 },
   { "unauto_view",         parse_unstailq,         IP &AutoViewList },
   { "unbind",              mutt_parse_unbind,      MUTT_UNBIND },
-#ifdef HAVE_COLOR
   { "uncolor",             mutt_parse_uncolor,     0 },
-#endif
   { "ungroup",             parse_group,            MUTT_UNGROUP },
   { "unhdr_order",         parse_unstailq,         IP &HeaderOrderList },
   { "unhook",              mutt_parse_unhook,      0 },
@@ -145,7 +139,7 @@ void mutt_commands_init(void)
 }
 
 /**
- * commands_cmp - Compare two commands by name - Implements ::sort_t
+ * commands_cmp - Compare two commands by name - Implements ::sort_t - @ingroup sort_api
  */
 int commands_cmp(const void *a, const void *b)
 {

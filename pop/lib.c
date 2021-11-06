@@ -41,11 +41,15 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "conn/lib.h"
-#include "gui/lib.h"
+#include "question/lib.h"
+#include "progress/lib.h"
+#include "adata.h"
+#include "edata.h"
 #include "mutt_account.h"
 #include "mutt_logging.h"
 #include "mutt_socket.h"
-#include "progress.h"
+
+struct Progress;
 
 /**
  * pop_get_field - Get connection login credentials - Implements ConnAccount::get_field()
@@ -56,11 +60,11 @@ const char *pop_get_field(enum ConnAccountField field, void *gf_data)
   {
     case MUTT_CA_LOGIN:
     case MUTT_CA_USER:
-      return C_PopUser;
+      return cs_subset_string(NeoMutt->sub, "pop_user");
     case MUTT_CA_PASS:
-      return C_PopPass;
+      return cs_subset_string(NeoMutt->sub, "pop_pass");
     case MUTT_CA_OAUTH_CMD:
-      return C_PopOauthRefreshCommand;
+      return cs_subset_string(NeoMutt->sub, "pop_oauth_refresh_command");
     case MUTT_CA_HOST:
     default:
       return NULL;
@@ -136,7 +140,7 @@ static void pop_error(struct PopAccountData *adata, char *msg)
 }
 
 /**
- * fetch_capa - Parse CAPA output - Implements ::pop_fetch_t
+ * fetch_capa - Parse CAPA output - Implements ::pop_fetch_t - @ingroup pop_fetch_api
  * @param line List of capabilities
  * @param data POP data
  * @retval 0 (always)
@@ -163,7 +167,7 @@ static int fetch_capa(const char *line, void *data)
 }
 
 /**
- * fetch_auth - Fetch list of the authentication mechanisms - Implements ::pop_fetch_t
+ * fetch_auth - Fetch list of the authentication mechanisms - Implements ::pop_fetch_t - @ingroup pop_fetch_api
  * @param line List of authentication methods
  * @param data POP data
  * @retval 0 (always)
@@ -262,18 +266,6 @@ static int pop_capabilities(struct PopAccountData *adata, int mode)
 }
 
 /**
- * pop_edata_get - Get the private data for this Email
- * @param e Email
- * @retval ptr Private Email data
- */
-struct PopEmailData *pop_edata_get(struct Email *e)
-{
-  if (!e)
-    return NULL;
-  return e->edata;
-}
-
-/**
  * pop_connect - Open connection
  * @param adata POP Account data
  * @retval  0 Successful
@@ -331,14 +323,17 @@ int pop_open_connection(struct PopAccountData *adata)
 
 #ifdef USE_SSL
   /* Attempt STLS if available and desired. */
-  if ((adata->conn->ssf == 0) && (adata->cmd_stls || C_SslForceTls))
+  const bool c_ssl_force_tls = cs_subset_bool(NeoMutt->sub, "ssl_force_tls");
+  if ((adata->conn->ssf == 0) && (adata->cmd_stls || c_ssl_force_tls))
   {
-    if (C_SslForceTls)
+    if (c_ssl_force_tls)
       adata->use_stls = 2;
     if (adata->use_stls == 0)
     {
+      const enum QuadOption c_ssl_starttls =
+          cs_subset_quad(NeoMutt->sub, "ssl_starttls");
       enum QuadOption ans =
-          query_quadoption(C_SslStarttls, _("Secure connection with TLS?"));
+          query_quadoption(c_ssl_starttls, _("Secure connection with TLS?"));
       if (ans == MUTT_ABORT)
         return -2;
       adata->use_stls = 1;
@@ -374,7 +369,7 @@ int pop_open_connection(struct PopAccountData *adata)
     }
   }
 
-  if (C_SslForceTls && (adata->conn->ssf == 0))
+  if (c_ssl_force_tls && (adata->conn->ssf == 0))
   {
     mutt_error(_("Encrypted connection unavailable"));
     return -2;
@@ -419,7 +414,7 @@ err_conn:
 }
 
 /**
- * pop_logout - logout from a POP server
+ * pop_logout - Logout from a POP server
  * @param m Mailbox
  */
 void pop_logout(struct Mailbox *m)
@@ -552,7 +547,7 @@ int pop_fetch_data(struct PopAccountData *adata, const char *query,
     else
     {
       if (progress)
-        mutt_progress_update(progress, pos, -1);
+        progress_update(progress, pos, -1);
       if ((rc == 0) && (callback(inbuf, data) < 0))
         rc = -3;
       lenbuf = 0;
@@ -566,7 +561,7 @@ int pop_fetch_data(struct PopAccountData *adata, const char *query,
 }
 
 /**
- * check_uidl - find message with this UIDL and set refno - Implements ::pop_fetch_t
+ * check_uidl - Find message with this UIDL and set refno - Implements ::pop_fetch_t - @ingroup pop_fetch_api
  * @param line String containing UIDL
  * @param data POP data
  * @retval  0 Success
@@ -601,7 +596,7 @@ static int check_uidl(const char *line, void *data)
 }
 
 /**
- * pop_reconnect - reconnect and verify indexes if connection was lost
+ * pop_reconnect - Reconnect and verify indexes if connection was lost
  * @param m Mailbox
  * @retval  0 Success
  * @retval -1 Error
@@ -620,8 +615,8 @@ int pop_reconnect(struct Mailbox *m)
     int ret = pop_open_connection(adata);
     if (ret == 0)
     {
-      struct Progress progress;
-      mutt_progress_init(&progress, _("Verifying message indexes..."), MUTT_PROGRESS_NET, 0);
+      struct Progress *progress =
+          progress_new(_("Verifying message indexes..."), MUTT_PROGRESS_NET, 0);
 
       for (int i = 0; i < m->msg_count; i++)
       {
@@ -629,12 +624,14 @@ int pop_reconnect(struct Mailbox *m)
         edata->refno = -1;
       }
 
-      ret = pop_fetch_data(adata, "UIDL\r\n", &progress, check_uidl, m);
+      ret = pop_fetch_data(adata, "UIDL\r\n", progress, check_uidl, m);
+      progress_free(&progress);
       if (ret == -2)
       {
         mutt_error("%s", adata->err_msg);
       }
     }
+
     if (ret == 0)
       return 0;
 
@@ -643,25 +640,12 @@ int pop_reconnect(struct Mailbox *m)
     if (ret < -1)
       return -1;
 
-    if (query_quadoption(C_PopReconnect,
+    const enum QuadOption c_pop_reconnect =
+        cs_subset_quad(NeoMutt->sub, "pop_reconnect");
+    if (query_quadoption(c_pop_reconnect,
                          _("Connection lost. Reconnect to POP server?")) != MUTT_YES)
     {
       return -1;
     }
   }
-}
-
-/**
- * pop_adata_get - Get the Account data for this mailbox
- * @param m Mailbox
- * @retval ptr PopAccountData
- */
-struct PopAccountData *pop_adata_get(struct Mailbox *m)
-{
-  if (!m || (m->type != MUTT_POP))
-    return NULL;
-  struct Account *a = m->account;
-  if (!a)
-    return NULL;
-  return a->adata;
 }

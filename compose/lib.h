@@ -21,14 +21,22 @@
  */
 
 /**
- * @page lib_compose COMPOSE: Display and edit an email's headers
+ * @page lib_compose Compose an Email
  *
- * Display the mailboxes in a side panel
+ * Compose an email
  *
- * | File                | Description                |
- * | :------------------ | :------------------------- |
- * | compose/compose.c   | @subpage compose_compose   |
- * | compose/config.c    | @subpage compose_config    |
+ * | File                   | Description                    |
+ * | :--------------------- | :----------------------------- |
+ * | compose/attach.c       | @subpage compose_attach        |
+ * | compose/attach_data.c  | @subpage compose_attach_data   |
+ * | compose/cbar.c         | @subpage compose_cbar          |
+ * | compose/cbar_data.c    | @subpage compose_cbar_data     |
+ * | compose/compose.c      | @subpage compose_dialog        |
+ * | compose/config.c       | @subpage compose_config        |
+ * | compose/env_data.c     | @subpage compose_env_data      |
+ * | compose/envelope.c     | @subpage compose_envelope      |
+ * | compose/functions.c    | @subpage compose_functions     |
+ * | compose/shared_data.c  | @subpage compose_shared_data   |
  */
 
 #ifndef MUTT_COMPOSE_LIB_H
@@ -37,13 +45,12 @@
 #include <stdint.h>
 
 struct Buffer;
+struct ConfigSubset;
 struct Email;
 
 /* flags for mutt_compose_menu() */
 #define MUTT_COMPOSE_NOFREEHEADER (1 << 0)
 
-int mutt_compose_menu(struct Email *e, struct Buffer *fcc, struct Email *e_cur, uint8_t flags, struct ConfigSubset *sub);
-
-bool config_init_compose(struct ConfigSet *);
+int mutt_compose_menu(struct Email *e, struct Buffer *fcc, uint8_t flags, struct ConfigSubset *sub);
 
 #endif /* MUTT_COMPOSE_LIB_H */

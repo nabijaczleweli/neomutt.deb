@@ -23,30 +23,15 @@
 #ifndef MUTT_MAILDIR_PRIVATE_H
 #define MUTT_MAILDIR_PRIVATE_H
 
-#include <stdio.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <sys/types.h>
-#include "sequence.h"
 
-struct Account;
-struct Buffer;
-struct Email;
 struct MdEmailArray;
 struct Mailbox;
-struct MdEmail;
-struct Message;
-struct Progress;
-
-extern bool  C_CheckNew;
-extern bool  C_MaildirCheckCur;
-extern bool  C_MaildirHeaderCacheVerify;
-extern bool  C_MhPurge;
-extern char *C_MhSeqFlagged;
-extern char *C_MhSeqReplied;
-extern char *C_MhSeqUnseen;
 
 int    maildir_move_to_mailbox(struct Mailbox *m, struct MdEmailArray *mda);
-int    mh_mkstemp             (struct Mailbox *m, FILE **fp, char **tgt);
+bool   mh_mkstemp             (struct Mailbox *m, FILE **fp, char **tgt);
 mode_t mh_umask               (struct Mailbox *m);
 
 #endif /* MUTT_MAILDIR_PRIVATE_H */

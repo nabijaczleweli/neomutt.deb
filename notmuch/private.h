@@ -23,8 +23,8 @@
 #include <notmuch.h>
 #include <stdbool.h>
 #include <time.h>
-#include "core/lib.h"
-#include "progress.h"
+
+struct Mailbox;
 
 #ifndef MUTT_NOTMUCH_PRIVATE_H
 #define MUTT_NOTMUCH_PRIVATE_H
@@ -33,76 +33,31 @@
 #undef LIBNOTMUCH_CHECK_VERSION
 #endif
 
-/* The definition in <notmuch.h> is broken */
-#define LIBNOTMUCH_CHECK_VERSION(major, minor, micro)                             \
-  (LIBNOTMUCH_MAJOR_VERSION > (major) ||                                          \
-   (LIBNOTMUCH_MAJOR_VERSION == (major) && LIBNOTMUCH_MINOR_VERSION > (minor)) || \
-   (LIBNOTMUCH_MAJOR_VERSION == (major) &&                                        \
-    LIBNOTMUCH_MINOR_VERSION == (minor) && LIBNOTMUCH_MICRO_VERSION >= (micro)))
+#ifndef HAVE_NOTMUCH_DATABASE_INDEX_FILE
+#define HAVE_NOTMUCH_DATABASE_INDEX_FILE 0
+#endif
 
-extern const int NmUrlProtocolLen;
+#ifndef HAVE_NOTMUCH_DATABASE_OPEN_WITH_CONFIG
+#define HAVE_NOTMUCH_DATABASE_OPEN_WITH_CONFIG 0
+#endif
 
-/**
- * struct NmAccountData - Notmuch-specific Account data - @extends Account
- */
-struct NmAccountData
-{
-  notmuch_database_t *db;
-  bool longrun : 1;    ///< A long-lived action is in progress
-  bool trans : 1;      ///< Atomic transaction in progress
-};
-
-/**
- * enum NmQueryType - Notmuch Query Types
+/*
+ * The definition in <notmuch.h> is broken.
  *
- * Read whole-thread or matching messages only?
+ * Corrects for libnotmuch releases with missing version bumps:
+ * - libnotmuch 5.4 released with notmuch 0.32. notmuch 0.32.3 fixed version.
+ * - libnotmuch 5.1 released with notmuch 0.26. notmuch 0.26.1 fixed version.
  */
-enum NmQueryType
-{
-  NM_QUERY_TYPE_MESGS = 1, ///< Default: Messages only
-  NM_QUERY_TYPE_THREADS,   ///< Whole threads
-};
+#define LIBNOTMUCH_CHECK_VERSION(major, minor, micro)                              \
+  (major == 5 && minor == 4 && HAVE_NOTMUCH_DATABASE_OPEN_WITH_CONFIG)          || \
+  (major == 5 && minor == 1 && HAVE_NOTMUCH_DATABASE_INDEX_FILE)                || \
+  ((LIBNOTMUCH_MAJOR_VERSION > (major) ||                                          \
+   (LIBNOTMUCH_MAJOR_VERSION == (major) && LIBNOTMUCH_MINOR_VERSION > (minor))  || \
+   (LIBNOTMUCH_MAJOR_VERSION == (major) &&                                         \
+    LIBNOTMUCH_MINOR_VERSION == (minor) && LIBNOTMUCH_MICRO_VERSION >= (micro))))
 
-/**
- * struct NmMboxData - Notmuch-specific Mailbox data - @extends Mailbox
- */
-struct NmMboxData
-{
-  struct Url *db_url;  ///< Parsed view url of the Notmuch database
-  char *db_query;      ///< Previous query
-  int db_limit;        ///< Maximum number of results to return
-  enum NmQueryType query_type; ///< Messages or Threads
-
-  struct Progress progress; ///< A progress bar
-  int oldmsgcount;
-  int ignmsgcount; ///< Ignored messages
-
-  bool noprogress : 1;     ///< Don't show the progress bar
-  bool progress_ready : 1; ///< A progress bar has been initialised
-};
-
-/**
- * struct NmEmailData - Notmuch-specific Email data - @extends Email
- */
-struct NmEmailData
-{
-  char *folder; ///< Location of the Email
-  char *oldpath;
-  char *virtual_id;       ///< Unique Notmuch Id
-  enum MailboxType type;  ///< Type of Mailbox the Email is in
-};
-
-extern int   C_NmDbLimit;
-extern char *C_NmDefaultUrl;
-extern char *C_NmExcludeTags;
-extern char *C_NmFlaggedTag;
-extern int   C_NmOpenTimeout;
-extern char *C_NmQueryType;
-extern int   C_NmQueryWindowCurrentPosition;
-extern char *C_NmQueryWindowTimebase;
-extern char *C_NmRecordTags;
-extern char *C_NmRepliedTag;
-extern char *C_NmUnreadTag;
+extern const char NmUrlProtocol[];
+extern const int NmUrlProtocolLen;
 
 notmuch_database_t *nm_db_do_open     (const char *filename, bool writable, bool verbose);
 void                nm_db_free        (notmuch_database_t *db);
@@ -113,15 +68,5 @@ bool                nm_db_is_longrun  (struct Mailbox *m);
 int                 nm_db_release     (struct Mailbox *m);
 int                 nm_db_trans_begin (struct Mailbox *m);
 int                 nm_db_trans_end   (struct Mailbox *m);
-
-void                  nm_adata_free(void **ptr);
-struct NmAccountData *nm_adata_get (struct Mailbox *m);
-struct NmAccountData *nm_adata_new (void);
-void                  nm_edata_free(void **ptr);
-struct NmEmailData *  nm_edata_get (struct Email *e);
-struct NmEmailData *  nm_edata_new (void);
-void                  nm_mdata_free(void **ptr);
-struct NmMboxData *   nm_mdata_get (struct Mailbox *m);
-struct NmMboxData *   nm_mdata_new (const char *url);
 
 #endif /* MUTT_NOTMUCH_PRIVATE_H */

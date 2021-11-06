@@ -68,10 +68,10 @@ typedef uint16_t CompletionFlags;
 typedef uint16_t PagerFlags;
 typedef uint8_t SelectFileFlags;
 
-typedef const char *(format_t)(char *buf, size_t buflen, size_t col, int cols,
-                               char op, const char *src, const char *prec,
-                               const char *if_str, const char *else_str,
-                               intptr_t data, MuttFormatFlags flags);
+typedef const char *(format_t) (char *buf, size_t buflen, size_t col, int cols,
+                                char op, const char *src, const char *prec,
+                                const char *if_str, const char *else_str,
+                                intptr_t data, MuttFormatFlags flags);
 
 int crypt_valid_passphrase(int flags)
 {
@@ -107,7 +107,7 @@ int mutt_copy_header(FILE *in, struct Email *e, FILE *out, int flags, const char
   return -1;
 }
 
-int mutt_count_body_parts(struct Mailbox *m, struct Email *e)
+int mutt_count_body_parts(struct Mailbox *m, struct Email *e, struct Message *msg)
 {
   return g_body_parts;
 }
@@ -122,14 +122,11 @@ bool mutt_is_subscribed_list(struct Address *addr)
   return g_is_subscribed_list;
 }
 
-void mutt_parse_mime_message(struct Mailbox *m, struct Email *e)
+void mutt_parse_mime_message(struct Mailbox *m, struct Email *e, FILE *msg)
 {
 }
 
-void mutt_progress_init(struct Progress *progress, const char *msg, int type, size_t size)
-{
-}
-void mutt_progress_update(struct Progress *progress, long pos, int percent)
+void mutt_str_pretty_size(char *buf, size_t buflen, size_t num)
 {
 }
 
@@ -188,21 +185,21 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
 {
 }
 
-struct Menu *mutt_menu_new(enum MenuType type)
+struct Menu *menu_new(enum MenuType type)
 {
   return NULL;
 }
 
-void mutt_menu_pop_current(struct Menu *menu)
+void menu_pop_current(struct Menu *menu)
 {
 }
 
-int mutt_menu_loop(struct Menu *menu)
+int menu_loop(struct Menu *menu)
 {
   return 0;
 }
 
-void mutt_menu_current_redraw(void)
+void menu_current_redraw(void)
 {
 }
 
@@ -217,7 +214,7 @@ void mutt_resize_screen(void)
 {
 }
 
-void mutt_menu_push_current(struct Menu *menu)
+void menu_push_current(struct Menu *menu)
 {
 }
 
@@ -240,7 +237,7 @@ void mutt_enter_state_free(struct EnterState **ptr)
 {
 }
 
-void mutt_menu_free(struct Menu **ptr)
+void menu_free(struct Menu **ptr)
 {
 }
 
@@ -273,4 +270,14 @@ void mutt_buffer_select_file(struct Buffer *file, SelectFileFlags flags,
 struct Mailbox *ctx_mailbox(struct Context *ctx)
 {
   return Context ? Context->mailbox : NULL;
+}
+
+int menu_get_index(struct Menu *menu)
+{
+  return -1;
+}
+
+bool menu_set_index(struct Menu *menu, int index)
+{
+  return true;
 }

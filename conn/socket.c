@@ -34,11 +34,11 @@
 #include <time.h>
 #include "private.h"
 #include "mutt/lib.h"
+#include "config/lib.h"
+#include "core/lib.h"
 #include "socket.h"
-#include "lib.h"
 #include "connaccount.h"
 #include "connection.h"
-#include "mutt_globals.h"
 #include "protos.h"
 #include "ssl.h"
 
@@ -49,11 +49,12 @@
  */
 static int socket_preconnect(void)
 {
-  if (!C_Preconnect)
+  const char *const c_preconnect = cs_subset_string(NeoMutt->sub, "preconnect");
+  if (!c_preconnect)
     return 0;
 
-  mutt_debug(LL_DEBUG2, "Executing preconnect: %s\n", C_Preconnect);
-  const int rc = mutt_system(C_Preconnect);
+  mutt_debug(LL_DEBUG2, "Executing preconnect: %s\n", c_preconnect);
+  const int rc = mutt_system(c_preconnect);
   mutt_debug(LL_DEBUG2, "Preconnect result: %d\n", rc);
   if (rc != 0)
   {
@@ -114,7 +115,7 @@ int mutt_socket_close(struct Connection *conn)
 }
 
 /**
- * mutt_socket_read - read from a Connection
+ * mutt_socket_read - Read from a Connection
  * @param conn Connection a server
  * @param buf Buffer to store read data
  * @param len length of the buffer
@@ -127,7 +128,7 @@ int mutt_socket_read(struct Connection *conn, char *buf, size_t len)
 }
 
 /**
- * mutt_socket_write - write to a Connection
+ * mutt_socket_write - Write to a Connection
  * @param conn Connection to a server
  * @param buf Buffer with data to write
  * @param len Length of data to write
@@ -200,7 +201,7 @@ int mutt_socket_poll(struct Connection *conn, time_t wait_secs)
 }
 
 /**
- * mutt_socket_readchar - simple read buffering to speed things up
+ * mutt_socket_readchar - Simple read buffering to speed things up
  * @param[in]  conn Connection to a server
  * @param[out] c    Character that was read
  * @retval  1 Success
@@ -272,7 +273,7 @@ int mutt_socket_readln_d(char *buf, size_t buflen, struct Connection *conn, int 
 }
 
 /**
- * mutt_socket_new - allocate and initialise a new connection
+ * mutt_socket_new - Allocate and initialise a new connection
  * @param type Type of the new Connection
  * @retval ptr New Connection
  */

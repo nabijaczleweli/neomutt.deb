@@ -32,8 +32,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
 #include "core/lib.h"
-#include "mutt_globals.h"
 #include "muttlib.h"
 #include "options.h"
 #include "protos.h" // IWYU pragma: keep
@@ -48,15 +48,15 @@
  * mutt_complete - Attempt to complete a partial pathname
  * @param buf    Buffer containing pathname
  * @param buflen Length of buffer
- * @retval 0 if ok
- * @retval -1 if no matches
+ * @retval  0 Ok
+ * @retval -1 No matches
  *
  * Given a partial pathname, fill in as much of the rest of the path as is
  * unique.
  */
 int mutt_complete(char *buf, size_t buflen)
 {
-  char *p = NULL;
+  const char *p = NULL;
   DIR *dirp = NULL;
   struct dirent *de = NULL;
   int init = 0;
@@ -77,15 +77,17 @@ int mutt_complete(char *buf, size_t buflen)
     return nntp_complete(buf, buflen);
 #endif
 
+  const char *const c_spool_file = cs_subset_string(NeoMutt->sub, "spool_file");
+  const char *const c_folder = cs_subset_string(NeoMutt->sub, "folder");
 #ifdef USE_IMAP
   imap_path = mutt_buffer_pool_get();
   /* we can use '/' as a delimiter, imap_complete rewrites it */
   if ((*buf == '=') || (*buf == '+') || (*buf == '!'))
   {
     if (*buf == '!')
-      p = NONULL(C_Spoolfile);
+      p = NONULL(c_spool_file);
     else
-      p = NONULL(C_Folder);
+      p = NONULL(c_folder);
 
     mutt_buffer_concat_path(imap_path, p, buf + 1);
   }
@@ -111,15 +113,15 @@ int mutt_complete(char *buf, size_t buflen)
   {
     mutt_buffer_addch(dirpart, *buf);
     if (*buf == '!')
-      mutt_buffer_strcpy(exp_dirpart, NONULL(C_Spoolfile));
+      mutt_buffer_strcpy(exp_dirpart, NONULL(c_spool_file));
     else
-      mutt_buffer_strcpy(exp_dirpart, NONULL(C_Folder));
+      mutt_buffer_strcpy(exp_dirpart, NONULL(c_folder));
     p = strrchr(buf, '/');
     if (p)
     {
       mutt_buffer_concatn_path(tmp, mutt_buffer_string(exp_dirpart),
                                mutt_buffer_len(exp_dirpart), buf + 1,
-                               (size_t)(p - buf - 1));
+                               (size_t) (p - buf - 1));
       mutt_buffer_copy(exp_dirpart, tmp);
       mutt_buffer_substrcpy(dirpart, buf, p + 1);
       mutt_buffer_strcpy(filepart, p + 1);
@@ -198,7 +200,7 @@ int mutt_complete(char *buf, size_t buflen)
       }
       else
       {
-        struct stat st;
+        struct stat st = { 0 };
 
         mutt_buffer_strcpy(filepart, de->d_name);
 

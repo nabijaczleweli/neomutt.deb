@@ -44,7 +44,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
 #include "email/lib.h"
+#include "core/lib.h"
 #include "lib.h"
 #include "compress/lib.h"
 #include "store/lib.h"
@@ -60,15 +62,8 @@
 
 static unsigned int hcachever = 0x0;
 
-#define hcache_get_ops() store_get_backend_ops(C_HeaderCacheBackend)
-
-#ifdef USE_HCACHE_COMPRESSION
-#define compr_get_ops() compress_get_ops(C_HeaderCacheCompressMethod)
-#endif
-
 /**
- * header_size - Compute the size of the header with uuid validity
- * and crc.
+ * header_size - Compute the size of the header with uuid validity and crc
  */
 static size_t header_size(void)
 {
@@ -119,6 +114,7 @@ static void *dump(struct HeaderCache *hc, const struct Email *e, int *off, uint3
   e_dump.tree = NULL;
   e_dump.thread = NULL;
   e_dump.sequence = 0;
+  e_dump.notify = NULL;
   STAILQ_INIT(&e_dump.tags);
 #ifdef MIXMASTER
   STAILQ_INIT(&e_dump.chain);
@@ -130,6 +126,7 @@ static void *dump(struct HeaderCache *hc, const struct Email *e, int *off, uint3
 
   d = serial_dump_envelope(e_dump.env, d, off, convert);
   d = serial_dump_body(e_dump.body, d, off, convert);
+  d = serial_dump_tags(&e->tags, d, off);
 
   return d;
 }
@@ -155,9 +152,11 @@ static struct Email *restore(const unsigned char *d)
   off += sizeof(unsigned int);
 
   size_t sequence = e->sequence;
+  struct Notify *notify = e->notify;
   memcpy(e, d + off, sizeof(struct Email));
   off += sizeof(struct Email);
   e->sequence = sequence;
+  e->notify = notify;
 
   STAILQ_INIT(&e->tags);
 #ifdef MIXMASTER
@@ -169,14 +168,18 @@ static struct Email *restore(const unsigned char *d)
 
   e->body = mutt_body_new();
   serial_restore_body(e->body, d, &off, convert);
+  serial_restore_tags(&e->tags, d, &off);
 
   return e;
 }
 
+/**
+ * struct RealKey - Hcache key name (including compression method)
+ */
 struct RealKey
 {
-  char key[1024];
-  size_t len;
+  char key[1024]; ///< Key name
+  size_t len;     ///< Length of key
 };
 
 /**
@@ -189,9 +192,13 @@ static struct RealKey *realkey(const char *key, size_t keylen)
 {
   static struct RealKey rk;
 #ifdef USE_HCACHE_COMPRESSION
-  if (C_HeaderCacheCompressMethod)
+  const char *const c_header_cache_compress_method =
+      cs_subset_string(NeoMutt->sub, "header_cache_compress_method");
+  if (c_header_cache_compress_method)
   {
-    rk.len = snprintf(rk.key, sizeof(rk.key), "%s-%s", key, compr_get_ops()->name);
+    const struct ComprOps *cops = compress_get_ops(c_header_cache_compress_method);
+
+    rk.len = snprintf(rk.key, sizeof(rk.key), "%s-%s", key, cops->name);
   }
   else
 #endif
@@ -255,13 +262,13 @@ static bool create_hcache_dir(const char *path)
 static void hcache_per_folder(struct Buffer *hcpath, const char *path,
                               const char *folder, hcache_namer_t namer)
 {
-  struct stat sb;
+  struct stat st = { 0 };
 
   int plen = mutt_str_len(path);
-  int rc = stat(path, &sb);
+  int rc = stat(path, &st);
   bool slash = (path[plen - 1] == '/');
 
-  if (((rc == 0) && !S_ISDIR(sb.st_mode)) || ((rc == -1) && !slash))
+  if (((rc == 0) && !S_ISDIR(st.st_mode)) || ((rc == -1) && !slash))
   {
     /* An existing file or a non-existing path not ending with a slash */
     mutt_encode_path(hcpath, path);
@@ -280,11 +287,18 @@ static void hcache_per_folder(struct Buffer *hcpath, const char *path,
   {
     unsigned char m[16]; /* binary md5sum */
     struct Buffer *name = mutt_buffer_pool_get();
+
+    const char *const c_header_cache_backend =
+        cs_subset_string(NeoMutt->sub, "header_cache_backend");
+    const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
+
 #ifdef USE_HCACHE_COMPRESSION
-    const char *cm = C_HeaderCacheCompressMethod;
-    mutt_buffer_printf(name, "%s|%s%s", hcache_get_ops()->name, folder, cm ? cm : "");
+    const char *const c_header_cache_compress_method =
+        cs_subset_string(NeoMutt->sub, "header_cache_compress_method");
+    const char *cm = c_header_cache_compress_method;
+    mutt_buffer_printf(name, "%s|%s%s", ops->name, folder, cm ? cm : "");
 #else
-    mutt_buffer_printf(name, "%s|%s", hcache_get_ops()->name, folder);
+    mutt_buffer_printf(name, "%s|%s", ops->name, folder);
 #endif
     mutt_md5(mutt_buffer_string(name), m);
     mutt_buffer_reset(name);
@@ -319,7 +333,9 @@ static char *get_foldername(const char *folder)
  */
 struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcache_namer_t namer)
 {
-  const struct StoreOps *ops = hcache_get_ops();
+  const char *const c_header_cache_backend =
+      cs_subset_string(NeoMutt->sub, "header_cache_backend");
+  const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
   if (!ops)
     return NULL;
 
@@ -330,8 +346,8 @@ struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcach
   {
     union
     {
-      unsigned char charval[16];
-      unsigned int intval;
+      unsigned char charval[16]; ///< MD5 digest as a string
+      unsigned int intval;       ///< MD5 digest as an integer
     } digest;
     struct Md5Ctx md5ctx;
 
@@ -363,11 +379,15 @@ struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcach
   }
 
 #ifdef USE_HCACHE_COMPRESSION
-  if (C_HeaderCacheCompressMethod)
+  const char *const c_header_cache_compress_method =
+      cs_subset_string(NeoMutt->sub, "header_cache_compress_method");
+  if (c_header_cache_compress_method)
   {
-    const struct ComprOps *cops = compr_get_ops();
+    const struct ComprOps *cops = compress_get_ops(c_header_cache_compress_method);
 
-    hc->cctx = cops->open(C_HeaderCacheCompressLevel);
+    const short c_header_cache_compress_level =
+        cs_subset_number(NeoMutt->sub, "header_cache_compress_level");
+    hc->cctx = cops->open(c_header_cache_compress_level);
     if (!hc->cctx)
     {
       FREE(&hc);
@@ -416,13 +436,20 @@ struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcach
  */
 void mutt_hcache_close(struct HeaderCache *hc)
 {
-  const struct StoreOps *ops = hcache_get_ops();
+  const char *const c_header_cache_backend =
+      cs_subset_string(NeoMutt->sub, "header_cache_backend");
+  const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
   if (!hc || !ops)
     return;
 
 #ifdef USE_HCACHE_COMPRESSION
-  if (C_HeaderCacheCompressMethod)
-    compr_get_ops()->close(&hc->cctx);
+  const char *const c_header_cache_compress_method =
+      cs_subset_string(NeoMutt->sub, "header_cache_compress_method");
+  if (c_header_cache_compress_method)
+  {
+    const struct ComprOps *cops = compress_get_ops(c_header_cache_compress_method);
+    cops->close(&hc->cctx);
+  }
 #endif
 
   ops->close(&hc->ctx);
@@ -459,9 +486,11 @@ struct HCacheEntry mutt_hcache_fetch(struct HeaderCache *hc, const char *key,
   }
 
 #ifdef USE_HCACHE_COMPRESSION
-  if (C_HeaderCacheCompressMethod)
+  const char *const c_header_cache_compress_method =
+      cs_subset_string(NeoMutt->sub, "header_cache_compress_method");
+  if (c_header_cache_compress_method)
   {
-    const struct ComprOps *cops = compr_get_ops();
+    const struct ComprOps *cops = compress_get_ops(c_header_cache_compress_method);
 
     void *dblob = cops->decompress(hc->cctx, (char *) data + hlen, dlen - hlen);
     if (!dblob)
@@ -494,7 +523,9 @@ end:
 void *mutt_hcache_fetch_raw(struct HeaderCache *hc, const char *key,
                             size_t keylen, size_t *dlen)
 {
-  const struct StoreOps *ops = hcache_get_ops();
+  const char *const c_header_cache_backend =
+      cs_subset_string(NeoMutt->sub, "header_cache_backend");
+  const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
 
   if (!hc || !ops)
     return NULL;
@@ -507,11 +538,13 @@ void *mutt_hcache_fetch_raw(struct HeaderCache *hc, const char *key,
 }
 
 /**
- * mutt_hcache_free - Multiplexor for StoreOps::free
+ * mutt_hcache_free_raw - Multiplexor for StoreOps::free
  */
 void mutt_hcache_free_raw(struct HeaderCache *hc, void **data)
 {
-  const struct StoreOps *ops = hcache_get_ops();
+  const char *const c_header_cache_backend =
+      cs_subset_string(NeoMutt->sub, "header_cache_backend");
+  const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
 
   if (!hc || !ops || !data || !*data)
     return;
@@ -532,13 +565,15 @@ int mutt_hcache_store(struct HeaderCache *hc, const char *key, size_t keylen,
   char *data = dump(hc, e, &dlen, uidvalidity);
 
 #ifdef USE_HCACHE_COMPRESSION
-  if (C_HeaderCacheCompressMethod)
+  const char *const c_header_cache_compress_method =
+      cs_subset_string(NeoMutt->sub, "header_cache_compress_method");
+  if (c_header_cache_compress_method)
   {
     /* We don't compress uidvalidity and the crc, so we can check them before
      * decompressing on fetch().  */
     size_t hlen = header_size();
 
-    const struct ComprOps *cops = compr_get_ops();
+    const struct ComprOps *cops = compress_get_ops(c_header_cache_compress_method);
 
     /* data / dlen gets ptr to compressed data here */
     size_t clen = dlen;
@@ -570,7 +605,7 @@ int mutt_hcache_store(struct HeaderCache *hc, const char *key, size_t keylen,
 }
 
 /**
- * mutt_hcache_store_raw - store a key / data pair
+ * mutt_hcache_store_raw - Store a key / data pair
  * @param hc     Pointer to the struct HeaderCache structure got by mutt_hcache_open()
  * @param key    Message identification string
  * @param keylen Length of the string pointed to by key
@@ -582,7 +617,9 @@ int mutt_hcache_store(struct HeaderCache *hc, const char *key, size_t keylen,
 int mutt_hcache_store_raw(struct HeaderCache *hc, const char *key,
                           size_t keylen, void *data, size_t dlen)
 {
-  const struct StoreOps *ops = hcache_get_ops();
+  const char *const c_header_cache_backend =
+      cs_subset_string(NeoMutt->sub, "header_cache_backend");
+  const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
 
   if (!hc || !ops)
     return -1;
@@ -601,9 +638,12 @@ int mutt_hcache_store_raw(struct HeaderCache *hc, const char *key,
  */
 int mutt_hcache_delete_record(struct HeaderCache *hc, const char *key, size_t keylen)
 {
-  const struct StoreOps *ops = hcache_get_ops();
   if (!hc)
     return -1;
+
+  const char *const c_header_cache_backend =
+      cs_subset_string(NeoMutt->sub, "header_cache_backend");
+  const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
 
   struct Buffer path = mutt_buffer_make(1024);
 

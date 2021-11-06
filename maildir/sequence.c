@@ -27,23 +27,17 @@
  */
 
 #include "config.h"
-#include <errno.h>
-#include <fcntl.h>
-#include <inttypes.h>
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <unistd.h>
 #include "private.h"
 #include "mutt/lib.h"
+#include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
 #include "sequence.h"
-#include "maildir/lib.h"
-#include "mdata.h"
-#include "mutt_globals.h"
 
 /**
  * mh_seq_alloc - Allocate more memory for sequences
@@ -127,12 +121,18 @@ void mh_seq_add_one(struct Mailbox *m, int n, bool unseen, bool flagged, bool re
   size_t sz;
 
   FILE *fp_new = NULL;
-  if (mh_mkstemp(m, &fp_new, &tmpfname) == -1)
+  if (!mh_mkstemp(m, &fp_new, &tmpfname))
     return;
 
-  snprintf(seq_unseen, sizeof(seq_unseen), "%s:", NONULL(C_MhSeqUnseen));
-  snprintf(seq_replied, sizeof(seq_replied), "%s:", NONULL(C_MhSeqReplied));
-  snprintf(seq_flagged, sizeof(seq_flagged), "%s:", NONULL(C_MhSeqFlagged));
+  const char *const c_mh_seq_unseen =
+      cs_subset_string(NeoMutt->sub, "mh_seq_unseen");
+  const char *const c_mh_seq_replied =
+      cs_subset_string(NeoMutt->sub, "mh_seq_replied");
+  const char *const c_mh_seq_flagged =
+      cs_subset_string(NeoMutt->sub, "mh_seq_flagged");
+  snprintf(seq_unseen, sizeof(seq_unseen), "%s:", NONULL(c_mh_seq_unseen));
+  snprintf(seq_replied, sizeof(seq_replied), "%s:", NONULL(c_mh_seq_replied));
+  snprintf(seq_flagged, sizeof(seq_flagged), "%s:", NONULL(c_mh_seq_flagged));
 
   snprintf(sequences, sizeof(sequences), "%s/.mh_sequences", mailbox_path(m));
   FILE *fp_old = fopen(sequences, "r");
@@ -163,11 +163,11 @@ void mh_seq_add_one(struct Mailbox *m, int n, bool unseen, bool flagged, bool re
   FREE(&buf);
 
   if (!unseen_done && unseen)
-    fprintf(fp_new, "%s: %d\n", NONULL(C_MhSeqUnseen), n);
+    fprintf(fp_new, "%s: %d\n", NONULL(c_mh_seq_unseen), n);
   if (!flagged_done && flagged)
-    fprintf(fp_new, "%s: %d\n", NONULL(C_MhSeqFlagged), n);
+    fprintf(fp_new, "%s: %d\n", NONULL(c_mh_seq_flagged), n);
   if (!replied_done && replied)
-    fprintf(fp_new, "%s: %d\n", NONULL(C_MhSeqReplied), n);
+    fprintf(fp_new, "%s: %d\n", NONULL(c_mh_seq_replied), n);
 
   mutt_file_fclose(&fp_new);
 
@@ -250,12 +250,18 @@ void mh_seq_update(struct Mailbox *m)
 
   struct MhSequences mhs = { 0 };
 
-  snprintf(seq_unseen, sizeof(seq_unseen), "%s:", NONULL(C_MhSeqUnseen));
-  snprintf(seq_replied, sizeof(seq_replied), "%s:", NONULL(C_MhSeqReplied));
-  snprintf(seq_flagged, sizeof(seq_flagged), "%s:", NONULL(C_MhSeqFlagged));
+  const char *const c_mh_seq_unseen =
+      cs_subset_string(NeoMutt->sub, "mh_seq_unseen");
+  const char *const c_mh_seq_replied =
+      cs_subset_string(NeoMutt->sub, "mh_seq_replied");
+  const char *const c_mh_seq_flagged =
+      cs_subset_string(NeoMutt->sub, "mh_seq_flagged");
+  snprintf(seq_unseen, sizeof(seq_unseen), "%s:", NONULL(c_mh_seq_unseen));
+  snprintf(seq_replied, sizeof(seq_replied), "%s:", NONULL(c_mh_seq_replied));
+  snprintf(seq_flagged, sizeof(seq_flagged), "%s:", NONULL(c_mh_seq_flagged));
 
   FILE *fp_new = NULL;
-  if (mh_mkstemp(m, &fp_new, &tmpfname) != 0)
+  if (!mh_mkstemp(m, &fp_new, &tmpfname))
   {
     /* error message? */
     return;
@@ -318,11 +324,11 @@ void mh_seq_update(struct Mailbox *m)
 
   /* write out the new sequences */
   if (unseen)
-    mh_seq_write_one(fp_new, &mhs, MH_SEQ_UNSEEN, NONULL(C_MhSeqUnseen));
+    mh_seq_write_one(fp_new, &mhs, MH_SEQ_UNSEEN, NONULL(c_mh_seq_unseen));
   if (flagged)
-    mh_seq_write_one(fp_new, &mhs, MH_SEQ_FLAGGED, NONULL(C_MhSeqFlagged));
+    mh_seq_write_one(fp_new, &mhs, MH_SEQ_FLAGGED, NONULL(c_mh_seq_flagged));
   if (replied)
-    mh_seq_write_one(fp_new, &mhs, MH_SEQ_REPLIED, NONULL(C_MhSeqReplied));
+    mh_seq_write_one(fp_new, &mhs, MH_SEQ_REPLIED, NONULL(c_mh_seq_replied));
 
   mh_seq_free(&mhs);
 
@@ -393,11 +399,17 @@ int mh_seq_read(struct MhSequences *mhs, const char *path)
     if (!t)
       continue;
 
-    if (mutt_str_equal(t, C_MhSeqUnseen))
+    const char *const c_mh_seq_unseen =
+        cs_subset_string(NeoMutt->sub, "mh_seq_unseen");
+    const char *const c_mh_seq_flagged =
+        cs_subset_string(NeoMutt->sub, "mh_seq_flagged");
+    const char *const c_mh_seq_replied =
+        cs_subset_string(NeoMutt->sub, "mh_seq_replied");
+    if (mutt_str_equal(t, c_mh_seq_unseen))
       flags = MH_SEQ_UNSEEN;
-    else if (mutt_str_equal(t, C_MhSeqFlagged))
+    else if (mutt_str_equal(t, c_mh_seq_flagged))
       flags = MH_SEQ_FLAGGED;
-    else if (mutt_str_equal(t, C_MhSeqReplied))
+    else if (mutt_str_equal(t, c_mh_seq_replied))
       flags = MH_SEQ_REPLIED;
     else /* unknown sequence */
       continue;
@@ -433,12 +445,12 @@ out:
 int mh_seq_changed(struct Mailbox *m)
 {
   char path[PATH_MAX];
-  struct stat sb;
+  struct stat st = { 0 };
 
   if ((snprintf(path, sizeof(path), "%s/.mh_sequences", mailbox_path(m)) < sizeof(path)) &&
-      (stat(path, &sb) == 0))
+      (stat(path, &st) == 0))
   {
-    return (mutt_file_stat_timespec_compare(&sb, MUTT_STAT_MTIME, &m->last_visited) > 0);
+    return (mutt_file_stat_timespec_compare(&st, MUTT_STAT_MTIME, &m->last_visited) > 0);
   }
   return -1;
 }

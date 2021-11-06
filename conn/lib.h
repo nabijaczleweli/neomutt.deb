@@ -21,9 +21,9 @@
  */
 
 /**
- * @page lib_conn CONN: Network connections and their encryption
+ * @page lib_conn Network connections
  *
- * Manage external connections.
+ * Network connections and their encryption
  *
  * | File                | Description              |
  * | :------------------ | :----------------------- |
@@ -59,18 +59,11 @@
 // IWYU pragma: end_exports
 
 struct Buffer;
-struct ConfigSet;
-
-// These Config Variables are used outside of libconn
-extern bool          C_SslForceTls;
-extern unsigned char C_SslStarttls;
-extern const char *  C_Tunnel;
 
 #ifdef USE_SSL
 int mutt_ssl_starttls(struct Connection *conn);
 #endif
 
-int getdnsdomainname(struct Buffer *domain);
-bool config_init_conn(struct ConfigSet *cs);
+int getdnsdomainname(struct Buffer *result);
 
 #endif /* MUTT_CONN_LIB_H */

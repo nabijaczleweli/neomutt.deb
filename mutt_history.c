@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
+#include "core/lib.h"
 #include "mutt_history.h"
 #include "history/lib.h"
 
@@ -41,7 +42,8 @@
  */
 void mutt_hist_complete(char *buf, size_t buflen, enum HistoryClass hclass)
 {
-  char **matches = mutt_mem_calloc(C_History, sizeof(char *));
+  const short c_history = cs_subset_number(NeoMutt->sub, "history");
+  char **matches = mutt_mem_calloc(c_history, sizeof(char *));
   int match_count = mutt_hist_search(buf, hclass, matches);
   if (match_count)
   {
@@ -54,20 +56,19 @@ void mutt_hist_complete(char *buf, size_t buflen, enum HistoryClass hclass)
 }
 
 /**
- * mutt_hist_observer - Listen for config changes affecting the history - Implements ::observer_t
+ * main_hist_observer - Notification that a Config Variable has changed - Implements ::observer_t - @ingroup observer_api
  */
-int mutt_hist_observer(struct NotifyCallback *nc)
+int main_hist_observer(struct NotifyCallback *nc)
 {
-  if (!nc->event_data)
+  if ((nc->event_type != NT_CONFIG) || !nc->event_data)
     return -1;
-  if (nc->event_type != NT_CONFIG)
-    return 0;
 
-  struct EventConfig *ec = nc->event_data;
+  struct EventConfig *ev_c = nc->event_data;
 
-  if (!mutt_str_equal(ec->name, "history"))
+  if (!mutt_str_equal(ev_c->name, "history"))
     return 0;
 
   mutt_hist_init();
+  mutt_debug(LL_DEBUG5, "history done\n");
   return 0;
 }

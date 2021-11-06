@@ -25,37 +25,44 @@
 
 #include <stdbool.h>
 #include <stdio.h>
-#include "mutt_menu.h"
 
 struct Body;
 struct Email;
 struct EmailList;
 struct Envelope;
 struct Mailbox;
-struct MuttWindow;
 
-/* These Config Variables are only used in commands.c */
-extern char *        C_DisplayFilter;
-extern bool          C_PipeDecode;
-extern char *        C_PipeSep;
-extern bool          C_PipeSplit;
-extern bool          C_PrintDecode;
-extern bool          C_PrintSplit;
-extern bool          C_PromptAfter;
+/**
+ * enum MessageTransformOpt - Message transformation option
+ */
+enum MessageTransformOpt
+{
+  TRANSFORM_NONE = 0,   ///< No transformation
+  TRANSFORM_DECRYPT,    ///< Decrypt message
+  TRANSFORM_DECODE,     ///< Decode message
+};
+
+/**
+ * enum MessageSaveOpt - Message save option
+ */
+enum MessageSaveOpt
+{
+  SAVE_COPY = 0,   ///< Copy message, making a duplicate in another mailbox
+  SAVE_MOVE,       ///< Move message to another mailbox, removing the original
+};
 
 void ci_bounce_message(struct Mailbox *m, struct EmailList *el);
-void mutt_check_stats(void);
-bool mutt_check_traditional_pgp(struct EmailList *el, MuttRedrawFlags *redraw);
+void mutt_check_stats(struct Mailbox *m);
+bool mutt_check_traditional_pgp(struct Mailbox *m, struct EmailList *el);
 void mutt_commands_cleanup(void);
 void mutt_display_address(struct Envelope *env);
-int  mutt_display_message(struct MuttWindow *win_index, struct MuttWindow *win_ibar, struct MuttWindow *win_pager, struct MuttWindow *win_pbar, struct Mailbox *m, struct Email *e);
 bool mutt_edit_content_type(struct Email *e, struct Body *b, FILE *fp);
 void mutt_enter_command(void);
 void mutt_pipe_message(struct Mailbox *m, struct EmailList *el);
 void mutt_print_message(struct Mailbox *m, struct EmailList *el);
-int  mutt_save_message_ctx(struct Email *e, bool delete_original, bool decode, bool decrypt, struct Mailbox *m);
-int  mutt_save_message(struct Mailbox *m, struct EmailList *el, bool delete_original, bool decode, bool decrypt);
-int  mutt_select_sort(bool reverse);
+int  mutt_save_message(struct Mailbox *m, struct EmailList *el, enum MessageSaveOpt, enum MessageTransformOpt transform_opt);
+int mutt_save_message_ctx(struct Mailbox *m_src, struct Email *e, enum MessageSaveOpt save_opt, enum MessageTransformOpt transform_opt, struct Mailbox *m_dst);
+bool mutt_select_sort(bool reverse);
 bool mutt_shell_escape(void);
 
 #endif /* MUTT_COMMANDS_H */

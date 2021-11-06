@@ -21,7 +21,9 @@
  */
 
 /**
- * @page lib_autocrypt AUTOCRYPT: End-to-end encryption
+ * @page lib_autocrypt Autocrypt
+ *
+ * End-to-end encryption
  *
  * This is an implementation of Autocrypt Level 1.1. https://autocrypt.org/
  *
@@ -45,7 +47,7 @@
  * Outside message composition the flags are not exclusive.  We can't tell a
  * message is an autocrypt message until we try to decrypt it.  Once we do so,
  * the flag is added to the existing flags.  The only relevance for decrypted
- * messages is when replying - in which case we want to force using autocrypt
+ * messages is when replying, in which case we want to force using autocrypt
  * in the reply.
  *
  * ### `header->security | SEC_AUTOCRYPT_OVERRIDE`
@@ -89,11 +91,10 @@
 #ifndef MUTT_AUTOCRYPT_LIB_H
 #define MUTT_AUTOCRYPT_LIB_H
 
-#include <stdbool.h>
 #include <sqlite3.h>
+#include <stdbool.h>
 #include <stdio.h>
 
-struct ConfigSet;
 struct Email;
 struct Envelope;
 
@@ -102,11 +103,11 @@ struct Envelope;
  */
 struct AutocryptAccount
 {
-  char *email_addr;
-  char *keyid;
-  char *keydata;
+  char *email_addr;    ///< Email address
+  char *keyid;         ///< PGP Key id
+  char *keydata;       ///< PGP Key data
   bool prefer_encrypt; ///< false = nopref, true = mutual
-  bool enabled;
+  bool enabled;        ///< Is this account enabled
 };
 
 /**
@@ -114,15 +115,15 @@ struct AutocryptAccount
  */
 struct AutocryptPeer
 {
-  char *email_addr;
-  sqlite3_int64 last_seen;
-  sqlite3_int64 autocrypt_timestamp;
-  char *keyid;
-  char *keydata;
-  bool prefer_encrypt; ///< false = nopref, true = mutual
-  sqlite3_int64 gossip_timestamp;
-  char *gossip_keyid;
-  char *gossip_keydata;
+  char *email_addr;                  ///< Email address
+  sqlite3_int64 last_seen;           ///< When was the peer last seen
+  sqlite3_int64 autocrypt_timestamp; ///< When the email was sent
+  char *keyid;                       ///< PGP Key id
+  char *keydata;                     ///< PGP Key data
+  bool prefer_encrypt;               ///< false = nopref, true = mutual
+  sqlite3_int64 gossip_timestamp;    ///< Timestamp of Gossip header
+  char *gossip_keyid;                ///< Gossip Key id
+  char *gossip_keydata;              ///< Gossip Key data
 };
 
 /**
@@ -130,10 +131,10 @@ struct AutocryptPeer
  */
 struct AutocryptPeerHistory
 {
-  char *peer_email_addr;
-  char *email_msgid;
-  sqlite3_int64 timestamp;
-  char *keydata;
+  char *peer_email_addr;   ///< Email address of the peer
+  char *email_msgid;       ///< Message id of the email
+  sqlite3_int64 timestamp; ///< Timestamp of email
+  char *keydata;           ///< PGP Key data
 };
 
 /**
@@ -141,11 +142,11 @@ struct AutocryptPeerHistory
  */
 struct AutocryptGossipHistory
 {
-  char *peer_email_addr;
-  char *sender_email_addr;
-  char *email_msgid;
-  sqlite3_int64 timestamp;
-  char *gossip_keydata;
+  char *peer_email_addr;   ///< Email addressof the peer
+  char *sender_email_addr; ///< Sender's email address
+  char *email_msgid;       ///< Sender's email's message id
+  sqlite3_int64 timestamp; ///< Timestamp of sender's email
+  char *gossip_keydata;    ///< Gossip Key data
 };
 
 /**
@@ -162,12 +163,8 @@ enum AutocryptRec
 
 extern char *AutocryptSignAs;
 extern char *AutocryptDefaultKey;
-extern bool  C_Autocrypt;
-extern bool  C_AutocryptReply;
-extern char *C_AutocryptAcctFormat;
-extern char *C_AutocryptDir;
 
-void              dlg_select_autocrypt_account            (void);
+void              dlg_select_autocrypt_account           (void);
 void              mutt_autocrypt_cleanup                 (void);
 int               mutt_autocrypt_generate_gossip_list    (struct Email *e);
 int               mutt_autocrypt_init                    (bool can_create);

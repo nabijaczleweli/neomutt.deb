@@ -28,11 +28,6 @@
 
 struct Email;
 struct ListHead;
-struct MuttWindow;
-
-/* These Config Variables are only used in remailer.c */
-extern char *C_MixEntryFormat;
-extern char *C_Mixmaster;
 
 /* Mixmaster's maximum chain length.  Don't change this. */
 #define MAX_MIXES 19
@@ -49,11 +44,11 @@ typedef uint8_t MixCapFlags;       ///< Flags, e.g. #MIX_CAP_NO_FLAGS
  */
 struct Remailer
 {
-  int num;
-  char *shortname;
-  char *addr;
-  char *ver;
-  MixCapFlags caps;
+  int num;          ///< Index number
+  char *shortname;  ///< Short name of remailer host
+  char *addr;       ///< Address of host
+  char *ver;        ///< Version of host
+  MixCapFlags caps; ///< Capabilities of host
 };
 
 /**
@@ -61,12 +56,12 @@ struct Remailer
  */
 struct MixChain
 {
-  size_t cl;
-  int ch[MAX_MIXES];
+  size_t cl;         ///< Length of chain
+  int ch[MAX_MIXES]; ///< Indexes of chain hosts
 };
 
 int mix_send_message(struct ListHead *chain, const char *tempfile);
 int mix_check_message(struct Email *e);
-void dlg_select_mixmaster_chain(struct MuttWindow *win, struct ListHead *chainhead, int cols);
+void dlg_select_mixmaster_chain(struct ListHead *chainhead);
 
 #endif /* MUTT_REMAILER_H */

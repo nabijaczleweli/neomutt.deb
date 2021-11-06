@@ -25,26 +25,14 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <sys/types.h>
+#include "config/lib.h"
 
+struct Buffer;
 struct Email;
 struct EmailList;
 struct Mailbox;
-struct MuttThread;
 struct ThreadsContext;
-
-/* These Config Variables are only used in mutt_thread.c */
-extern bool C_CollapseFlagged;
-extern bool C_CollapseUnread;
-extern bool C_DuplicateThreads;
-extern bool C_HideLimited;
-extern bool C_HideMissing;
-extern bool C_HideThreadSubject;
-extern bool C_HideTopLimited;
-extern bool C_HideTopMissing;
-extern bool C_NarrowTree;
-extern bool C_SortRe;
-extern bool C_StrictThreads;
-extern bool C_ThreadReceived;
 
 /**
  * enum TreeChar - Tree characters for menus
@@ -79,11 +67,27 @@ typedef uint8_t MuttThreadFlags;         ///< Flags, e.g. #MUTT_THREAD_COLLAPSE
 #define MUTT_THREAD_NEXT_UNREAD (1 << 3) ///< Find the next unread email
 #define MUTT_THREAD_FLAGGED     (1 << 4) ///< Count flagged emails in a thread
 
+/**
+ * enum MessageInThread - Flags for mutt_messages_in_thread()
+ */
 enum MessageInThread
 {
-  MIT_NUM_MESSAGES, // How many messages are in the thread
-  MIT_POSITION,     // Our position in the thread
+  MIT_NUM_MESSAGES, ///< How many messages are in the thread
+  MIT_POSITION,     ///< Our position in the thread
 };
+
+/**
+ * enum UseThreads - Which threading style is active, $use_threads
+ */
+enum UseThreads
+{
+  UT_UNSET,     ///< Not yet set by user, stick to legacy semantics
+  UT_FLAT,      ///< Unthreaded
+  UT_THREADS,   ///< Normal threading (root above subthreads)
+  UT_REVERSE,   ///< Reverse threading (subthreads above root)
+};
+
+extern struct EnumDef UseThreadsTypeDef;
 
 int mutt_traverse_thread(struct Email *e, MuttThreadFlags flag);
 #define mutt_collapse_thread(e)         mutt_traverse_thread(e, MUTT_THREAD_COLLAPSE)
@@ -91,6 +95,12 @@ int mutt_traverse_thread(struct Email *e, MuttThreadFlags flag);
 #define mutt_thread_contains_unread(e)  mutt_traverse_thread(e, MUTT_THREAD_UNREAD)
 #define mutt_thread_contains_flagged(e) mutt_traverse_thread(e, MUTT_THREAD_FLAGGED)
 #define mutt_thread_next_unread(e)      mutt_traverse_thread(e, MUTT_THREAD_NEXT_UNREAD)
+
+enum UseThreads mutt_thread_style(void);
+#define mutt_using_threads() (mutt_thread_style() > UT_FLAT)
+const char *get_use_threads_str(enum UseThreads value);
+int sort_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
+                   intptr_t value, struct Buffer *err);
 
 int mutt_aside_thread(struct Email *e, bool forwards, bool subthreads);
 #define mutt_next_thread(e)        mutt_aside_thread(e, true,  false)
@@ -111,8 +121,6 @@ struct HashTable *     mutt_make_id_hash      (struct Mailbox *m);
 int                    mutt_messages_in_thread(struct Mailbox *m, struct Email *e, enum MessageInThread mit);
 int                    mutt_parent_message    (struct Email *e, bool find_root);
 off_t                  mutt_set_vnum          (struct Mailbox *m);
-void                   mutt_sort_subthreads   (struct ThreadsContext *tctx, bool init);
 void                   mutt_sort_threads      (struct ThreadsContext *tctx, bool init);
-
 
 #endif /* MUTT_MUTT_THREAD_H */
