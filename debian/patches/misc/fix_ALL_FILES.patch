@@ -11,10 +11,10 @@ Based on an old version of https://github.com/neomutt/neomutt/pull/2326
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/Makefile.autosetup b/Makefile.autosetup
-index 66e5ce5..ed2d21c 100644
+index 195a1cf..9d802a1 100644
 --- a/Makefile.autosetup
 +++ b/Makefile.autosetup
-@@ -55,7 +55,7 @@ UNINSTALL_TARGETS=	@UNINSTALL_TARGETS@
+@@ -56,7 +56,7 @@ UNINSTALL_TARGETS=	@UNINSTALL_TARGETS@
  
  VPATH=		@VPATH@
  
