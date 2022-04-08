@@ -1,16 +1,18 @@
 name: Build and Test
 
 on:
+  pull_request:
   push:
     branches:
       - 'master'
       - 'devel/**'
+  workflow_dispatch:
 
 jobs:
   build:
     name: Build-${{ matrix.cfg.name }}
     runs-on: ubuntu-latest
-    container: ghcr.io/neomutt/neomutt-docker-build
+    container: ghcr.io/neomutt/docker-build
 
     strategy:
       # Limit jobs to one at a time so that ccache really helps later builds
@@ -20,16 +22,16 @@ jobs:
           - name: default
             options:
           - name: disabled
-            options: --disable-idn --disable-nls --disable-pgp --disable-smime
+            options: --disable-idn --disable-nls --disable-pgp --disable-smime --ssl
           - name: everything
             options: --autocrypt --bdb --disable-idn --full-doc --gdbm --gnutls --gpgme --gss --idn2 --kyotocabinet --lmdb --lua --lz4 --notmuch --qdbm --sasl --tdb --tokyocabinet --with-lock=fcntl --zlib --zstd
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Checkout Test Files
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         repository: neomutt/neomutt-test-files
         path: test-files
@@ -40,7 +42,7 @@ jobs:
         ./setup.sh
 
     - name: Compilation Cache
-      uses: hendrikmuhs/ccache-action@v1
+      uses: hendrikmuhs/ccache-action@v1.2
 
     - name: Configure Neomutt
       run: ./configure ${{ matrix.cfg.options }}

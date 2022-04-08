@@ -27,7 +27,6 @@
  */
 
 #include "config.h"
-#include <ctype.h>
 #include <errno.h>
 #include <inttypes.h> // IWYU pragma: keep
 #include <limits.h>
@@ -60,7 +59,7 @@ static int check_sig(const char *s, struct Line *info, int offset)
 
   while ((offset > 0) && (count <= NUM_SIG_LINES))
   {
-    if (info[offset].color != MT_COLOR_SIGNATURE)
+    if (info[offset].cid != MT_COLOR_SIGNATURE)
       break;
     count++;
     offset--;
@@ -113,29 +112,31 @@ static int comp_syntax_t(const void *m1, const void *m2)
  * @param cnt       If true, this is a continuation line
  * @param flags     Flags, see #PagerFlags
  * @param special   Flags, e.g. A_BOLD
- * @param aa        ANSI attributes
+ * @param ansi      ANSI attributes
  */
 static void resolve_color(struct MuttWindow *win, struct Line *lines, int line_num,
-                          int cnt, PagerFlags flags, int special, struct AnsiAttr *aa)
+                          int cnt, PagerFlags flags, int special, struct AnsiColor *ansi)
 {
-  int def_color;         /* color without syntax highlight */
-  int color;             /* final color */
-  static int last_color; /* last color set */
+  struct AttrColor def_color = { 0 }; /* color without syntax highlight */
+  struct AttrColor color = { 0 };     /* final color */
+  static struct AttrColor last_color = { 0 }; /* last color set */
   bool search = false;
   int m;
   struct TextSyntax *matching_chunk = NULL;
 
   if (cnt == 0)
-    last_color = -1;
+  {
+    last_color.curses_color = NULL;
+    last_color.attrs = 0;
+  }
 
   if (lines[line_num].cont_line)
   {
     const bool c_markers = cs_subset_bool(NeoMutt->sub, "markers");
     if (!cnt && c_markers)
     {
-      mutt_curses_set_color_by_id(MT_COLOR_MARKERS);
+      last_color = *mutt_curses_set_color_by_id(MT_COLOR_MARKERS);
       mutt_window_addch(win, '+');
-      last_color = simple_colors_get(MT_COLOR_MARKERS);
     }
     m = (lines[line_num].syntax)[0].first;
     cnt += (lines[line_num].syntax)[0].last;
@@ -144,26 +145,26 @@ static void resolve_color(struct MuttWindow *win, struct Line *lines, int line_n
     m = line_num;
   if (flags & MUTT_PAGER_LOGS)
   {
-    def_color = simple_colors_get(lines[line_num].syntax[0].color);
+    def_color = *(lines[line_num].syntax[0].attr_color);
   }
   else if (!(flags & MUTT_SHOWCOLOR))
-    def_color = simple_colors_get(MT_COLOR_NORMAL);
-  else if (lines[m].color == MT_COLOR_HEADER)
-    def_color = lines[m].syntax[0].color;
+    def_color = *simple_color_get(MT_COLOR_NORMAL);
+  else if (lines[m].cid == MT_COLOR_HEADER)
+    def_color = *lines[m].syntax[0].attr_color;
   else
-    def_color = simple_colors_get(lines[m].color);
+    def_color = *simple_color_get(lines[m].cid);
 
-  if ((flags & MUTT_SHOWCOLOR) && (lines[m].color == MT_COLOR_QUOTED))
+  if ((flags & MUTT_SHOWCOLOR) && (lines[m].cid == MT_COLOR_QUOTED))
   {
-    struct QClass *qc = lines[m].quote;
+    struct QuoteStyle *qc = lines[m].quote;
 
     if (qc)
     {
-      def_color = qc->color;
+      def_color = attr_color_copy(qc->attr_color);
 
       while (qc && (qc->prefix_len > cnt))
       {
-        def_color = qc->color;
+        def_color = attr_color_copy(qc->attr_color);
         qc = qc->up;
       }
     }
@@ -177,7 +178,8 @@ static void resolve_color(struct MuttWindow *win, struct Line *lines, int line_n
     if (matching_chunk && (cnt >= matching_chunk->first) &&
         (cnt < matching_chunk->last))
     {
-      color = matching_chunk->color;
+      if (matching_chunk->attr_color)
+        color = *matching_chunk->attr_color;
     }
   }
 
@@ -188,53 +190,34 @@ static void resolve_color(struct MuttWindow *win, struct Line *lines, int line_n
     if (matching_chunk && (cnt >= matching_chunk->first) &&
         (cnt < matching_chunk->last))
     {
-      color = simple_colors_get(MT_COLOR_SEARCH);
-      search = 1;
+      color = *simple_color_get(MT_COLOR_SEARCH);
+      search = true;
     }
   }
 
   /* handle "special" bold & underlined characters */
-  if (special || aa->attr)
+  if (special & A_BOLD)
   {
-    if ((aa->attr & ANSI_COLOR))
-    {
-      if (aa->pair == -1)
-        aa->pair = mutt_color_alloc(aa->fg, aa->bg);
-      color = aa->pair;
-      if (aa->attr & ANSI_BOLD)
-        color |= A_BOLD;
-    }
-    else if ((special & A_BOLD) || (aa->attr & ANSI_BOLD))
-    {
-      if (simple_color_is_set(MT_COLOR_BOLD) && !search)
-        color = simple_colors_get(MT_COLOR_BOLD);
-      else
-        color ^= A_BOLD;
-    }
-    if ((special & A_UNDERLINE) || (aa->attr & ANSI_UNDERLINE))
-    {
-      if (simple_color_is_set(MT_COLOR_UNDERLINE) && !search)
-        color = simple_colors_get(MT_COLOR_UNDERLINE);
-      else
-        color ^= A_UNDERLINE;
-    }
-    else if (aa->attr & ANSI_REVERSE)
-    {
-      color ^= A_REVERSE;
-    }
-    else if (aa->attr & ANSI_BLINK)
-    {
-      color ^= A_BLINK;
-    }
-    else if (aa->attr == ANSI_OFF)
-    {
-      aa->attr = 0;
-    }
+    if (simple_color_is_set(MT_COLOR_BOLD) && !search)
+      color = *simple_color_get(MT_COLOR_BOLD);
+    else
+      color.attrs |= A_BOLD;
+  }
+  else if (special & A_UNDERLINE)
+  {
+    if (simple_color_is_set(MT_COLOR_UNDERLINE) && !search)
+      color = *simple_color_get(MT_COLOR_UNDERLINE);
+    else
+      color.attrs |= A_UNDERLINE;
+  }
+  else if (ansi->attr_color)
+  {
+    color = *ansi->attr_color;
   }
 
-  if (color != last_color)
+  if (!attr_color_match(&color, &last_color))
   {
-    mutt_curses_set_attr(color);
+    mutt_curses_set_color(&color);
     last_color = color;
   }
 }
@@ -249,8 +232,8 @@ static void append_line(struct Line *lines, int line_num, int cnt)
 {
   int m;
 
-  lines[line_num + 1].color = lines[line_num].color;
-  (lines[line_num + 1].syntax)[0].color = (lines[line_num].syntax)[0].color;
+  lines[line_num + 1].cid = lines[line_num].cid;
+  (lines[line_num + 1].syntax)[0].attr_color = (lines[line_num].syntax)[0].attr_color;
   lines[line_num + 1].cont_line = 1;
 
   /* find the real start of the line */
@@ -261,374 +244,6 @@ static void append_line(struct Line *lines, int line_num, int cnt)
   (lines[line_num + 1].syntax)[0].first = m;
   (lines[line_num + 1].syntax)[0].last =
       (lines[line_num].cont_line) ? cnt + (lines[line_num].syntax)[0].last : cnt;
-}
-
-/**
- * class_color_new - Create a new quoting colour
- * @param[in]     qc      Class of quoted text
- * @param[in,out] q_level Quote level
- */
-static void class_color_new(struct QClass *qc, int *q_level)
-{
-  qc->quote_n = (*q_level)++;
-  qc->color = quoted_colors_get(qc->quote_n);
-}
-
-/**
- * shift_class_colors - Insert a new quote colour class into a list
- * @param[in]     quote_list List of quote colours
- * @param[in]     new_class  New quote colour to inset
- * @param[in]     index      Index to insert at
- * @param[in,out] q_level    Quote level
- */
-static void shift_class_colors(struct QClass *quote_list,
-                               struct QClass *new_class, int index, int *q_level)
-{
-  struct QClass *q_list = quote_list;
-  new_class->quote_n = -1;
-
-  while (q_list)
-  {
-    if (q_list->quote_n >= index)
-    {
-      q_list->quote_n++;
-      q_list->color = quoted_colors_get(q_list->quote_n);
-    }
-    if (q_list->down)
-      q_list = q_list->down;
-    else if (q_list->next)
-      q_list = q_list->next;
-    else
-    {
-      while (!q_list->next)
-      {
-        q_list = q_list->up;
-        if (!q_list)
-          break;
-      }
-      if (q_list)
-        q_list = q_list->next;
-    }
-  }
-
-  new_class->quote_n = index;
-  new_class->color = quoted_colors_get(index);
-  (*q_level)++;
-}
-
-/**
- * classify_quote - Find a style for a string
- * @param[out] quote_list   List of quote colours
- * @param[in]  qptr         String to classify
- * @param[in]  length       Length of string
- * @param[out] force_redraw Set to true if a screen redraw is needed
- * @param[out] q_level      Quoting level
- * @retval ptr Quoting style
- */
-static struct QClass *classify_quote(struct QClass **quote_list, const char *qptr,
-                                     size_t length, bool *force_redraw, int *q_level)
-{
-  struct QClass *q_list = *quote_list;
-  struct QClass *qc = NULL, *tmp = NULL, *ptr = NULL, *save = NULL;
-  const char *tail_qptr = NULL;
-  size_t offset, tail_lng;
-  int index = -1;
-
-  if (quoted_colors_num_used() <= 1)
-  {
-    /* not much point in classifying quotes... */
-
-    if (!*quote_list)
-    {
-      qc = mutt_mem_calloc(1, sizeof(struct QClass));
-      qc->color = quoted_colors_get(0);
-      *quote_list = qc;
-    }
-    return *quote_list;
-  }
-
-  /* classify quoting prefix */
-  while (q_list)
-  {
-    if (length <= q_list->prefix_len)
-    {
-      /* case 1: check the top level nodes */
-
-      if (mutt_strn_equal(qptr, q_list->prefix, length))
-      {
-        if (length == q_list->prefix_len)
-          return q_list; /* same prefix: return the current class */
-
-        /* found shorter prefix */
-        if (!tmp)
-        {
-          /* add a node above q_list */
-          tmp = mutt_mem_calloc(1, sizeof(struct QClass));
-          tmp->prefix = mutt_mem_calloc(1, length + 1);
-          strncpy(tmp->prefix, qptr, length);
-          tmp->prefix_len = length;
-
-          /* replace q_list by tmp in the top level list */
-          if (q_list->next)
-          {
-            tmp->next = q_list->next;
-            q_list->next->prev = tmp;
-          }
-          if (q_list->prev)
-          {
-            tmp->prev = q_list->prev;
-            q_list->prev->next = tmp;
-          }
-
-          /* make q_list a child of tmp */
-          tmp->down = q_list;
-          q_list->up = tmp;
-
-          /* q_list has no siblings for now */
-          q_list->next = NULL;
-          q_list->prev = NULL;
-
-          /* update the root if necessary */
-          if (q_list == *quote_list)
-            *quote_list = tmp;
-
-          index = q_list->quote_n;
-
-          /* tmp should be the return class too */
-          qc = tmp;
-
-          /* next class to test; if tmp is a shorter prefix for another
-           * node, that node can only be in the top level list, so don't
-           * go down after this point */
-          q_list = tmp->next;
-        }
-        else
-        {
-          /* found another branch for which tmp is a shorter prefix */
-
-          /* save the next sibling for later */
-          save = q_list->next;
-
-          /* unlink q_list from the top level list */
-          if (q_list->next)
-            q_list->next->prev = q_list->prev;
-          if (q_list->prev)
-            q_list->prev->next = q_list->next;
-
-          /* at this point, we have a tmp->down; link q_list to it */
-          ptr = tmp->down;
-          /* sibling order is important here, q_list should be linked last */
-          while (ptr->next)
-            ptr = ptr->next;
-          ptr->next = q_list;
-          q_list->next = NULL;
-          q_list->prev = ptr;
-          q_list->up = tmp;
-
-          index = q_list->quote_n;
-
-          /* next class to test; as above, we shouldn't go down */
-          q_list = save;
-        }
-
-        /* we found a shorter prefix, so certain quotes have changed classes */
-        *force_redraw = true;
-        continue;
-      }
-      else
-      {
-        /* shorter, but not a substring of the current class: try next */
-        q_list = q_list->next;
-        continue;
-      }
-    }
-    else
-    {
-      /* case 2: try subclassing the current top level node */
-
-      /* tmp != NULL means we already found a shorter prefix at case 1 */
-      if (!tmp && mutt_strn_equal(qptr, q_list->prefix, q_list->prefix_len))
-      {
-        /* ok, it's a subclass somewhere on this branch */
-
-        ptr = q_list;
-        offset = q_list->prefix_len;
-
-        q_list = q_list->down;
-        tail_lng = length - offset;
-        tail_qptr = qptr + offset;
-
-        while (q_list)
-        {
-          if (length <= q_list->prefix_len)
-          {
-            if (mutt_strn_equal(tail_qptr, (q_list->prefix) + offset, tail_lng))
-            {
-              /* same prefix: return the current class */
-              if (length == q_list->prefix_len)
-                return q_list;
-
-              /* found shorter common prefix */
-              if (!tmp)
-              {
-                /* add a node above q_list */
-                tmp = mutt_mem_calloc(1, sizeof(struct QClass));
-                tmp->prefix = mutt_mem_calloc(1, length + 1);
-                strncpy(tmp->prefix, qptr, length);
-                tmp->prefix_len = length;
-
-                /* replace q_list by tmp */
-                if (q_list->next)
-                {
-                  tmp->next = q_list->next;
-                  q_list->next->prev = tmp;
-                }
-                if (q_list->prev)
-                {
-                  tmp->prev = q_list->prev;
-                  q_list->prev->next = tmp;
-                }
-
-                /* make q_list a child of tmp */
-                tmp->down = q_list;
-                tmp->up = q_list->up;
-                q_list->up = tmp;
-                if (tmp->up->down == q_list)
-                  tmp->up->down = tmp;
-
-                /* q_list has no siblings */
-                q_list->next = NULL;
-                q_list->prev = NULL;
-
-                index = q_list->quote_n;
-
-                /* tmp should be the return class too */
-                qc = tmp;
-
-                /* next class to test */
-                q_list = tmp->next;
-              }
-              else
-              {
-                /* found another branch for which tmp is a shorter prefix */
-
-                /* save the next sibling for later */
-                save = q_list->next;
-
-                /* unlink q_list from the top level list */
-                if (q_list->next)
-                  q_list->next->prev = q_list->prev;
-                if (q_list->prev)
-                  q_list->prev->next = q_list->next;
-
-                /* at this point, we have a tmp->down; link q_list to it */
-                ptr = tmp->down;
-                while (ptr->next)
-                  ptr = ptr->next;
-                ptr->next = q_list;
-                q_list->next = NULL;
-                q_list->prev = ptr;
-                q_list->up = tmp;
-
-                index = q_list->quote_n;
-
-                /* next class to test */
-                q_list = save;
-              }
-
-              /* we found a shorter prefix, so we need a redraw */
-              *force_redraw = true;
-              continue;
-            }
-            else
-            {
-              q_list = q_list->next;
-              continue;
-            }
-          }
-          else
-          {
-            /* longer than the current prefix: try subclassing it */
-            if (!tmp && mutt_strn_equal(tail_qptr, (q_list->prefix) + offset,
-                                        q_list->prefix_len - offset))
-            {
-              /* still a subclass: go down one level */
-              ptr = q_list;
-              offset = q_list->prefix_len;
-
-              q_list = q_list->down;
-              tail_lng = length - offset;
-              tail_qptr = qptr + offset;
-
-              continue;
-            }
-            else
-            {
-              /* nope, try the next prefix */
-              q_list = q_list->next;
-              continue;
-            }
-          }
-        }
-
-        /* still not found so far: add it as a sibling to the current node */
-        if (!qc)
-        {
-          tmp = mutt_mem_calloc(1, sizeof(struct QClass));
-          tmp->prefix = mutt_mem_calloc(1, length + 1);
-          strncpy(tmp->prefix, qptr, length);
-          tmp->prefix_len = length;
-
-          if (ptr->down)
-          {
-            tmp->next = ptr->down;
-            ptr->down->prev = tmp;
-          }
-          ptr->down = tmp;
-          tmp->up = ptr;
-
-          class_color_new(tmp, q_level);
-
-          return tmp;
-        }
-        else
-        {
-          if (index != -1)
-            shift_class_colors(*quote_list, tmp, index, q_level);
-
-          return qc;
-        }
-      }
-      else
-      {
-        /* nope, try the next prefix */
-        q_list = q_list->next;
-        continue;
-      }
-    }
-  }
-
-  if (!qc)
-  {
-    /* not found so far: add it as a top level class */
-    qc = mutt_mem_calloc(1, sizeof(struct QClass));
-    qc->prefix = mutt_mem_calloc(1, length + 1);
-    strncpy(qc->prefix, qptr, length);
-    qc->prefix_len = length;
-    class_color_new(qc, q_level);
-
-    if (*quote_list)
-    {
-      qc->next = *quote_list;
-      (*quote_list)->prev = qc;
-    }
-    *quote_list = qc;
-  }
-
-  if (index != -1)
-    shift_class_colors(*quote_list, tmp, index, q_level);
-
-  return qc;
 }
 
 /**
@@ -675,7 +290,7 @@ static int check_protected_header_marker(const char *p)
  * @retval true Line is quoted
  *
  * Checks if line matches the `$quote_regex` and doesn't match `$smileys`.
- * This is used by the pager for calling classify_quote.
+ * This is used by the pager for calling qstyle_classify.
  */
 int mutt_is_quote_line(char *line, regmatch_t *pmatch)
 {
@@ -723,9 +338,10 @@ int mutt_is_quote_line(char *line, regmatch_t *pmatch)
  * @param[out] force_redraw Set to true if a screen redraw is needed
  * @param[in]  q_classify   If true, style the text
  */
-static void resolve_types(struct MuttWindow *win, char *buf, char *raw, struct Line *lines,
-                          int line_num, int lines_used, struct QClass **quote_list,
-                          int *q_level, bool *force_redraw, bool q_classify)
+static void resolve_types(struct MuttWindow *win, char *buf, char *raw,
+                          struct Line *lines, int line_num, int lines_used,
+                          struct QuoteStyle **quote_list, int *q_level,
+                          bool *force_redraw, bool q_classify)
 {
   struct RegexColor *color_line = NULL;
   struct RegexColorList *head = NULL;
@@ -736,12 +352,12 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw, struct L
       cs_subset_bool(NeoMutt->sub, "header_color_partial");
   int offset, i = 0;
 
-  if ((line_num == 0) || simple_color_is_header(lines[line_num - 1].color) ||
+  if ((line_num == 0) || simple_color_is_header(lines[line_num - 1].cid) ||
       (check_protected_header_marker(raw) == 0))
   {
     if (buf[0] == '\n') /* end of header */
     {
-      lines[line_num].color = MT_COLOR_NORMAL;
+      lines[line_num].cid = MT_COLOR_NORMAL;
       mutt_window_get_coords(win, &braille_col, &braille_row);
     }
     else
@@ -750,16 +366,17 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw, struct L
        * line's color as default. */
       if ((line_num > 0) && ((buf[0] == ' ') || (buf[0] == '\t')))
       {
-        lines[line_num].color = lines[line_num - 1].color; /* wrapped line */
+        lines[line_num].cid = lines[line_num - 1].cid; /* wrapped line */
         if (!c_header_color_partial)
         {
-          (lines[line_num].syntax)[0].color = (lines[line_num - 1].syntax)[0].color;
+          (lines[line_num].syntax)[0].attr_color =
+              (lines[line_num - 1].syntax)[0].attr_color;
           lines[line_num].cont_header = 1;
         }
       }
       else
       {
-        lines[line_num].color = MT_COLOR_HDRDEFAULT;
+        lines[line_num].cid = MT_COLOR_HDRDEFAULT;
       }
 
       /* When this option is unset, we color the entire header the
@@ -771,22 +388,22 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw, struct L
         {
           if (regexec(&color_line->regex, buf, 0, NULL, 0) == 0)
           {
-            lines[line_num].color = MT_COLOR_HEADER;
-            lines[line_num].syntax[0].color = color_line->pair;
+            lines[line_num].cid = MT_COLOR_HEADER;
+            lines[line_num].syntax[0].attr_color = &color_line->attr_color;
             if (lines[line_num].cont_header)
             {
               /* adjust the previous continuation lines to reflect the color of this continuation line */
               int j;
               for (j = line_num - 1; j >= 0 && lines[j].cont_header; --j)
               {
-                lines[j].color = lines[line_num].color;
-                lines[j].syntax[0].color = lines[line_num].syntax[0].color;
+                lines[j].cid = lines[line_num].cid;
+                lines[j].syntax[0].attr_color = lines[line_num].syntax[0].attr_color;
               }
               /* now adjust the first line of this header field */
               if (j >= 0)
               {
-                lines[j].color = lines[line_num].color;
-                lines[j].syntax[0].color = lines[line_num].syntax[0].color;
+                lines[j].cid = lines[line_num].cid;
+                lines[j].syntax[0].attr_color = lines[line_num].syntax[0].attr_color;
               }
               *force_redraw = true; /* the previous lines have already been drawn on the screen */
             }
@@ -797,17 +414,17 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw, struct L
     }
   }
   else if (mutt_str_startswith(raw, "\033[0m")) // Escape: a little hack...
-    lines[line_num].color = MT_COLOR_NORMAL;
+    lines[line_num].cid = MT_COLOR_NORMAL;
   else if (check_attachment_marker((char *) raw) == 0)
-    lines[line_num].color = MT_COLOR_ATTACHMENT;
+    lines[line_num].cid = MT_COLOR_ATTACHMENT;
   else if (mutt_str_equal("-- \n", buf) || mutt_str_equal("-- \r\n", buf))
   {
     i = line_num + 1;
 
-    lines[line_num].color = MT_COLOR_SIGNATURE;
+    lines[line_num].cid = MT_COLOR_SIGNATURE;
     while ((i < lines_used) && (check_sig(buf, lines, i - 1) == 0) &&
-           ((lines[i].color == MT_COLOR_NORMAL) || (lines[i].color == MT_COLOR_QUOTED) ||
-            (lines[i].color == MT_COLOR_HEADER)))
+           ((lines[i].cid == MT_COLOR_NORMAL) || (lines[i].cid == MT_COLOR_QUOTED) ||
+            (lines[i].cid == MT_COLOR_HEADER)))
     {
       /* oops... */
       if (lines[i].syntax_arr_size)
@@ -815,28 +432,28 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw, struct L
         lines[i].syntax_arr_size = 0;
         mutt_mem_realloc(&(lines[line_num].syntax), sizeof(struct TextSyntax));
       }
-      lines[i++].color = MT_COLOR_SIGNATURE;
+      lines[i++].cid = MT_COLOR_SIGNATURE;
     }
   }
   else if (check_sig(buf, lines, line_num - 1) == 0)
-    lines[line_num].color = MT_COLOR_SIGNATURE;
+    lines[line_num].cid = MT_COLOR_SIGNATURE;
   else if (mutt_is_quote_line(buf, pmatch))
 
   {
     if (q_classify && (lines[line_num].quote == NULL))
     {
-      lines[line_num].quote = classify_quote(quote_list, buf + pmatch[0].rm_so,
-                                             pmatch[0].rm_eo - pmatch[0].rm_so,
-                                             force_redraw, q_level);
+      lines[line_num].quote = qstyle_classify(quote_list, buf + pmatch[0].rm_so,
+                                              pmatch[0].rm_eo - pmatch[0].rm_so,
+                                              force_redraw, q_level);
     }
-    lines[line_num].color = MT_COLOR_QUOTED;
+    lines[line_num].cid = MT_COLOR_QUOTED;
   }
   else
-    lines[line_num].color = MT_COLOR_NORMAL;
+    lines[line_num].cid = MT_COLOR_NORMAL;
 
   /* body patterns */
-  if ((lines[line_num].color == MT_COLOR_NORMAL) || (lines[line_num].color == MT_COLOR_QUOTED) ||
-      ((lines[line_num].color == MT_COLOR_HDRDEFAULT) && c_header_color_partial))
+  if ((lines[line_num].cid == MT_COLOR_NORMAL) || (lines[line_num].cid == MT_COLOR_QUOTED) ||
+      ((lines[line_num].cid == MT_COLOR_HDRDEFAULT) && c_header_color_partial))
   {
     size_t nl;
 
@@ -849,10 +466,14 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw, struct L
     i = 0;
     offset = 0;
     lines[line_num].syntax_arr_size = 0;
-    if (lines[line_num].color == MT_COLOR_HDRDEFAULT)
+    if (lines[line_num].cid == MT_COLOR_HDRDEFAULT)
+    {
       head = regex_colors_get_list(MT_COLOR_HEADER);
+    }
     else
+    {
       head = regex_colors_get_list(MT_COLOR_BODY);
+    }
     STAILQ_FOREACH(color_line, head, entries)
     {
       color_line->stop_matching = false;
@@ -899,7 +520,7 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw, struct L
               ((pmatch[0].rm_so == (lines[line_num].syntax)[i].first) &&
                (pmatch[0].rm_eo > (lines[line_num].syntax)[i].last)))
           {
-            (lines[line_num].syntax)[i].color = color_line->pair;
+            (lines[line_num].syntax)[i].attr_color = &color_line->attr_color;
             (lines[line_num].syntax)[i].first = pmatch[0].rm_so;
             (lines[line_num].syntax)[i].last = pmatch[0].rm_eo;
           }
@@ -925,7 +546,7 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw, struct L
   }
 
   /* attachment patterns */
-  if (lines[line_num].color == MT_COLOR_ATTACHMENT)
+  if (lines[line_num].cid == MT_COLOR_ATTACHMENT)
   {
     size_t nl;
 
@@ -969,7 +590,7 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw, struct L
               ((pmatch[0].rm_so == (lines[line_num].syntax)[i].first) &&
                (pmatch[0].rm_eo > (lines[line_num].syntax)[i].last)))
           {
-            (lines[line_num].syntax)[i].color = color_line->pair;
+            (lines[line_num].syntax)[i].attr_color = &color_line->attr_color;
             (lines[line_num].syntax)[i].first = pmatch[0].rm_so;
             (lines[line_num].syntax)[i].last = pmatch[0].rm_eo;
           }
@@ -988,103 +609,6 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw, struct L
     if (nl > 0)
       buf[nl] = '\n';
   }
-}
-
-/**
- * is_ansi - Is this an ANSI escape sequence?
- * @param str String to test
- * @retval true It's an ANSI escape sequence
- */
-static bool is_ansi(const char *str)
-{
-  while (*str && (isdigit(*str) || (*str == ';')))
-    str++;
-  return (*str == 'm');
-}
-
-/**
- * grok_ansi - Parse an ANSI escape sequence
- * @param buf String to parse
- * @param pos Starting position in string
- * @param aa  AnsiAttr for the result
- * @retval num Index of first character after the escape sequence
- */
-static int grok_ansi(const unsigned char *buf, int pos, struct AnsiAttr *aa)
-{
-  int x = pos;
-
-  while (isdigit(buf[x]) || (buf[x] == ';'))
-    x++;
-
-  /* Character Attributes */
-  const bool c_allow_ansi = cs_subset_bool(NeoMutt->sub, "allow_ansi");
-  if (c_allow_ansi && aa && (buf[x] == 'm'))
-  {
-    if (pos == x)
-    {
-      if (aa->pair != -1)
-        mutt_color_free(aa->fg, aa->bg);
-      aa->attr = ANSI_OFF;
-      aa->pair = -1;
-    }
-    while (pos < x)
-    {
-      if ((buf[pos] == '1') && (((pos + 1) == x) || (buf[pos + 1] == ';')))
-      {
-        aa->attr |= ANSI_BOLD;
-        pos += 2;
-      }
-      else if ((buf[pos] == '4') && (((pos + 1) == x) || (buf[pos + 1] == ';')))
-      {
-        aa->attr |= ANSI_UNDERLINE;
-        pos += 2;
-      }
-      else if ((buf[pos] == '5') && (((pos + 1) == x) || (buf[pos + 1] == ';')))
-      {
-        aa->attr |= ANSI_BLINK;
-        pos += 2;
-      }
-      else if ((buf[pos] == '7') && (((pos + 1) == x) || (buf[pos + 1] == ';')))
-      {
-        aa->attr |= ANSI_REVERSE;
-        pos += 2;
-      }
-      else if ((buf[pos] == '0') && (((pos + 1) == x) || (buf[pos + 1] == ';')))
-      {
-        if (aa->pair != -1)
-          mutt_color_free(aa->fg, aa->bg);
-        aa->attr = ANSI_OFF;
-        aa->pair = -1;
-        pos += 2;
-      }
-      else if ((buf[pos] == '3') && isdigit(buf[pos + 1]))
-      {
-        if (aa->pair != -1)
-          mutt_color_free(aa->fg, aa->bg);
-        aa->pair = -1;
-        aa->attr |= ANSI_COLOR;
-        aa->fg = buf[pos + 1] - '0';
-        pos += 3;
-      }
-      else if ((buf[pos] == '4') && isdigit(buf[pos + 1]))
-      {
-        if (aa->pair != -1)
-          mutt_color_free(aa->fg, aa->bg);
-        aa->pair = -1;
-        aa->attr |= ANSI_COLOR;
-        aa->bg = buf[pos + 1] - '0';
-        pos += 3;
-      }
-      else
-      {
-        while ((pos < x) && (buf[pos] != ';'))
-          pos++;
-        pos++;
-      }
-    }
-  }
-  pos = x;
-  return pos;
 }
 
 /**
@@ -1123,11 +647,13 @@ void mutt_buffer_strip_formatting(struct Buffer *dest, const char *src, bool str
       }
       else /* ^H */
         mutt_buffer_addch(dest, *s++);
+      continue;
     }
-    else if ((s[0] == '\033') && (s[1] == '[') && is_ansi(s + 2))
+
+    int len = ansi_color_seq_length(s);
+    if (len > 0)
     {
-      while (*s++ != 'm')
-        ; /* skip ANSI sequence */
+      s += len;
     }
     else if (strip_markers && (s[0] == '\033') && (s[1] == ']') &&
              ((check_attachment_marker(s) == 0) || (check_protected_header_marker(s) == 0)))
@@ -1163,9 +689,8 @@ static int fill_buffer(FILE *fp, LOFF_T *bytes_read, LOFF_T offset, unsigned cha
   {
     if (offset != *bytes_read)
     {
-      if (fseeko(fp, offset, SEEK_SET) != 0)
+      if (!mutt_file_seek(fp, offset, SEEK_SET))
       {
-        mutt_perror("fseeko");
         return -1;
       }
     }
@@ -1199,42 +724,42 @@ static int fill_buffer(FILE *fp, LOFF_T *bytes_read, LOFF_T offset, unsigned cha
  * @param[in]  line_num  Line number (index into lines)
  * @param[in]  buf       Text to display
  * @param[in]  flags     Flags, see #PagerFlags
- * @param[out] aa        ANSI attributes used
+ * @param[out] ansi      ANSI attributes used
  * @param[in]  cnt       Length of text buffer
  * @param[out] pspace    Index of last whitespace character
  * @param[out] pvch      Number of bytes read
  * @param[out] pcol      Number of columns used
  * @param[out] pspecial  Attribute flags, e.g. A_UNDERLINE
  * @param[in]  width     Width of screen (to wrap to)
+ * @param[out] ansi_list List of unique Ansi colours
  * @retval num Number of characters displayed
  */
 static int format_line(struct MuttWindow *win, struct Line **lines, int line_num,
-                       unsigned char *buf, PagerFlags flags, struct AnsiAttr *aa,
-                       int cnt, int *pspace, int *pvch, int *pcol, int *pspecial, int width)
+                       unsigned char *buf, PagerFlags flags, struct AnsiColor *ansi,
+                       int cnt, int *pspace, int *pvch, int *pcol,
+                       int *pspecial, int width, struct AttrColorList *ansi_list)
 {
   int space = -1; /* index of the last space or TAB */
   const bool c_markers = cs_subset_bool(NeoMutt->sub, "markers");
   size_t col = c_markers ? (*lines)[line_num].cont_line : 0;
   size_t k;
   int ch, vch, last_special = -1, special = 0, t;
-  wchar_t wc;
-  mbstate_t mbstate;
+  wchar_t wc = 0;
+  mbstate_t mbstate = { 0 }; // FIXME: this should come from lines
   const size_t c_wrap = cs_subset_number(NeoMutt->sub, "wrap");
   size_t wrap_cols = mutt_window_wrap_cols(width, (flags & MUTT_PAGER_NOWRAP) ? 0 : c_wrap);
 
   if (check_attachment_marker((char *) buf) == 0)
     wrap_cols = width;
 
-  /* FIXME: this should come from lines */
-  memset(&mbstate, 0, sizeof(mbstate));
-
+  const bool c_allow_ansi = cs_subset_bool(NeoMutt->sub, "allow_ansi");
   for (ch = 0, vch = 0; ch < cnt; ch += k, vch += k)
   {
     /* Handle ANSI sequences */
-    while ((cnt - ch >= 2) && (buf[ch] == '\033') && (buf[ch + 1] == '[') && // Escape
-           is_ansi((char *) buf + ch + 2))
+    if (buf[ch] == '\033') // Escape
     {
-      ch = grok_ansi(buf, ch + 2, aa) + 1;
+      int len = ansi_color_parse((const char *) buf + ch, ansi, ansi_list, !c_allow_ansi);
+      ch += len;
     }
 
     while ((cnt - ch >= 2) && (buf[ch] == '\033') && (buf[ch + 1] == ']') && // Escape
@@ -1256,10 +781,10 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
       if (k == (size_t) (-1))
         memset(&mbstate, 0, sizeof(mbstate));
       mutt_debug(LL_DEBUG1, "mbrtowc returned %lu; errno = %d\n", k, errno);
-      if (col + 4 > wrap_cols)
+      if ((col + 4) > wrap_cols)
         break;
       col += 4;
-      if (aa)
+      if (ansi)
         mutt_window_printf(win, "\\%03o", buf[ch]);
       k = 1;
       continue;
@@ -1286,7 +811,7 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
     special = 0;
     if (IsWPrint(wc))
     {
-      wchar_t wc1;
+      wchar_t wc1 = 0;
       mbstate_t mbstate1 = mbstate;
       size_t k1 = mbrtowc(&wc1, (char *) buf + ch + k, cnt - ch - k, &mbstate1);
       while ((k1 != (size_t) (-2)) && (k1 != (size_t) (-1)) && (k1 > 0) && (wc1 == '\b'))
@@ -1318,11 +843,12 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
       }
     }
 
-    if (aa && ((flags & (MUTT_SHOWCOLOR | MUTT_SEARCH | MUTT_PAGER_MARKER)) ||
-               special || last_special || aa->attr))
+    if (ansi && ((flags & (MUTT_SHOWCOLOR | MUTT_SEARCH | MUTT_PAGER_MARKER)) ||
+                 special || last_special || ansi->attrs))
     {
-      resolve_color(win, *lines, line_num, vch, flags, special, aa);
+      resolve_color(win, *lines, line_num, vch, flags, special, ansi);
       last_special = special;
+      // memset(ansi, 0, sizeof(*ansi));
     }
 
     /* no-break space, narrow no-break space */
@@ -1336,7 +862,7 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
       if (col + t > wrap_cols)
         break;
       col += t;
-      if (aa)
+      if (ansi)
         mutt_addwch(win, wc);
     }
     else if (wc == '\n')
@@ -1347,7 +873,7 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
       t = (col & ~7) + 8;
       if (t > wrap_cols)
         break;
-      if (aa)
+      if (ansi)
         for (; col < t; col++)
           mutt_window_addch(win, ' ');
       else
@@ -1358,7 +884,7 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
       if (col + 2 > wrap_cols)
         break;
       col += 2;
-      if (aa)
+      if (ansi)
         mutt_window_printf(win, "^%c", ('@' + wc) & 0x7f);
     }
     else if (wc < 0x100)
@@ -1366,7 +892,7 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
       if (col + 4 > wrap_cols)
         break;
       col += 4;
-      if (aa)
+      if (ansi)
         mutt_window_printf(win, "\\%03o", wc);
     }
     else
@@ -1374,7 +900,7 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
       if (col + 1 > wrap_cols)
         break;
       col += k;
-      if (aa)
+      if (ansi)
         mutt_addwch(win, ReplacementChar);
     }
   }
@@ -1399,14 +925,16 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
  * @param[out] force_redraw    Force a repaint
  * @param[out] search_re       Regex to highlight
  * @param[in]  win_pager       Window to draw into
+ * @param[in]  ansi_list       List of ANSI colours/attributes
  * @retval -1 EOF was reached
  * @retval 0  normal exit, line was not displayed
  * @retval >0 normal exit, line was displayed
  */
 int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
-                 int line_num, int *lines_used, int *lines_max, PagerFlags flags,
-                 struct QClass **quote_list, int *q_level, bool *force_redraw,
-                 regex_t *search_re, struct MuttWindow *win_pager)
+                 int line_num, int *lines_used, int *lines_max,
+                 PagerFlags flags, struct QuoteStyle **quote_list, int *q_level,
+                 bool *force_redraw, regex_t *search_re,
+                 struct MuttWindow *win_pager, struct AttrColorList *ansi_list)
 {
   unsigned char *buf = NULL, *fmt = NULL;
   size_t buflen = 0;
@@ -1416,10 +944,10 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
   bool change_last = false;
   int special;
   int offset;
-  int def_color;
+  struct AttrColor *def_color = NULL;
   int m;
   int rc = -1;
-  struct AnsiAttr aa = { 0, 0, 0, -1 };
+  struct AnsiColor ansi = { NULL, 0, COLOR_DEFAULT, COLOR_DEFAULT };
   regmatch_t pmatch[1];
 
   if (line_num == *lines_used)
@@ -1434,44 +962,44 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
     for (ch = *lines_used; ch < *lines_max; ch++)
     {
       memset(&((*lines)[ch]), 0, sizeof(struct Line));
-      (*lines)[ch].color = -1;
+      (*lines)[ch].cid = -1;
       (*lines)[ch].search_arr_size = -1;
-      (*lines)[ch].syntax = mutt_mem_malloc(sizeof(struct TextSyntax));
+      (*lines)[ch].syntax = mutt_mem_calloc(1, sizeof(struct TextSyntax));
       ((*lines)[ch].syntax)[0].first = -1;
       ((*lines)[ch].syntax)[0].last = -1;
     }
   }
 
-  struct Line *const curr_line = &(*lines)[line_num];
+  struct Line *const cur_line = &(*lines)[line_num];
 
   if (flags & MUTT_PAGER_LOGS)
   {
     /* determine the line class */
-    if (fill_buffer(fp, bytes_read, curr_line->offset, &buf, &fmt, &buflen, &buf_ready) < 0)
+    if (fill_buffer(fp, bytes_read, cur_line->offset, &buf, &fmt, &buflen, &buf_ready) < 0)
     {
       if (change_last)
         (*lines_used)--;
       goto out;
     }
 
-    curr_line->color = MT_COLOR_MESSAGE_LOG;
+    cur_line->cid = MT_COLOR_MESSAGE_LOG;
     if (buf[11] == 'M')
-      curr_line->syntax[0].color = MT_COLOR_MESSAGE;
+      cur_line->syntax[0].attr_color = simple_color_get(MT_COLOR_MESSAGE);
     else if (buf[11] == 'W')
-      curr_line->syntax[0].color = MT_COLOR_WARNING;
+      cur_line->syntax[0].attr_color = simple_color_get(MT_COLOR_WARNING);
     else if (buf[11] == 'E')
-      curr_line->syntax[0].color = MT_COLOR_ERROR;
+      cur_line->syntax[0].attr_color = simple_color_get(MT_COLOR_ERROR);
     else
-      curr_line->syntax[0].color = MT_COLOR_NORMAL;
+      cur_line->syntax[0].attr_color = simple_color_get(MT_COLOR_NORMAL);
   }
 
   /* only do color highlighting if we are viewing a message */
   if (flags & (MUTT_SHOWCOLOR | MUTT_TYPES))
   {
-    if (curr_line->color == -1)
+    if (cur_line->cid == -1)
     {
       /* determine the line class */
-      if (fill_buffer(fp, bytes_read, curr_line->offset, &buf, &fmt, &buflen, &buf_ready) < 0)
+      if (fill_buffer(fp, bytes_read, cur_line->offset, &buf, &fmt, &buflen, &buf_ready) < 0)
       {
         if (change_last)
           (*lines_used)--;
@@ -1484,14 +1012,16 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
       /* avoid race condition for continuation lines when scrolling up */
       for (m = line_num + 1;
            m < *lines_used && (*lines)[m].offset && (*lines)[m].cont_line; m++)
-        (*lines)[m].color = curr_line->color;
+      {
+        (*lines)[m].cid = cur_line->cid;
+      }
     }
 
     /* this also prevents searching through the hidden lines */
     const short c_toggle_quoted_show_levels =
         cs_subset_number(NeoMutt->sub, "toggle_quoted_show_levels");
-    if ((flags & MUTT_HIDE) && (curr_line->color == MT_COLOR_QUOTED) &&
-        ((curr_line->quote == NULL) || (curr_line->quote->quote_n >= c_toggle_quoted_show_levels)))
+    if ((flags & MUTT_HIDE) && (cur_line->cid == MT_COLOR_QUOTED) &&
+        ((cur_line->quote == NULL) || (cur_line->quote->quote_n >= c_toggle_quoted_show_levels)))
     {
       flags = 0; /* MUTT_NOSHOW */
     }
@@ -1502,10 +1032,10 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
    * would slow down the "bottom" function unacceptably. A compromise
    * solution is hence to call regexec() again, just to find out the
    * length of the quote prefix.  */
-  if ((flags & MUTT_SHOWCOLOR) && !curr_line->cont_line &&
-      (curr_line->color == MT_COLOR_QUOTED) && !curr_line->quote)
+  if ((flags & MUTT_SHOWCOLOR) && !cur_line->cont_line &&
+      (cur_line->cid == MT_COLOR_QUOTED) && !cur_line->quote)
   {
-    if (fill_buffer(fp, bytes_read, curr_line->offset, &buf, &fmt, &buflen, &buf_ready) < 0)
+    if (fill_buffer(fp, bytes_read, cur_line->offset, &buf, &fmt, &buflen, &buf_ready) < 0)
     {
       if (change_last)
         (*lines_used)--;
@@ -1516,9 +1046,9 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
         cs_subset_regex(NeoMutt->sub, "quote_regex");
     if (mutt_regex_capture(c_quote_regex, (char *) fmt, 1, pmatch))
     {
-      curr_line->quote =
-          classify_quote(quote_list, (char *) fmt + pmatch[0].rm_so,
-                         pmatch[0].rm_eo - pmatch[0].rm_so, force_redraw, q_level);
+      cur_line->quote =
+          qstyle_classify(quote_list, (char *) fmt + pmatch[0].rm_so,
+                          pmatch[0].rm_eo - pmatch[0].rm_so, force_redraw, q_level);
     }
     else
     {
@@ -1526,9 +1056,9 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
     }
   }
 
-  if ((flags & MUTT_SEARCH) && !curr_line->cont_line && (curr_line->search_arr_size == -1))
+  if ((flags & MUTT_SEARCH) && !cur_line->cont_line && (cur_line->search_arr_size == -1))
   {
-    if (fill_buffer(fp, bytes_read, curr_line->offset, &buf, &fmt, &buflen, &buf_ready) < 0)
+    if (fill_buffer(fp, bytes_read, cur_line->offset, &buf, &fmt, &buflen, &buf_ready) < 0)
     {
       if (change_last)
         (*lines_used)--;
@@ -1536,21 +1066,23 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
     }
 
     offset = 0;
-    curr_line->search_arr_size = 0;
+    cur_line->search_arr_size = 0;
     while (regexec(search_re, (char *) fmt + offset, 1, pmatch,
                    (offset ? REG_NOTBOL : 0)) == 0)
     {
-      if (++(curr_line->search_arr_size) > 1)
+      if (++(cur_line->search_arr_size) > 1)
       {
-        mutt_mem_realloc(&(curr_line->search),
-                         (curr_line->search_arr_size) * sizeof(struct TextSyntax));
+        mutt_mem_realloc(&(cur_line->search),
+                         (cur_line->search_arr_size) * sizeof(struct TextSyntax));
       }
       else
-        curr_line->search = mutt_mem_malloc(sizeof(struct TextSyntax));
+      {
+        cur_line->search = mutt_mem_calloc(1, sizeof(struct TextSyntax));
+      }
       pmatch[0].rm_so += offset;
       pmatch[0].rm_eo += offset;
-      (curr_line->search)[curr_line->search_arr_size - 1].first = pmatch[0].rm_so;
-      (curr_line->search)[curr_line->search_arr_size - 1].last = pmatch[0].rm_eo;
+      (cur_line->search)[cur_line->search_arr_size - 1].first = pmatch[0].rm_so;
+      (cur_line->search)[cur_line->search_arr_size - 1].last = pmatch[0].rm_eo;
 
       if (pmatch[0].rm_eo == pmatch[0].rm_so)
         offset++; /* avoid degenerate cases */
@@ -1574,7 +1106,7 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
     goto out; /* fake display */
   }
 
-  b_read = fill_buffer(fp, bytes_read, curr_line->offset, &buf, &fmt, &buflen, &buf_ready);
+  b_read = fill_buffer(fp, bytes_read, cur_line->offset, &buf, &fmt, &buflen, &buf_ready);
   if (b_read < 0)
   {
     if (change_last)
@@ -1584,7 +1116,7 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
 
   /* now chose a good place to break the line */
   cnt = format_line(win_pager, lines, line_num, buf, flags, NULL, b_read, &ch,
-                    &vch, &col, &special, win_pager->state.cols);
+                    &vch, &col, &special, win_pager->state.cols, ansi_list);
   buf_ptr = buf + cnt;
 
   /* move the break point only if smart_wrap is set */
@@ -1592,7 +1124,7 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
   if (c_smart_wrap)
   {
     if ((cnt < b_read) && (ch != -1) &&
-        !simple_color_is_header(curr_line->color) && !IS_SPACE(buf[cnt]))
+        !simple_color_is_header(cur_line->cid) && !IS_SPACE(buf[cnt]))
     {
       buf_ptr = buf + ch;
       /* skip trailing blanks */
@@ -1623,7 +1155,7 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
 
   if (((int) (buf_ptr - buf) < b_read) && !(*lines)[line_num + 1].cont_line)
     append_line(*lines, line_num, (int) (buf_ptr - buf));
-  (*lines)[line_num + 1].offset = curr_line->offset + (long) (buf_ptr - buf);
+  (*lines)[line_num + 1].offset = cur_line->offset + (long) (buf_ptr - buf);
 
   /* if we don't need to display the line we are done */
   if (!(flags & MUTT_SHOW))
@@ -1633,8 +1165,8 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
   }
 
   /* display the line */
-  format_line(win_pager, lines, line_num, buf, flags, &aa, cnt, &ch, &vch, &col,
-              &special, win_pager->state.cols);
+  format_line(win_pager, lines, line_num, buf, flags, &ansi, cnt, &ch, &vch,
+              &col, &special, win_pager->state.cols, ansi_list);
 
   /* avoid a bug in ncurses... */
   if (col == 0)
@@ -1645,20 +1177,22 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
 
   /* end the last color pattern (needed by S-Lang) */
   if (special || ((col != win_pager->state.cols) && (flags & (MUTT_SHOWCOLOR | MUTT_SEARCH))))
-    resolve_color(win_pager, *lines, line_num, vch, flags, 0, &aa);
+    resolve_color(win_pager, *lines, line_num, vch, flags, 0, &ansi);
 
   /* Fill the blank space at the end of the line with the prevailing color.
    * ncurses does an implicit clrtoeol() when you do mutt_window_addch('\n') so we have
    * to make sure to reset the color *after* that */
   if (flags & MUTT_SHOWCOLOR)
   {
-    m = (curr_line->cont_line) ? (curr_line->syntax)[0].first : line_num;
-    if ((*lines)[m].color == MT_COLOR_HEADER)
-      def_color = ((*lines)[m].syntax)[0].color;
+    m = (cur_line->cont_line) ? (cur_line->syntax)[0].first : line_num;
+    if ((*lines)[m].cid == MT_COLOR_HEADER)
+      def_color = ((*lines)[m].syntax)[0].attr_color;
     else
-      def_color = simple_colors_get((*lines)[m].color);
+    {
+      def_color = simple_color_get((*lines)[m].cid);
+    }
 
-    mutt_curses_set_attr(def_color);
+    mutt_curses_set_color(def_color);
   }
 
   if (col < win_pager->state.cols)

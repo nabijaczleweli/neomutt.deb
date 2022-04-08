@@ -40,9 +40,9 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "copy.h"
+#include "index/lib.h"
 #include "ncrypt/lib.h"
 #include "send/lib.h"
-#include "context.h"
 #include "format_flags.h"
 #include "handler.h"
 #include "hdrline.h"
@@ -119,7 +119,7 @@ int mutt_copy_hdr(FILE *fp_in, FILE *fp_out, LOFF_T off_start, LOFF_T off_end,
     return -1;
 
   if (ftello(fp_in) != off_start)
-    if (fseeko(fp_in, off_start, SEEK_SET) < 0)
+    if (!mutt_file_seek(fp_in, off_start, SEEK_SET))
       return -1;
 
   buf[0] = '\n';
@@ -533,7 +533,7 @@ int mutt_copy_header(FILE *fp_in, struct Email *e, FILE *fp_out,
   {
     temp_hdr = e->env->x_label;
     /* env->x_label isn't currently stored with direct references elsewhere.
-     * Context->label_hash strdups the keys.  But to be safe, encode a copy */
+     * Mailbox->label_hash strdups the keys.  But to be safe, encode a copy */
     if (!(chflags & CH_DECODE))
     {
       temp_hdr = mutt_str_dup(temp_hdr);
@@ -552,7 +552,7 @@ int mutt_copy_header(FILE *fp_in, struct Email *e, FILE *fp_out,
   if ((chflags & CH_UPDATE_SUBJECT) && e->env->subject)
   {
     temp_hdr = e->env->subject;
-    /* env->subject is directly referenced in Context->subj_hash, so we
+    /* env->subject is directly referenced in Mailbox->subj_hash, so we
      * have to be careful not to encode (and thus free) that memory. */
     if (!(chflags & CH_DECODE))
     {
@@ -599,7 +599,7 @@ static int count_delete_lines(FILE *fp, struct Body *b, LOFF_T *length, size_t d
 
   if (b->deleted)
   {
-    if (fseeko(fp, b->offset, SEEK_SET) != 0)
+    if (!mutt_file_seek(fp, b->offset, SEEK_SET))
     {
       return -1;
     }
@@ -664,8 +664,9 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
     {
       const char *const c_indent_string =
           cs_subset_string(NeoMutt->sub, "indent_string");
+      struct Mailbox *m_cur = get_current_mailbox();
       mutt_make_string(prefix, sizeof(prefix), wraplen, NONULL(c_indent_string),
-                       Context->mailbox, -1, e, MUTT_FORMAT_NO_FLAGS, NULL);
+                       m_cur, -1, e, MUTT_FORMAT_NO_FLAGS, NULL);
     }
   }
 
@@ -687,7 +688,7 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
       mutt_buffer_addch(quoted_date, '"');
 
       /* Count the number of lines and bytes to be deleted */
-      if (fseeko(fp_in, body->offset, SEEK_SET) != 0)
+      if (!mutt_file_seek(fp_in, body->offset, SEEK_SET))
       {
         goto attach_del_cleanup;
       }
@@ -714,7 +715,7 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
       new_offset = ftello(fp_out);
 
       /* Copy the body */
-      if (fseeko(fp_in, body->offset, SEEK_SET) < 0)
+      if (!mutt_file_seek(fp_in, body->offset, SEEK_SET))
         goto attach_del_cleanup;
       if (copy_delete_attach(body, fp_in, fp_out, mutt_buffer_string(quoted_date)))
         goto attach_del_cleanup;
@@ -736,12 +737,6 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
         e->attach_del = false;
         e->lines = new_lines;
         body->offset = new_offset;
-
-        /* update the total size of the mailbox to reflect this deletion */
-        Context->mailbox->size -= body->length - new_length;
-        /* if the message is visible, update the visible size of the mailbox as well.  */
-        if (Context->mailbox->v2r[e->msgno] != -1)
-          Context->vsize -= body->length - new_length;
 
         body->length = new_length;
         mutt_body_free(&body->parts);
@@ -819,7 +814,7 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
     mutt_write_mime_header(cur, fp_out, NeoMutt->sub);
     fputc('\n', fp_out);
 
-    if (fseeko(fp, cur->offset, SEEK_SET) < 0)
+    if (!mutt_file_seek(fp, cur->offset, SEEK_SET))
       return -1;
     if (mutt_file_copy_bytes(fp, fp_out, cur->length) == -1)
     {
@@ -832,7 +827,7 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
   }
   else
   {
-    if (fseeko(fp_in, body->offset, SEEK_SET) < 0)
+    if (!mutt_file_seek(fp_in, body->offset, SEEK_SET))
       return -1;
     if (cmflags & MUTT_CM_PREFIX)
     {
@@ -918,7 +913,7 @@ static int append_message(struct Mailbox *dest, FILE *fp_in, struct Mailbox *src
   struct Message *msg = NULL;
   int rc;
 
-  if (fseeko(fp_in, e->offset, SEEK_SET) < 0)
+  if (!mutt_file_seek(fp_in, e->offset, SEEK_SET))
     return -1;
   if (!fgets(buf, sizeof(buf), fp_in))
     return -1;
@@ -1019,7 +1014,7 @@ static int copy_delete_attach(struct Body *b, FILE *fp_in, FILE *fp_out, const c
         }
 
         /* Skip the deleted body */
-        if (fseeko(fp_in, part->offset + part->length, SEEK_SET) != 0)
+        if (!mutt_file_seek(fp_in, part->offset + part->length, SEEK_SET))
         {
           return -1;
         }

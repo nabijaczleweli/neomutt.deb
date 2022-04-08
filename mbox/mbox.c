@@ -38,11 +38,9 @@
 #include <inttypes.h> // IWYU pragma: keep
 #include <limits.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <unistd.h>
 #include <utime.h>
 #include "mutt/lib.h"
@@ -253,9 +251,8 @@ static enum MxOpenReturns mmdf_parse_mailbox(struct Mailbox *m)
 
       if (!is_from(buf, return_path, sizeof(return_path), &t))
       {
-        if (fseeko(adata->fp, loc, SEEK_SET) != 0)
+        if (!mutt_file_seek(adata->fp, loc, SEEK_SET))
         {
-          mutt_debug(LL_DEBUG1, "#1 fseek() failed\n");
           mutt_error(_("Mailbox is corrupt"));
           goto fail;
         }
@@ -275,11 +272,10 @@ static enum MxOpenReturns mmdf_parse_mailbox(struct Mailbox *m)
 
         if ((tmploc > 0) && (tmploc < m->size))
         {
-          if ((fseeko(adata->fp, tmploc, SEEK_SET) != 0) ||
+          if (!mutt_file_seek(adata->fp, tmploc, SEEK_SET) ||
               !fgets(buf, sizeof(buf) - 1, adata->fp) || !mutt_str_equal(MMDF_SEP, buf))
           {
-            if (fseeko(adata->fp, loc, SEEK_SET) != 0)
-              mutt_debug(LL_DEBUG1, "#2 fseek() failed\n");
+            (void) mutt_file_seek(adata->fp, loc, SEEK_SET);
             e->body->length = -1;
           }
         }
@@ -439,17 +435,14 @@ static enum MxOpenReturns mbox_parse_mailbox(struct Mailbox *m)
         {
           /* check to see if the content-length looks valid.  we expect to
            * to see a valid message separator at this point in the stream */
-          if ((fseeko(adata->fp, tmploc, SEEK_SET) != 0) ||
+          if (!mutt_file_seek(adata->fp, tmploc, SEEK_SET) ||
               !fgets(buf, sizeof(buf), adata->fp) || !mutt_str_startswith(buf, "From "))
           {
             mutt_debug(LL_DEBUG1, "bad content-length in message %d (cl=" OFF_T_FMT ")\n",
                        e_cur->index, e_cur->body->length);
             mutt_debug(LL_DEBUG1, "    LINE: %s", buf);
             /* nope, return the previous position */
-            if ((loc < 0) || (fseeko(adata->fp, loc, SEEK_SET) != 0))
-            {
-              mutt_debug(LL_DEBUG1, "#1 fseek() failed\n");
-            }
+            (void) mutt_file_seek(adata->fp, loc, SEEK_SET);
             e_cur->body->length = -1;
           }
         }
@@ -469,8 +462,7 @@ static enum MxOpenReturns mbox_parse_mailbox(struct Mailbox *m)
             int cl = e_cur->body->length;
 
             /* count the number of lines in this message */
-            if ((loc < 0) || (fseeko(adata->fp, loc, SEEK_SET) != 0))
-              mutt_debug(LL_DEBUG1, "#2 fseek() failed\n");
+            (void) mutt_file_seek(adata->fp, loc, SEEK_SET);
             while (cl-- > 0)
             {
               if (fgetc(adata->fp) == '\n')
@@ -479,8 +471,7 @@ static enum MxOpenReturns mbox_parse_mailbox(struct Mailbox *m)
           }
 
           /* return to the offset of the next message separator */
-          if (fseeko(adata->fp, tmploc, SEEK_SET) != 0)
-            mutt_debug(LL_DEBUG1, "#3 fseek() failed\n");
+          (void) mutt_file_seek(adata->fp, tmploc, SEEK_SET);
         }
       }
 
@@ -742,7 +733,10 @@ static int fseek_last_message(FILE *fp)
   char buf[BUFSIZ + 7] = { 0 }; // 7 for "\n\nFrom "
   size_t bytes_read;
 
-  fseek(fp, 0, SEEK_END);
+  if (!mutt_file_seek(fp, 0, SEEK_END))
+  {
+    return -1;
+  }
   pos = ftello(fp);
 
   /* Set 'bytes_read' to the size of the last, probably partial, buf;
@@ -756,7 +750,10 @@ static int fseek_last_message(FILE *fp)
   {
     /* we save in the buf at the end the first 7 chars from the last read */
     memcpy(buf + BUFSIZ, buf, 7);
-    fseeko(fp, pos, SEEK_SET);
+    if (!mutt_file_seek(fp, pos, SEEK_SET))
+    {
+      return -1;
+    }
     bytes_read = fread(buf, sizeof(char), bytes_read, fp);
     if (bytes_read == 0)
       return -1;
@@ -765,7 +762,10 @@ static int fseek_last_message(FILE *fp)
     {
       if (mutt_str_startswith(buf + i, "\n\nFrom "))
       { /* found it - go to the beginning of the From */
-        fseeko(fp, pos + i + 2, SEEK_SET);
+        if (!mutt_file_seek(fp, pos + i + 2, SEEK_SET))
+        {
+          return -1;
+        }
         return 0;
       }
     }
@@ -775,7 +775,10 @@ static int fseek_last_message(FILE *fp)
   /* here we are at the beginning of the file */
   if (mutt_str_startswith(buf, "From "))
   {
-    fseek(fp, 0, SEEK_SET);
+    if (!mutt_file_seek(fp, 0, SEEK_SET))
+    {
+      return -1;
+    }
     return 0;
   }
 
@@ -931,7 +934,7 @@ static enum MxOpenReturns mbox_mbox_open(struct Mailbox *m)
   if (!adata)
     return MX_OPEN_ERROR;
 
-  adata->fp = mbox_open_readwrite(m);
+  adata->fp = m->readonly ? NULL : mbox_open_readwrite(m);
   if (!adata->fp)
   {
     adata->fp = mbox_open_readonly(m);
@@ -1008,7 +1011,11 @@ static bool mbox_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
     }
   }
 
-  fseek(adata->fp, 0, SEEK_END);
+  if (!mutt_file_seek(adata->fp, 0, SEEK_END))
+  {
+    mutt_file_fclose(&adata->fp);
+    return false;
+  }
 
   return true;
 }
@@ -1076,15 +1083,19 @@ static enum MxStatus mbox_mbox_check(struct Mailbox *m)
        * see the message separator at *exactly* what used to be the end of the
        * folder.  */
       char buf[1024];
-      if (fseeko(adata->fp, m->size, SEEK_SET) != 0)
-        mutt_debug(LL_DEBUG1, "#1 fseek() failed\n");
+      if (!mutt_file_seek(adata->fp, m->size, SEEK_SET))
+      {
+        goto error;
+      }
       if (fgets(buf, sizeof(buf), adata->fp))
       {
         if (((m->type == MUTT_MBOX) && mutt_str_startswith(buf, "From ")) ||
             ((m->type == MUTT_MMDF) && mutt_str_equal(buf, MMDF_SEP)))
         {
-          if (fseeko(adata->fp, m->size, SEEK_SET) != 0)
-            mutt_debug(LL_DEBUG1, "#2 fseek() failed\n");
+          if (!mutt_file_seek(adata->fp, m->size, SEEK_SET))
+          {
+            goto error;
+          }
 
           int old_msg_count = m->msg_count;
           if (m->type == MUTT_MBOX)
@@ -1135,8 +1146,9 @@ static enum MxStatus mbox_mbox_check(struct Mailbox *m)
 
   /* fatal error */
 
+error:
   mbox_unlock_mailbox(m);
-  mx_fastclose_mailbox(m);
+  mx_fastclose_mailbox(m, false);
   mutt_sig_unblock();
   mutt_error(_("Mailbox was corrupted"));
   return MX_STATUS_ERROR;
@@ -1180,7 +1192,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
   adata->fp = freopen(mailbox_path(m), "r+", adata->fp);
   if (!adata->fp)
   {
-    mx_fastclose_mailbox(m);
+    mx_fastclose_mailbox(m, false);
     mutt_error(_("Fatal error!  Could not reopen mailbox!"));
     goto fatal;
   }
@@ -1351,7 +1363,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
   if (!fp)
   {
     mutt_sig_unblock();
-    mx_fastclose_mailbox(m);
+    mx_fastclose_mailbox(m, false);
     mutt_debug(LL_DEBUG1, "unable to reopen temp copy of mailbox!\n");
     mutt_perror(mutt_buffer_string(tempfile));
     FREE(&new_offset);
@@ -1359,7 +1371,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
     goto fatal;
   }
 
-  if ((fseeko(adata->fp, offset, SEEK_SET) != 0) || /* seek the append location */
+  if (!mutt_file_seek(adata->fp, offset, SEEK_SET) || /* seek the append location */
       /* do a sanity check to make sure the mailbox looks ok */
       !fgets(buf, sizeof(buf), adata->fp) ||
       ((m->type == MUTT_MBOX) && !mutt_str_startswith(buf, "From ")) ||
@@ -1371,10 +1383,9 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
   }
   else
   {
-    if (fseeko(adata->fp, offset, SEEK_SET) != 0) /* return to proper offset */
+    if (!mutt_file_seek(adata->fp, offset, SEEK_SET)) /* return to proper offset */
     {
       i = -1;
-      mutt_debug(LL_DEBUG1, "fseek() failed\n");
     }
     else
     {
@@ -1413,7 +1424,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
                        NONULL(ShortHostname), (unsigned int) getpid());
     rename(mutt_buffer_string(tempfile), mutt_buffer_string(savefile));
     mutt_sig_unblock();
-    mx_fastclose_mailbox(m);
+    mx_fastclose_mailbox(m, false);
     mutt_buffer_pretty_mailbox(savefile);
     mutt_error(_("Write failed!  Saved partial mailbox to %s"), mutt_buffer_string(savefile));
     mutt_buffer_pool_release(&savefile);
@@ -1435,7 +1446,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
   {
     unlink(mutt_buffer_string(tempfile));
     mutt_sig_unblock();
-    mx_fastclose_mailbox(m);
+    mx_fastclose_mailbox(m, false);
     mutt_error(_("Fatal error!  Could not reopen mailbox!"));
     FREE(&new_offset);
     FREE(&old_offset);
@@ -1502,7 +1513,7 @@ bail: /* Come here in case of disaster */
   if (!adata->fp)
   {
     mutt_error(_("Could not reopen mailbox"));
-    mx_fastclose_mailbox(m);
+    mx_fastclose_mailbox(m, false);
     goto fatal;
   }
 

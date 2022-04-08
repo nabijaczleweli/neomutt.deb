@@ -20,8 +20,8 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_SEND_H
-#define MUTT_SEND_H
+#ifndef MUTT_SEND_SEND_H
+#define MUTT_SEND_SEND_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -51,6 +51,7 @@ typedef uint16_t SendFlags;             ///< Flags for mutt_send_message(), e.g.
 #define SEND_TO_SENDER        (1 << 11) ///< Compose new email to sender
 #define SEND_GROUP_CHAT_REPLY (1 << 12) ///< Reply to all recipients preserving To/Cc
 #define SEND_NEWS             (1 << 13) ///< Reply to a news article
+#define SEND_REVIEW_TO        (1 << 14) ///< Allow the user to edit the To field
 
 void            mutt_add_to_reference_headers(struct Envelope *env, struct Envelope *curenv, struct ConfigSubset *sub);
 struct Address *mutt_default_from(struct ConfigSubset *sub);
@@ -70,4 +71,4 @@ void            mutt_set_followup_to(struct Envelope *env, struct ConfigSubset *
 bool            mutt_send_list_subscribe(struct Mailbox *m, const struct Email *e);
 bool            mutt_send_list_unsubscribe(struct Mailbox *m, const struct Email *e);
 
-#endif /* MUTT_SEND_H */
+#endif /* MUTT_SEND_SEND_H */

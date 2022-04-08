@@ -97,14 +97,6 @@ static struct ConfigDef SendVars[] = {
   { "allow_8bit", DT_BOOL, true, 0, NULL,
     "Allow 8-bit messages, don't use quoted-printable or base64"
   },
-  { "ask_follow_up", DT_BOOL, false, 0, NULL,
-    "(nntp) Ask the user for follow-up groups before editing"
-  },
-#ifdef USE_NNTP
-  { "ask_x_comment_to", DT_BOOL, false, 0, NULL,
-    "(nntp) Ask the user for the 'X-Comment-To' field before editing"
-  },
-#endif
   { "attach_charset", DT_STRING, 0, 0, charset_validator,
     "When attaching files, use one of these character sets"
   },
@@ -151,7 +143,7 @@ static struct ConfigDef SendVars[] = {
     "Don't prompt for the recipients and subject when replying/forwarding"
   },
   { "fcc_attach", DT_QUAD, MUTT_YES, 0, NULL,
-    "Save send message with all their attachments"
+    "Save sent message with all their attachments"
   },
   { "fcc_before_send", DT_BOOL, false, 0, NULL,
     "Save FCCs before sending the message"
@@ -195,11 +187,6 @@ static struct ConfigDef SendVars[] = {
   { "include", DT_QUAD, MUTT_ASKYES, 0, NULL,
     "Include a copy of the email that's being replied to"
   },
-#ifdef USE_NNTP
-  { "inews", DT_STRING|DT_COMMAND, 0, 0, NULL,
-    "(nntp) External command to post news articles"
-  },
-#endif
   { "me_too", DT_BOOL, false, 0, NULL,
     "Remove the user's address from the list of recipients"
   },
@@ -260,23 +247,6 @@ static struct ConfigDef SendVars[] = {
   { "signature", DT_PATH|DT_PATH_FILE, IP "~/.signature", 0, NULL,
     "File containing a signature to append to all mail"
   },
-#ifdef USE_SMTP
-  { "smtp_authenticators", DT_SLIST|SLIST_SEP_COLON, 0, 0, smtp_auth_validator,
-    "(smtp) List of allowed authentication methods (colon-separated)"
-  },
-  { "smtp_oauth_refresh_command", DT_STRING|DT_COMMAND|DT_SENSITIVE, 0, 0, NULL,
-    "(smtp) External command to generate OAUTH refresh token"
-  },
-  { "smtp_pass", DT_STRING|DT_SENSITIVE, 0, 0, NULL,
-    "(smtp) Password for the SMTP server"
-  },
-  { "smtp_user", DT_STRING|DT_SENSITIVE, 0, 0, NULL,
-    "(smtp) Username for the SMTP server"
-  },
-  { "smtp_url", DT_STRING|DT_SENSITIVE, 0, 0, NULL,
-    "(smtp) Url of the SMTP server"
-  },
-#endif
   { "use_8bit_mime", DT_BOOL, false, 0, NULL,
     "Use 8-bit messages and ESMTP to send messages"
   },
@@ -287,48 +257,95 @@ static struct ConfigDef SendVars[] = {
     "Set the 'From' header for outgoing mail"
   },
   { "user_agent", DT_BOOL, false, 0, NULL,
-    "Add a 'User-Agent' head to outgoing mail"
+    "Add a 'User-Agent' header to outgoing mail"
   },
   { "wrap_headers", DT_NUMBER|DT_NOT_NEGATIVE|R_PAGER, 78, 0, wrapheaders_validator,
     "Width to wrap headers in outgoing messages"
   },
 
-  { "abort_noattach_regexp",    DT_SYNONYM, IP "abort_noattach_regex", },
-  { "attach_keyword",           DT_SYNONYM, IP "abort_noattach_regex", },
-  { "crypt_autoencrypt",        DT_SYNONYM, IP "crypt_auto_encrypt", },
-  { "crypt_autopgp",            DT_SYNONYM, IP "crypt_auto_pgp", },
-  { "crypt_autosign",           DT_SYNONYM, IP "crypt_auto_sign", },
-  { "crypt_autosmime",          DT_SYNONYM, IP "crypt_auto_smime", },
-  { "crypt_replyencrypt",       DT_SYNONYM, IP "crypt_reply_encrypt", },
-  { "crypt_replysign",          DT_SYNONYM, IP "crypt_reply_sign", },
-  { "crypt_replysignencrypted", DT_SYNONYM, IP "crypt_reply_sign_encrypted", },
-  { "envelope_from",            DT_SYNONYM, IP "use_envelope_from", },
-  { "forw_decrypt",             DT_SYNONYM, IP "forward_decrypt", },
-  { "forw_format",              DT_SYNONYM, IP "forward_format", },
-  { "metoo",                    DT_SYNONYM, IP "me_too", },
-  { "pgp_auto_traditional",     DT_SYNONYM, IP "pgp_reply_inline", },
-  { "pgp_autoencrypt",          DT_SYNONYM, IP "crypt_auto_encrypt", },
-  { "pgp_autosign",             DT_SYNONYM, IP "crypt_auto_sign", },
-  { "pgp_replyencrypt",         DT_SYNONYM, IP "crypt_reply_encrypt", },
-  { "pgp_replyinline",          DT_SYNONYM, IP "pgp_reply_inline", },
-  { "pgp_replysign",            DT_SYNONYM, IP "crypt_reply_sign", },
-  { "pgp_replysignencrypted",   DT_SYNONYM, IP "crypt_reply_sign_encrypted", },
-  { "post_indent_str",          DT_SYNONYM, IP "post_indent_string", },
-  { "reverse_realname",         DT_SYNONYM, IP "reverse_real_name", },
-  { "use_8bitmime",             DT_SYNONYM, IP "use_8bit_mime", },
-
-#ifdef USE_NNTP
-  { "mime_subject",             DT_DEPRECATED|DT_BOOL, true },
-#endif
+  { "abort_noattach_regexp",    DT_SYNONYM, IP "abort_noattach_regex",       IP "2021-03-21" },
+  { "attach_keyword",           DT_SYNONYM, IP "abort_noattach_regex",       IP "2021-03-21" },
+  { "crypt_autoencrypt",        DT_SYNONYM, IP "crypt_auto_encrypt",         IP "2021-03-21" },
+  { "crypt_autopgp",            DT_SYNONYM, IP "crypt_auto_pgp",             IP "2021-03-21" },
+  { "crypt_autosign",           DT_SYNONYM, IP "crypt_auto_sign",            IP "2021-03-21" },
+  { "crypt_autosmime",          DT_SYNONYM, IP "crypt_auto_smime",           IP "2021-03-21" },
+  { "crypt_replyencrypt",       DT_SYNONYM, IP "crypt_reply_encrypt",        IP "2021-03-21" },
+  { "crypt_replysign",          DT_SYNONYM, IP "crypt_reply_sign",           IP "2021-03-21" },
+  { "crypt_replysignencrypted", DT_SYNONYM, IP "crypt_reply_sign_encrypted", IP "2021-03-21" },
+  { "envelope_from",            DT_SYNONYM, IP "use_envelope_from",          IP "2021-03-21" },
+  { "forw_decrypt",             DT_SYNONYM, IP "forward_decrypt",            IP "2021-03-21" },
+  { "forw_format",              DT_SYNONYM, IP "forward_format",             IP "2021-03-21" },
+  { "metoo",                    DT_SYNONYM, IP "me_too",                     IP "2021-03-21" },
+  { "pgp_auto_traditional",     DT_SYNONYM, IP "pgp_reply_inline",           IP "2021-03-21" },
+  { "pgp_autoencrypt",          DT_SYNONYM, IP "crypt_auto_encrypt",         IP "2021-03-21" },
+  { "pgp_autosign",             DT_SYNONYM, IP "crypt_auto_sign",            IP "2021-03-21" },
+  { "pgp_replyencrypt",         DT_SYNONYM, IP "crypt_reply_encrypt",        IP "2021-03-21" },
+  { "pgp_replyinline",          DT_SYNONYM, IP "pgp_reply_inline",           IP "2021-03-21" },
+  { "pgp_replysign",            DT_SYNONYM, IP "crypt_reply_sign",           IP "2021-03-21" },
+  { "pgp_replysignencrypted",   DT_SYNONYM, IP "crypt_reply_sign_encrypted", IP "2021-03-21" },
+  { "post_indent_str",          DT_SYNONYM, IP "post_indent_string",         IP "2021-03-21" },
+  { "reverse_realname",         DT_SYNONYM, IP "reverse_real_name",          IP "2021-03-21" },
+  { "use_8bitmime",             DT_SYNONYM, IP "use_8bit_mime",              IP "2021-03-21" },
 
   { NULL },
   // clang-format on
 };
+
+#if defined(USE_NNTP)
+static struct ConfigDef SendVarsNntp[] = {
+  // clang-format off
+  { "ask_follow_up", DT_BOOL, false, 0, NULL,
+    "(nntp) Ask the user for follow-up groups before editing"
+  },
+  { "ask_x_comment_to", DT_BOOL, false, 0, NULL,
+    "(nntp) Ask the user for the 'X-Comment-To' field before editing"
+  },
+  { "inews", DT_STRING|DT_COMMAND, 0, 0, NULL,
+    "(nntp) External command to post news articles"
+  },
+  { "mime_subject", DT_DEPRECATED|DT_BOOL, true, IP "2021-03-24" },
+  { NULL },
+  // clang-format on
+};
+#endif
+
+#if defined(USE_SMTP)
+static struct ConfigDef SendVarsSmtp[] = {
+  // clang-format off
+  { "smtp_authenticators", DT_SLIST|SLIST_SEP_COLON, 0, 0, smtp_auth_validator,
+    "(smtp) List of allowed authentication methods (colon-separated)"
+  },
+  { "smtp_oauth_refresh_command", DT_STRING|DT_COMMAND|DT_SENSITIVE, 0, 0, NULL,
+    "(smtp) External command to generate OAUTH refresh token"
+  },
+  { "smtp_pass", DT_STRING|DT_SENSITIVE, 0, 0, NULL,
+    "(smtp) Password for the SMTP server"
+  },
+  { "smtp_url", DT_STRING|DT_SENSITIVE, 0, 0, NULL,
+    "(smtp) Url of the SMTP server"
+  },
+  { "smtp_user", DT_STRING|DT_SENSITIVE, 0, 0, NULL,
+    "(smtp) Username for the SMTP server"
+  },
+  { NULL },
+  // clang-format on
+};
+#endif
 
 /**
  * config_init_send - Register send config variables - Implements ::module_init_config_t - @ingroup cfg_module_api
  */
 bool config_init_send(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, SendVars, 0);
+  bool rc = cs_register_variables(cs, SendVars, 0);
+
+#if defined(USE_NNTP)
+  rc |= cs_register_variables(cs, SendVarsNntp, 0);
+#endif
+
+#if defined(USE_SMTP)
+  rc |= cs_register_variables(cs, SendVarsSmtp, 0);
+#endif
+
+  return rc;
 }

@@ -49,9 +49,9 @@
 #include "init.h"
 #include "color/lib.h"
 #include "history/lib.h"
+#include "index/lib.h"
 #include "notmuch/lib.h"
 #include "command_parse.h"
-#include "context.h"
 #include "functions.h"
 #include "keymap.h"
 #include "mutt_commands.h"
@@ -148,7 +148,7 @@ static void candidate(char *user, const char *src, char *dest, size_t dlen)
  */
 static int complete_all_nm_tags(const char *pt)
 {
-  struct Mailbox *m = ctx_mailbox(Context);
+  struct Mailbox *m_cur = get_current_mailbox();
   int tag_count_1 = 0;
   int tag_count_2 = 0;
 
@@ -157,10 +157,10 @@ static int complete_all_nm_tags(const char *pt)
   memset(Matches, 0, MatchesListsize);
   memset(Completed, 0, sizeof(Completed));
 
-  nm_db_longrun_init(m, false);
+  nm_db_longrun_init(m_cur, false);
 
   /* Work out how many tags there are. */
-  if (nm_get_all_tags(m, NULL, &tag_count_1) || (tag_count_1 == 0))
+  if (nm_get_all_tags(m_cur, NULL, &tag_count_1) || (tag_count_1 == 0))
     goto done;
 
   /* Free the old list, if any. */
@@ -175,11 +175,11 @@ static int complete_all_nm_tags(const char *pt)
   nm_tags[tag_count_1] = NULL;
 
   /* Get all the tags. */
-  if (nm_get_all_tags(m, nm_tags, &tag_count_2) || (tag_count_1 != tag_count_2))
+  if (nm_get_all_tags(m_cur, nm_tags, &tag_count_2) || (tag_count_1 != tag_count_2))
   {
     FREE(&nm_tags);
     nm_tags = NULL;
-    nm_db_longrun_done(m);
+    nm_db_longrun_done(m_cur);
     return -1;
   }
 
@@ -193,7 +193,7 @@ static int complete_all_nm_tags(const char *pt)
   Matches[NumMatched++] = UserTyped;
 
 done:
-  nm_db_longrun_done(m);
+  nm_db_longrun_done(m_cur);
   return 0;
 }
 #endif
@@ -312,7 +312,7 @@ static char *getmailname(void)
 static bool get_hostname(struct ConfigSet *cs)
 {
   const char *short_host = NULL;
-  struct utsname utsname;
+  struct utsname utsname = { 0 };
 
   const char *const c_hostname = cs_subset_string(NeoMutt->sub, "hostname");
   if (c_hostname)
@@ -544,7 +544,8 @@ int mutt_extract_token(struct Buffer *dest, struct Buffer *tok, TokenFlags flags
       mutt_file_fclose(&fp);
       int rc = filter_wait(pid);
       if (rc != 0)
-        mutt_debug(LL_DEBUG1, "backticks exited code %d for command: %s\n", rc, cmd);
+        mutt_debug(LL_DEBUG1, "backticks exited code %d for command: %s\n", rc,
+                   mutt_buffer_string(&cmd));
       FREE(&cmd.data);
 
       /* if we got output, make a new string consisting of the shell output
@@ -656,8 +657,7 @@ void mutt_opts_free(void)
   mutt_regexlist_free(&UnSubscribedLists);
 
   mutt_grouplist_free();
-  mutt_hash_free(&TagFormats);
-  mutt_hash_free(&TagTransforms);
+  driver_tags_cleanup();
 
   /* Lists of strings */
   mutt_list_free(&AlternativeOrderList);
@@ -736,8 +736,7 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
 #ifdef USE_LUA
   mutt_lua_init();
 #endif
-  TagTransforms = mutt_hash_new(64, MUTT_HASH_STRCASECMP);
-  TagFormats = mutt_hash_new(64, MUTT_HASH_NO_FLAGS);
+  driver_tags_init();
 
   menu_init();
 #ifdef USE_SIDEBAR
@@ -1014,7 +1013,7 @@ enum CommandResult mutt_parse_rc_buffer(struct Buffer *line,
     {
       if (mutt_str_equal(token->data, cmd[i].name))
       {
-        mutt_debug(LL_NOTIFY, "NT_COMMAND: %s\n", cmd[i].name);
+        mutt_debug(LL_DEBUG1, "NT_COMMAND: %s\n", cmd[i].name);
         rc = cmd[i].parse(token, line, cmd[i].data, err);
         if ((rc == MUTT_CMD_ERROR) || (rc == MUTT_CMD_FINISH))
           goto finish; /* Propagate return code */
@@ -1250,9 +1249,9 @@ int mutt_command_complete(char *buf, size_t buflen, int pos, int numtabs)
   else if (mutt_str_startswith(buf, "exec"))
   {
     const enum MenuType mtype = menu_get_current_type();
-    const struct Binding *menu = km_get_table(mtype);
-    if (!menu && (mtype != MENU_PAGER))
-      menu = OpGeneric;
+    const struct MenuFuncOp *funcs = km_get_table(mtype);
+    if (!funcs && (mtype != MENU_PAGER))
+      funcs = OpGeneric;
 
     pt++;
     /* first TAB. Collect all the matches */
@@ -1262,14 +1261,14 @@ int mutt_command_complete(char *buf, size_t buflen, int pos, int numtabs)
       mutt_str_copy(UserTyped, pt, sizeof(UserTyped));
       memset(Matches, 0, MatchesListsize);
       memset(Completed, 0, sizeof(Completed));
-      for (int num = 0; menu[num].name; num++)
-        candidate(UserTyped, menu[num].name, Completed, sizeof(Completed));
+      for (int num = 0; funcs[num].name; num++)
+        candidate(UserTyped, funcs[num].name, Completed, sizeof(Completed));
       /* try the generic menu */
-      if ((Completed[0] == '\0') && (mtype != MENU_PAGER))
+      if ((mtype != MENU_PAGER) && (mtype != MENU_GENERIC))
       {
-        menu = OpGeneric;
-        for (int num = 0; menu[num].name; num++)
-          candidate(UserTyped, menu[num].name, Completed, sizeof(Completed));
+        funcs = OpGeneric;
+        for (int num = 0; funcs[num].name; num++)
+          candidate(UserTyped, funcs[num].name, Completed, sizeof(Completed));
       }
       matches_ensure_morespace(NumMatched);
       Matches[NumMatched++] = UserTyped;
@@ -1314,7 +1313,8 @@ int mutt_label_complete(char *buf, size_t buflen, int numtabs)
   char *pt = buf;
   int spaces; /* keep track of the number of leading spaces on the line */
 
-  if (!Context || !Context->mailbox->label_hash)
+  struct Mailbox *m_cur = get_current_mailbox();
+  if (!m_cur || !m_cur->label_hash)
     return 0;
 
   SKIPWS(buf);
@@ -1330,7 +1330,7 @@ int mutt_label_complete(char *buf, size_t buflen, int numtabs)
     mutt_str_copy(UserTyped, buf, sizeof(UserTyped));
     memset(Matches, 0, MatchesListsize);
     memset(Completed, 0, sizeof(Completed));
-    while ((entry = mutt_hash_walk(Context->mailbox->label_hash, &state)))
+    while ((entry = mutt_hash_walk(m_cur->label_hash, &state)))
       candidate(UserTyped, entry->key.strkey, Completed, sizeof(Completed));
     matches_ensure_morespace(NumMatched);
     qsort(Matches, NumMatched, sizeof(char *), (sort_t) mutt_istr_cmp);
@@ -1482,6 +1482,8 @@ bool mutt_nm_tag_complete(char *buf, size_t buflen, int numtabs)
  * @param buf    Buffer for the result
  * @param buflen Length of the buffer
  * @param pos    Cursor position in the buffer
+ * @retval 1 Success
+ * @retval 0 Failure
  */
 int mutt_var_value_complete(char *buf, size_t buflen, int pos)
 {

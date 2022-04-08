@@ -34,6 +34,13 @@ ADDRESS_OBJS	= test/address/mutt_addr_cat.o \
 
 ARRAY_OBJS	= test/array/mutt_array_api.o
 
+ATOI_OBJS	= test/atoi/mutt_str_atoi.o \
+		  test/atoi/mutt_str_atol.o \
+		  test/atoi/mutt_str_atos.o \
+		  test/atoi/mutt_str_atoui.o \
+		  test/atoi/mutt_str_atoul.o \
+		  test/atoi/mutt_str_atoull.o
+
 ATTACH_OBJS	= test/attach/mutt_actx_add_attach.o \
 		  test/attach/mutt_actx_add_body.o \
 		  test/attach/mutt_actx_add_fp.o \
@@ -398,6 +405,7 @@ PATH_OBJS	= test/path/mutt_path_abbr_folder.o \
 
 PATTERN_OBJS	= pattern/pattern.o \
 		  test/pattern/comp.o \
+		  test/pattern/leak.o \
 		  test/pattern/dummy.o \
 		  test/pattern/extract.o
 
@@ -495,12 +503,6 @@ STRING_OBJS	= test/string/mutt_istr_equal.o \
 		  test/string/mutt_str_adjust.o \
 		  test/string/mutt_str_append_item.o \
 		  test/string/mutt_str_asprintf.o \
-		  test/string/mutt_str_atoi.o \
-		  test/string/mutt_str_atol.o \
-		  test/string/mutt_str_atos.o \
-		  test/string/mutt_str_atoui.o \
-		  test/string/mutt_str_atoul.o \
-		  test/string/mutt_str_atoull.o \
 		  test/string/mutt_str_cat.o \
 		  test/string/mutt_str_coll.o \
 		  test/string/mutt_str_copy.o \
@@ -553,26 +555,28 @@ URL_OBJS	= test/url/url_check_scheme.o \
 		  test/url/url_tostring.o
 
 BUILD_DIRS	= $(PWD)/test/account $(PWD)/test/address $(PWD)/test/array \
-		  $(PWD)/test/attach $(PWD)/test/base64 $(PWD)/test/body \
-		  $(PWD)/test/buffer $(PWD)/test/charset $(PWD)/test/compress \
-		  $(PWD)/test/config $(PWD)/test/date $(PWD)/test/email \
-		  $(PWD)/test/envelope $(PWD)/test/envlist $(PWD)/test/file \
-		  $(PWD)/test/filter $(PWD)/test/from $(PWD)/test/group \
-		  $(PWD)/test/gui $(PWD)/test/hash $(PWD)/test/history \
-		  $(PWD)/test/idna $(PWD)/test/list $(PWD)/test/logging \
-		  $(PWD)/test/mailbox $(PWD)/test/mapping $(PWD)/test/mbyte \
-		  $(PWD)/test/md5 $(PWD)/test/memory $(PWD)/test/neo $(PWD)/test/notmuch \
-		  $(PWD)/test/notify $(PWD)/test/parameter $(PWD)/test/parse \
-		  $(PWD)/test/path $(PWD)/test/pattern $(PWD)/test/pool \
-		  $(PWD)/test/prex $(PWD)/test/regex $(PWD)/test/rfc2047 \
-		  $(PWD)/test/rfc2231 $(PWD)/test/signal $(PWD)/test/slist \
-		  $(PWD)/test/sort $(PWD)/test/store $(PWD)/test/string \
-		  $(PWD)/test/tags $(PWD)/test/thread $(PWD)/test/url
+		  $(PWD)/test/atoi $(PWD)/test/attach $(PWD)/test/base64 \
+		  $(PWD)/test/body $(PWD)/test/buffer $(PWD)/test/charset \
+		  $(PWD)/test/compress $(PWD)/test/config $(PWD)/test/date \
+		  $(PWD)/test/email $(PWD)/test/envelope $(PWD)/test/envlist \
+		  $(PWD)/test/file $(PWD)/test/filter $(PWD)/test/from \
+		  $(PWD)/test/group $(PWD)/test/gui $(PWD)/test/hash \
+		  $(PWD)/test/history $(PWD)/test/idna $(PWD)/test/list \
+		  $(PWD)/test/logging $(PWD)/test/mailbox $(PWD)/test/mapping \
+		  $(PWD)/test/mbyte $(PWD)/test/md5 $(PWD)/test/memory \
+		  $(PWD)/test/neo $(PWD)/test/notify $(PWD)/test/notmuch \
+		  $(PWD)/test/parameter $(PWD)/test/parse $(PWD)/test/path \
+		  $(PWD)/test/pattern $(PWD)/test/pool $(PWD)/test/prex \
+		  $(PWD)/test/regex $(PWD)/test/rfc2047 $(PWD)/test/rfc2231 \
+		  $(PWD)/test/signal $(PWD)/test/slist $(PWD)/test/sort \
+		  $(PWD)/test/store $(PWD)/test/string $(PWD)/test/tags \
+		  $(PWD)/test/thread $(PWD)/test/url
 
 TEST_OBJS	= test/main.o test/common.o \
 		  $(ACCOUNT_OBJS) \
 		  $(ADDRESS_OBJS) \
 		  $(ARRAY_OBJS) \
+		  $(ATOI_OBJS) \
 		  $(ATTACH_OBJS) \
 		  $(BASE64_OBJS) \
 		  $(BODY_OBJS) \

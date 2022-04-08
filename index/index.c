@@ -256,15 +256,17 @@ static int index_color_observer(struct NotifyCallback *nc)
 
   struct EventColor *ev_c = nc->event_data;
 
-  const int c = ev_c->color;
+  const int cid = ev_c->cid;
 
-  bool simple = (c == MT_COLOR_INDEX_COLLAPSED) || (c == MT_COLOR_INDEX_DATE) ||
-                (c == MT_COLOR_INDEX_LABEL) || (c == MT_COLOR_INDEX_NUMBER) ||
-                (c == MT_COLOR_INDEX_SIZE) || (c == MT_COLOR_INDEX_TAGS);
+  // MT_COLOR_MAX is sent on `uncolor *`
+  bool simple = (cid == MT_COLOR_INDEX_COLLAPSED) ||
+                (cid == MT_COLOR_INDEX_DATE) || (cid == MT_COLOR_INDEX_LABEL) ||
+                (cid == MT_COLOR_INDEX_NUMBER) || (cid == MT_COLOR_INDEX_SIZE) ||
+                (cid == MT_COLOR_INDEX_TAGS) || (cid == MT_COLOR_MAX);
 
-  bool lists = (c == MT_COLOR_INDEX) || (c == MT_COLOR_INDEX_AUTHOR) ||
-               (c == MT_COLOR_INDEX_FLAGS) || (c == MT_COLOR_INDEX_SUBJECT) ||
-               (c == MT_COLOR_INDEX_TAG);
+  bool lists = (cid == MT_COLOR_INDEX) || (cid == MT_COLOR_INDEX_AUTHOR) ||
+               (cid == MT_COLOR_INDEX_FLAGS) || (cid == MT_COLOR_INDEX_SUBJECT) ||
+               (cid == MT_COLOR_INDEX_TAG) || (cid == MT_COLOR_MAX);
 
   // The changes aren't relevant to the index menu
   if (!simple && !lists)
@@ -278,8 +280,8 @@ static int index_color_observer(struct NotifyCallback *nc)
   if (!m)
     return 0;
 
-  // Colour deleted from a list
-  if ((nc->event_subtype == NT_COLOR_RESET) && lists)
+  // Colour added/deleted from a list
+  if (lists)
   {
     // Force re-caching of index colours
     for (int i = 0; i < m->msg_count; i++)
@@ -287,7 +289,7 @@ static int index_color_observer(struct NotifyCallback *nc)
       struct Email *e = m->emails[i];
       if (!e)
         break;
-      e->pair = 0;
+      e->attr_color = NULL;
     }
   }
 
@@ -320,6 +322,8 @@ static int index_config_observer(struct NotifyCallback *nc)
     OptNeedResort = true;
   if (flags & R_RESORT_INIT)
     OptResortInit = true;
+  if (!(flags & R_INDEX))
+    return 0;
 
   if (mutt_str_equal(ev_c->name, "reply_regex"))
   {
@@ -338,6 +342,28 @@ static int index_config_observer(struct NotifyCallback *nc)
     config_use_threads(ev_c->sub);
     mutt_debug(LL_DEBUG5, "config done\n");
   }
+
+  win->actions |= WA_RECALC;
+  return 0;
+}
+
+/**
+ * index_global_observer - Notification that a Global event occurred - Implements ::observer_t - @ingroup observer_api
+ */
+static int index_global_observer(struct NotifyCallback *nc)
+{
+  if ((nc->event_type != NT_GLOBAL) || !nc->global_data)
+    return -1;
+  if (nc->event_subtype != NT_GLOBAL_COMMAND)
+    return 0;
+
+  struct MuttWindow *win = nc->global_data;
+  struct MuttWindow *dlg = dialog_find(win);
+  if (!dlg)
+    return 0;
+
+  struct IndexSharedData *shared = dlg->wdata;
+  mutt_check_rescore(shared->mailbox);
 
   return 0;
 }
@@ -385,7 +411,7 @@ static int index_score_observer(struct NotifyCallback *nc)
       break;
 
     mutt_score_message(m, e, true);
-    e->pair = 0; // Force recalc of colour
+    e->attr_color = NULL; // Force recalc of colour
   }
 
   mutt_debug(LL_DEBUG5, "score done\n");
@@ -431,6 +457,7 @@ static int index_window_observer(struct NotifyCallback *nc)
   notify_observer_remove(NeoMutt->notify, index_attach_observer, win);
   notify_observer_remove(NeoMutt->notify, index_color_observer, win);
   notify_observer_remove(NeoMutt->notify, index_config_observer, win);
+  notify_observer_remove(NeoMutt->notify, index_global_observer, win);
   notify_observer_remove(menu->notify, index_menu_observer, win);
   notify_observer_remove(NeoMutt->notify, index_score_observer, win);
   notify_observer_remove(NeoMutt->notify, index_subjrx_observer, win);
@@ -446,20 +473,75 @@ static int index_window_observer(struct NotifyCallback *nc)
  */
 struct MuttWindow *index_window_new(struct IndexPrivateData *priv)
 {
-  struct MuttWindow *win = menu_new_window(MENU_MAIN, NeoMutt->sub);
+  struct MuttWindow *win = menu_new_window(MENU_INDEX, NeoMutt->sub);
 
   struct Menu *menu = win->wdata;
   menu->mdata = priv;
+  menu->mdata_free = NULL; // Menu doesn't own the data
   priv->menu = menu;
 
   notify_observer_add(NeoMutt->notify, NT_ALTERN, index_altern_observer, win);
   notify_observer_add(NeoMutt->notify, NT_ATTACH, index_attach_observer, win);
   notify_observer_add(NeoMutt->notify, NT_COLOR, index_color_observer, win);
   notify_observer_add(NeoMutt->notify, NT_CONFIG, index_config_observer, win);
+  notify_observer_add(NeoMutt->notify, NT_GLOBAL, index_global_observer, win);
   notify_observer_add(menu->notify, NT_MENU, index_menu_observer, win);
   notify_observer_add(NeoMutt->notify, NT_SCORE, index_score_observer, win);
   notify_observer_add(NeoMutt->notify, NT_SUBJRX, index_subjrx_observer, win);
   notify_observer_add(win->notify, NT_WINDOW, index_window_observer, win);
 
   return win;
+}
+
+/**
+ * get_current_mailbox - Get the current Mailbox
+ * @retval ptr Current Mailbox
+ *
+ * Search for the last (most recent) dialog that has an Index.
+ * Then return the Mailbox from its shared data.
+ */
+struct Mailbox *get_current_mailbox(void)
+{
+  if (!AllDialogsWindow)
+    return NULL;
+
+  struct MuttWindow *np = NULL;
+  TAILQ_FOREACH_REVERSE(np, &AllDialogsWindow->children, MuttWindowList, entries)
+  {
+    struct MuttWindow *win = window_find_child(np, WT_DLG_INDEX);
+    if (win)
+    {
+      struct IndexSharedData *shared = win->wdata;
+      return shared->mailbox;
+    }
+  }
+
+  return NULL;
+}
+
+/**
+ * get_current_menu - Get the current Menu
+ * @retval ptr Current Menu
+ *
+ * Search for the last (most recent) dialog that has an Index.
+ * Then return the Menu from its private data.
+ */
+struct Menu *get_current_menu(void)
+{
+  if (!AllDialogsWindow)
+    return NULL;
+
+  struct MuttWindow *np = NULL;
+  TAILQ_FOREACH_REVERSE(np, &AllDialogsWindow->children, MuttWindowList, entries)
+  {
+    struct MuttWindow *dlg = window_find_child(np, WT_DLG_INDEX);
+    if (dlg)
+    {
+      struct MuttWindow *panel_index = window_find_child(dlg, WT_INDEX);
+      struct IndexPrivateData *priv = panel_index->wdata;
+      return priv->menu;
+    }
+  }
+
+  return NULL;
 }

@@ -13,6 +13,7 @@ CFLAGS_FOR_BUILD=	@CFLAGS_FOR_BUILD@ $(EXTRA_CFLAGS_FOR_BUILD)
 LDFLAGS_FOR_BUILD=	@LDFLAGS_FOR_BUILD@ $(EXTRA_LDFLAGS_FOR_BUILD)
 
 PWD=		@PWD@
+SH?=		sh
 AR=		@AR@
 CC=		@CC@
 CPP=		@CPP@
@@ -62,18 +63,20 @@ default:	all
 ###############################################################################
 # neomutt
 NEOMUTT=	neomutt$(EXEEXT)
-NEOMUTTOBJS=	alternates.o browser.o commands.o command_parse.o \
-		complete.o conststrings.o context.o copy.o dlg_postpone.o \
-		editmsg.o enriched.o enter.o flags.o functions.o git_ver.o \
-		handler.o hdrline.o help.o hook.o icommands.o init.o \
-		keymap.o mailcap.o maillist.o main.o muttlib.o mutt_account.o \
-		mutt_body.o mutt_commands.o mutt_config.o \
-		mutt_header.o mutt_history.o mutt_logging.o mutt_mailbox.o \
-		mutt_signal.o mutt_socket.o mutt_thread.o mx.o \
-		myvar.o opcodes.o postpone.o \
-		recvcmd.o resize.o rfc3676.o score.o \
-		sort.o status.o subjectrx.o system.o version.o
+NEOMUTTOBJS=	alternates.o commands.o command_parse.o complete.o \
+		conststrings.o context.o copy.o dlg_postpone.o editmsg.o \
+		enriched.o flags.o functions.o git_ver.o handler.o \
+		hdrline.o help.o hook.o icommands.o init.o keymap.o mailcap.o \
+		maillist.o main.o muttlib.o mutt_account.o mutt_body.o \
+		mutt_commands.o mutt_config.o mutt_header.o mutt_history.o \
+		mutt_logging.o mutt_mailbox.o mutt_signal.o mutt_socket.o \
+		mutt_thread.o mx.o myvar.o opcodes.o postpone.o recvcmd.o \
+		resize.o rfc3676.o score.o sort.o status.o subjectrx.o \
+		system.o version.o
 
+@if !HAVE_TIMEGM
+NEOMUTTOBJS+=	timegm.o
+@endif
 @if !HAVE_WCSCASECMP
 NEOMUTTOBJS+=	wcscasecmp.o
 @endif
@@ -107,8 +110,8 @@ $(PWD)/address:
 # libalias
 LIBALIAS=	libalias.a
 LIBALIASOBJS=	alias/alias.o alias/array.o alias/commands.o alias/config.o \
-		alias/dlgalias.o alias/dlgquery.o alias/gui.o alias/reverse.o \
-		alias/sort.o
+		alias/dlg_alias.o alias/dlg_query.o alias/functions.o \
+		alias/gui.o alias/reverse.o alias/sort.o
 CLEANFILES+=	$(LIBALIAS) $(LIBALIASOBJS)
 ALLOBJS+=	$(LIBALIASOBJS)
 
@@ -121,8 +124,9 @@ $(PWD)/alias:
 ###############################################################################
 # libattach
 LIBATTACH=	libattach.a
-LIBATTACHOBJS=	attach/attachments.o attach/dlg_attach.o attach/mutt_attach.o \
-		attach/recvattach.o
+LIBATTACHOBJS=	attach/attach.o attach/attachments.o attach/dlg_attach.o \
+		attach/functions.o attach/lib.o attach/mutt_attach.o \
+		attach/private_data.o attach/recvattach.o
 CLEANFILES+=	$(LIBATTACH) $(LIBATTACHOBJS)
 ALLOBJS+=	$(LIBATTACHOBJS)
 
@@ -136,7 +140,7 @@ $(PWD)/attach:
 # libautocrypt
 @if USE_AUTOCRYPT
 LIBAUTOCRYPT=	libautocrypt.a
-LIBAUTOCRYPTOBJS=autocrypt/autocrypt.o autocrypt/dlgautocrypt.o \
+LIBAUTOCRYPTOBJS=autocrypt/autocrypt.o autocrypt/dlg_autocrypt.o \
 		 autocrypt/config.o autocrypt/db.o autocrypt/gpgme.o \
 		 autocrypt/schema.o
 CLEANFILES+=	$(LIBAUTOCRYPT) $(LIBAUTOCRYPTOBJS)
@@ -163,10 +167,27 @@ $(PWD)/bcache:
 	$(MKDIR_P) $(PWD)/bcache
 
 ###############################################################################
+# libbrowser
+LIBBROWSER=	libbrowser.a
+LIBBROWSEROBJS=	browser/browser.o browser/sort.o
+CLEANFILES+=	$(LIBBROWSER) $(LIBBROWSEROBJS)
+ALLOBJS+=	$(LIBBROWSEROBJS)
+
+$(LIBBROWSER): $(PWD)/browser $(LIBBROWSEROBJS)
+	$(AR) cr $@ $(LIBBROWSEROBJS)
+	$(RANLIB) $@
+$(PWD)/browser:
+	$(MKDIR_P) $(PWD)/browser
+
+###############################################################################
 # libcolor
 LIBCOLOR=	libcolor.a
-LIBCOLOROBJS=	color/color.o color/command.o color/notify.o color/quoted.o \
+LIBCOLOROBJS=	color/ansi.o color/attr.o color/color.o color/command.o \
+		color/curses.o color/merged.o color/notify.o color/quoted.o \
 		color/regex.o color/simple.o
+@if USE_DEBUG_COLOR
+LIBCOLOROBJS+=	color/debug.o
+@endif
 CLEANFILES+=	$(LIBCOLOR) $(LIBCOLOROBJS)
 ALLOBJS+=	$(LIBCOLOROBJS)
 
@@ -194,8 +215,7 @@ $(PWD)/compmbox:
 LIBCOMPOSE=	libcompose.a
 LIBCOMPOSEOBJS=	compose/attach.o compose/attach_data.o compose/cbar.o \
 		compose/cbar_data.o compose/compose.o compose/config.o \
-		compose/env_data.o compose/envelope.o compose/functions.o \
-		compose/shared_data.o
+		compose/functions.o compose/shared_data.o
 
 CLEANFILES+=	$(LIBCOMPOSE) $(LIBCOMPOSEOBJS)
 ALLOBJS+=	$(LIBCOMPOSEOBJS)
@@ -256,7 +276,7 @@ LIBCONNOBJS=	conn/config.o conn/connaccount.o conn/getdomain.o conn/raw.o \
 LIBCONNOBJS+=	conn/sasl.o
 @endif
 @if USE_SSL
-LIBCONNOBJS+=	conn/dlgverifycert.o
+LIBCONNOBJS+=	conn/dlg_verifycert.o
 @endif
 @if USE_SSL_GNUTLS
 LIBCONNOBJS+=	conn/gnutls.o
@@ -279,7 +299,7 @@ $(PWD)/conn:
 ###############################################################################
 # libcore
 LIBCORE=	libcore.a
-LIBCOREOBJS=	core/account.o core/mailbox.o core/neomutt.o
+LIBCOREOBJS=	core/account.o core/dispatcher.o core/mailbox.o core/neomutt.o
 CLEANFILES+=	$(LIBCORE) $(LIBCOREOBJS)
 ALLOBJS+=	$(LIBCOREOBJS)
 
@@ -293,6 +313,9 @@ $(PWD)/core:
 # libdebug
 @if HAVE_LIBUNWIND
 LIBDEBUGOBJS+=	debug/backtrace.o
+@endif
+@if USE_DEBUG_COLOR
+LIBDEBUGOBJS+=	debug/pager.o
 @endif
 @if USE_DEBUG_EMAIL
 LIBDEBUGOBJS+=	debug/email.o
@@ -309,7 +332,7 @@ LIBDEBUGOBJS+=	debug/parse_test.o
 @if USE_DEBUG_WINDOW
 LIBDEBUGOBJS+=	debug/window.o
 @endif
-@if HAVE_LIBUNWIND || USE_DEBUG_GRAPHVIZ || USE_DEBUG_NOTIFY || USE_DEBUG_PARSE_TEST || USE_DEBUG_WINDOW
+@if HAVE_LIBUNWIND || USE_DEBUG_COLOR || USE_DEBUG_EMAIL || USE_DEBUG_GRAPHVIZ || USE_DEBUG_NOTIFY || USE_DEBUG_PARSE_TEST || USE_DEBUG_WINDOW
 LIBDEBUG=	libdebug.a
 CLEANFILES+=	$(LIBDEBUG) $(LIBDEBUGOBJS)
 ALLOBJS+=	$(LIBDEBUGOBJS)
@@ -324,7 +347,7 @@ $(PWD)/debug:
 ###############################################################################
 # libemail
 LIBEMAIL=	libemail.a
-LIBEMAILOBJS=	email/attach.o email/body.o email/email.o email/envelope.o \
+LIBEMAILOBJS=	email/body.o email/email.o email/envelope.o \
 		email/from.o email/globals.o email/mime.o email/parameter.o \
 		email/parse.o email/rfc2047.o email/rfc2231.o email/tags.o \
 		email/thread.o email/url.o
@@ -338,11 +361,37 @@ $(PWD)/email:
 	$(MKDIR_P) $(PWD)/email
 
 ###############################################################################
+# libenter
+LIBENTER=	libenter.a
+LIBENTEROBJS=	enter/enter.o enter/state.o
+CLEANFILES+=	$(LIBENTER) $(LIBENTEROBJS)
+ALLOBJS+=	$(LIBENTEROBJS)
+
+$(LIBENTER): $(PWD)/enter $(LIBENTEROBJS)
+	$(AR) cr $@ $(LIBENTEROBJS)
+	$(RANLIB) $@
+$(PWD)/enter:
+	$(MKDIR_P) $(PWD)/enter
+
+###############################################################################
+# libenvelope
+LIBENVELOPE=	libenvelope.a
+LIBENVELOPEOBJS= envelope/functions.o envelope/wdata.o envelope/window.o
+CLEANFILES+=	$(LIBENVELOPE) $(LIBENVELOPEOBJS)
+ALLOBJS+=	$(LIBENVELOPEOBJS)
+
+$(LIBENVELOPE): $(PWD)/envelope $(LIBENVELOPEOBJS)
+	$(AR) cr $@ $(LIBENVELOPEOBJS)
+	$(RANLIB) $@
+$(PWD)/envelope:
+	$(MKDIR_P) $(PWD)/envelope
+
+###############################################################################
 # libgui
 LIBGUI=		libgui.a
-LIBGUIOBJS=	gui/curs_lib.o gui/dialog.o gui/msgwin.o gui/mutt_curses.o \
-		gui/mutt_window.o gui/reflow.o gui/rootwin.o gui/sbar.o \
-		gui/simple.o gui/terminal.o
+LIBGUIOBJS=	gui/curs_lib.o gui/dialog.o gui/global.o gui/msgwin.o \
+		gui/mutt_curses.o gui/mutt_window.o gui/reflow.o gui/rootwin.o \
+		gui/sbar.o gui/simple.o gui/terminal.o
 CLEANFILES+=	$(LIBGUI) $(LIBGUIOBJS)
 ALLOBJS+=	$(LIBGUIOBJS)
 
@@ -384,7 +433,7 @@ $(PWD)/helpbar:
 ###############################################################################
 # libhistory
 LIBHISTORY=	libhistory.a
-LIBHISTORYOBJS=	history/config.o history/dlghistory.o history/history.o
+LIBHISTORYOBJS=	history/config.o history/dlg_history.o history/history.o
 CLEANFILES+=	$(LIBHISTORY) $(LIBHISTORYOBJS)
 ALLOBJS+=	$(LIBHISTORYOBJS)
 
@@ -464,8 +513,9 @@ $(PWD)/mbox:
 ###############################################################################
 # libmenu
 LIBMENU=	libmenu.a
-LIBMENUOBJS=	menu/config.o menu/draw.o menu/menu.o menu/move.o \
-		menu/observer.o menu/type.o menu/window.o
+LIBMENUOBJS=	menu/config.o menu/draw.o menu/functions.o menu/menu.o \
+		menu/move.o menu/observer.o menu/tagging.o menu/type.o \
+		menu/window.o
 CLEANFILES+=	$(LIBMENU) $(LIBMENUOBJS)
 ALLOBJS+=	$(LIBMENUOBJS)
 
@@ -478,12 +528,14 @@ $(PWD)/menu:
 ###############################################################################
 # libmutt
 LIBMUTT=	libmutt.a
-LIBMUTTOBJS=	mutt/base64.o mutt/buffer.o mutt/charset.o mutt/date.o \
-		mutt/envlist.o mutt/exit.o mutt/file.o mutt/filter.o \
-		mutt/hash.o mutt/list.o mutt/logging.o mutt/mapping.o \
-		mutt/mbyte.o mutt/md5.o mutt/memory.o mutt/notify.o \
-		mutt/path.o mutt/pool.o mutt/prex.o mutt/qsort_r.o mutt/random.o \
-		mutt/regex.o mutt/signal.o mutt/slist.o mutt/state.o mutt/string.o
+LIBMUTTOBJS=	mutt/atoi.o mutt/base64.o mutt/buffer.o mutt/charset.o \
+		mutt/date.o mutt/envlist.o mutt/exit.o mutt/file.o \
+		mutt/filter.o mutt/hash.o mutt/list.o mutt/logging.o \
+		mutt/mapping.o mutt/mbyte.o mutt/md5.o mutt/memory.o \
+		mutt/notify.o mutt/path.o mutt/pool.o mutt/prex.o \
+		mutt/qsort_r.o mutt/random.o mutt/regex.o mutt/signal.o \
+		mutt/slist.o mutt/state.o mutt/string.o
+
 CLEANFILES+=	$(LIBMUTT) $(LIBMUTTOBJS)
 ALLOBJS+=	$(LIBMUTTOBJS)
 
@@ -499,16 +551,16 @@ LIBNCRYPT=	libncrypt.a
 LIBNCRYPTOBJS=	ncrypt/config.o ncrypt/crypt.o ncrypt/cryptglue.o \
 		ncrypt/crypt_mod.o
 @if HAVE_GPGME
-LIBNCRYPTOBJS+=	ncrypt/crypt_gpgme.o ncrypt/dlggpgme.o ncrypt/crypt_mod_pgp_gpgme.o \
+LIBNCRYPTOBJS+=	ncrypt/crypt_gpgme.o ncrypt/dlg_gpgme.o ncrypt/crypt_mod_pgp_gpgme.o \
 		ncrypt/crypt_mod_smime_gpgme.o
 @endif
 @if HAVE_PGP
-LIBNCRYPTOBJS+=	ncrypt/crypt_mod_pgp_classic.o ncrypt/dlgpgp.o ncrypt/gnupgparse.o \
+LIBNCRYPTOBJS+=	ncrypt/crypt_mod_pgp_classic.o ncrypt/dlg_pgp.o ncrypt/gnupgparse.o \
 		ncrypt/pgp.o ncrypt/pgpinvoke.o ncrypt/pgpkey.o ncrypt/pgplib.o \
 		ncrypt/pgpmicalg.o ncrypt/pgppacket.o
 @endif
 @if HAVE_SMIME
-LIBNCRYPTOBJS+=	ncrypt/crypt_mod_smime_classic.o ncrypt/dlgsmime.o ncrypt/smime.o
+LIBNCRYPTOBJS+=	ncrypt/crypt_mod_smime_classic.o ncrypt/dlg_smime.o ncrypt/smime.o
 @endif
 CLEANFILES+=	$(LIBNCRYPT) $(LIBNCRYPTOBJS)
 ALLOBJS+=	$(LIBNCRYPTOBJS)
@@ -568,7 +620,7 @@ $(PWD)/pager:
 ###############################################################################
 # libpattern
 LIBPATTERN=	libpattern.a
-LIBPATTERNOBJS=	pattern/compile.o pattern/config.o pattern/dlgpattern.o \
+LIBPATTERNOBJS=	pattern/compile.o pattern/config.o pattern/dlg_pattern.o \
 		pattern/exec.o pattern/flags.o pattern/pattern.o
 CLEANFILES+=	$(LIBPATTERN) $(LIBPATTERNOBJS)
 ALLOBJS+=	$(LIBPATTERNOBJS)
@@ -711,14 +763,16 @@ $(ALLOBJS):
 
 # The order of these libraries depends on their dependencies.
 # The libraries with the most dependencies will come first.
-MUTTLIBS+=	$(LIBINDEX) $(LIBPAGER) $(LIBAUTOCRYPT) $(LIBPOP) $(LIBNNTP) \
-		$(LIBCOMPMBOX) $(LIBSTORE) $(LIBPATTERN) $(LIBPROGRESS) \
-		$(LIBQUESTION) $(LIBMENU) $(LIBCOLOR) $(LIBGUI) $(LIBHELPBAR) \
-		$(LIBMBOX) $(LIBNOTMUCH) $(LIBATTACH) $(LIBMAILDIR) \
-		$(LIBNCRYPT) $(LIBIMAP) $(LIBCONN) $(LIBHCACHE) $(LIBCOMPRESS) \
-		$(LIBSIDEBAR) $(LIBBCACHE) $(LIBHISTORY) $(LIBALIAS) \
-		$(LIBSEND) $(LIBCOMPOSE) $(LIBCORE) $(LIBCONFIG) $(LIBEMAIL) \
-		$(LIBADDRESS) $(LIBDEBUG) $(LIBMUTT)
+MUTTLIBS+=	$(LIBINDEX) $(LIBPAGER) $(LIBAUTOCRYPT) $(LIBPOP) \
+		$(LIBBROWSER) $(LIBNNTP) $(LIBCOMPMBOX) $(LIBSTORE) \
+		$(LIBPROGRESS) $(LIBQUESTION) $(LIBALIAS) $(LIBSEND) \
+		$(LIBCOMPOSE) $(LIBATTACH) $(LIBGUI) $(LIBENTER) \
+		$(LIBPATTERN) $(LIBMENU) $(LIBCOLOR) $(LIBENVELOPE) \
+		$(LIBHELPBAR) $(LIBMBOX) $(LIBNOTMUCH) $(LIBMAILDIR) \
+		$(LIBNCRYPT) $(LIBIMAP) $(LIBCONN) $(LIBHCACHE) \
+		$(LIBCOMPRESS) $(LIBSIDEBAR) $(LIBBCACHE) $(LIBHISTORY) \
+		$(LIBCORE) $(LIBCONFIG) $(LIBEMAIL) $(LIBADDRESS) $(LIBDEBUG) \
+		$(LIBMUTT)
 
 # neomutt
 $(NEOMUTT): $(GENERATED) $(NEOMUTTOBJS) $(MUTTLIBS)
@@ -785,7 +839,7 @@ hcache/hcversion.h:	$(SRCDIR)/address/address.h $(SRCDIR)/email/body.h \
 	echo '#include "email/parameter.h"'; \
 	echo '#include "mutt/buffer.h"'; \
 	echo '#include "mutt/list.h"';) | $(CPP) $(CFLAGS) - | \
-	sh $(SRCDIR)/hcache/hcachever.sh hcache/hcversion.h
+	$(SH) $(SRCDIR)/hcache/hcachever.sh hcache/hcversion.h
 
 ###############################################################################
 # coverage
@@ -801,7 +855,9 @@ coverage: all test
 	  --directory email \
 	  --directory mutt \
 	  --directory notmuch \
-	  --directory store
+	  --directory pattern \
+	  --directory store \
+	  --exclude '*/include/*'
 	-genhtml --output-directory coverage --frames coverage.info
 	lcov --list coverage.info
 @endif
@@ -818,6 +874,9 @@ coverage: all test
 @include @srcdir@/docs/Makefile.autosetup
 @if ENABLE_UNIT_TESTS
 @include @srcdir@/test/Makefile.autosetup
+@endif
+@if ENABLE_FUZZ_TESTS
+@include @srcdir@/fuzz/Makefile.autosetup
 @endif
 
 # vim: set ts=8 noexpandtab:

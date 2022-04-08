@@ -103,7 +103,7 @@ enum UseThreads mutt_thread_style(void)
 /**
  * get_use_threads_str - Convert UseThreads enum to string
  * @param value Value to convert
- * @retval string form of value
+ * @retval ptr String form of value
  */
 const char *get_use_threads_str(enum UseThreads value)
 {
@@ -351,7 +351,7 @@ static void calculate_visibility(struct MuttThread *tree, int *max_depth)
 /**
  * mutt_thread_ctx_init - Initialize a threading context
  * @param m     Current mailbox
- * @retval tctx Threading context
+ * @retval ptr Threading context
  */
 struct ThreadsContext *mutt_thread_ctx_init(struct Mailbox *m)
 {
@@ -1453,7 +1453,7 @@ int mutt_traverse_thread(struct Email *e_cur, MuttThreadFlags flag)
 
   if (flag & (MUTT_THREAD_COLLAPSE | MUTT_THREAD_UNCOLLAPSE))
   {
-    e_cur->pair = 0; /* force index entry's color to be re-evaluated */
+    e_cur->attr_color = NULL; /* force index entry's color to be re-evaluated */
     e_cur->collapsed = flag & MUTT_THREAD_COLLAPSE;
     if (e_cur->vnum != -1)
     {
@@ -1487,7 +1487,7 @@ int mutt_traverse_thread(struct Email *e_cur, MuttThreadFlags flag)
     {
       if (flag & (MUTT_THREAD_COLLAPSE | MUTT_THREAD_UNCOLLAPSE))
       {
-        e_cur->pair = 0; /* force index entry's color to be re-evaluated */
+        e_cur->attr_color = NULL; /* force index entry's color to be re-evaluated */
         e_cur->collapsed = flag & MUTT_THREAD_COLLAPSE;
         if (!e_root && e_cur->visible)
         {

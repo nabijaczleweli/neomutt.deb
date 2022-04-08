@@ -247,8 +247,7 @@ bail:
  */
 static void parse_content_disposition(const char *s, struct Body *ct)
 {
-  struct ParameterList pl;
-  TAILQ_INIT(&pl);
+  struct ParameterList pl = TAILQ_HEAD_INITIALIZER(pl);
 
   if (mutt_istr_startswith(s, "inline"))
     ct->disposition = DISP_INLINE;
@@ -268,7 +267,7 @@ static void parse_content_disposition(const char *s, struct Body *ct)
       mutt_str_replace(&ct->filename, s);
     s = mutt_param_get(&pl, "name");
     if (s)
-      ct->form_name = mutt_str_dup(s);
+      mutt_str_replace(&ct->form_name, s);
     mutt_param_free(&pl);
   }
 }
@@ -301,7 +300,7 @@ static void parse_content_language(const char *s, struct Body *ct)
     return;
 
   mutt_debug(LL_DEBUG2, "RFC8255 >> Content-Language set to %s\n", s);
-  ct->language = mutt_str_dup(s);
+  mutt_str_replace(&ct->language, s);
 }
 
 /**
@@ -463,7 +462,7 @@ void mutt_parse_content_type(const char *s, struct Body *ct)
       ; // do nothing
 
     *pc = '\0';
-    ct->subtype = mutt_str_dup(subtype);
+    mutt_str_replace(&ct->subtype, subtype);
   }
 
   /* Finally, get the major type */
@@ -471,7 +470,7 @@ void mutt_parse_content_type(const char *s, struct Body *ct)
 
 #ifdef SUN_ATTACHMENT
   if (mutt_istr_equal("x-sun-attachment", s))
-    ct->subtype = mutt_str_dup("x-sun-attachment");
+    mutt_str_replace(&ct->subtype, "x-sun-attachment");
 #endif
 
   if (ct->type == TYPE_OTHER)
@@ -592,7 +591,7 @@ cleanup:
 /**
  * rfc2369_first_mailto - Extract the first mailto: URL from a RFC2369 list
  * @param body Body of the header
- * @return First mailto: URL found, or NULL if none was found
+ * @retval ptr First mailto: URL found, or NULL if none was found
  */
 static char *rfc2369_first_mailto(const char *body)
 {
@@ -656,6 +655,26 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, const char *na
         mutt_addrlist_parse(&env->from, body);
         matched = true;
       }
+#ifdef USE_AUTOCRYPT
+      else if (mutt_istr_equal(name + 1, "utocrypt"))
+      {
+        const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
+        if (c_autocrypt)
+        {
+          env->autocrypt = parse_autocrypt(env->autocrypt, body);
+          matched = true;
+        }
+      }
+      else if (mutt_istr_equal(name + 1, "utocrypt-gossip"))
+      {
+        const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
+        if (c_autocrypt)
+        {
+          env->autocrypt_gossip = parse_autocrypt(env->autocrypt_gossip, body);
+          matched = true;
+        }
+      }
+#endif
       break;
 
     case 'b':
@@ -699,11 +718,9 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, const char *na
           {
             if (e)
             {
-              int rc = mutt_str_atol(body, (long *) &e->body->length);
-              if ((rc < 0) || (e->body->length < 0))
-                e->body->length = -1;
-              if (e->body->length > CONTENT_TOO_BIG)
-                e->body->length = CONTENT_TOO_BIG;
+              unsigned long len = 0;
+              e->body->length =
+                  mutt_str_atoul(body, &len) ? MIN(len, CONTENT_TOO_BIG) : -1;
             }
             matched = true;
           }
@@ -786,10 +803,9 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, const char *na
       {
         if (e)
         {
-          /* HACK - neomutt has, for a very short time, produced negative
-           * Lines header values.  Ignore them.  */
-          if ((mutt_str_atoi(body, &e->lines) < 0) || (e->lines < 0))
-            e->lines = 0;
+          unsigned int ui = 0; // we don't want a negative number of lines
+          mutt_str_atoui(body, &ui);
+          e->lines = ui;
         }
 
         matched = true;
@@ -976,26 +992,6 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, const char *na
         mutt_addrlist_parse(&env->to, body);
         matched = true;
       }
-#ifdef USE_AUTOCRYPT
-      else if (mutt_istr_equal(name + 1, "utocrypt"))
-      {
-        const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
-        if (c_autocrypt)
-        {
-          env->autocrypt = parse_autocrypt(env->autocrypt, body);
-          matched = true;
-        }
-      }
-      else if (mutt_istr_equal(name + 1, "utocrypt-gossip"))
-      {
-        const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
-        if (c_autocrypt)
-        {
-          env->autocrypt_gossip = parse_autocrypt(env->autocrypt_gossip, body);
-          matched = true;
-        }
-      }
-#endif
       break;
 
     case 'x':
@@ -1216,7 +1212,7 @@ struct Envelope *mutt_rfc822_read_header(FILE *fp, struct Email *e, bool user_hd
         continue;
       }
 
-      (void) fseeko(fp, loc, SEEK_SET);
+      (void) mutt_file_seek(fp, loc, SEEK_SET);
       break; /* end of header */
     }
 
@@ -1338,6 +1334,7 @@ struct Body *mutt_read_mime_header(FILE *fp, bool digest)
   char *c = NULL;
   size_t linelen = 1024;
   char *line = mutt_mem_malloc(linelen);
+  bool matched = false;
 
   p->hdr_offset = ftello(fp);
 
@@ -1381,6 +1378,23 @@ struct Body *mutt_read_mime_header(FILE *fp, bool digest)
         mutt_str_replace(&p->description, c);
         rfc2047_decode(&p->description);
       }
+      else if (mutt_istr_equal("id", line + plen))
+      {
+        // strip <angle braces> from Content-ID: header
+        char *id = c;
+        int cid_len = mutt_str_len(c);
+        if (cid_len > 2)
+        {
+          if (id[0] == '<')
+          {
+            id++;
+            cid_len--;
+          }
+          if (id[cid_len - 1] == '>')
+            id[cid_len - 1] = '\0';
+        }
+        mutt_param_set(&p->parameter, "content-id", id);
+      }
     }
 #ifdef SUN_ATTACHMENT
     else if ((plen = mutt_istr_startswith(line, "x-sun-")))
@@ -1401,7 +1415,9 @@ struct Body *mutt_read_mime_header(FILE *fp, bool digest)
     else
     {
       if (mutt_rfc822_parse_line(env, NULL, line, c, false, false, false))
-        p->mime_headers = env;
+      {
+        matched = true;
+      }
     }
   }
   p->offset = ftello(fp); /* Mark the start of the real data */
@@ -1412,10 +1428,15 @@ struct Body *mutt_read_mime_header(FILE *fp, bool digest)
 
   FREE(&line);
 
-  if (p->mime_headers)
+  if (matched)
+  {
+    p->mime_headers = env;
     rfc2047_decode_envelope(p->mime_headers);
+  }
   else
+  {
     mutt_env_free(&env);
+  }
 
   return p;
 }
@@ -1468,7 +1489,10 @@ static void parse_part(FILE *fp, struct Body *b, int *counter)
 #endif
         bound = mutt_param_get(&b->parameter, "boundary");
 
-      fseeko(fp, b->offset, SEEK_SET);
+      if (!mutt_file_seek(fp, b->offset, SEEK_SET))
+      {
+        goto bail;
+      }
       b->parts = parse_multipart(fp, bound, b->offset + b->length,
                                  mutt_istr_equal("digest", b->subtype), counter);
       break;
@@ -1477,7 +1501,10 @@ static void parse_part(FILE *fp, struct Body *b, int *counter)
       if (!b->subtype)
         break;
 
-      fseeko(fp, b->offset, SEEK_SET);
+      if (!mutt_file_seek(fp, b->offset, SEEK_SET))
+      {
+        goto bail;
+      }
       if (mutt_is_message_type(b->type, b->subtype))
         b->parts = rfc822_parse_message(fp, b, counter);
       else if (mutt_istr_equal(b->subtype, "external-body"))
@@ -1566,11 +1593,7 @@ static struct Body *parse_multipart(FILE *fp, const char *boundary,
         if (mutt_param_get(&new_body->parameter, "content-lines"))
         {
           int lines = 0;
-          if (mutt_str_atoi(
-                  mutt_param_get(&new_body->parameter, "content-lines"), &lines) < 0)
-          {
-            lines = 0;
-          }
+          mutt_str_atoi(mutt_param_get(&new_body->parameter, "content-lines"), &lines);
           for (; lines > 0; lines--)
             if ((ftello(fp) >= end_off) || !fgets(buf, sizeof(buf), fp))
               break;
@@ -1648,15 +1671,15 @@ static struct Body *rfc822_parse_message(FILE *fp, struct Body *parent, int *cou
 
 /**
  * mutt_parse_mailto - Parse a mailto:// url
- * @param[in]  e    Envelope to fill
+ * @param[in]  env  Envelope to fill
  * @param[out] body Body to
  * @param[in]  src  String to parse
  * @retval true  Success
  * @retval false Error
  */
-bool mutt_parse_mailto(struct Envelope *e, char **body, const char *src)
+bool mutt_parse_mailto(struct Envelope *env, char **body, const char *src)
 {
-  if (!e || !src)
+  if (!env || !src)
     return false;
 
   struct Url *url = url_parse(src);
@@ -1670,7 +1693,7 @@ bool mutt_parse_mailto(struct Envelope *e, char **body, const char *src)
     return false;
   }
 
-  mutt_addrlist_parse(&e->to, url->path);
+  mutt_addrlist_parse(&env->to, url->path);
 
   struct UrlQuery *np;
   STAILQ_FOREACH(np, &url->query_strings, entries)
@@ -1702,14 +1725,14 @@ bool mutt_parse_mailto(struct Envelope *e, char **body, const char *src)
         mutt_str_asprintf(&scratch, "%s: %s", tag, value);
         scratch[taglen] = 0; /* overwrite the colon as mutt_rfc822_parse_line expects */
         value = mutt_str_skip_email_wsp(&scratch[taglen + 1]);
-        mutt_rfc822_parse_line(e, NULL, scratch, value, true, false, true);
+        mutt_rfc822_parse_line(env, NULL, scratch, value, true, false, true);
         FREE(&scratch);
       }
     }
   }
 
   /* RFC2047 decode after the RFC822 parsing */
-  rfc2047_decode_envelope(e);
+  rfc2047_decode_envelope(env);
 
   url_free(&url);
   return true;

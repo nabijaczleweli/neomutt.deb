@@ -139,7 +139,7 @@ static int fold_one_header(FILE *fp, const char *tag, const char *value, size_t 
   const bool display = (chflags & CH_DISPLAY);
 
   mutt_debug(LL_DEBUG5, "pfx=[%s], tag=[%s], flags=%d value=[%.*s]\n", pfx, tag,
-             chflags, ((value[vlen - 1] == '\n') ? vlen - 1 : vlen), value);
+             chflags, (int) ((value[vlen - 1] == '\n') ? vlen - 1 : vlen), value);
 
   if (tag && *tag && (fprintf(fp, "%s%s: ", NONULL(pfx), tag) < 0))
     return -1;
@@ -303,7 +303,7 @@ static int write_one_header(FILE *fp, int pfxw, int max, int wraplen, const char
   const bool short_enough = (pfxw + max <= wraplen);
 
   mutt_debug((short_enough ? LL_DEBUG2 : LL_DEBUG5), "buf[%s%.*s] %s, max width = %d %s %d\n",
-             NONULL(pfx), vallen - 1 /* skip newline */, start,
+             NONULL(pfx), (int) (vallen - 1) /* skip newline */, start,
              (short_enough ? "short enough" : "too long"), max,
              (short_enough ? "<=" : ">"), wraplen);
 
@@ -379,17 +379,17 @@ static struct UserHdrsOverride write_userhdrs(FILE *fp, const struct ListHead *u
     }
 
     /* check whether the current user-header is an override */
-    size_t curr_override = (size_t) -1;
+    size_t cur_override = (size_t) -1;
     const char *const *idx = bsearch(tmp->data, userhdrs_override_headers,
                                      mutt_array_size(userhdrs_override_headers),
                                      sizeof(char *), userhdrs_override_cmp);
     if (idx != NULL)
     {
-      curr_override = idx - userhdrs_override_headers;
-      overrides.is_overridden[curr_override] = true;
+      cur_override = idx - userhdrs_override_headers;
+      overrides.is_overridden[cur_override] = true;
     }
 
-    if (privacy && (curr_override == USERHDRS_OVERRIDE_USER_AGENT))
+    if (privacy && (cur_override == USERHDRS_OVERRIDE_USER_AGENT))
     {
       continue;
     }
@@ -767,6 +767,8 @@ int mutt_write_mime_header(struct Body *a, FILE *fp, struct ConfigSubset *sub)
   int tmplen;
   char buf[256] = { 0 };
 
+  char *id = NULL;
+
   fprintf(fp, "Content-Type: %s/%s", TYPE(a), a->subtype);
 
   if (!TAILQ_EMPTY(&a->parameter))
@@ -784,6 +786,13 @@ int mutt_write_mime_header(struct Body *a, FILE *fp, struct ConfigSubset *sub)
       struct Parameter *cont = NULL;
       TAILQ_FOREACH(cont, &pl_conts, entries)
       {
+        if (mutt_istr_equal(cont->attribute, "content-id"))
+        {
+          // Content-ID: gets its own header
+          mutt_str_replace(&id, cont->value);
+          break;
+        }
+
         fputc(';', fp);
 
         buf[0] = 0;
@@ -816,6 +825,12 @@ int mutt_write_mime_header(struct Body *a, FILE *fp, struct ConfigSubset *sub)
 
   fputc('\n', fp);
 
+  if (id)
+  {
+    fprintf(fp, "Content-ID: <%s>\n", id);
+    mutt_mem_free(&id);
+  }
+
   if (a->language)
     fprintf(fp, "Content-Language: %s\n", a->language);
 
@@ -831,7 +846,7 @@ int mutt_write_mime_header(struct Body *a, FILE *fp, struct ConfigSubset *sub)
       fprintf(fp, "Content-Disposition: %s", dispstr[a->disposition]);
       len = 21 + mutt_str_len(dispstr[a->disposition]);
 
-      if (a->use_disp && (a->disposition != DISP_INLINE))
+      if (a->use_disp && ((a->disposition != DISP_INLINE) || a->d_filename))
       {
         char *fn = a->d_filename;
         if (!fn)

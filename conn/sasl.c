@@ -43,6 +43,7 @@
 #include <netdb.h>
 #include <sasl/sasl.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -288,7 +289,7 @@ static int mutt_sasl_start(void)
 
   /* set up default logging callback */
   callbacks[0].id = SASL_CB_LOG;
-  callbacks[0].proc = (int (*)(void)) mutt_sasl_cb_log;
+  callbacks[0].proc = (int (*)(void))(intptr_t) mutt_sasl_cb_log;
   callbacks[0].context = NULL;
 
   callbacks[1].id = SASL_CB_LIST_END;
@@ -393,17 +394,17 @@ static sasl_callback_t *mutt_sasl_get_callbacks(struct ConnAccount *cac)
   sasl_callback_t *callback = MuttSaslCallbacks;
 
   callback->id = SASL_CB_USER;
-  callback->proc = (int (*)(void)) mutt_sasl_cb_authname;
+  callback->proc = (int (*)(void))(intptr_t) mutt_sasl_cb_authname;
   callback->context = cac;
   callback++;
 
   callback->id = SASL_CB_AUTHNAME;
-  callback->proc = (int (*)(void)) mutt_sasl_cb_authname;
+  callback->proc = (int (*)(void))(intptr_t) mutt_sasl_cb_authname;
   callback->context = cac;
   callback++;
 
   callback->id = SASL_CB_PASS;
-  callback->proc = (int (*)(void)) mutt_sasl_cb_pass;
+  callback->proc = (int (*)(void))(intptr_t) mutt_sasl_cb_pass;
   callback->context = cac;
   callback++;
 
@@ -700,30 +701,31 @@ int mutt_sasl_client_new(struct Connection *conn, sasl_conn_t **saslconn)
  */
 int mutt_sasl_interact(sasl_interact_t *interaction)
 {
+  int rc = SASL_OK;
   char prompt[128];
-  char resp[128];
+  struct Buffer *resp = mutt_buffer_pool_get();
 
   while (interaction->id != SASL_CB_LIST_END)
   {
     mutt_debug(LL_DEBUG2, "filling in SASL interaction %ld\n", interaction->id);
 
     snprintf(prompt, sizeof(prompt), "%s: ", interaction->prompt);
-    resp[0] = '\0';
-    if (OptNoCurses || mutt_get_field(prompt, resp, sizeof(resp),
-                                      MUTT_COMP_NO_FLAGS, false, NULL, NULL))
+    mutt_buffer_reset(resp);
+
+    if (OptNoCurses || mutt_buffer_get_field(prompt, resp, MUTT_COMP_NO_FLAGS,
+                                             false, NULL, NULL, NULL))
     {
-      return SASL_FAIL;
+      rc = SASL_FAIL;
+      break;
     }
 
-    interaction->len = mutt_str_len(resp) + 1;
-    char *result = mutt_mem_malloc(interaction->len);
-    memcpy(result, resp, interaction->len);
-    interaction->result = result;
-
+    interaction->len = mutt_buffer_len(resp) + 1;
+    interaction->result = mutt_buffer_strdup(resp);
     interaction++;
   }
 
-  return SASL_OK;
+  mutt_buffer_pool_release(&resp);
+  return rc;
 }
 
 /**

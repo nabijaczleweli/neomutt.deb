@@ -52,11 +52,9 @@
  * @retval ptr  Key binding
  * @retval NULL No key binding found
  */
-static const struct Binding *help_lookup_function(int op, enum MenuType menu)
+static const struct MenuFuncOp *help_lookup_function(int op, enum MenuType menu)
 {
-  const struct Binding *map = NULL;
-
-  if (menu != MENU_PAGER)
+  if (menu != MENU_PAGER && (menu != MENU_GENERIC))
   {
     /* first look in the generic map for the function */
     for (int i = 0; OpGeneric[i].name; i++)
@@ -64,12 +62,12 @@ static const struct Binding *help_lookup_function(int op, enum MenuType menu)
         return &OpGeneric[i];
   }
 
-  map = km_get_table(menu);
-  if (map)
+  const struct MenuFuncOp *funcs = km_get_table(menu);
+  if (funcs)
   {
-    for (int i = 0; map[i].name; i++)
-      if (map[i].op == op)
-        return &map[i];
+    for (int i = 0; funcs[i].name; i++)
+      if (funcs[i].op == op)
+        return &funcs[i];
   }
 
   return NULL;
@@ -87,13 +85,12 @@ static const struct Binding *help_lookup_function(int op, enum MenuType menu)
 static int print_macro(FILE *fp, int maxwidth, const char **macro)
 {
   int n = maxwidth;
-  wchar_t wc;
+  wchar_t wc = 0;
   size_t k;
   size_t len = mutt_str_len(*macro);
-  mbstate_t mbstate1, mbstate2;
+  mbstate_t mbstate1 = { 0 };
+  mbstate_t mbstate2 = { 0 };
 
-  memset(&mbstate1, 0, sizeof(mbstate1));
-  memset(&mbstate2, 0, sizeof(mbstate2));
   for (; len && (k = mbrtowc(&wc, *macro, len, &mbstate1)); *macro += k, len -= k)
   {
     if ((k == (size_t) (-1)) || (k == (size_t) (-2)))
@@ -157,14 +154,13 @@ static int print_macro(FILE *fp, int maxwidth, const char **macro)
  */
 static int get_wrapped_width(const char *t, size_t wid)
 {
-  wchar_t wc;
+  wchar_t wc = 0;
   size_t k;
   size_t m, n;
   size_t len = mutt_str_len(t);
   const char *s = t;
-  mbstate_t mbstate;
+  mbstate_t mbstate = { 0 };
 
-  memset(&mbstate, 0, sizeof(mbstate));
   for (m = wid, n = 0; len && (k = mbrtowc(&wc, s, len, &mbstate)) && (n <= wid);
        s += k, len -= k)
   {
@@ -321,7 +317,6 @@ static void format_line(FILE *fp, int ismacro, const char *t1, const char *t2,
 static void dump_menu(FILE *fp, enum MenuType menu, int wraplen)
 {
   struct Keymap *map = NULL;
-  const struct Binding *b = NULL;
   char buf[128];
 
   STAILQ_FOREACH(map, &Keymaps[menu], entries)
@@ -339,9 +334,11 @@ static void dump_menu(FILE *fp, enum MenuType menu, int wraplen)
       }
       else
       {
-        b = help_lookup_function(map->op, menu);
-        format_line(fp, 0, buf, b ? b->name : "UNKNOWN",
-                    b ? _(OpStrings[b->op][1]) : _("ERROR: please report this bug"), wraplen);
+        const struct MenuFuncOp *funcs = help_lookup_function(map->op, menu);
+        format_line(fp, 0, buf, funcs ? funcs->name : "UNKNOWN",
+                    funcs ? _(opcodes_get_description(funcs->op)) :
+                            _("ERROR: please report this bug"),
+                    wraplen);
       }
     }
   }
@@ -372,13 +369,13 @@ static bool is_bound(struct KeymapList *km_list, int op)
  * @param aux     Second key map to consider
  * @param wraplen Width to wrap to
  */
-static void dump_unbound(FILE *fp, const struct Binding *funcs,
+static void dump_unbound(FILE *fp, const struct MenuFuncOp *funcs,
                          struct KeymapList *km_list, struct KeymapList *aux, int wraplen)
 {
   for (int i = 0; funcs[i].name; i++)
   {
     if (!is_bound(km_list, funcs[i].op) && (!aux || !is_bound(aux, funcs[i].op)))
-      format_line(fp, 0, funcs[i].name, "", _(OpStrings[funcs[i].op][1]), wraplen);
+      format_line(fp, 0, funcs[i].name, "", _(opcodes_get_description(funcs[i].op)), wraplen);
   }
 }
 
@@ -388,7 +385,6 @@ static void dump_unbound(FILE *fp, const struct Binding *funcs,
  */
 void mutt_help(enum MenuType menu)
 {
-  const int wraplen = AllDialogsWindow->state.cols;
   char banner[128];
   FILE *fp = NULL;
 
@@ -396,7 +392,7 @@ void mutt_help(enum MenuType menu)
   struct Buffer t = mutt_buffer_make(PATH_MAX);
   mutt_buffer_mktemp(&t);
 
-  const struct Binding *funcs = km_get_table(menu);
+  const struct MenuFuncOp *funcs = km_get_table(menu);
   const char *desc = mutt_map_get_name(menu, MenuNames);
   if (!desc)
     desc = _("<UNKNOWN>");
@@ -416,8 +412,9 @@ void mutt_help(enum MenuType menu)
       goto cleanup;
     }
 
+    const int wraplen = AllDialogsWindow->state.cols;
     dump_menu(fp, menu, wraplen);
-    if ((menu != MENU_EDITOR) && (menu != MENU_PAGER))
+    if ((menu != MENU_EDITOR) && (menu != MENU_PAGER) && (menu != MENU_GENERIC))
     {
       fprintf(fp, "\n%s\n\n", _("Generic bindings:"));
       dump_menu(fp, MENU_GENERIC, wraplen);
@@ -426,7 +423,7 @@ void mutt_help(enum MenuType menu)
     fprintf(fp, "\n%s\n\n", _("Unbound functions:"));
     if (funcs)
       dump_unbound(fp, funcs, &Keymaps[menu], NULL, wraplen);
-    if (menu != MENU_PAGER)
+    if ((menu != MENU_EDITOR) && (menu != MENU_PAGER) && (menu != MENU_GENERIC))
       dump_unbound(fp, OpGeneric, &Keymaps[MENU_GENERIC], &Keymaps[menu], wraplen);
 
     mutt_file_fclose(&fp);

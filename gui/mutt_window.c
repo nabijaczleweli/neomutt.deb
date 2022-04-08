@@ -34,6 +34,7 @@
 #include "mutt_window.h"
 #include "curs_lib.h"
 #include "mutt_curses.h"
+#include "mutt_globals.h"
 #include "options.h"
 #include "reflow.h"
 #include "rootwin.h"
@@ -454,6 +455,7 @@ void mutt_window_add_child(struct MuttWindow *parent, struct MuttWindow *child)
  * mutt_window_remove_child - Remove a child from a Window
  * @param parent Window to remove from
  * @param child  Window to remove
+ * @retval ptr Child Window
  */
 struct MuttWindow *mutt_window_remove_child(struct MuttWindow *parent, struct MuttWindow *child)
 {
@@ -604,6 +606,13 @@ void window_redraw(struct MuttWindow *win)
   if (!win)
     win = RootWindow;
 
+  if (SigWinch)
+  {
+    SigWinch = false;
+    window_invalidate_all();
+    mutt_resize_screen();
+  }
+
   window_reflow(win);
   window_notify_all(win);
 
@@ -718,7 +727,7 @@ static void window_invalidate(struct MuttWindow *win)
   if (!win)
     return;
 
-  win->actions |= WA_REPAINT;
+  win->actions |= WA_RECALC | WA_REPAINT;
 
   struct MuttWindow *np = NULL;
   TAILQ_FOREACH(np, &win->children, entries)

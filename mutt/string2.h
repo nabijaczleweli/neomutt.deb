@@ -25,8 +25,8 @@
  * #include <string.h>
  */
 
-#ifndef MUTT_LIB_STRING_H
-#define MUTT_LIB_STRING_H
+#ifndef MUTT_LIB_STRING2_H
+#define MUTT_LIB_STRING2_H
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -56,12 +56,6 @@
 void        mutt_str_adjust(char **ptr);
 void        mutt_str_append_item(char **str, const char *item, char sep);
 int         mutt_str_asprintf(char **strp, const char *fmt, ...);
-int         mutt_str_atoi(const char *str, int *dst);
-int         mutt_str_atol(const char *str, long *dst);
-int         mutt_str_atos(const char *str, short *dst);
-int         mutt_str_atoui(const char *str, unsigned int *dst);
-int         mutt_str_atoul(const char *str, unsigned long *dst);
-int         mutt_str_atoull(const char *str, unsigned long long *dst);
 int         mutt_str_coll(const char *a, const char *b);
 void        mutt_str_dequote_comment(char *str);
 const char *mutt_str_find_word(const char *src);
@@ -76,6 +70,7 @@ size_t      mutt_str_lws_rlen(const char *s, size_t n);
 const char *mutt_str_next_word(const char *s);
 void        mutt_str_remove_trailing_ws(char *s);
 char *      mutt_str_replace(char **p, const char *s);
+char *      mutt_str_sep(char **stringp, const char *delim);
 char *      mutt_str_skip_email_wsp(const char *s);
 char *      mutt_str_skip_whitespace(const char *p);
 const char *mutt_str_sysexit(int e);
@@ -107,4 +102,4 @@ int         mutt_istrn_cmp(const char *a, const char *b, size_t num);
 bool        mutt_istrn_equal(const char *a, const char *b, size_t num);
 const char *mutt_istrn_rfind(const char *haystack, size_t haystack_length, const char *needle);
 
-#endif /* MUTT_LIB_STRING_H */
+#endif /* MUTT_LIB_STRING2_H */

@@ -499,7 +499,7 @@ bool mutt_ch_lookup_add(enum LookupType type, const char *pat,
   if (!pat || !replace)
     return false;
 
-  regex_t *rx = mutt_mem_malloc(sizeof(regex_t));
+  regex_t *rx = mutt_mem_calloc(1, sizeof(regex_t));
   int rc = REG_COMP(rx, pat, REG_ICASE);
   if (rc != 0)
   {
@@ -739,8 +739,7 @@ int mutt_ch_check(const char *s, size_t slen, const char *from, const char *to)
   char *out = mutt_mem_malloc(outlen + 1);
   char *saved_out = out;
 
-  const size_t convlen =
-      iconv(cd, (ICONV_CONST char **) &s, &slen, &out, (size_t *) &outlen);
+  const size_t convlen = iconv(cd, (ICONV_CONST char **) &s, &slen, &out, &outlen);
   if (convlen == -1)
     rc = errno;
 

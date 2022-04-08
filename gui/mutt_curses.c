@@ -29,49 +29,64 @@
  */
 
 #include "config.h"
+#include <stddef.h>
 #include "mutt_curses.h"
 #include "color/lib.h"
 
 /**
- * mutt_curses_set_attr - Set the attributes for text
- * @param attr Attributes to set, e.g. A_UNDERLINE
+ * mutt_curses_set_color - Set the colour and attributes for text
+ * @param ac Colour and Attributes to set
  */
-void mutt_curses_set_attr(int attr)
+void mutt_curses_set_color(struct AttrColor *ac)
 {
-  bkgdset(attr | ' ');
+  if (!ac)
+    return;
+
+  int index = ac->curses_color ? ac->curses_color->index : 0;
+
+#if defined(HAVE_SETCCHAR) && defined(HAVE_BKGRNDSET)
+  cchar_t cch = { 0 };
+  setcchar(&cch, L" ", ac->attrs, index, NULL);
+  bkgrndset(&cch);
+#elif defined(HAVE_BKGDSET)
+  bkgdset(COLOR_PAIR(index) | ac->attrs | ' ');
+#else
+  attrset(COLOR_PAIR(index) | ac->attrs);
+#endif
 }
 
 /**
- * mutt_curses_set_color_by_id - Set the current colour for text
- * @param color Colour to set, e.g. #MT_COLOR_HEADER
- *
- * If the system has bkgdset() use it rather than attrset() so that the clr*()
- * functions will properly set the background attributes all the way to the
- * right column.
+ * mutt_curses_set_color_by_id - Set the colour and attributes by the colour id
+ * @param cid Colour Id, e.g. #MT_COLOR_TREE
+ * @retval ptr Colour set
  */
-void mutt_curses_set_color_by_id(enum ColorId color)
+struct AttrColor *mutt_curses_set_color_by_id(enum ColorId cid)
 {
-  const int chosen = simple_colors_get(color);
-  const int normal = simple_colors_get(MT_COLOR_NORMAL);
-  bkgdset((chosen ? chosen : normal) | ' ');
+  struct AttrColor *ac = simple_color_get(cid);
+  if (!attr_color_is_set(ac))
+    ac = simple_color_get(MT_COLOR_NORMAL);
+
+  mutt_curses_set_color(ac);
+  return ac;
 }
 
 /**
  * mutt_curses_set_cursor - Set the cursor state
  * @param state State to set, e.g. #MUTT_CURSOR_INVISIBLE
+ * @retval enum Old state, e.g. #MUTT_CURSOR_VISIBLE
  */
-void mutt_curses_set_cursor(enum MuttCursorState state)
+enum MuttCursorState mutt_curses_set_cursor(enum MuttCursorState state)
 {
-  static int SavedCursor = MUTT_CURSOR_VISIBLE;
+  static enum MuttCursorState SavedCursor = MUTT_CURSOR_VISIBLE;
 
-  if (state == MUTT_CURSOR_RESTORE_LAST)
-    state = SavedCursor;
-  else
-    SavedCursor = state;
+  enum MuttCursorState OldCursor = SavedCursor;
+  SavedCursor = state;
 
   if (curs_set(state) == ERR)
   {
     if (state == MUTT_CURSOR_VISIBLE)
       curs_set(MUTT_CURSOR_VERY_VISIBLE);
   }
+
+  return OldCursor;
 }

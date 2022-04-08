@@ -43,11 +43,11 @@
 #include "core/lib.h"
 #include "mutt.h"
 #include "curs_lib.h"
+#include "browser/lib.h"
 #include "color/lib.h"
+#include "enter/lib.h"
 #include "menu/lib.h"
 #include "question/lib.h"
-#include "browser.h"
-#include "enter_state.h"
 #include "keymap.h"
 #include "msgwin.h"
 #include "mutt_curses.h"
@@ -72,13 +72,13 @@
  * They can be temporarily ignored by setting OptIgnoreMacroEvents */
 static size_t MacroBufferCount = 0;
 static size_t MacroBufferLen = 0;
-static struct KeyEvent *MacroEvents;
+static struct KeyEvent *MacroEvents = NULL;
 
 /* These are used in all other "normal" situations, and are not
  * ignored when setting OptIgnoreMacroEvents */
 static size_t UngetCount = 0;
 static size_t UngetLen = 0;
-static struct KeyEvent *UngetKeyEvents;
+static struct KeyEvent *UngetKeyEvents = NULL;
 
 int MuttGetchTimeout = -1;
 
@@ -135,6 +135,10 @@ void mutt_refresh(void)
  */
 void mutt_need_hard_redraw(void)
 {
+  // Forcibly switch to the alternate screen.
+  // Using encryption can leave ncurses confused about which mode it's in.
+  fputs("\033[?1049h", stdout);
+  fflush(stdout);
   keypad(stdscr, true);
   clearok(stdscr, true);
   window_redraw(NULL);
@@ -189,14 +193,15 @@ static int mutt_monitor_getch(void)
  * 3. Keyboard
  *
  * This function can return:
- * - Error `{ -1, OP_NULL }`
- * - Timeout `{ -2, OP_NULL }`
+ * - Error   `{ OP_ABORT,   OP_NULL }`
+ * - Timeout `{ OP_TIMEOUT, OP_NULL }`
  */
 struct KeyEvent mutt_getch(void)
 {
   int ch;
-  struct KeyEvent err = { -1, OP_NULL }, ret;
-  struct KeyEvent timeout = { -2, OP_NULL };
+  struct KeyEvent err = { OP_ABORT, OP_NULL };
+  struct KeyEvent timeout = { OP_TIMEOUT, OP_NULL };
+  struct KeyEvent ret = { OP_NULL, OP_NULL };
 
   if (UngetCount)
     return UngetKeyEvents[--UngetCount];
@@ -225,14 +230,16 @@ struct KeyEvent mutt_getch(void)
     return err;
   }
 
-  /* either timeout, a sigwinch (if timeout is set), or the terminal
-   * has been lost */
+  /* either timeout, a sigwinch (if timeout is set), the terminal
+   * has been lost, or curses was never initialized */
   if (ch == ERR)
   {
     if (!isatty(0))
+    {
       mutt_exit(1);
+    }
 
-    return timeout;
+    return OptNoCurses ? err : timeout;
   }
 
   const bool c_meta_key = cs_subset_bool(NeoMutt->sub, "meta_key");
@@ -240,14 +247,14 @@ struct KeyEvent mutt_getch(void)
   {
     /* send ALT-x as ESC-x */
     ch &= ~0x80;
-    mutt_unget_event(ch, 0);
+    mutt_unget_event(ch, OP_NULL);
     ret.ch = '\033'; // Escape
-    ret.op = 0;
+    ret.op = OP_NULL;
     return ret;
   }
 
   ret.ch = ch;
-  ret.op = 0;
+  ret.op = OP_NULL;
   return (ch == AbortKey) ? err : ret;
 }
 
@@ -283,7 +290,8 @@ int mutt_buffer_get_field(const char *field, struct Buffer *buf, CompletionFlags
   win->help_menu = MENU_EDITOR;
   struct MuttWindow *old_focus = window_set_focus(win);
 
-  window_redraw(NULL);
+  enum MuttCursorState cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
+  window_redraw(win);
   do
   {
     if (SigWinch)
@@ -302,6 +310,7 @@ int mutt_buffer_get_field(const char *field, struct Buffer *buf, CompletionFlags
     ret = mutt_enter_string_full(buf->data, buf->dsize, col, complete, multiple,
                                  m, files, numfiles, es);
   } while (ret == 1);
+  mutt_curses_set_cursor(cursor);
 
   win->help_data = old_help;
   win->help_menu = old_menu;
@@ -320,43 +329,15 @@ int mutt_buffer_get_field(const char *field, struct Buffer *buf, CompletionFlags
 }
 
 /**
- * mutt_get_field - Ask the user for a string
- * @param[in]  field    Prompt
- * @param[in]  buf      Buffer for the result
- * @param[in]  buflen   Length of buffer
- * @param[in]  complete Flags, see #CompletionFlags
- * @param[in]  multiple Allow multiple selections
- * @param[out] files    List of files selected
- * @param[out] numfiles Number of files selected
- * @retval 1  Redraw the screen and call the function again
- * @retval 0  Selection made
- * @retval -1 Aborted
- */
-int mutt_get_field(const char *field, char *buf, size_t buflen,
-                   CompletionFlags complete, bool multiple, char ***files, int *numfiles)
-{
-  if (!buf)
-    return -1;
-
-  struct Buffer tmp = {
-    .data = buf,
-    .dptr = buf + mutt_str_len(buf),
-    .dsize = buflen,
-  };
-  return mutt_buffer_get_field(field, &tmp, complete, multiple, NULL, files, numfiles);
-}
-
-/**
  * mutt_get_field_unbuffered - Ask the user for a string (ignoring macro buffer)
  * @param msg    Prompt
  * @param buf    Buffer for the result
- * @param buflen Length of buffer
  * @param flags  Flags, see #CompletionFlags
  * @retval 1  Redraw the screen and call the function again
  * @retval 0  Selection made
  * @retval -1 Aborted
  */
-int mutt_get_field_unbuffered(const char *msg, char *buf, size_t buflen, CompletionFlags flags)
+int mutt_get_field_unbuffered(const char *msg, struct Buffer *buf, CompletionFlags flags)
 {
   bool reset_ignoremacro = false;
 
@@ -365,7 +346,7 @@ int mutt_get_field_unbuffered(const char *msg, char *buf, size_t buflen, Complet
     OptIgnoreMacroEvents = true;
     reset_ignoremacro = true;
   }
-  int rc = mutt_get_field(msg, buf, buflen, flags, false, NULL, NULL);
+  int rc = mutt_buffer_get_field(msg, buf, flags, false, NULL, NULL, NULL);
   if (reset_ignoremacro)
     OptIgnoreMacroEvents = false;
 
@@ -403,7 +384,7 @@ void mutt_edit_file(const char *editor, const char *file)
 void mutt_query_exit(void)
 {
   mutt_flushinp();
-  mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
+  enum MuttCursorState cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
   const short c_timeout = cs_subset_number(NeoMutt->sub, "timeout");
   if (c_timeout)
     mutt_getch_timeout(-1); /* restore blocking operation */
@@ -412,7 +393,7 @@ void mutt_query_exit(void)
     mutt_exit(1);
   }
   mutt_clear_error();
-  mutt_curses_set_cursor(MUTT_CURSOR_RESTORE_LAST);
+  mutt_curses_set_cursor(cursor);
   SigInt = false;
 }
 
@@ -518,7 +499,7 @@ int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
   if (!win)
     return -1;
 
-  struct KeyEvent ch;
+  struct KeyEvent ch = { OP_NULL, OP_NULL };
   struct MuttWindow *old_focus = window_set_focus(win);
 
   mutt_curses_set_color_by_id(MT_COLOR_PROMPT);
@@ -530,10 +511,12 @@ int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
   mutt_window_clrtoeol(win);
   mutt_refresh();
 
+  enum MuttCursorState cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
   do
   {
     ch = mutt_getch();
-  } while (ch.ch == -2); // Timeout
+  } while (ch.ch == OP_TIMEOUT);
+  mutt_curses_set_cursor(cursor);
 
   mutt_window_move(win, 0, 0);
   mutt_window_clrtoeol(win);
@@ -562,12 +545,12 @@ int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
 
     sprintf(pc, "%s: ", prompt);
     if (ch.op == OP_NULL)
-      mutt_unget_event(ch.ch, 0);
+      mutt_unget_event(ch.ch, OP_NULL);
     else
       mutt_unget_event(0, ch.op);
 
     mutt_buffer_alloc(fname, 1024);
-    if (mutt_buffer_get_field(pc, fname, (mailbox ? MUTT_EFILE : MUTT_FILE) | MUTT_CLEAR,
+    if (mutt_buffer_get_field(pc, fname, (mailbox ? MUTT_COMP_FILE_MBOX : MUTT_COMP_FILE) | MUTT_COMP_CLEAR,
                               multiple, m, files, numfiles) != 0)
     {
       mutt_buffer_reset(fname);
@@ -587,7 +570,7 @@ int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
  */
 void mutt_unget_event(int ch, int op)
 {
-  struct KeyEvent tmp;
+  struct KeyEvent tmp = { OP_NULL, OP_NULL };
 
   tmp.ch = ch;
   tmp.op = op;
@@ -624,7 +607,7 @@ void mutt_unget_string(const char *s)
  */
 void mutt_push_macro_event(int ch, int op)
 {
-  struct KeyEvent tmp;
+  struct KeyEvent tmp = { OP_NULL, OP_NULL };
 
   tmp.ch = ch;
   tmp.op = op;
@@ -687,10 +670,9 @@ void mutt_flushinp(void)
 int mutt_addwch(struct MuttWindow *win, wchar_t wc)
 {
   char buf[MB_LEN_MAX * 2];
-  mbstate_t mbstate;
+  mbstate_t mbstate = { 0 };
   size_t n1, n2;
 
-  memset(&mbstate, 0, sizeof(mbstate));
   if (((n1 = wcrtomb(buf, wc, &mbstate)) == (size_t) (-1)) ||
       ((n2 = wcrtomb(buf + n1, 0, &mbstate)) == (size_t) (-1)))
   {
@@ -722,15 +704,14 @@ void mutt_simple_format(char *buf, size_t buflen, int min_width, int max_width,
                         enum FormatJustify justify, char pad_char,
                         const char *s, size_t n, bool arboreal)
 {
-  wchar_t wc;
+  wchar_t wc = 0;
   int w;
   size_t k, k2;
   char scratch[MB_LEN_MAX];
-  mbstate_t mbstate1, mbstate2;
+  mbstate_t mbstate1 = { 0 };
+  mbstate_t mbstate2 = { 0 };
   bool escaped = false;
 
-  memset(&mbstate1, 0, sizeof(mbstate1));
-  memset(&mbstate2, 0, sizeof(mbstate2));
   buflen--;
   char *p = buf;
   for (; n && (k = mbrtowc(&wc, s, n, &mbstate1)); s += k, n -= k)
@@ -894,12 +875,11 @@ void mutt_format_s_tree(char *buf, size_t buflen, const char *prec, const char *
  */
 void mutt_paddstr(struct MuttWindow *win, int n, const char *s)
 {
-  wchar_t wc;
+  wchar_t wc = 0;
   size_t k;
   size_t len = mutt_str_len(s);
-  mbstate_t mbstate;
+  mbstate_t mbstate = { 0 };
 
-  memset(&mbstate, 0, sizeof(mbstate));
   for (; len && (k = mbrtowc(&wc, s, len, &mbstate)); s += k, len -= k)
   {
     if ((k == (size_t) (-1)) || (k == (size_t) (-2)))
@@ -937,17 +917,16 @@ void mutt_paddstr(struct MuttWindow *win, int n, const char *s)
  */
 size_t mutt_wstr_trunc(const char *src, size_t maxlen, size_t maxwid, size_t *width)
 {
-  wchar_t wc;
+  wchar_t wc = 0;
   size_t n, w = 0, l = 0, cl;
   int cw;
-  mbstate_t mbstate;
+  mbstate_t mbstate = { 0 };
 
   if (!src)
     goto out;
 
   n = mutt_str_len(src);
 
-  memset(&mbstate, 0, sizeof(mbstate));
   for (w = 0; n && (cl = mbrtowc(&wc, src, n, &mbstate)); src += cl, n -= cl)
   {
     if ((cl == (size_t) (-1)) || (cl == (size_t) (-2)))
@@ -985,7 +964,7 @@ out:
  * @param s String to be measured
  * @retval num Screen cells string would use
  */
-int mutt_strwidth(const char *s)
+size_t mutt_strwidth(const char *s)
 {
   if (!s)
     return 0;
@@ -998,17 +977,16 @@ int mutt_strwidth(const char *s)
  * @param n Length of string to be measured
  * @retval num Screen cells string would use
  */
-int mutt_strnwidth(const char *s, size_t n)
+size_t mutt_strnwidth(const char *s, size_t n)
 {
   if (!s)
     return 0;
 
-  wchar_t wc;
+  wchar_t wc = 0;
   int w;
   size_t k;
-  mbstate_t mbstate;
+  mbstate_t mbstate = { 0 };
 
-  memset(&mbstate, 0, sizeof(mbstate));
   for (w = 0; n && (k = mbrtowc(&wc, s, n, &mbstate)); s += k, n -= k)
   {
     if (*s == MUTT_SPECIAL_INDEX)

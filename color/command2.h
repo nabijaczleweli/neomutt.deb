@@ -20,8 +20,8 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_COLOR_COMMAND_H
-#define MUTT_COLOR_COMMAND_H
+#ifndef MUTT_COLOR_COMMAND2_H
+#define MUTT_COLOR_COMMAND2_H
 
 #include "config.h"
 #include <stdint.h>
@@ -38,7 +38,7 @@ struct Buffer;
  * @param[in]  s     Buffer containing string to be parsed
  * @param[out] fg    Foreground colour (set to -1)
  * @param[out] bg    Background colour (set to -1)
- * @param[out] attrs Attribute flags
+ * @param[out] attrs Attributes, e.g. A_UNDERLINE
  * @param[out] err   Buffer for error messages
  * @retval  0 Success
  * @retval -1 Error
@@ -51,6 +51,6 @@ enum CommandResult mutt_parse_mono   (struct Buffer *buf, struct Buffer *s, intp
 enum CommandResult mutt_parse_uncolor(struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
 enum CommandResult mutt_parse_unmono (struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
 
-int fgbgattr_to_color(int fg, int bg, int attrs);
+void get_colorid_name(unsigned int color_id, struct Buffer *buf);
 
-#endif /* MUTT_COLOR_COMMAND_H */
+#endif /* MUTT_COLOR_COMMAND2_H */

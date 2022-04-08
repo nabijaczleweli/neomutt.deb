@@ -29,8 +29,6 @@
 
 #include "config.h"
 #include <ctype.h>
-#include <errno.h>
-#include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -45,6 +43,62 @@
 #ifdef HAVE_SYSEXITS_H
 #include <sysexits.h>
 #endif
+
+#ifndef HAVE_STRCASESTR
+/**
+ * strcasestr - Find the first occurrence of needle in haystack, ignoring case
+ * @param haystack String to search
+ * @param needle   String to find
+ * @retval ptr Matched string, or NULL on failure
+ */
+static char *strcasestr(const char *haystack, const char *needle)
+{
+  size_t haystackn = strlen(haystack);
+  size_t needlen = strlen(needle);
+
+  const char *p = haystack;
+  while (haystackn >= needlen)
+  {
+    if (strncasecmp(p, needle, needlen) == 0)
+      return (char *) p;
+    p++;
+    haystackn--;
+  }
+  return NULL;
+}
+#endif /* HAVE_STRCASESTR */
+
+#ifndef HAVE_STRSEP
+/**
+ * strsep - Extract a token from a string
+ * @param stringp String to be split up
+ * @param delim   Characters to split stringp at
+ * @retval ptr Next token, or NULL if the no more tokens
+ *
+ * @note The pointer stringp will be moved and NULs inserted into it
+ */
+static char *strsep(char **stringp, const char *delim)
+{
+  if (*stringp == NULL)
+    return NULL;
+
+  char *start = *stringp;
+  for (char *p = *stringp; *p != '\0'; p++)
+  {
+    for (const char *s = delim; *s != '\0'; s++)
+    {
+      if (*p == *s)
+      {
+        *p = '\0';
+        *stringp = p + 1;
+        return start;
+      }
+    }
+  }
+  *stringp = NULL;
+  return start;
+}
+#endif /* HAVE_STRSEP */
 
 /**
  * struct SysExits - Lookup table of error messages
@@ -121,6 +175,19 @@ const char *mutt_str_sysexit(int err_num)
 }
 
 /**
+ * mutt_str_sep - Find first occurance of any of delim characters in *stringp
+ * @param stringp Pointer to string to search for delim, updated with position of after delim if found else NULL
+ * @param delim   String with characters to search for in *stringp
+ * @retval ptr Input value of *stringp
+ */
+char *mutt_str_sep(char **stringp, const char *delim)
+{
+  if (!stringp || !*stringp || !delim)
+    return NULL;
+  return strsep(stringp, delim);
+}
+
+/**
  * startswith - Check whether a string starts with a prefix
  * @param str String to check
  * @param prefix Prefix to match
@@ -172,193 +239,6 @@ size_t mutt_str_startswith(const char *str, const char *prefix)
 size_t mutt_istr_startswith(const char *str, const char *prefix)
 {
   return startswith(str, prefix, false);
-}
-
-/**
- * mutt_str_atol - Convert ASCII string to a long
- * @param[in]  str String to read
- * @param[out] dst Store the result
- * @retval  0 Success
- * @retval -1 Error
- * @retval -2 Overflow
- *
- * This is a strtol() wrapper with range checking.
- * errno may be set on error, e.g. ERANGE
- */
-int mutt_str_atol(const char *str, long *dst)
-{
-  if (dst)
-    *dst = 0;
-
-  if (!str || (*str == '\0')) /* no input: 0 */
-    return 0;
-
-  char *e = NULL;
-  errno = 0;
-
-  long res = strtol(str, &e, 10);
-  if (dst)
-    *dst = res;
-  if (((res == LONG_MIN) || (res == LONG_MAX)) && (errno == ERANGE))
-    return -2;
-  if (e && (*e != '\0'))
-    return -1;
-  return 0;
-}
-
-/**
- * mutt_str_atos - Convert ASCII string to a short
- * @param[in]  str String to read
- * @param[out] dst Store the result
- * @retval  0 Success
- * @retval -1 Error
- * @retval -2 Error, overflow
- *
- * This is a strtol() wrapper with range checking.
- * If @a dst is NULL, the string will be tested only (without conversion).
- *
- * errno may be set on error, e.g. ERANGE
- */
-int mutt_str_atos(const char *str, short *dst)
-{
-  if (dst)
-    *dst = 0;
-
-  long res = 0;
-  int rc = mutt_str_atol(str, &res);
-  if (rc < 0)
-    return rc;
-  if ((res < SHRT_MIN) || (res > SHRT_MAX))
-    return -2;
-
-  if (dst)
-    *dst = (short) res;
-
-  return 0;
-}
-
-/**
- * mutt_str_atoi - Convert ASCII string to an integer
- * @param[in]  str String to read
- * @param[out] dst Store the result
- * @retval  0 Success
- * @retval -1 Error
- * @retval -2 Error, overflow
- *
- * This is a strtol() wrapper with range checking.
- * If @a dst is NULL, the string will be tested only (without conversion).
- * errno may be set on error, e.g. ERANGE
- */
-int mutt_str_atoi(const char *str, int *dst)
-{
-  if (dst)
-    *dst = 0;
-
-  long res = 0;
-  int rc = mutt_str_atol(str, &res);
-  if (rc < 0)
-    return rc;
-  if ((res < INT_MIN) || (res > INT_MAX))
-    return -2;
-
-  if (dst)
-    *dst = (int) res;
-
-  return 0;
-}
-
-/**
- * mutt_str_atoui - Convert ASCII string to an unsigned integer
- * @param[in]  str String to read
- * @param[out] dst Store the result
- * @retval  1 Successful conversion, with trailing characters
- * @retval  0 Successful conversion
- * @retval -1 Invalid input
- * @retval -2 Input out of range
- *
- * @note This function's return value differs from the other functions.
- *       They return -1 if there is input beyond the number.
- */
-int mutt_str_atoui(const char *str, unsigned int *dst)
-{
-  if (dst)
-    *dst = 0;
-
-  unsigned long res = 0;
-  int rc = mutt_str_atoul(str, &res);
-  if (rc < 0)
-    return rc;
-  if (res > UINT_MAX)
-    return -2;
-
-  if (dst)
-    *dst = (unsigned int) res;
-
-  return rc;
-}
-
-/**
- * mutt_str_atoul - Convert ASCII string to an unsigned long
- * @param[in]  str String to read
- * @param[out] dst Store the result
- * @retval  1 Successful conversion, with trailing characters
- * @retval  0 Successful conversion
- * @retval -1 Invalid input
- *
- * @note This function's return value differs from the other functions.
- *       They return -1 if there is input beyond the number.
- */
-int mutt_str_atoul(const char *str, unsigned long *dst)
-{
-  if (dst)
-    *dst = 0;
-
-  if (!str || (*str == '\0')) /* no input: 0 */
-    return 0;
-
-  char *e = NULL;
-  errno = 0;
-
-  unsigned long res = strtoul(str, &e, 10);
-  if (dst)
-    *dst = res;
-  if ((res == ULONG_MAX) && (errno == ERANGE))
-    return -1;
-  if (e && (*e != '\0'))
-    return 1;
-  return 0;
-}
-
-/**
- * mutt_str_atoull - Convert ASCII string to an unsigned long long
- * @param[in]  str String to read
- * @param[out] dst Store the result
- * @retval  1 Successful conversion, with trailing characters
- * @retval  0 Successful conversion
- * @retval -1 Invalid input
- *
- * @note This function's return value differs from the other functions.
- *       They return -1 if there is input beyond the number.
- */
-int mutt_str_atoull(const char *str, unsigned long long *dst)
-{
-  if (dst)
-    *dst = 0;
-
-  if (!str || (*str == '\0')) /* no input: 0 */
-    return 0;
-
-  char *e = NULL;
-  errno = 0;
-
-  unsigned long long res = strtoull(str, &e, 10);
-  if (dst)
-    *dst = res;
-  if ((res == ULLONG_MAX) && (errno == ERANGE))
-    return -1;
-  if (e && (*e != '\0'))
-    return 1;
-  return 0;
 }
 
 /**

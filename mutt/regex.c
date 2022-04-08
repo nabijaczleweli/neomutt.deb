@@ -29,11 +29,13 @@
 
 #include "config.h"
 #include <ctype.h>
+#include <regex.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "atoi.h"
 #include "buffer.h"
 #include "logging.h"
 #include "mbyte.h"
@@ -94,9 +96,10 @@ struct Regex *mutt_regex_new(const char *str, uint32_t flags, struct Buffer *err
   }
 
   int rc = REG_COMP(reg->regex, str, rflags);
-  if ((rc != 0) && err)
+  if (rc != 0)
   {
-    regerror(rc, reg->regex, err->data, err->dsize);
+    if (err)
+      regerror(rc, reg->regex, err->data, err->dsize);
     mutt_regex_free(&reg);
     return NULL;
   }
@@ -314,12 +317,24 @@ int mutt_replacelist_add(struct ReplaceList *rl, const char *pat,
     if (*p == '%')
     {
       int n = 0;
-      if (mutt_str_atoi(++p, &n) < 0)
+      const char *end = mutt_str_atoi(++p, &n);
+      if (!end)
+      {
+        // this is not an error, we might have matched %R or %L in subjectrx
         mutt_debug(LL_DEBUG2, "Invalid match number in replacelist: '%s'\n", p);
+      }
       if (n > np->nmatch)
+      {
         np->nmatch = n;
-      while (*p && isdigit((int) *p))
+      }
+      if (end)
+      {
+        p = end;
+      }
+      else
+      {
         p++;
+      }
     }
     else
       p++;
@@ -371,7 +386,7 @@ char *mutt_replacelist_apply(struct ReplaceList *rl, char *buf, size_t buflen, c
   src = twinbuf[switcher];
   dst = src;
 
-  mutt_str_copy(src, str, 1024);
+  mutt_str_copy(src, str, sizeof(*twinbuf));
 
   struct Replace *np = NULL;
   STAILQ_FOREACH(np, rl, entries)
@@ -394,7 +409,7 @@ char *mutt_replacelist_apply(struct ReplaceList *rl, char *buf, size_t buflen, c
       /* Copy into other twinbuf with substitutions */
       if (np->templ)
       {
-        for (p = np->templ; *p && (tlen < 1023);)
+        for (p = np->templ; *p && (tlen < (sizeof(*twinbuf) - 1));)
         {
           if (*p == '%')
           {
@@ -402,25 +417,29 @@ char *mutt_replacelist_apply(struct ReplaceList *rl, char *buf, size_t buflen, c
             if (*p == 'L')
             {
               p++;
-              cpysize = MIN(pmatch[0].rm_so, 1023 - tlen);
+              cpysize = MIN(pmatch[0].rm_so, (sizeof(*twinbuf) - 1) - tlen);
               strncpy(&dst[tlen], src, cpysize);
               tlen += cpysize;
             }
             else if (*p == 'R')
             {
               p++;
-              cpysize = MIN(strlen(src) - pmatch[0].rm_eo, 1023 - tlen);
+              cpysize = MIN(strlen(src) - pmatch[0].rm_eo, (sizeof(*twinbuf) - 1) - tlen);
               strncpy(&dst[tlen], &src[pmatch[0].rm_eo], cpysize);
               tlen += cpysize;
             }
             else
             {
-              long n = strtoul(p, &p, 10);        /* get subst number */
-              while (isdigit((unsigned char) *p)) /* skip subst token */
-                p++;
-              for (int i = pmatch[n].rm_so; (i < pmatch[n].rm_eo) && (tlen < 1023); i++)
+              long n = strtoul(p, &p, 10); /* get subst number */
+              if (n < np->nmatch)
               {
-                dst[tlen++] = src[i];
+                while (isdigit((unsigned char) *p)) /* skip subst token */
+                  p++;
+                for (int i = pmatch[n].rm_so;
+                     (i < pmatch[n].rm_eo) && (tlen < (sizeof(*twinbuf) - 1)); i++)
+                {
+                  dst[tlen++] = src[i];
+                }
               }
             }
           }
@@ -463,9 +482,9 @@ void mutt_replacelist_free(struct ReplaceList *rl)
 /**
  * mutt_replacelist_match - Does a string match a pattern?
  * @param rl     ReplaceList of patterns
- * @param str    String to check
  * @param buf    Buffer to save match
  * @param buflen Buffer length
+ * @param str    String to check
  * @retval true String matches a patterh in the ReplaceList
  *
  * Match a string against the patterns defined by the 'spam' command and output
@@ -512,12 +531,11 @@ bool mutt_replacelist_match(struct ReplaceList *rl, char *buf, size_t buflen, co
           /* Ensure that the integer conversion succeeded (e!=p) and bounds check.  The upper bound check
            * should not strictly be necessary since add_to_spam_list() finds the largest value, and
            * the static array above is always large enough based on that value. */
-          if ((e != p) && (n >= 0) && (n <= np->nmatch) && (pmatch[n].rm_so != -1))
+          if ((e != p) && (n >= 0) && (n < np->nmatch) && (pmatch[n].rm_so != -1))
           {
             /* copy as much of the substring match as will fit in the output buffer, saving space for
              * the terminating nul char */
-            int idx;
-            for (idx = pmatch[n].rm_so;
+            for (int idx = pmatch[n].rm_so;
                  (idx < pmatch[n].rm_eo) && (tlen < (buflen - 1)); idx++)
             {
               buf[tlen++] = str[idx];

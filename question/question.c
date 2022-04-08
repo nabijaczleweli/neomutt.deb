@@ -39,12 +39,13 @@
 #include "keymap.h"
 #include "mutt_globals.h"
 #include "mutt_logging.h"
+#include "opcodes.h"
 
 /**
  * mutt_multi_choice - Offer the user a multiple choice question
  * @param prompt  Message prompt
  * @param letters Allowable selection keys
- * @retval >=0 0-based user selection
+ * @retval >=1 1-based user selection
  * @retval  -1 Selection aborted
  */
 int mutt_multi_choice(const char *prompt, const char *letters)
@@ -53,16 +54,15 @@ int mutt_multi_choice(const char *prompt, const char *letters)
   if (!win)
     return -1;
 
-  struct KeyEvent ch;
+  struct KeyEvent ch = { OP_NULL, OP_NULL };
   int choice;
   bool redraw = true;
   int prompt_lines = 1;
 
-  const bool opt_cols =
-      (simple_color_is_set(MT_COLOR_OPTIONS) &&
-       (simple_colors_get(MT_COLOR_OPTIONS) != simple_colors_get(MT_COLOR_PROMPT)));
+  const bool opt_cols = simple_color_is_set(MT_COLOR_OPTIONS);
 
   struct MuttWindow *old_focus = window_set_focus(win);
+  enum MuttCursorState cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
   window_redraw(NULL);
   while (true)
   {
@@ -134,7 +134,7 @@ int mutt_multi_choice(const char *prompt, const char *letters)
     mutt_getch_timeout(30 * 1000);
     ch = mutt_getch();
     mutt_getch_timeout(-1);
-    if (ch.ch == -2) // Timeout
+    if (ch.ch == OP_TIMEOUT)
       continue;
     /* (ch.ch == 0) is technically possible.  Treat the same as < 0 (abort) */
     if ((ch.ch <= 0) || CI_is_return(ch.ch))
@@ -159,6 +159,7 @@ int mutt_multi_choice(const char *prompt, const char *letters)
     }
     mutt_beep(false);
   }
+
   if (win->state.rows == 1)
   {
     mutt_window_clearline(win, 0);
@@ -168,7 +169,10 @@ int mutt_multi_choice(const char *prompt, const char *letters)
     msgwin_set_height(1);
     window_redraw(NULL);
   }
+
+  mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
   window_set_focus(old_focus);
+  mutt_curses_set_cursor(cursor);
   mutt_refresh();
   return choice;
 }
@@ -185,7 +189,7 @@ enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
   if (!win)
     return MUTT_ABORT;
 
-  struct KeyEvent ch;
+  struct KeyEvent ch = { OP_NULL, OP_NULL };
   char *answer_string = NULL;
   int answer_string_wid, msg_wid;
   size_t trunc_msg_len;
@@ -199,8 +203,8 @@ enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
   char *trans_no = _(no);
 
   char *expr = NULL;
-  regex_t reyes;
-  regex_t reno;
+  regex_t reyes = { 0 };
+  regex_t reno = { 0 };
 
   bool reyes_ok = (expr = nl_langinfo(YESEXPR)) && (expr[0] == '^') &&
                   (REG_COMP(&reyes, expr, REG_NOSUB) == 0);
@@ -238,6 +242,8 @@ enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
   msg_wid = mutt_strwidth(msg);
 
   struct MuttWindow *old_focus = window_set_focus(win);
+
+  enum MuttCursorState cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
   window_redraw(NULL);
   while (true)
   {
@@ -281,7 +287,7 @@ enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
     mutt_getch_timeout(30 * 1000);
     ch = mutt_getch();
     mutt_getch_timeout(-1);
-    if (ch.ch == -2) // Timeout
+    if (ch.ch == OP_TIMEOUT)
       continue;
     if (CI_is_return(ch.ch))
       break;
@@ -308,6 +314,7 @@ enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
     }
   }
   window_set_focus(old_focus);
+  mutt_curses_set_cursor(cursor);
 
   FREE(&answer_string);
 

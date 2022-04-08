@@ -45,8 +45,8 @@ static int menu_color_observer(struct NotifyCallback *nc)
   struct EventColor *ev_c = nc->event_data;
 
   // MT_COLOR_MAX is sent on `uncolor *`
-  if ((ev_c->color != MT_COLOR_NORMAL) && (ev_c->color != MT_COLOR_INDICATOR) &&
-      (ev_c->color != MT_COLOR_MAX))
+  if ((ev_c->cid != MT_COLOR_NORMAL) && (ev_c->cid != MT_COLOR_INDICATOR) &&
+      (ev_c->cid != MT_COLOR_MAX))
   {
     return 0;
   }
@@ -99,7 +99,7 @@ static int menu_window_observer(struct NotifyCallback *nc)
 
   if (nc->event_subtype == NT_WINDOW_STATE)
   {
-    menu->pagelen = win->state.rows;
+    menu->page_len = win->state.rows;
     menu->redraw |= MENU_REDRAW_FULL;
 
     win->actions |= WA_RECALC | WA_REPAINT;
@@ -111,6 +111,7 @@ static int menu_window_observer(struct NotifyCallback *nc)
     notify_observer_remove(NeoMutt->notify, menu_config_observer, menu);
     notify_observer_remove(win->notify, menu_window_observer, menu);
     mutt_color_observer_remove(menu_color_observer, menu);
+    msgwin_clear_text();
     mutt_debug(LL_DEBUG5, "window delete done\n");
   }
 

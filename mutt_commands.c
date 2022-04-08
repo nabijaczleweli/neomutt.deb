@@ -54,7 +54,7 @@ static const struct Command mutt_commands[] = {
   { "auto_view",           parse_stailq,           IP &AutoViewList },
   { "bind",                mutt_parse_bind,        0 },
   { "cd",                  parse_cd,               0 },
-  { "charset-hook",        mutt_parse_hook,        MUTT_CHARSET_HOOK },
+  { "charset-hook",        mutt_parse_charset_iconv_hook, MUTT_CHARSET_HOOK },
   { "color",               mutt_parse_color,       0 },
   { "crypt-hook",          mutt_parse_hook,        MUTT_CRYPT_HOOK },
   { "echo",                parse_echo,             0 },
@@ -65,7 +65,7 @@ static const struct Command mutt_commands[] = {
   { "folder-hook",         mutt_parse_hook,        MUTT_FOLDER_HOOK },
   { "group",               parse_group,            MUTT_GROUP },
   { "hdr_order",           parse_stailq,           IP &HeaderOrderList },
-  { "iconv-hook",          mutt_parse_hook,        MUTT_ICONV_HOOK },
+  { "iconv-hook",          mutt_parse_charset_iconv_hook, MUTT_ICONV_HOOK },
   { "ifdef",               parse_ifdef,            0 },
   { "ifndef",              parse_ifdef,            1 },
   { "ignore",              parse_ignore,           0 },
@@ -127,7 +127,8 @@ static const struct Command mutt_commands[] = {
   // clang-format on
 };
 
-ARRAY_HEAD(, struct Command) commands = ARRAY_HEAD_INITIALIZER;
+ARRAY_HEAD(CommandArray, struct Command);
+struct CommandArray commands = ARRAY_HEAD_INITIALIZER;
 
 /**
  * mutt_commands_init - Initialize commands array and register default commands
@@ -174,7 +175,7 @@ void mutt_commands_free(void)
 /**
  * mutt_commands_array - Get Commands array
  * @param first Set to first element of Commands array
- * @retval size_t Size of Commands array
+ * @retval num Size of Commands array
  */
 size_t mutt_commands_array(struct Command **first)
 {

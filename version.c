@@ -29,7 +29,6 @@
  */
 
 #include "config.h"
-#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -80,7 +79,7 @@ static const char *Copyright =
     "Copyright (C) 2000-2004 Edmund Grimley Evans <edmundo@rano.org>\n"
     "Copyright (C) 2006-2009 Rocco Rutte <pdmef@gmx.net>\n"
     "Copyright (C) 2014-2020 Kevin J. McCarthy <kevin@8t8.us>\n"
-    "Copyright (C) 2015-2020 Richard Russon <rich@flatcap.org>\n";
+    "Copyright (C) 2015-2022 Richard Russon <rich@flatcap.org>\n";
 
 static const char *Thanks =
     N_("Many others not mentioned here contributed code, fixes,\n"
@@ -110,7 +109,7 @@ static const char *ReachingUs =
 
 // clang-format off
 static const char *Notice =
-    N_("Copyright (C) 1996-2020 Michael R. Elkins and others.\n"
+    N_("Copyright (C) 1996-2022 Michael R. Elkins and others.\n"
        "NeoMutt comes with ABSOLUTELY NO WARRANTY; for details type 'neomutt -vv'.\n"
        "NeoMutt is free software, and you are welcome to redistribute it\n"
        "under certain conditions; type 'neomutt -vv' for details.\n");
@@ -295,8 +294,14 @@ static struct CompileOptions debug_opts[] = {
 #ifdef USE_ASAN
   { "asan", 2 },
 #endif
+#ifdef USE_DEBUG_COLOR
+  { "color", 2 },
+#endif
 #ifdef HAVE_LIBUNWIND
   { "backtrace", 2 },
+#endif
+#ifdef USE_DEBUG_EMAIL
+  { "email", 2 },
 #endif
 #ifdef USE_DEBUG_GRAPHVIZ
   { "graphviz", 2 },
@@ -306,6 +311,9 @@ static struct CompileOptions debug_opts[] = {
 #endif
 #ifdef USE_DEBUG_PARSE_TEST
   { "parse-test", 2 },
+#endif
+#ifdef QUEUE_MACRO_DEBUG_TRACE
+  { "queue", 2 },
 #endif
 #ifdef USE_DEBUG_WINDOW
   { "window", 2 },
@@ -491,7 +499,7 @@ bool print_version(FILE *fp)
 
   if (debug_opts[0].name)
   {
-    fprintf(fp, "\n%s\n", _("Debug options:"));
+    fprintf(fp, "\n%s\n", _("Devel options:"));
     print_compile_options(debug_opts, fp);
   }
 

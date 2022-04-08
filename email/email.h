@@ -109,7 +109,7 @@ struct Email
 
   int index;                   ///< The absolute (unsorted) message number
   int msgno;                   ///< Number displayed to the user
-  int pair;                    ///< Color-pair to use when displaying in the index
+  struct AttrColor *attr_color; ///< Color-pair to use when displaying in the index
   int score;                   ///< Message score
   int vnum;                    ///< Virtual message number
   short attach_total;          ///< Number of qualifying attachments in message, if attach_valid
@@ -144,10 +144,13 @@ STAILQ_HEAD(EmailList, EmailNode);
  */
 enum NotifyEmail
 {
-  NT_EMAIL_ADD = 1,    ///< Email has been added
-  NT_EMAIL_DELETE,     ///< Email is about to be deleted
-  NT_EMAIL_DELETE_ALL, ///< All the Emails are about to be deleted
-  NT_EMAIL_CHANGE,     ///< Email has changed
+  NT_EMAIL_ADD = 1,         ///< Email has been added
+  NT_EMAIL_DELETE,          ///< Email is about to be deleted
+  NT_EMAIL_DELETE_ALL,      ///< All the Emails are about to be deleted
+  NT_EMAIL_CHANGE,          ///< Email has changed
+  NT_EMAIL_CHANGE_ENVELOPE, ///< Email's Envelope has changed
+  NT_EMAIL_CHANGE_ATTACH,   ///< Email's Attachments have changed
+  NT_EMAIL_CHANGE_SECURITY, ///< Email's security settings have changed
 };
 
 /**
@@ -162,7 +165,7 @@ struct EventEmail
 /**
  * enum NotifyHeader - Types of Header Event
  *
- * Observers on #NT_HEADER will be passed an #EventHeader
+ * Observers of #NT_HEADER will be passed an #EventHeader.
  */
 enum NotifyHeader
 {

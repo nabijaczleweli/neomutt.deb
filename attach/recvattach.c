@@ -45,6 +45,7 @@
 #include "ncrypt/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
+#include "attach.h"
 #include "commands.h"
 #include "handler.h"
 #include "hook.h"
@@ -88,7 +89,7 @@ static void mutt_update_v2r(struct AttachCtx *actx)
   while (rindex < actx->idxlen)
   {
     actx->v2r[vindex++] = rindex;
-    if (actx->idx[rindex]->body->collapsed)
+    if (actx->idx[rindex]->collapsed)
     {
       curlevel = actx->idx[rindex]->level;
       do
@@ -109,7 +110,7 @@ static void mutt_update_v2r(struct AttachCtx *actx)
  */
 void mutt_update_tree(struct AttachCtx *actx)
 {
-  char buf[256];
+  char buf[256] = { 0 };
   char *s = NULL;
 
   mutt_update_v2r(actx);
@@ -289,8 +290,8 @@ static int query_save_attachment(FILE *fp, struct Body *body, struct Email *e, c
   prompt = _("Save to file: ");
   while (prompt)
   {
-    if ((mutt_buffer_get_field(prompt, buf, MUTT_FILE | MUTT_CLEAR, false, NULL,
-                               NULL, NULL) != 0) ||
+    if ((mutt_buffer_get_field(prompt, buf, MUTT_COMP_FILE | MUTT_COMP_CLEAR,
+                               false, NULL, NULL, NULL) != 0) ||
         mutt_buffer_is_empty(buf))
     {
       goto cleanup;
@@ -444,7 +445,7 @@ void mutt_save_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag,
           mutt_buffer_strcpy(buf, mutt_path_basename(NONULL(top->filename)));
           prepend_savedir(buf);
 
-          if ((mutt_buffer_get_field(_("Save to file: "), buf, MUTT_FILE | MUTT_CLEAR,
+          if ((mutt_buffer_get_field(_("Save to file: "), buf, MUTT_COMP_FILE | MUTT_COMP_CLEAR,
                                      false, NULL, NULL, NULL) != 0) ||
               mutt_buffer_is_empty(buf))
           {
@@ -715,8 +716,8 @@ void mutt_pipe_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag,
   /* perform charset conversion on text attachments when piping */
   state.flags = MUTT_CHARCONV;
 
-  if (mutt_buffer_get_field((filter ? _("Filter through: ") : _("Pipe to: ")),
-                            buf, MUTT_CMD, false, NULL, NULL, NULL) != 0)
+  if (mutt_buffer_get_field((filter ? _("Filter through: ") : _("Pipe to: ")), buf,
+                            MUTT_COMP_FILE_SIMPLE, false, NULL, NULL, NULL) != 0)
   {
     goto cleanup;
   }
@@ -932,7 +933,7 @@ void recvattach_edit_content_type(struct AttachCtx *actx, struct Menu *menu, str
  * mutt_attach_display_loop - Event loop for the Attachment menu
  * @param sub  Config Subset
  * @param menu Menu listing Attachments
- * @param op   Operation, e.g. OP_VIEW_ATTACH
+ * @param op   Operation, e.g. OP_ATTACHMENT_VIEW
  * @param e  Email
  * @param actx Attachment context
  * @param recv true if these are received attachments (rather than in compose)
@@ -949,9 +950,19 @@ int mutt_attach_display_loop(struct ConfigSubset *sub, struct Menu *menu, int op
         bool_str_toggle(NeoMutt->sub, "weed", NULL);
         /* fallthrough */
 
-      case OP_VIEW_ATTACH:
+      case OP_ATTACHMENT_VIEW:
       {
         struct AttachPtr *cur_att = current_attachment(actx, menu);
+        if (!cur_att->fp)
+        {
+          if (cur_att->body->type == TYPE_MULTIPART)
+          {
+            struct Body *b = cur_att->body->parts;
+            while (b->parts)
+              b = b->parts;
+            cur_att = b->aptr;
+          }
+        }
         op = mutt_view_attachment(cur_att->fp, cur_att->body, MUTT_VA_REGULAR,
                                   e, actx, menu->win);
         break;
@@ -964,7 +975,7 @@ int mutt_attach_display_loop(struct ConfigSubset *sub, struct Menu *menu, int op
         if (index < menu->max)
         {
           menu_set_index(menu, index);
-          op = OP_VIEW_ATTACH;
+          op = OP_ATTACHMENT_VIEW;
         }
         else
           op = OP_NULL;
@@ -978,14 +989,14 @@ int mutt_attach_display_loop(struct ConfigSubset *sub, struct Menu *menu, int op
         if (index >= 0)
         {
           menu_set_index(menu, index);
-          op = OP_VIEW_ATTACH;
+          op = OP_ATTACHMENT_VIEW;
         }
         else
           op = OP_NULL;
         break;
       }
 
-      case OP_EDIT_TYPE:
+      case OP_ATTACHMENT_EDIT_TYPE:
       {
         struct AttachPtr *cur_att = current_attachment(actx, menu);
         /* when we edit the content-type, we should redisplay the attachment
@@ -997,7 +1008,7 @@ int mutt_attach_display_loop(struct ConfigSubset *sub, struct Menu *menu, int op
           mutt_edit_content_type(e, cur_att->body, cur_att->fp);
 
         menu_queue_redraw(menu, MENU_REDRAW_INDEX);
-        op = OP_VIEW_ATTACH;
+        op = OP_ATTACHMENT_VIEW;
         break;
       }
       /* functions which are passed through from the pager */
@@ -1008,7 +1019,7 @@ int mutt_attach_display_loop(struct ConfigSubset *sub, struct Menu *menu, int op
           break;
         }
       /* fallthrough */
-      case OP_ATTACH_COLLAPSE:
+      case OP_ATTACHMENT_COLLAPSE:
         if (recv)
           return op;
       /* fallthrough */
@@ -1104,13 +1115,14 @@ void mutt_generate_recvattach_list(struct AttachCtx *actx, struct Email *e,
 
     /* Strip out the top level multipart */
     if ((m->type == TYPE_MULTIPART) && m->parts && !need_secured &&
-        ((parent_type == -1) && !mutt_istr_equal("alternative", m->subtype)))
+        ((parent_type == -1) && !mutt_istr_equal("alternative", m->subtype) &&
+         !mutt_istr_equal("multilingual", m->subtype)))
     {
       mutt_generate_recvattach_list(actx, e, m->parts, fp, m->type, level, decrypted);
     }
     else
     {
-      struct AttachPtr *ap = mutt_mem_calloc(1, sizeof(struct AttachPtr));
+      struct AttachPtr *ap = mutt_aptr_new();
       mutt_actx_add_attach(actx, ap);
 
       ap->body = m;
@@ -1149,7 +1161,7 @@ void mutt_attach_init(struct AttachCtx *actx)
     actx->idx[i]->body->tagged = false;
 
     /* OR an inner container is of type 'multipart/digest' */
-    actx->idx[i]->body->collapsed =
+    actx->idx[i]->collapsed =
         (c_digest_collapse &&
          (digest || ((actx->idx[i]->body->type == TYPE_MULTIPART) &&
                      mutt_istr_equal(actx->idx[i]->body->subtype, "digest"))));
@@ -1169,7 +1181,6 @@ void mutt_update_recvattach_menu(struct AttachCtx *actx, struct Menu *menu, bool
     mutt_generate_recvattach_list(actx, actx->email, actx->email->body,
                                   actx->fp_root, -1, 0, 0);
     mutt_attach_init(actx);
-    menu->mdata = actx;
   }
 
   mutt_update_tree(actx);
@@ -1180,4 +1191,40 @@ void mutt_update_recvattach_menu(struct AttachCtx *actx, struct Menu *menu, bool
   if (index >= menu->max)
     menu_set_index(menu, menu->max - 1);
   menu_queue_redraw(menu, MENU_REDRAW_INDEX);
+}
+
+/**
+ * ba_add_tagged - Get an array of tagged Attachments
+ * @param ba   Empty BodyArray to populate
+ * @param actx List of Attachments
+ * @param menu Menu
+ * @retval num Number of selected Attachments
+ * @retval -1  Error
+ */
+int ba_add_tagged(struct BodyArray *ba, struct AttachCtx *actx, struct Menu *menu)
+{
+  if (!ba || !actx || !menu)
+    return -1;
+
+  if (menu->tag_prefix)
+  {
+    for (int i = 0; i < actx->idxlen; i++)
+    {
+      struct Body *b = actx->idx[i]->body;
+      if (b->tagged)
+      {
+        ARRAY_ADD(ba, b);
+      }
+    }
+  }
+  else
+  {
+    struct AttachPtr *cur = current_attachment(actx, menu);
+    if (!cur)
+      return -1;
+
+    ARRAY_ADD(ba, cur->body);
+  }
+
+  return ARRAY_SIZE(ba);
 }

@@ -2,10 +2,10 @@
 
 [![Stars](https://img.shields.io/github/stars/neomutt/neomutt.svg?style=social&label=Stars)](https://github.com/neomutt/neomutt "Give us a Star")
 [![Twitter](https://img.shields.io/twitter/follow/NeoMutt_Org.svg?style=social&label=Follow)](https://twitter.com/NeoMutt_Org "Follow us on Twitter")
-[![Contributors](https://img.shields.io/badge/Contributors-218-orange.svg)](https://github.com/neomutt/neomutt/blob/master/AUTHORS.md "All of NeoMutt's Contributors")
+[![Contributors](https://img.shields.io/badge/Contributors-234-orange.svg)](https://github.com/neomutt/neomutt/blob/master/AUTHORS.md "All of NeoMutt's Contributors")
 [![Release](https://img.shields.io/github/release/neomutt/neomutt.svg)](https://github.com/neomutt/neomutt/releases/latest "Latest Release Notes")
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-blue.svg)](https://github.com/neomutt/neomutt/blob/master/LICENSE.md "Copyright Statement")
-[![Code build](https://img.shields.io/travis/com/neomutt/neomutt/master?label=code)](https://app.travis-ci.com/github/neomutt/neomutt "Latest Automatic Code Build")
+[![Code build](https://github.com/neomutt/neomutt/actions/workflows/build-and-test.yml/badge.svg?branch=master&event=push)](https://github.com/neomutt/neomutt/actions/workflows/build-and-test.yml "Latest Automatic Code Build")
 [![Coverity Scan](https://img.shields.io/coverity/scan/8495.svg)](https://scan.coverity.com/projects/neomutt-neomutt "Latest Code Static Analysis")
 [![Website build](https://img.shields.io/travis/neomutt/neomutt.github.io.svg?label=website)](https://app.travis-ci.com/github/neomutt/neomutt.github.io "Latest Website Test")
 
@@ -79,7 +79,7 @@ instructions on the [distro page](https://neomutt.org/distro.html).
 - Releases:        https://github.com/neomutt/neomutt/releases/latest
 - Questions/Bugs:  https://github.com/neomutt/neomutt/issues
 - Website:         https://neomutt.org
-- IRC:             [irc://irc.libera.chat/neomutt](https://kiwiirc.com/nextclient/irc.libera.chat/#neomutt "IRC Web Client") - please be patient.
+- IRC:             [irc://irc.libera.chat/neomutt](https://web.libera.chat/#neomutt "IRC Web Client") - please be patient.
   We're a small group, so our answer might take some time.
 - Mailinglists:    [neomutt-users](mailto:neomutt-users-request@neomutt.org?subject=subscribe)
   and [neomutt-devel](mailto:neomutt-devel-request@neomutt.org?subject=subscribe)
@@ -103,5 +103,5 @@ The principal authors of NeoMutt are:
 - Copyright (C) 2000-2019 David Champion `<dgc.mutt@c13.us>`
 - Copyright (C) 2006-2009 Rocco Rutte `<pdmef@gmx.net>`
 - Copyright (C) 2014-2020 Kevin J. McCarthy `<kevin@8t8.us>`
-- Copyright (C) 2015-2021 Richard Russon `<rich@flatcap.org>`
+- Copyright (C) 2015-2022 Richard Russon `<rich@flatcap.org>`
 

@@ -26,14 +26,14 @@
  *
  * Match patterns to emails
  *
- * | File                 | Description                 |
- * | :------------------- | :-------------------------- |
- * | pattern/compile.c    | @subpage pattern_compile    |
- * | pattern/config.c     | @subpage pattern_config     |
- * | pattern/dlgpattern.c | @subpage pattern_dlgpattern |
- * | pattern/exec.c       | @subpage pattern_exec       |
- * | pattern/flags.c      | @subpage pattern_flags      |
- * | pattern/pattern.c    | @subpage pattern_pattern    |
+ * | File                 | Description                  |
+ * | :------------------- | :--------------------------- |
+ * | pattern/compile.c    | @subpage pattern_compile     |
+ * | pattern/config.c     | @subpage pattern_config      |
+ * | pattern/dlgpattern.c | @subpage pattern_dlg_pattern |
+ * | pattern/exec.c       | @subpage pattern_exec        |
+ * | pattern/flags.c      | @subpage pattern_flags       |
+ * | pattern/pattern.c    | @subpage pattern_pattern     |
  */
 
 #ifndef MUTT_PATTERN_LIB_H
@@ -67,7 +67,7 @@ typedef uint8_t PatternCompFlags;           ///< Flags for mutt_pattern_comp(), 
  */
 struct Pattern
 {
-  short op;                      ///< Operation, e.g. MUTT_PAT_SCORE
+  short op;                      ///< Operation, e.g. #MUTT_PAT_SCORE
   bool pat_not      : 1;         ///< Pattern should be inverted (not)
   bool all_addr     : 1;         ///< All Addresses in the list must match
   bool string_match : 1;         ///< Check a string for a match
@@ -86,6 +86,9 @@ struct Pattern
     char *str;                   ///< String, if string_match is set
     struct ListHead multi_cases; ///< Multiple strings for ~I pattern
   } p;
+#ifdef USE_DEBUG_GRAPHVIZ
+  const char *raw_pattern;
+#endif
   SLIST_ENTRY(Pattern) entries;  ///< Linked list
 };
 SLIST_HEAD(PatternList, Pattern);
@@ -181,8 +184,8 @@ void mutt_pattern_free(struct PatternList **pat);
 bool dlg_select_pattern(char *buf, size_t buflen);
 
 int mutt_which_case(const char *s);
-int mutt_is_list_recipient(bool all_addr, struct Envelope *e);
-int mutt_is_subscribed_list_recipient(bool all_addr, struct Envelope *e);
+int mutt_is_list_recipient(bool all_addr, struct Envelope *env);
+int mutt_is_subscribed_list_recipient(bool all_addr, struct Envelope *env);
 int mutt_pattern_func(struct Context *ctx, int op, char *prompt);
 int mutt_pattern_alias_func(char *prompt, struct AliasMenuData *mdata, struct Menu *menu);
 int mutt_search_command(struct Mailbox *m, struct Menu *menu, int cur, int op);

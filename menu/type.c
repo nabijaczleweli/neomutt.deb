@@ -32,10 +32,13 @@ const struct Mapping MenuNames[] = {
   // clang-format off
   { "alias",            MENU_ALIAS },
   { "attach",           MENU_ATTACH },
+#ifdef USE_AUTOCRYPT
+  { "autocrypt",        MENU_AUTOCRYPT_ACCT },
+#endif
   { "browser",          MENU_FOLDER },
   { "compose",          MENU_COMPOSE },
   { "editor",           MENU_EDITOR },
-  { "index",            MENU_MAIN },
+  { "index",            MENU_INDEX },
   { "pager",            MENU_PAGER },
   { "postpone",         MENU_POSTPONE },
   { "pgp",              MENU_PGP },

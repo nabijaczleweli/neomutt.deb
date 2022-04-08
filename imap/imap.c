@@ -63,6 +63,7 @@
 #include "mutt_socket.h"
 #include "muttlib.h"
 #include "mx.h"
+#include "sort.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
@@ -273,9 +274,8 @@ static int make_msg_set(struct Mailbox *m, struct Buffer *buf,
       else if (n == (m->msg_count - 1))
         mutt_buffer_add_printf(buf, ":%u", imap_edata_get(e)->uid);
     }
-    /* End current set if message doesn't match or we've reached the end
-     * of the mailbox via inactive messages following the last match. */
-    else if (setstart && (e->active || (n == adata->mailbox->msg_count - 1)))
+    /* End current set if message doesn't match. */
+    else if (setstart)
     {
       if (imap_edata_get(m->emails[n - 1])->uid > setstart)
         mutt_buffer_add_printf(buf, ":%u", imap_edata_get(m->emails[n - 1])->uid);
@@ -445,7 +445,7 @@ static int complete_hosts(char *buf, size_t buflen)
  * @retval  0 Success
  * @retval -1 Failure
  */
-int imap_create_mailbox(struct ImapAccountData *adata, char *mailbox)
+int imap_create_mailbox(struct ImapAccountData *adata, const char *mailbox)
 {
   char buf[2048], mbox[1024];
 
@@ -668,12 +668,13 @@ void imap_notify_delete_email(struct Mailbox *m, struct Email *e)
 /**
  * imap_expunge_mailbox - Purge messages from the server
  * @param m Mailbox
+ * @param resort Trigger a resort?
  *
  * Purge IMAP portion of expunged messages from the context. Must not be done
  * while something has a handle on any headers (eg inside pager or editor).
  * That is, check #IMAP_REOPEN_ALLOW.
  */
-void imap_expunge_mailbox(struct Mailbox *m)
+void imap_expunge_mailbox(struct Mailbox *m, bool resort)
 {
   struct ImapAccountData *adata = imap_adata_get(m);
   struct ImapMboxData *mdata = imap_mdata_get(m);
@@ -733,7 +734,10 @@ void imap_expunge_mailbox(struct Mailbox *m)
 #endif
 
   mailbox_changed(m, NT_MAILBOX_UPDATE);
-  mailbox_changed(m, NT_MAILBOX_RESORT);
+  if (resort)
+  {
+    mailbox_changed(m, NT_MAILBOX_RESORT);
+  }
 }
 
 /**
@@ -905,8 +909,11 @@ static int compare_uid(const void *a, const void *b)
 {
   const struct Email *ea = *(struct Email const *const *) a;
   const struct Email *eb = *(struct Email const *const *) b;
-  return imap_edata_get((struct Email *) ea)->uid -
-         imap_edata_get((struct Email *) eb)->uid;
+
+  const unsigned int ua = imap_edata_get((struct Email *) ea)->uid;
+  const unsigned int ub = imap_edata_get((struct Email *) eb)->uid;
+
+  return mutt_numeric_cmp(ua, ub);
 }
 
 /**
@@ -1098,7 +1105,7 @@ int imap_sync_message_for_copy(struct Mailbox *m, struct Email *e,
  * imap_check_mailbox - Use the NOOP or IDLE command to poll for new mail
  * @param m     Mailbox
  * @param force Don't wait
- * return enum MxStatus
+ * @retval num MxStatus
  */
 enum MxStatus imap_check_mailbox(struct Mailbox *m, bool force)
 {
@@ -1251,7 +1258,7 @@ int imap_path_status(const char *path, bool queue)
 
   if (is_temp)
   {
-    mx_ac_remove(m);
+    mx_ac_remove(m, false);
     mailbox_free(&m);
   }
 
@@ -1347,7 +1354,7 @@ int imap_complete(char *buf, size_t buflen, const char *path)
   char tmp[2048];
   struct ImapList listresp = { 0 };
   char completion[1024];
-  int clen;
+  size_t clen;
   size_t matchlen = 0;
   int completions = 0;
   int rc;
@@ -2022,7 +2029,7 @@ static enum MxOpenReturns imap_mbox_open(struct Mailbox *m)
       mutt_debug(LL_DEBUG3, "Getting mailbox UIDVALIDITY\n");
       pc += 3;
       pc = imap_next_word(pc);
-      if (mutt_str_atoui(pc, &mdata->uidvalidity) < 0)
+      if (!mutt_str_atoui(pc, &mdata->uidvalidity))
         goto fail;
     }
     else if (mutt_istr_startswith(pc, "OK [UIDNEXT"))
@@ -2030,7 +2037,7 @@ static enum MxOpenReturns imap_mbox_open(struct Mailbox *m)
       mutt_debug(LL_DEBUG3, "Getting mailbox UIDNEXT\n");
       pc += 3;
       pc = imap_next_word(pc);
-      if (mutt_str_atoui(pc, &mdata->uid_next) < 0)
+      if (!mutt_str_atoui(pc, &mdata->uid_next))
         goto fail;
     }
     else if (mutt_istr_startswith(pc, "OK [HIGHESTMODSEQ"))
@@ -2038,7 +2045,7 @@ static enum MxOpenReturns imap_mbox_open(struct Mailbox *m)
       mutt_debug(LL_DEBUG3, "Getting mailbox HIGHESTMODSEQ\n");
       pc += 3;
       pc = imap_next_word(pc);
-      if (mutt_str_atoull(pc, &mdata->modseq) < 0)
+      if (!mutt_str_atoull(pc, &mdata->modseq))
         goto fail;
     }
     else if (mutt_istr_startswith(pc, "OK [NOMODSEQ"))
@@ -2204,7 +2211,7 @@ static enum MxStatus imap_mbox_close(struct Mailbox *m)
       if (m->msg_deleted == 0)
       {
         adata->closing = true;
-        imap_exec(adata, "CLOSE", IMAP_CMD_QUEUE);
+        imap_exec(adata, "CLOSE", IMAP_CMD_NO_FLAGS);
       }
       adata->state = IMAP_AUTHENTICATED;
     }
@@ -2247,7 +2254,7 @@ cleanup:
 /**
  * imap_tags_edit - Prompt and validate new messages tags - Implements MxOps::tags_edit() - @ingroup mx_tags_edit
  */
-static int imap_tags_edit(struct Mailbox *m, const char *tags, char *buf, size_t buflen)
+static int imap_tags_edit(struct Mailbox *m, const char *tags, struct Buffer *buf)
 {
   struct ImapMboxData *mdata = imap_mdata_get(m);
   if (!mdata)
@@ -2263,11 +2270,11 @@ static int imap_tags_edit(struct Mailbox *m, const char *tags, char *buf, size_t
     return -1;
   }
 
-  *buf = '\0';
+  mutt_buffer_reset(buf);
   if (tags)
-    mutt_str_copy(buf, tags, buflen);
+    mutt_buffer_strcpy(buf, tags);
 
-  if (mutt_get_field("Tags: ", buf, buflen, MUTT_COMP_NO_FLAGS, false, NULL, NULL) != 0)
+  if (mutt_buffer_get_field("Tags: ", buf, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0)
     return -1;
 
   /* each keyword must be atom defined by rfc822 as:
@@ -2283,8 +2290,8 @@ static int imap_tags_edit(struct Mailbox *m, const char *tags, char *buf, size_t
    * And must be separated by one space.
    */
 
-  new_tag = buf;
-  checker = buf;
+  new_tag = buf->data;
+  checker = buf->data;
   SKIPWS(checker);
   while (*checker != '\0')
   {
@@ -2315,10 +2322,10 @@ static int imap_tags_edit(struct Mailbox *m, const char *tags, char *buf, size_t
     *new_tag++ = *checker++;
   }
   *new_tag = '\0';
-  new_tag = buf; /* rewind */
+  new_tag = buf->data; /* rewind */
   mutt_str_remove_trailing_ws(new_tag);
 
-  return !mutt_str_equal(tags, buf);
+  return !mutt_str_equal(tags, mutt_buffer_string(buf));
 }
 
 /**
@@ -2334,7 +2341,7 @@ static int imap_tags_edit(struct Mailbox *m, const char *tags, char *buf, size_t
  * Also this method check that each flags is support by the server
  * first and remove unsupported one.
  */
-static int imap_tags_commit(struct Mailbox *m, struct Email *e, char *buf)
+static int imap_tags_commit(struct Mailbox *m, struct Email *e, const char *buf)
 {
   char uid[11];
 

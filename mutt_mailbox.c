@@ -214,7 +214,7 @@ int mutt_mailbox_check(struct Mailbox *m_cur, int force)
   struct MailboxNode *np = NULL;
   STAILQ_FOREACH(np, &ml, entries)
   {
-    if (np->mailbox->flags & MB_HIDDEN)
+    if (!np->mailbox->visible)
       continue;
 
     mailbox_check(m_cur, np->mailbox, &st_ctx,
@@ -332,7 +332,7 @@ void mutt_mailbox_set_notified(struct Mailbox *m)
 /**
  * find_next_mailbox - Find the next mailbox with new or unread mail.
  * @param s         Buffer containing name of current mailbox
- * @param find_new  Boolean controlling new or unread check.
+ * @param find_new  Boolean controlling new or unread check
  * @retval ptr Mailbox
  *
  * Given a folder name, find the next incoming folder with new or unread mail.

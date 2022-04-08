@@ -664,7 +664,7 @@ int mutt_check_overwrite(const char *attname, const char *path, struct Buffer *f
 
     struct Buffer *tmp = mutt_buffer_pool_get();
     mutt_buffer_strcpy(tmp, mutt_path_basename(NONULL(attname)));
-    if ((mutt_buffer_get_field(_("File under directory: "), tmp, MUTT_FILE | MUTT_CLEAR,
+    if ((mutt_buffer_get_field(_("File under directory: "), tmp, MUTT_COMP_FILE | MUTT_COMP_CLEAR,
                                false, NULL, NULL, NULL) != 0) ||
         mutt_buffer_is_empty(tmp))
     {
@@ -677,10 +677,11 @@ int mutt_check_overwrite(const char *attname, const char *path, struct Buffer *f
 
   if ((*opt == MUTT_SAVE_NO_FLAGS) && (access(mutt_buffer_string(fname), F_OK) == 0))
   {
-    switch (
-        mutt_multi_choice(_("File exists, (o)verwrite, (a)ppend, or (c)ancel?"),
-                          // L10N: Options for: File exists, (o)verwrite, (a)ppend, or (c)ancel?
-                          _("oac")))
+    char buf[4096] = { 0 };
+    snprintf(buf, sizeof(buf), "%s - %s", mutt_buffer_string(fname),
+             // L10N: Options for: File %s exists, (o)verwrite, (a)ppend, or (c)ancel?
+             _("File exists, (o)verwrite, (a)ppend, or (c)ancel?"));
+    switch (mutt_multi_choice(buf, _("oac")))
     {
       case -1: /* abort */
         return -1;
@@ -1517,11 +1518,11 @@ int mutt_set_xdg_path(enum XdgType type, struct Buffer *buf)
 {
   const char *xdg_env = mutt_str_getenv(xdg_env_vars[type]);
   char *xdg = xdg_env ? mutt_str_dup(xdg_env) : mutt_str_dup(xdg_defaults[type]);
-  char *x = xdg; /* strsep() changes xdg, so free x instead later */
+  char *x = xdg; /* mutt_str_sep() changes xdg, so free x instead later */
   char *token = NULL;
   int rc = 0;
 
-  while ((token = strsep(&xdg, ":")))
+  while ((token = mutt_str_sep(&xdg, ":")))
   {
     if (mutt_buffer_printf(buf, "%s/%s/neomuttrc", token, PACKAGE) < 0)
       continue;

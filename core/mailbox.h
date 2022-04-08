@@ -34,9 +34,6 @@
 struct ConfigSubset;
 struct Email;
 
-#define MB_NORMAL 0
-#define MB_HIDDEN 1
-
 /**
  * enum MailboxType - Supported mailbox formats
  */
@@ -131,7 +128,7 @@ struct Mailbox
   struct Account *account;            ///< Account that owns this Mailbox
   int opened;                         ///< Number of times mailbox is opened
 
-  uint8_t flags;                      ///< e.g. #MB_NORMAL
+  bool visible;                       ///< True if a result of "mailboxes"
 
   void *mdata;                        ///< Driver specific data
 
@@ -179,7 +176,6 @@ enum NotifyMailbox
    * Eventually, they'll be eliminated. */
   NT_MAILBOX_INVALID,    ///< Email list was changed
   NT_MAILBOX_RESORT,     ///< Email list needs resorting
-  NT_MAILBOX_SWITCH,     ///< Current Mailbox has changed
   NT_MAILBOX_UPDATE,     ///< Update internal tables
   NT_MAILBOX_UNTAG,      ///< Clear the 'last-tagged' pointer
 };

@@ -32,6 +32,7 @@
  * | menu/menu.c      | @subpage menu_menu      |
  * | menu/move.c      | @subpage menu_move      |
  * | menu/observer.c  | @subpage menu_observer  |
+ * | menu/tagging.c   | @subpage menu_tagging   |
  * | menu/window.c    | @subpage menu_window    |
  */
 
@@ -39,22 +40,24 @@
 #define MUTT_MENU_LIB_H
 
 #include "config.h"
+#include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include "mutt/lib.h"
 #include "type.h"
 
 struct ConfigSubset;
+struct MuttWindow;
 
+// Observers of #NT_MENU will not be passed any Event data.
 typedef uint8_t MenuRedrawFlags;       ///< Flags, e.g. #MENU_REDRAW_INDEX
 #define MENU_REDRAW_NO_FLAGS        0  ///< No flags are set
 #define MENU_REDRAW_INDEX     (1 << 0) ///< Redraw the index
 #define MENU_REDRAW_MOTION    (1 << 1) ///< Redraw after moving the menu list
 #define MENU_REDRAW_CURRENT   (1 << 2) ///< Redraw the current line of the menu
 #define MENU_REDRAW_FULL      (1 << 3) ///< Redraw everything
-#define MENU_REDRAW_BODY      (1 << 4) ///< Redraw the pager
-#define MENU_REDRAW_FLOW      (1 << 5) ///< Used by pager to reflow text
+
+ARRAY_HEAD(DialogLines, char *);
 
 /**
  * @defgroup menu_api Menu API
@@ -69,25 +72,16 @@ struct Menu
   int max;                  ///< Number of entries in the menu
   MenuRedrawFlags redraw;   ///< When to redraw the screen
   enum MenuType type;       ///< Menu definition for keymap entries
-  int pagelen;              ///< Number of entries per screen
-  bool tagprefix : 1;       ///< User has pressed <tag-prefix>
+  int page_len;             ///< Number of entries per screen
+  bool tag_prefix : 1;      ///< User has pressed <tag-prefix>
   struct MuttWindow *win;   ///< Window holding the Menu
-  struct MuttWindow *win_ibar;
   struct ConfigSubset *sub; ///< Inherited config items
-
-  /* Setting a non-empty dialog overrides normal menu behavior.
-   * In dialog mode menubar is hidden and prompt keys are checked before
-   * normal menu movement keys. This can cause problems with scrolling, if
-   * prompt keys override movement keys.  */
-  ARRAY_HEAD(, char *) dialog; ///< Dialog lines themselves
-  char *prompt;                ///< Prompt for user, similar to mutt_multi_choice
-  char *keys;                  ///< Keys used in the prompt
 
   /* the following are used only by menu_loop() */
   int top;                ///< Entry that is the top of the current page
-  int oldcurrent;         ///< For driver use only
+  int old_current;        ///< For driver use only
   int search_dir;         ///< Direction of search
-  int tagged;             ///< Number of tagged entries
+  int num_tagged;         ///< Number of tagged entries
   bool custom_search : 1; ///< The menu implements its own non-Menu::search()-compatible search, trickle OP_SEARCH*
 
   /**
@@ -137,7 +131,7 @@ struct Menu
    * @retval >0 Colour pair in an integer
    * @retval  0 No colour
    */
-  int (*color)(struct Menu *menu, int line);
+  struct AttrColor *(*color)(struct Menu *menu, int line);
 
   /**
    * @defgroup menu_custom_redraw custom_redraw()
@@ -190,14 +184,12 @@ void         menu_redraw_current(struct Menu *menu);
 void         menu_redraw_full   (struct Menu *menu);
 void         menu_redraw_index  (struct Menu *menu);
 void         menu_redraw_motion (struct Menu *menu);
-void         menu_redraw_status (struct Menu *menu);
 int          menu_redraw        (struct Menu *menu);
 
 void         menu_add_dialog_row(struct Menu *menu, const char *row);
 void         menu_cleanup(void);
 enum MenuType menu_get_current_type(void);
 void         menu_init(void);
-int          menu_loop(struct Menu *menu);
 
 struct MuttWindow *menu_new_window(enum MenuType type, struct ConfigSubset *sub);
 
@@ -208,5 +200,8 @@ void menu_queue_redraw(struct Menu *menu, MenuRedrawFlags redraw);
 MenuRedrawFlags menu_move_view_relative(struct Menu *menu, int relative);
 MenuRedrawFlags menu_set_and_notify(struct Menu *menu, int top, int index);
 void menu_adjust(struct Menu *menu);
+
+int menu_function_dispatcher(struct MuttWindow *win, int op);
+int menu_tagging_dispatcher(struct MuttWindow *win, int op);
 
 #endif /* MUTT_MENU_LIB_H */

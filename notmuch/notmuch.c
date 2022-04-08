@@ -361,8 +361,10 @@ static char *get_query_string(struct NmMboxData *mdata, bool window)
 
     if (strcmp(item->name, "limit") == 0)
     {
-      if (mutt_str_atoi(item->value, &mdata->db_limit))
+      if (!mutt_str_atoi_full(item->value, &mdata->db_limit))
+      {
         mutt_error(_("failed to parse notmuch limit: %s"), item->value);
+      }
     }
     else if (strcmp(item->name, "type") == 0)
       mdata->query_type = nm_string_to_query_type(item->value);
@@ -1584,7 +1586,9 @@ char *nm_url_from_query(struct Mailbox *m, char *buf, size_t buflen)
     using_default_data = true;
   }
 
-  mdata->query_type = nm_parse_type_from_query(buf);
+  enum NmQueryType c_nm_query_type =
+      nm_string_to_query_type(cs_subset_string(NeoMutt->sub, "nm_query_type"));
+  mdata->query_type = nm_parse_type_from_query(buf, c_nm_query_type);
 
   const short c_nm_db_limit = cs_subset_number(NeoMutt->sub, "nm_db_limit");
   if (get_limit(mdata) == c_nm_db_limit)
@@ -1798,7 +1802,7 @@ static enum MxStatus nm_mbox_check_stats(struct Mailbox *m, uint8_t flags)
     else if (item->value && (strcmp(item->name, "limit") == 0))
     {
       // Try to parse the limit
-      if (mutt_str_atoi(item->value, &limit) != 0)
+      if (!mutt_str_atoi_full(item->value, &limit))
       {
         mutt_error(_("failed to parse limit: %s"), item->value);
         goto done;
@@ -1856,7 +1860,7 @@ done:
 
 /**
  * get_default_mailbox - Get Mailbox for notmuch without any parameters.
- * @retval ptr Mailbox pointer.
+ * @retval ptr Mailbox pointer
  */
 static struct Mailbox *get_default_mailbox(void)
 {
@@ -2164,6 +2168,7 @@ static enum MxStatus nm_mbox_check(struct Mailbox *m)
       struct Email e_tmp = { 0 };
       e_tmp.edata = maildir_edata_new();
       maildir_parse_flags(&e_tmp, new_file);
+      e_tmp.old = e->old;
       maildir_update_flags(m, e, &e_tmp);
       maildir_edata_free(&e_tmp.edata);
     }
@@ -2393,10 +2398,11 @@ static int nm_msg_close(struct Mailbox *m, struct Message *msg)
 /**
  * nm_tags_edit - Prompt and validate new messages tags - Implements MxOps::tags_edit() - @ingroup mx_tags_edit
  */
-static int nm_tags_edit(struct Mailbox *m, const char *tags, char *buf, size_t buflen)
+static int nm_tags_edit(struct Mailbox *m, const char *tags, struct Buffer *buf)
 {
-  *buf = '\0';
-  if (mutt_get_field("Add/remove labels: ", buf, buflen, MUTT_NM_TAG, false, NULL, NULL) != 0)
+  mutt_buffer_reset(buf);
+  if (mutt_buffer_get_field("Add/remove labels: ", buf, MUTT_COMP_NM_TAG, false,
+                            NULL, NULL, NULL) != 0)
   {
     return -1;
   }
@@ -2406,7 +2412,7 @@ static int nm_tags_edit(struct Mailbox *m, const char *tags, char *buf, size_t b
 /**
  * nm_tags_commit - Save the tags to a message - Implements MxOps::tags_commit() - @ingroup mx_tags_commit
  */
-static int nm_tags_commit(struct Mailbox *m, struct Email *e, char *buf)
+static int nm_tags_commit(struct Mailbox *m, struct Email *e, const char *buf)
 {
   if (*buf == '\0')
     return 0; /* no tag change, so nothing to do */

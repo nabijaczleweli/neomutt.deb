@@ -31,6 +31,7 @@
 #include "config/lib.h"
 #include "core/lib.h"
 
+struct Buffer;
 struct Email;
 
 extern const struct MxOps *mx_ops[];
@@ -61,8 +62,8 @@ int             mx_path_pretty     (char *buf, size_t buflen, const char *folder
 enum MailboxType mx_path_probe     (const char *path);
 struct Mailbox *mx_path_resolve    (const char *path);
 struct Mailbox *mx_resolve         (const char *path_or_name);
-int             mx_tags_commit     (struct Mailbox *m, struct Email *e, char *tags);
-int             mx_tags_edit       (struct Mailbox *m, const char *tags, char *buf, size_t buflen);
+int             mx_tags_commit     (struct Mailbox *m, struct Email *e, const char *tags);
+int             mx_tags_edit       (struct Mailbox *m, const char *tags, struct Buffer *buf);
 enum MailboxType mx_type           (struct Mailbox *m);
 
 struct Account *mx_ac_find     (struct Mailbox *m);
@@ -70,12 +71,12 @@ struct Mailbox *mx_mbox_find   (struct Account *a, const char *path);
 struct Mailbox *mx_mbox_find2  (const char *path);
 bool            mx_mbox_ac_link(struct Mailbox *m);
 bool            mx_ac_add      (struct Account *a, struct Mailbox *m);
-int             mx_ac_remove   (struct Mailbox *m);
+int             mx_ac_remove   (struct Mailbox *m, bool keep_account);
 
 int                 mx_access           (const char *path, int flags);
 void                mx_alloc_memory     (struct Mailbox *m);
 int                 mx_path_is_empty    (const char *path);
-void                mx_fastclose_mailbox(struct Mailbox *m);
+void                mx_fastclose_mailbox(struct Mailbox *m, bool keep_account);
 const struct MxOps *mx_get_ops          (enum MailboxType type);
 bool                mx_tags_is_supported(struct Mailbox *m);
 int                 mx_toggle_write     (struct Mailbox *m);

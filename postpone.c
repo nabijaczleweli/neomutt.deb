@@ -32,9 +32,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <unistd.h>
 #include "mutt/lib.h"
+#include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
@@ -159,15 +159,13 @@ int mutt_num_postponed(struct Mailbox *m, bool force)
     if (mx_mbox_open(m_post, MUTT_NOSORT | MUTT_QUIET))
     {
       PostCount = m_post->msg_count;
-      mx_fastclose_mailbox(m_post);
-      if (m_post->flags == MB_HIDDEN)
-        mailbox_free(&m_post);
+      mx_fastclose_mailbox(m_post, false);
     }
     else
     {
-      mailbox_free(&m_post);
       PostCount = 0;
     }
+    mailbox_free(&m_post);
 
 #ifdef USE_NNTP
     if (optnews)
@@ -198,7 +196,7 @@ static void hardclose(struct Mailbox *m)
   if (rc != MX_STATUS_ERROR && rc != MX_STATUS_OK)
     rc = mx_mbox_close(m);
   if (rc != MX_STATUS_OK)
-    mx_fastclose_mailbox(m);
+    mx_fastclose_mailbox(m, false);
 }
 
 /**
@@ -353,6 +351,144 @@ SecurityFlags mutt_parse_crypt_hdr(const char *p, bool set_empty_signas, Securit
 }
 
 /**
+ * create_tmp_files_for_attachments - Create temporary files for all attachments
+ * @param fp_body           file containing the template
+ * @param file              Allocated buffer for temporary file name
+ * @param e_new             The new email template header
+ * @param body              First body in email or group
+ * @param protected_headers MIME headers for email template
+ * @retval  0 Success
+ * @retval -1 Error
+ */
+static int create_tmp_files_for_attachments(FILE *fp_body, struct Buffer *file,
+                                            struct Email *e_new, struct Body *body,
+                                            struct Envelope *protected_headers)
+{
+  struct Body *b = NULL;
+  struct State s = { 0 };
+  SecurityFlags sec_type;
+
+  s.fp_in = fp_body;
+
+  for (b = body; b; b = b->next)
+  {
+    if (b->type == TYPE_MULTIPART)
+    {
+      if (create_tmp_files_for_attachments(fp_body, file, e_new, b->parts, protected_headers) < 0)
+      {
+        return -1;
+      }
+    }
+    else
+    {
+      mutt_buffer_reset(file);
+      if (b->filename)
+      {
+        mutt_buffer_strcpy(file, b->filename);
+        b->d_filename = mutt_str_dup(b->filename);
+      }
+      else
+      {
+        /* avoid Content-Disposition: header with temporary filename */
+        b->use_disp = false;
+      }
+
+      /* set up state flags */
+
+      s.flags = 0;
+
+      if (b->type == TYPE_TEXT)
+      {
+        if (mutt_istr_equal("yes",
+                            mutt_param_get(&b->parameter, "x-mutt-noconv")))
+        {
+          b->noconv = true;
+        }
+        else
+        {
+          s.flags |= MUTT_CHARCONV;
+          b->noconv = false;
+        }
+
+        mutt_param_delete(&b->parameter, "x-mutt-noconv");
+      }
+
+      mutt_adv_mktemp(file);
+      s.fp_out = mutt_file_fopen(mutt_buffer_string(file), "w");
+      if (!s.fp_out)
+        return -1;
+
+      if (((WithCrypto & APPLICATION_PGP) != 0) &&
+          ((sec_type = mutt_is_application_pgp(b)) & (SEC_ENCRYPT | SEC_SIGN)))
+      {
+        if (sec_type & SEC_ENCRYPT)
+        {
+          if (!crypt_valid_passphrase(APPLICATION_PGP))
+            return -1;
+          mutt_message(_("Decrypting message..."));
+        }
+
+        if (mutt_body_handler(b, &s) < 0)
+        {
+          mutt_error(_("Decryption failed"));
+          return -1;
+        }
+
+        if ((b == body) && !protected_headers)
+        {
+          protected_headers = b->mime_headers;
+          b->mime_headers = NULL;
+        }
+
+        e_new->security |= sec_type;
+        b->type = TYPE_TEXT;
+        mutt_str_replace(&b->subtype, "plain");
+        mutt_param_delete(&b->parameter, "x-action");
+      }
+      else if (((WithCrypto & APPLICATION_SMIME) != 0) &&
+               ((sec_type = mutt_is_application_smime(b)) & (SEC_ENCRYPT | SEC_SIGN)))
+      {
+        if (sec_type & SEC_ENCRYPT)
+        {
+          if (!crypt_valid_passphrase(APPLICATION_SMIME))
+            return -1;
+          crypt_smime_getkeys(e_new->env);
+          mutt_message(_("Decrypting message..."));
+        }
+
+        if (mutt_body_handler(b, &s) < 0)
+        {
+          mutt_error(_("Decryption failed"));
+          return -1;
+        }
+
+        e_new->security |= sec_type;
+        b->type = TYPE_TEXT;
+        mutt_str_replace(&b->subtype, "plain");
+      }
+      else
+      {
+        mutt_decode_attachment(b, &s);
+      }
+
+      if (mutt_file_fclose(&s.fp_out) != 0)
+        return -1;
+
+      mutt_str_replace(&b->filename, mutt_buffer_string(file));
+      b->unlink = true;
+
+      mutt_stamp_attachment(b);
+
+      mutt_body_free(&b->parts);
+      if (b->email)
+        b->email->body = NULL; /* avoid dangling pointer */
+    }
+  }
+
+  return 0;
+}
+
+/**
  * mutt_prepare_template - Prepare a message template
  * @param fp      If not NULL, file containing the template
  * @param m       If fp is NULL, the Mailbox containing the header with the template
@@ -371,7 +507,6 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
   struct Body *b = NULL;
   FILE *fp_body = NULL;
   int rc = -1;
-  struct State s = { 0 };
   SecurityFlags sec_type;
   struct Envelope *protected_headers = NULL;
   struct Buffer *file = NULL;
@@ -386,9 +521,8 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
 
   /* parse the message header and MIME structure */
 
-  if (fseeko(fp, e->offset, SEEK_SET) != 0)
+  if (!mutt_file_seek(fp, e->offset, SEEK_SET))
   {
-    mutt_perror("fseeko");
     return -1;
   }
   e_new->offset = e->offset;
@@ -460,124 +594,16 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
     }
   }
 
-  /* We don't need no primary multipart.
-   * Note: We _do_ preserve messages!
-   *
-   * XXX - we don't handle multipart/alternative in any
-   * smart way when sending messages.  However, one may
-   * consider this a feature.  */
-  if (e_new->body->type == TYPE_MULTIPART)
+  /* We don't need no primary multipart/mixed. */
+  if ((e_new->body->type == TYPE_MULTIPART) && mutt_istr_equal(e_new->body->subtype, "mixed"))
     e_new->body = mutt_remove_multipart(e_new->body);
-
-  s.fp_in = fp_body;
 
   file = mutt_buffer_pool_get();
 
   /* create temporary files for all attachments */
-  for (b = e_new->body; b; b = b->next)
+  if (create_tmp_files_for_attachments(fp_body, file, e_new, e_new->body, protected_headers) < 0)
   {
-    /* what follows is roughly a receive-mode variant of
-     * mutt_get_tmp_attachment () from muttlib.c */
-
-    mutt_buffer_reset(file);
-    if (b->filename)
-    {
-      mutt_buffer_strcpy(file, b->filename);
-      b->d_filename = mutt_str_dup(b->filename);
-    }
-    else
-    {
-      /* avoid Content-Disposition: header with temporary filename */
-      b->use_disp = false;
-    }
-
-    /* set up state flags */
-
-    s.flags = 0;
-
-    if (b->type == TYPE_TEXT)
-    {
-      if (mutt_istr_equal("yes",
-                          mutt_param_get(&b->parameter, "x-mutt-noconv")))
-      {
-        b->noconv = true;
-      }
-      else
-      {
-        s.flags |= MUTT_CHARCONV;
-        b->noconv = false;
-      }
-
-      mutt_param_delete(&b->parameter, "x-mutt-noconv");
-    }
-
-    mutt_adv_mktemp(file);
-    s.fp_out = mutt_file_fopen(mutt_buffer_string(file), "w");
-    if (!s.fp_out)
-      goto bail;
-
-    if (((WithCrypto & APPLICATION_PGP) != 0) &&
-        ((sec_type = mutt_is_application_pgp(b)) & (SEC_ENCRYPT | SEC_SIGN)))
-    {
-      if (sec_type & SEC_ENCRYPT)
-      {
-        if (!crypt_valid_passphrase(APPLICATION_PGP))
-          goto bail;
-        mutt_message(_("Decrypting message..."));
-      }
-
-      if (mutt_body_handler(b, &s) < 0)
-      {
-        mutt_error(_("Decryption failed"));
-        goto bail;
-      }
-
-      if ((b == e_new->body) && !protected_headers)
-      {
-        protected_headers = b->mime_headers;
-        b->mime_headers = NULL;
-      }
-
-      e_new->security |= sec_type;
-      b->type = TYPE_TEXT;
-      mutt_str_replace(&b->subtype, "plain");
-      mutt_param_delete(&b->parameter, "x-action");
-    }
-    else if (((WithCrypto & APPLICATION_SMIME) != 0) &&
-             ((sec_type = mutt_is_application_smime(b)) & (SEC_ENCRYPT | SEC_SIGN)))
-    {
-      if (sec_type & SEC_ENCRYPT)
-      {
-        if (!crypt_valid_passphrase(APPLICATION_SMIME))
-          goto bail;
-        crypt_smime_getkeys(e_new->env);
-        mutt_message(_("Decrypting message..."));
-      }
-
-      if (mutt_body_handler(b, &s) < 0)
-      {
-        mutt_error(_("Decryption failed"));
-        goto bail;
-      }
-
-      e_new->security |= sec_type;
-      b->type = TYPE_TEXT;
-      mutt_str_replace(&b->subtype, "plain");
-    }
-    else
-      mutt_decode_attachment(b, &s);
-
-    if (mutt_file_fclose(&s.fp_out) != 0)
-      goto bail;
-
-    mutt_str_replace(&b->filename, mutt_buffer_string(file));
-    b->unlink = true;
-
-    mutt_stamp_attachment(b);
-
-    mutt_body_free(&b->parts);
-    if (b->email)
-      b->email->body = NULL; /* avoid dangling pointer */
+    goto bail;
   }
 
   const bool c_crypt_protected_headers_read =
@@ -659,8 +685,7 @@ int mutt_get_postponed(struct Mailbox *m_cur, struct Email *hdr,
     {
       PostCount = 0;
       mutt_error(_("No postponed messages"));
-      if (m->flags == MB_HIDDEN)
-        mailbox_free(&m);
+      mailbox_free(&m);
       return -1;
     }
   }
@@ -673,9 +698,8 @@ int mutt_get_postponed(struct Mailbox *m_cur, struct Email *hdr,
     mutt_error(_("No postponed messages"));
     if (m_cur != m)
     {
-      mx_fastclose_mailbox(m);
-      if (m->flags == MB_HIDDEN)
-        mailbox_free(&m);
+      mx_fastclose_mailbox(m, false);
+      mailbox_free(&m);
     }
     return -1;
   }
@@ -787,8 +811,7 @@ cleanup:
   {
     hardclose(m);
     ctx_free(&ctx);
-    if (m->flags == MB_HIDDEN)
-      mailbox_free(&m);
+    mailbox_free(&m);
   }
 
   cs_subset_str_native_set(NeoMutt->sub, "delete", c_delete, NULL);

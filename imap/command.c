@@ -173,11 +173,9 @@ static void cmd_handle_fatal(struct ImapAccountData *adata)
 
   if ((adata->state >= IMAP_SELECTED) && (mdata->reopen & IMAP_REOPEN_ALLOW))
   {
-    mx_fastclose_mailbox(adata->mailbox);
-    mutt_socket_close(adata->conn);
+    mx_fastclose_mailbox(adata->mailbox, true);
     mutt_error(_("Mailbox %s@%s closed"), adata->conn->account.user,
                adata->conn->account.host);
-    adata->state = IMAP_DISCONNECTED;
   }
 
   imap_close_connection(adata);
@@ -263,7 +261,7 @@ static void cmd_parse_expunge(struct ImapAccountData *adata, const char *s)
 
   struct ImapMboxData *mdata = adata->mailbox->mdata;
 
-  if ((mutt_str_atoui(s, &exp_msn) < 0) || (exp_msn < 1) ||
+  if (!mutt_str_atoui(s, &exp_msn) || (exp_msn < 1) ||
       (exp_msn > imap_msn_highest(&mdata->msn)))
   {
     return;
@@ -407,7 +405,7 @@ static void cmd_parse_fetch(struct ImapAccountData *adata, char *s)
 
   mutt_debug(LL_DEBUG3, "Handling FETCH\n");
 
-  if (mutt_str_atoui(s, &msn) < 0)
+  if (!mutt_str_atoui(s, &msn))
   {
     mutt_debug(LL_DEBUG3, "Skipping FETCH response - illegal MSN\n");
     return;
@@ -470,7 +468,7 @@ static void cmd_parse_fetch(struct ImapAccountData *adata, char *s)
     {
       s += plen;
       SKIPWS(s);
-      if (mutt_str_atoui(s, &uid) < 0)
+      if (!mutt_str_atoui(s, &uid))
       {
         mutt_debug(LL_DEBUG1, "Illegal UID.  Skipping update\n");
         return;
@@ -945,6 +943,7 @@ static void cmd_parse_enabled(struct ImapAccountData *adata, const char *s)
       adata->qresync = true;
   }
 }
+
 /**
  * cmd_parse_exists - Parse EXISTS message from serer
  * @param adata  Imap Account data
@@ -955,7 +954,7 @@ static void cmd_parse_exists(struct ImapAccountData *adata, const char *pn)
   unsigned int count = 0;
   mutt_debug(LL_DEBUG2, "Handling EXISTS\n");
 
-  if (mutt_str_atoui(pn, &count) < 0)
+  if (!mutt_str_atoui(pn, &count))
   {
     mutt_debug(LL_DEBUG1, "Malformed EXISTS: '%s'\n", pn);
     return;
@@ -1345,7 +1344,7 @@ void imap_cmd_finish(struct ImapAccountData *adata)
     if (mdata->reopen & IMAP_EXPUNGE_PENDING)
     {
       mutt_debug(LL_DEBUG2, "Expunging mailbox\n");
-      imap_expunge_mailbox(adata->mailbox);
+      imap_expunge_mailbox(adata->mailbox, true);
       /* Detect whether we've gotten unexpected EXPUNGE messages */
       if (!(mdata->reopen & IMAP_EXPUNGE_EXPECTED))
         mdata->check_status |= IMAP_EXPUNGE_PENDING;
@@ -1361,8 +1360,8 @@ void imap_cmd_finish(struct ImapAccountData *adata)
         if (!(mdata->reopen & IMAP_EXPUNGE_PENDING))
           mdata->check_status |= IMAP_NEWMAIL_PENDING;
 
-        mutt_debug(LL_DEBUG2, "Fetching new mails from %d to %d\n", max_msn + 1,
-                   mdata->new_mail_count);
+        mutt_debug(LL_DEBUG2, "Fetching new mails from %ld to %u\n",
+                   max_msn + 1, mdata->new_mail_count);
         imap_read_headers(adata->mailbox, max_msn + 1, mdata->new_mail_count, false);
       }
     }

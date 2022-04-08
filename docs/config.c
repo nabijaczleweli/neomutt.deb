@@ -6,7 +6,7 @@
 #endif
 
 /*++*/
-
+// clang-format off
 { "abort_backspace", DT_BOOL, true },
 /*
 ** .pp
@@ -18,7 +18,7 @@
 /*
 ** .pp
 ** Specifies the key that can be used to abort prompts.  The format is the
-** same as used in "bind" commands.  The default is equivalent to "\G".
+** same as used in "bind" commands.  The default is equivalent to "Ctrl-G".
 ** Note that the specified key should not be used in other bindings, as the
 ** abort operation has higher precedence and the binding will not have the
 ** desired effect.
@@ -161,6 +161,20 @@
 ** and attachment trees, instead of the default \fIACS\fP characters.
 */
 
+{ "ask_bcc", DT_BOOL, false },
+/*
+** .pp
+** If \fIset\fP, NeoMutt will prompt you for blind-carbon-copy (Bcc) recipients
+** before editing an outgoing message.
+*/
+
+{ "ask_cc", DT_BOOL, false },
+/*
+** .pp
+** If \fIset\fP, NeoMutt will prompt you for carbon-copy (Cc) recipients before
+** editing the body of an outgoing message.
+*/
+
 #ifdef USE_NNTP
 { "ask_follow_up", DT_BOOL, false },
 /*
@@ -176,20 +190,6 @@
 ** the body of an outgoing message.
 */
 #endif
-
-{ "ask_bcc", DT_BOOL, false },
-/*
-** .pp
-** If \fIset\fP, NeoMutt will prompt you for blind-carbon-copy (Bcc) recipients
-** before editing an outgoing message.
-*/
-
-{ "ask_cc", DT_BOOL, false },
-/*
-** .pp
-** If \fIset\fP, NeoMutt will prompt you for carbon-copy (Cc) recipients before
-** editing the body of an outgoing message.
-*/
 
 { "assumed_charset", DT_STRING, 0 },
 /*
@@ -312,6 +312,22 @@
 ** this except to override that default.
 */
 
+{ "auto_edit", DT_BOOL, false },
+/*
+** .pp
+** When \fIset\fP along with $$edit_headers, NeoMutt will skip the initial
+** send-menu (prompting for subject and recipients) and allow you to
+** immediately begin editing the body of your
+** message.  The send-menu may still be accessed once you have finished
+** editing the body of your message.
+** .pp
+** \fBNote:\fP when this option is \fIset\fP, you can't use send-hooks that depend
+** on the recipients when composing a new (non-reply) message, as the initial
+** list of recipients is empty.
+** .pp
+** Also see $$fast_reply.
+*/
+
 { "auto_subscribe", DT_BOOL, false },
 /*
 ** .pp
@@ -375,22 +391,6 @@
 ** (Autocrypt only)
 */
 #endif
-
-{ "auto_edit", DT_BOOL, false },
-/*
-** .pp
-** When \fIset\fP along with $$edit_headers, NeoMutt will skip the initial
-** send-menu (prompting for subject and recipients) and allow you to
-** immediately begin editing the body of your
-** message.  The send-menu may still be accessed once you have finished
-** editing the body of your message.
-** .pp
-** \fBNote:\fP when this option is \fIset\fP, you can't use send-hooks that depend
-** on the recipients when composing a new (non-reply) message, as the initial
-** list of recipients is empty.
-** .pp
-** Also see $$fast_reply.
-*/
 
 { "beep", DT_BOOL, true },
 /*
@@ -1155,12 +1155,17 @@
 { "fast_reply", DT_BOOL, false },
 /*
 ** .pp
-** When \fIset\fP, the initial prompt for recipients and subject are skipped
-** when replying to messages, and the initial prompt for subject is
-** skipped when forwarding messages.
+** When \fIset\fP, the initial prompt for recipients (to, cc, bcc) and
+** subject are skipped when the relevant information is already provided.
+** These cases include replying to messages and passing the relevant
+** command line arguments. The initial prompt for recipients
+** is also skipped when composing a new message to the current message sender,
+** while the initial prompt for subject is also skipped when forwarding messages.
 ** .pp
 ** \fBNote:\fP this variable has no effect when the $$auto_edit
 ** variable is \fIset\fP.
+** .pp
+** See also: $$auto_edit, $$edit_headers, $$ask_cc, $$ask_bcc
 */
 
 { "fcc_attach", DT_QUAD, MUTT_YES },
@@ -1519,8 +1524,9 @@
 { "header_cache_backend", DT_STRING, 0 },
 /*
 ** .pp
-** This variable specifies the header cache backend.  By default it is
-** \fIunset\fP so no header caching will be used.
+** This variable specifies the header cache backend.  If no backend is
+** specified, the first available backend will be used in the following order:
+** tokyocabinet, kyotocabinet, qdbm, rocksdb, gdbm, bdb, tdb, lmdb.
 */
 
 #ifdef USE_HCACHE_COMPRESSION
@@ -2066,13 +2072,18 @@
 **                 "$index-format-hook" command
 ** .dt %{fmt} .dd the date and time of the message is converted to sender's
 **                time zone, and "fmt" is expanded by the library function
-**                \fCstrftime(3)\fP; a leading bang disables locales
+**                \fCstrftime(3)\fP; if the first character inside the braces
+**                is a bang ("!"), the date is formatted ignoring any locale
+**                settings.  Note that the sender's time zone might only be
+**                available as a numerical offset, so "%Z" behaves like "%z".
 ** .dt %[fmt] .dd the date and time of the message is converted to the local
 **                time zone, and "fmt" is expanded by the library function
-**                \fCstrftime(3)\fP; a leading bang disables locales
-** .dt %(fmt) .dd the local date and time when the message was received.
+**                \fCstrftime(3)\fP; if the first character inside the brackets
+**                is a bang ("!"), the date is formatted ignoring any locale settings.
+** .dt %(fmt) .dd the local date and time when the message was received, and
 **                "fmt" is expanded by the library function \fCstrftime(3)\fP;
-**                a leading bang disables locales
+**                if the first character inside the parentheses is a bang ("!"),
+**                the date is formatted ignoring any locale settings.
 ** .dt %>X    .dd right justify the rest of the string and pad with character "X"
 ** .dt %|X    .dd pad to the end of the line with character "X"
 ** .dt %*X    .dd soft-fill with character "X" as pad
@@ -2141,10 +2152,9 @@
 { "local_date_header", DT_BOOL, true },
 /*
 ** .pp
-** If \fIset\fP, convert the date in the Date header of sent emails into the
-** local timezone of the sender. When \fIunset\fP, use UTC instead.
-** This is meant for privacy-conscious users that do not want to disclose their
-** time zone when they send mail.
+** If \fIset\fP, the date in the Date header of emails that you send will be in
+** your local timezone. If unset a UTC date will be used instead to avoid
+** leaking information about your current location.
 */
 
 { "mail_check", DT_NUMBER, 5 },
@@ -2295,6 +2305,13 @@
 ** This can also be set using the \fC-m\fP command-line option.
 */
 
+{ "me_too", DT_BOOL, false },
+/*
+** .pp
+** If \fIunset\fP, NeoMutt will remove your address (see the "$alternates"
+** command) from the list of recipients when replying to a message.
+*/
+
 { "menu_context", DT_NUMBER, 0 },
 /*
 ** .pp
@@ -2362,13 +2379,6 @@
 ** pressed Esc then "x".  This is because the result of removing the
 ** high bit from \fC0xf8\fP is \fC0x78\fP, which is the ASCII character
 ** "x".
-*/
-
-{ "me_too", DT_BOOL, false },
-/*
-** .pp
-** If \fIunset\fP, NeoMutt will remove your address (see the "$alternates"
-** command) from the list of recipients when replying to a message.
 */
 
 { "mh_purge", DT_BOOL, false },
@@ -2657,21 +2667,27 @@
 { "nm_record", DT_BOOL, false },
 /*
 ** .pp
-** This variable specifies if the NeoMutt record should indexed by notmuch.
+** This variable specifies whether, when writing a just-sent message to the
+** $$record, the message should also be added to the notmuch DB. Replies inherit
+** the notmuch tags from the original message. See $$nm_record_tags for how to
+** modify the set of notmuch tags assigned to sent messages written to the
+** record.
 */
 
 { "nm_record_tags", DT_STRING, 0 },
 /*
 ** .pp
-** This variable specifies the default tags applied to messages stored to the NeoMutt record.
-** When set to 0 this variable disable the window feature.
+** This variable specifies the notmuch tag modifications (addition, removal,
+** toggling) applied to messages added to the Neomutt record when $$nm_record is
+** true. See the description of the \fC<modify-labels>\fP function for the
+** syntax.
 */
 
 { "nm_replied_tag", DT_STRING, "replied" },
 /*
 ** .pp
 ** This variable specifies notmuch tag which is used for replied messages. The
-** variable is used to set the replied flag when modifiying tags. All other NeoMutt
+** variable is used to set the replied flag when modifying tags. All other NeoMutt
 ** commands use standard (e.g. maildir) flags.
 */
 
@@ -3600,7 +3616,8 @@
 ** string substituted for "%s" automatically according to shell quoting
 ** rules, so you should avoid adding your own.  If no "%s" is found in
 ** the string, NeoMutt will append the user's query to the end of the string.
-** See "$query" for more information.
+** See "$query" (https://neomutt.org/guide/advancedusage.html#query) for more
+** information.
 */
 
 { "query_format", DT_STRING, "%3c %t %-25.25n %-25.25a | %e" },
@@ -4614,7 +4631,7 @@
 ** (the default) NeoMutt will try all available methods, in order from
 ** most-secure to least-secure. Support for the "plain" mechanism is
 ** bundled; other mechanisms are provided by an external SASL library (look
-** for +USE_SASL in the output of neomutt -v).
+** for '+sasl' in the output of neomutt -v).
 ** .pp
 ** Example:
 ** .ts
@@ -4811,7 +4828,6 @@
 ** \fC$$$MAILDIR\fP will be checked.
 */
 
-#ifdef USE_SSL
 #ifdef USE_SSL_GNUTLS
 { "ssl_ca_certificates_file", DT_PATH, 0 },
 /*
@@ -4827,6 +4843,7 @@
 */
 #endif
 
+#ifdef USE_SSL
 { "ssl_ciphers", DT_STRING, 0 },
 /*
 ** .pp
@@ -4846,7 +4863,7 @@
 ** key.
 */
 
-{ "ssl_force_tls", DT_BOOL, false },
+{ "ssl_force_tls", DT_BOOL, true },
 /*
 ** .pp
 ** If this variable is \fIset\fP, NeoMutt will require that all connections
@@ -4855,6 +4872,7 @@
 ** since it would otherwise have to abort the connection anyway. This
 ** option supersedes $$ssl_starttls.
 */
+#endif
 
 #ifdef USE_SSL_GNUTLS
 { "ssl_min_dh_prime_bits", DT_NUMBER, 0 },
@@ -4866,6 +4884,7 @@
 */
 #endif
 
+#ifdef USE_SSL
 { "ssl_starttls", DT_QUAD, MUTT_YES },
 /*
 ** .pp
@@ -4878,6 +4897,7 @@
 ** suppress the advertising of support.  Setting $$ssl_force_tls is
 ** recommended if you rely on \fCSTARTTLS\fP.
 */
+#endif
 
 #ifdef USE_SSL_OPENSSL
 { "ssl_use_sslv2", DT_BOOL, false },
@@ -4890,6 +4910,7 @@
 */
 #endif
 
+#ifdef USE_SSL
 { "ssl_use_sslv3", DT_BOOL, false },
 /*
 ** .pp
@@ -4897,7 +4918,19 @@
 ** request it. \fBN.B. As of 2015, SSLv3 is considered insecure, and using
 ** it is inadvisable. See https://tools.ietf.org/html/rfc7525 .\fP
 */
+#endif
 
+#ifdef USE_SSL_OPENSSL
+{ "ssl_use_system_certs", DT_BOOL, true },
+/*
+** .pp
+** If set to \fIyes\fP, NeoMutt will use CA certificates in the
+** system-wide certificate store when checking if a server certificate
+** is signed by a trusted CA. (OpenSSL only)
+*/
+#endif
+
+#ifdef USE_SSL
 { "ssl_use_tlsv1", DT_BOOL, false },
 /*
 ** .pp
@@ -4928,16 +4961,6 @@
 ** request it.
 */
 
-#ifdef USE_SSL_OPENSSL
-{ "ssl_use_system_certs", DT_BOOL, true },
-/*
-** .pp
-** If set to \fIyes\fP, NeoMutt will use CA certificates in the
-** system-wide certificate store when checking if a server certificate
-** is signed by a trusted CA. (OpenSSL only)
-*/
-#endif
-
 { "ssl_verify_dates", DT_BOOL, true },
 /*
 ** .pp
@@ -4955,8 +4978,8 @@
 ** URL. You should only unset this for particular known hosts, using
 ** the \fC$<account-hook>\fP function.
 */
+#endif
 
-#ifdef USE_SSL_OPENSSL
 #ifdef HAVE_SSL_PARTIAL_CHAIN
 { "ssl_verify_partial_chains", DT_BOOL, false },
 /*
@@ -4972,8 +4995,6 @@
 ** .pp
 ** (OpenSSL 1.0.2b and newer only).
 */
-#endif
-#endif
 #endif
 
 { "status_chars", DT_MBTABLE, "-*%A" },
@@ -5499,5 +5520,5 @@
 ** name of original article author) to article that followuped to newsgroup.
 */
 #endif
-
+// clang-format on
 /*--*/
