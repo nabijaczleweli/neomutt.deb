@@ -37,6 +37,7 @@ override_dh_auto_configure:
 		--mixmaster \
 		--sasl \
 		--tokyocabinet \
+		--lmdb \
 		--zlib \
 		--zstd \
 		--testing
