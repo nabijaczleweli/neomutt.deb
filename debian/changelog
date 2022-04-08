@@ -1,3 +1,18 @@
+neomutt (20220408+dfsg-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload
+  * d/watch: suffix with +dfsg instead of +dfsg.1
+  * New upstream version 20220408+dfsg
+    Notable default configuration change (cf. upstream changelog):
+    + New default: `set rfc2047_parameters = yes`
+  * d/patches: drop PR #3124 (included upstream), refresh
+  * Build with lmdb, pursuant upstream issue #2730
+    (https://github.com/neomutt/neomutt/issues/2730)
+    tokyocabinet support will be removed in the next release
+  * Update neomutt-test-files to dc9fb32a701eb9dce4fda93c27da1d9b5be23231
+
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Fri, 08 Apr 2022 17:11:49 +0200
+
 neomutt (20211029+dfsg.1-0.2) unstable; urgency=medium
 
   * Non-maintainer upload.
