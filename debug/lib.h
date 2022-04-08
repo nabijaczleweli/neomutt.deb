@@ -44,19 +44,25 @@
 #include "core/lib.h"
 
 struct AddressList;
+struct AttachCtx;
+struct AttachPtr;
 struct Buffer;
 struct Context;
 struct ListHead;
 struct NotifyCallback;
+struct PagerPrivateData;
 
 // Backtrace
 void show_backtrace(void);
 
 // Email
 void        add_flag               (struct Buffer *buf, bool is_set, const char *name);
+char        body_name              (const struct Body *b);
 void        dump_addr_list         (char *buf, size_t buflen, const struct AddressList *al, const char *name);
 void        dump_attach            (const struct AttachPtr *att);
 void        dump_body              (const struct Body *body);
+void        dump_body_next         (struct Buffer *buf, const struct Body *b);
+void        dump_body_one_line     (const struct Body *b);
 void        dump_email             (const struct Email *e);
 void        dump_envelope          (const struct Envelope *env);
 void        dump_list_head         (const struct ListHead *list, const char *name);
@@ -69,6 +75,7 @@ const char *get_content_type       (enum ContentType type);
 void        add_flag               (struct Buffer *buf, bool is_set, const char *name);
 void        dump_graphviz          (const char *title, struct Context *ctx);
 void        dump_graphviz_attach_ctx(struct AttachCtx *actx);
+void        dump_graphviz_body     (struct Body *b);
 void        dump_graphviz_email    (struct Email *e);
 const char *get_content_disposition(enum ContentDisposition disp);
 const char *get_content_encoding   (enum ContentEncoding enc);
@@ -77,6 +84,9 @@ const char *get_content_type       (enum ContentType type);
 // Notify
 int debug_all_observer(struct NotifyCallback *nc);
 const char *get_mailbox_type(enum MailboxType type);
+
+// Pager
+void dump_pager(struct PagerPrivateData *priv);
 
 // Parse Set
 void test_parse_set(void);

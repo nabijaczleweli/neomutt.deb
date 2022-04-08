@@ -316,7 +316,7 @@ static int msg_parse_fetch(struct ImapHeader *h, char *s)
     {
       s += plen;
       SKIPWS(s);
-      if (mutt_str_atoui(s, &h->edata->uid) < 0)
+      if (!mutt_str_atoui(s, &h->edata->uid))
         return -1;
 
       s = imap_next_word(s);
@@ -348,7 +348,7 @@ static int msg_parse_fetch(struct ImapHeader *h, char *s)
       while (isdigit((unsigned char) *s) && (ptmp != (tmp + sizeof(tmp) - 1)))
         *ptmp++ = *s++;
       *ptmp = '\0';
-      if (mutt_str_atol(tmp, &h->content_length) < 0)
+      if (!mutt_str_atol(tmp, &h->content_length))
         return -1;
     }
     else if (mutt_istr_startswith(s, "BODY") ||
@@ -413,7 +413,7 @@ static int msg_fetch_header(struct Mailbox *m, struct ImapHeader *ih, char *buf,
 
   /* skip to message number */
   buf = imap_next_word(buf);
-  if (mutt_str_atoui(buf, &ih->edata->msn) < 0)
+  if (!mutt_str_atoui(buf, &ih->edata->msn))
     return rc;
 
   /* find FETCH tag */
@@ -465,6 +465,8 @@ static int msg_fetch_header(struct Mailbox *m, struct ImapHeader *ih, char *buf,
  * @param buf  Buffer containing data
  * @param len  Length of buffer
  * @param conn Network connection
+ * @retval >0 Number of bytes written
+ * @retval -1 Error
  */
 static int flush_buffer(char *buf, size_t *len, struct Connection *conn)
 {
@@ -521,9 +523,14 @@ static void imap_alloc_uid_hash(struct ImapAccountData *adata, unsigned int msn_
  * @param[in]  msn_begin     First Message Sequence Number
  * @param[in]  msn_end       Last Message Sequence Number
  * @param[out] fetch_msn_end Highest Message Sequence Number fetched
+ * @retval num MSN count
  *
  * Generates a more complicated sequence set after using the header cache,
  * in case there are missing MSNs in the middle.
+ *
+ * This can happen if during a sync/close, messages are deleted from
+ * the cache, but the server doesn't get the updates (via a dropped
+ * network connection, or just plain refusing the updates).
  */
 static unsigned int imap_fetch_msn_seqset(struct Buffer *buf, struct ImapAccountData *adata,
                                           bool evalhc, unsigned int msn_begin,
@@ -855,6 +862,21 @@ static int read_headers_qresync_eval_cache(struct ImapAccountData *adata, char *
 
       msn++;
     }
+    /* A non-zero uid missing from the header cache is either the
+     * result of an expunged message (not recorded in the uid seqset)
+     * or a hole in the header cache.
+     *
+     * We have to assume it's an earlier expunge and compact the msn's
+     * in that case, because cmd_parse_vanished() won't find it in the
+     * uid_hash and decrement later msn's there.
+     *
+     * Thus we only increment the uid if the uid was 0: an actual
+     * stored "blank" in the uid seqset.
+     */
+    else if (!uid)
+    {
+      msn++;
+    }
   }
 
   mutt_seqset_iterator_free(&iter);
@@ -917,7 +939,7 @@ static int read_headers_condstore_qresync_updates(struct ImapAccountData *adata,
       continue;
 
     fetch_buf = imap_next_word(fetch_buf);
-    if (!isdigit((unsigned char) *fetch_buf) || (mutt_str_atoui(fetch_buf, &header_msn) < 0))
+    if (!isdigit((unsigned char) *fetch_buf) || !mutt_str_atoui(fetch_buf, &header_msn))
       continue;
 
     if ((header_msn < 1) || (header_msn > msn_end) ||
@@ -943,7 +965,7 @@ static int read_headers_condstore_qresync_updates(struct ImapAccountData *adata,
   if (mdata->reopen & IMAP_EXPUNGE_PENDING)
   {
     imap_hcache_close(mdata);
-    imap_expunge_mailbox(m);
+    imap_expunge_mailbox(m, false);
 
     imap_hcache_open(adata, mdata);
     mdata->reopen &= ~IMAP_EXPUNGE_PENDING;
@@ -1011,6 +1033,9 @@ static int imap_verify_qresync(struct Mailbox *m)
 fail:
   imap_msn_free(&mdata->msn);
   mutt_hash_free(&mdata->uid_hash);
+  mutt_hash_free(&m->subj_hash);
+  mutt_hash_free(&m->id_hash);
+  mutt_hash_free(&m->label_hash);
 
   for (int i = 0; i < m->msg_count; i++)
   {
@@ -1019,6 +1044,7 @@ fail:
     email_free(&m->emails[i]);
   }
   m->msg_count = 0;
+  m->size = 0;
   mutt_hcache_delete_record(mdata->hcache, "/MODSEQ", 7);
   imap_hcache_clear_uid_seqset(mdata);
   imap_hcache_close(mdata);
@@ -1065,7 +1091,6 @@ static int read_headers_fetch_new(struct Mailbox *m, unsigned int msn_begin,
 
   struct ImapAccountData *adata = imap_adata_get(m);
   struct ImapMboxData *mdata = imap_mdata_get(m);
-  int idx = m->msg_count;
 
   if (!adata || (adata->mailbox != m))
     return -1;
@@ -1194,7 +1219,10 @@ static int read_headers_fetch_new(struct Mailbox *m, unsigned int msn_begin,
         }
 
         struct Email *e = email_new();
-        m->emails[idx] = e;
+        if (m->msg_count >= m->email_max)
+          mx_alloc_memory(m);
+
+        m->emails[m->msg_count++] = e;
 
         imap_msn_set(&mdata->msn, h.edata->msn - 1, e);
         mutt_hash_int_insert(mdata->uid_hash, h.edata->uid, e);
@@ -1234,10 +1262,7 @@ static int read_headers_fetch_new(struct Mailbox *m, unsigned int msn_begin,
         imap_hcache_put(mdata, e);
 #endif /* USE_HCACHE */
 
-        m->msg_count++;
-
         h.edata = NULL;
-        idx++;
       } while (mfhrc == -1);
 
       imap_edata_free((void **) &h.edata);
@@ -1263,7 +1288,7 @@ static int read_headers_fetch_new(struct Mailbox *m, unsigned int msn_begin,
      * chunked FETCH commands).  We previously tried to be robust by
      * setting:
      *   msn_begin = mdata->max_msn + 1;
-     * but with chunking (and the mythical header cache holes) this
+     * but with chunking and header cache holes this
      * may not be correct.  So here we must assume the msn values have
      * not been altered during or after the fetch.  */
     msn_begin = fetch_msn_end + 1;
@@ -1311,9 +1336,9 @@ int imap_read_headers(struct Mailbox *m, unsigned int msn_begin,
   bool has_qresync = false;
   bool eval_condstore = false;
   bool eval_qresync = false;
-  unsigned long long *pmodseq = NULL;
   unsigned long long hc_modseq = 0;
   char *uid_seqset = NULL;
+  const unsigned int msn_begin_save = msn_begin;
 #endif /* USE_HCACHE */
 
   struct ImapAccountData *adata = imap_adata_get(m);
@@ -1366,7 +1391,8 @@ retry:
     {
       size_t dlen2 = 0;
       evalhc = true;
-      pmodseq = mutt_hcache_fetch_raw(mdata->hcache, "/MODSEQ", 7, &dlen2);
+      const unsigned long long *pmodseq =
+          mutt_hcache_fetch_raw(mdata->hcache, "/MODSEQ", 7, &dlen2);
       if (pmodseq)
       {
         hc_modseq = *pmodseq;
@@ -1436,6 +1462,7 @@ retry:
       FREE(&uid_seqset);
       uidvalidity = NULL;
       uid_next = 0;
+      msn_begin = msn_begin_save;
 
       goto retry;
     }
@@ -1929,7 +1956,6 @@ bool imap_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
   char buf[1024];
   char *pc = NULL;
   unsigned int bytes;
-  struct Progress *progress = NULL;
   unsigned int uid;
   bool retried = false;
   bool read;
@@ -2007,7 +2033,7 @@ bool imap_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
         if (mutt_istr_startswith(pc, "UID"))
         {
           pc = imap_next_word(pc);
-          if (mutt_str_atoui(pc, &uid) < 0)
+          if (!mutt_str_atoui(pc, &uid))
             goto bail;
           if (uid != imap_edata_get(e)->uid)
           {
@@ -2023,11 +2049,13 @@ bool imap_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
             imap_error("imap_msg_open()", buf);
             goto bail;
           }
-          if (output_progress)
-          {
-            progress = progress_new(_("Fetching message..."), MUTT_PROGRESS_NET, bytes);
-          }
-          if (imap_read_literal(msg->fp, adata, bytes, output_progress ? progress : NULL) < 0)
+          struct Progress *progress =
+              output_progress ?
+                  progress_new(_("Fetching message..."), MUTT_PROGRESS_NET, bytes) :
+                  NULL;
+          const int res = imap_read_literal(msg->fp, adata, bytes, progress);
+          progress_free(&progress);
+          if (res < 0)
           {
             goto bail;
           }
@@ -2111,14 +2139,12 @@ parsemsg:
     goto parsemsg;
   }
 
-  progress_free(&progress);
   return true;
 
 bail:
   e->active = true;
   mutt_file_fclose(&msg->fp);
   imap_cache_del(m, e);
-  progress_free(&progress);
   return false;
 }
 

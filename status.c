@@ -30,7 +30,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <sys/types.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
@@ -74,7 +73,7 @@ struct MenuStatusLineData
  * status_format_str - Create the status bar string - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
- * |:--------|:--------------------------------------------------------
+ * | :------ | :-------------------------------------------------------
  * | \%b     | Number of incoming folders with unread messages
  * | \%D     | Description of the mailbox
  * | \%d     | Number of deleted messages
@@ -285,7 +284,7 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
       if (!menu)
         break;
       char *cp = NULL;
-      if (menu->top + menu->pagelen >= menu->max)
+      if (menu->top + menu->page_len >= menu->max)
       {
         cp = menu->top ?
                  /* L10N: Status bar message: the end of the list emails is visible in the index */
@@ -295,7 +294,7 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
       }
       else
       {
-        int count = (100 * (menu->top + menu->pagelen)) / menu->max;
+        int count = (100 * (menu->top + menu->page_len)) / menu->max;
         snprintf(tmp, sizeof(tmp), "%d%%", count);
         cp = tmp;
       }
@@ -441,6 +440,8 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
  * @param[in]  menu     Current menu
  * @param[in]  cols     Maximum number of columns to use
  * @param[in]  fmt      Format string
+ *
+ * @sa status_format_str()
  */
 void menu_status_line(char *buf, size_t buflen, struct IndexSharedData *shared,
                       struct Menu *menu, int cols, const char *fmt)

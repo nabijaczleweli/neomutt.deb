@@ -95,15 +95,21 @@ bool pgp_class_valid_passphrase(void)
 
   pgp_class_void_passphrase();
 
-  if (mutt_get_field_unbuffered(_("Enter PGP passphrase:"), PgpPass,
-                                sizeof(PgpPass), MUTT_PASS) == 0)
+  struct Buffer *buf = mutt_buffer_pool_get();
+  const int rc = mutt_get_field_unbuffered(_("Enter PGP passphrase:"), buf, MUTT_COMP_PASS);
+  mutt_str_copy(PgpPass, mutt_buffer_string(buf), sizeof(PgpPass));
+  mutt_buffer_pool_release(&buf);
+
+  if (rc == 0)
   {
     const long c_pgp_timeout = cs_subset_long(NeoMutt->sub, "pgp_timeout");
     PgpExptime = mutt_date_add_timeout(mutt_date_epoch(), c_pgp_timeout);
     return true;
   }
   else
+  {
     PgpExptime = 0;
+  }
 
   return false;
 }
@@ -483,9 +489,8 @@ int pgp_class_application_handler(struct Body *m, struct State *s)
   char body_charset[256];
   mutt_body_get_charset(m, body_charset, sizeof(body_charset));
 
-  if (fseeko(s->fp_in, m->offset, SEEK_SET) != 0)
+  if (!mutt_file_seek(s->fp_in, m->offset, SEEK_SET))
   {
-    mutt_perror("fseeko");
     return -1;
   }
   last_pos = m->offset;
@@ -894,9 +899,8 @@ int pgp_class_verify_one(struct Body *sigbdy, struct State *s, const char *tempf
     goto cleanup;
   }
 
-  if (fseeko(s->fp_in, sigbdy->offset, SEEK_SET) != 0)
+  if (!mutt_file_seek(s->fp_in, sigbdy->offset, SEEK_SET))
   {
-    mutt_perror("fseeko");
     mutt_file_fclose(&fp_sig);
     goto cleanup;
   }
@@ -1039,9 +1043,8 @@ static struct Body *pgp_decrypt_part(struct Body *a, struct State *s,
   /* Position the stream at the beginning of the body, and send the data to
    * the temporary file.  */
 
-  if (fseeko(s->fp_in, a->offset, SEEK_SET) != 0)
+  if (!mutt_file_seek(s->fp_in, a->offset, SEEK_SET))
   {
-    mutt_perror("fseeko");
     mutt_file_fclose(&fp_pgp_tmp);
     mutt_file_fclose(&fp_pgp_err);
     goto cleanup;
@@ -1185,9 +1188,8 @@ int pgp_class_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Bo
       return -1;
     }
 
-    if (fseeko(s.fp_in, b->offset, SEEK_SET) != 0)
+    if (!mutt_file_seek(s.fp_in, b->offset, SEEK_SET))
     {
-      mutt_perror("fseeko");
       rc = -1;
       goto bail;
     }

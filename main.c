@@ -49,11 +49,12 @@
  *
  * Libraries:
  * @ref lib_address, @ref lib_alias, @ref lib_attach, @ref lib_autocrypt,
- * @ref lib_bcache, @ref lib_color, @ref lib_compmbox, @ref lib_compose,
- * @ref lib_compress, @ref lib_config, @ref lib_conn, @ref lib_core,
- * @ref lib_email, @ref lib_gui, @ref lib_hcache, @ref lib_helpbar,
- * @ref lib_history, @ref lib_imap, @ref lib_index, @ref lib_maildir,
- * @ref lib_mbox, @ref lib_menu, @ref lib_mutt, @ref lib_ncrypt, @ref lib_nntp,
+ * @ref lib_bcache, @ref lib_browser, @ref lib_color, @ref lib_compmbox,
+ * @ref lib_compose, @ref lib_compress, @ref lib_config, @ref lib_conn,
+ * @ref lib_core, @ref lib_email, @ref lib_enter, @ref lib_envelope,
+ * @ref lib_gui, @ref lib_hcache, @ref lib_helpbar, @ref lib_history,
+ * @ref lib_imap, @ref lib_index, @ref lib_maildir, @ref lib_mbox,
+ * @ref lib_menu, @ref lib_mutt, @ref lib_ncrypt, @ref lib_nntp,
  * @ref lib_notmuch, @ref lib_pager, @ref lib_pattern, @ref lib_pop,
  * @ref lib_progress, @ref lib_question, @ref lib_send, @ref lib_sidebar,
  * @ref lib_store.
@@ -65,7 +66,6 @@
  * | File            | Description                |
  * | :-------------- | :------------------------- |
  * | alternates.c    | @subpage neo_alternates    |
- * | browser.c       | @subpage neo_browser       |
  * | commands.c      | @subpage neo_commands      |
  * | command_parse.c | @subpage neo_command_parse |
  * | complete.c      | @subpage neo_complete      |
@@ -74,7 +74,6 @@
  * | dlg_postpone.c  | @subpage neo_dlg_postpone  |
  * | editmsg.c       | @subpage neo_editmsg       |
  * | enriched.c      | @subpage neo_enriched      |
- * | enter.c         | @subpage neo_enter         |
  * | flags.c         | @subpage neo_flags         |
  * | functions.c     | @subpage neo_functions     |
  * | handler.c       | @subpage neo_handler       |
@@ -116,6 +115,7 @@
  * | status.c        | @subpage neo_status        |
  * | subjectrx.c     | @subpage neo_subjrx        |
  * | system.c        | @subpage neo_system        |
+ * | timegm.c        | @subpage neo_timegm        |
  * | version.c       | @subpage neo_version       |
  * | wcscasecmp.c    | @subpage neo_wcscasecmp    |
  *
@@ -163,6 +163,7 @@
 #include "conn/lib.h"
 #include "gui/lib.h"
 #include "attach/lib.h"
+#include "browser/lib.h"
 #include "color/lib.h"
 #include "index/lib.h"
 #include "menu/lib.h"
@@ -170,9 +171,7 @@
 #include "question/lib.h"
 #include "send/lib.h"
 #include "alternates.h"
-#include "browser.h"
 #include "commands.h"
-#include "context.h"
 #include "hook.h"
 #include "init.h"
 #include "keymap.h"
@@ -444,11 +443,12 @@ static void log_translation(void)
 {
   const char *header = ""; // Do not merge these two lines
   header = _(header);      // otherwise the .po files will end up badly ordered
-  const char *lang = strcasestr(header, "Language:");
+  const char *label = "Language:"; // the start of the lookup/needle
+  const char *lang = mutt_istr_find(header, label);
   int len = 64;
   if (lang)
   {
-    lang += 9; // skip label
+    lang += strlen(label); // skip label
     SKIPWS(lang);
     char *nl = strchr(lang, '\n');
     if (nl)
@@ -470,7 +470,13 @@ static void log_translation(void)
  * @retval 0 Success
  * @retval 1 Error
  */
-int main(int argc, char *argv[], char *envp[])
+int
+#ifdef ENABLE_FUZZ_TESTS
+disabled_main
+#else
+main
+#endif
+(int argc, char *argv[], char *envp[])
 {
   char *subject = NULL;
   char *include_file = NULL;
@@ -514,7 +520,7 @@ int main(int argc, char *argv[], char *envp[])
   /* sanity check against stupid administrators */
   if (getegid() != getgid())
   {
-    mutt_error("%s: I don't want to run with privileges!", argv[0]);
+    mutt_error("%s: I don't want to run with privileges!", (argc != 0) ? argv[0] : "neomutt");
     goto main_exit; // TEST01: neomutt (as root, chgrp mail neomutt; chmod +s neomutt)
   }
 
@@ -716,7 +722,7 @@ int main(int argc, char *argv[], char *envp[])
   if (dlevel)
   {
     short num = 0;
-    if ((mutt_str_atos(dlevel, &num) < 0) || (num < LL_MESSAGE) || (num >= LL_MAX))
+    if (!mutt_str_atos_full(dlevel, &num) || (num < LL_MESSAGE) || (num >= LL_MAX))
     {
       mutt_error(_("Error: value '%s' is invalid for -d"), dlevel);
       goto main_exit; // TEST07: neomutt -d xyz
@@ -786,7 +792,6 @@ int main(int argc, char *argv[], char *envp[])
 
   /* set defaults and read init files */
   int rc2 = mutt_init(cs, flags & MUTT_CLI_NOSYSRC, &commands);
-  mutt_list_free(&commands);
   if (rc2 != 0)
     goto main_curses;
 
@@ -997,7 +1002,9 @@ int main(int argc, char *argv[], char *envp[])
     }
 
     if (subject)
-      e->env->subject = mutt_str_dup(subject);
+    {
+      mutt_str_replace(&e->env->subject, subject);
+    }
 
     if (draft_file)
     {
@@ -1186,9 +1193,7 @@ int main(int argc, char *argv[], char *envp[])
 
     if (edit_infile)
     {
-      if (include_file)
-        e->body->unlink = false;
-      else if (draft_file)
+      if (draft_file)
       {
         if (truncate(mutt_buffer_string(&expanded_infile), 0) == -1)
         {
@@ -1281,8 +1286,8 @@ int main(int argc, char *argv[], char *envp[])
         const char *const c_news_server =
             cs_subset_string(NeoMutt->sub, "news_server");
         OptNews = true;
-        CurrentNewsSrv = nntp_select_server(Context ? Context->mailbox : NULL,
-                                            c_news_server, false);
+        struct Mailbox *m_cur = get_current_mailbox();
+        CurrentNewsSrv = nntp_select_server(m_cur, c_news_server, false);
         if (!CurrentNewsSrv)
           goto main_curses; // TEST38: neomutt -G (unset news_server)
       }
@@ -1294,8 +1299,8 @@ int main(int argc, char *argv[], char *envp[])
         goto main_curses; // TEST39: neomutt -n -F /dev/null -y
       }
       mutt_buffer_reset(&folder);
-      mutt_buffer_select_file(&folder, MUTT_SEL_FOLDER | MUTT_SEL_MAILBOX,
-                              ctx_mailbox(Context), NULL, NULL);
+      struct Mailbox *m_cur = get_current_mailbox();
+      mutt_buffer_select_file(&folder, MUTT_SEL_FOLDER | MUTT_SEL_MAILBOX, m_cur, NULL, NULL);
       if (mutt_buffer_is_empty(&folder))
       {
         goto main_ok; // TEST40: neomutt -y (quit selection)
@@ -1370,13 +1375,10 @@ int main(int argc, char *argv[], char *envp[])
       struct MuttWindow *dlg = index_pager_init();
       dialog_push(dlg);
 
-      struct EventMailbox ev_m = { m };
-      mutt_debug(LL_NOTIFY, "NT_MAILBOX_SWITCH: %p\n", m);
-      notify_send(dlg->notify, NT_MAILBOX, NT_MAILBOX_SWITCH, &ev_m);
-
+      mutt_curses_set_cursor(MUTT_CURSOR_INVISIBLE);
       m = mutt_index_menu(dlg, m);
-      if (m && (m->flags == MB_HIDDEN))
-        mailbox_free(&m);
+      mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
+      mailbox_free(&m);
 
       dialog_pop();
       mutt_window_free(&dlg);
@@ -1405,6 +1407,7 @@ main_curses:
   if (repeat_error && ErrorBufMessage)
     puts(ErrorBuf);
 main_exit:
+  mutt_list_free(&commands);
   MuttLogger = log_disp_queue;
   mutt_buffer_dealloc(&folder);
   mutt_buffer_dealloc(&expanded_infile);

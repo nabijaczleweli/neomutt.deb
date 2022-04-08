@@ -68,7 +68,6 @@
 int mutt_get_tmp_attachment(struct Body *a)
 {
   char type[256];
-  struct stat st = { 0 };
 
   if (a->unlink)
     return 0;
@@ -81,12 +80,6 @@ int mutt_get_tmp_attachment(struct Body *a)
 
   mailcap_entry_free(&entry);
 
-  if (stat(a->filename, &st) == -1)
-  {
-    mutt_buffer_pool_release(&tmpfile);
-    return -1;
-  }
-
   FILE *fp_in = NULL, *fp_out = NULL;
   if ((fp_in = fopen(a->filename, "r")) &&
       (fp_out = mutt_file_fopen(mutt_buffer_string(tmpfile), "w")))
@@ -95,8 +88,11 @@ int mutt_get_tmp_attachment(struct Body *a)
     mutt_str_replace(&a->filename, mutt_buffer_string(tmpfile));
     a->unlink = true;
 
-    if (a->stamp >= st.st_mtime)
+    struct stat st = { 0 };
+    if ((fstat(fileno(fp_in), &st) == 0) && (a->stamp >= st.st_mtime))
+    {
       mutt_stamp_attachment(a);
+    }
   }
   else
     mutt_perror(fp_in ? mutt_buffer_string(tmpfile) : a->filename);
@@ -196,8 +192,13 @@ int mutt_compose_attachment(struct Body *a)
 
             /* Remove headers by copying out data to another file, then
              * copying the file back */
-            fseeko(fp, b->offset, SEEK_SET);
+            const LOFF_T offset = b->offset;
             mutt_body_free(&b);
+            if (!mutt_file_seek(fp, offset, SEEK_SET))
+            {
+              goto bailout;
+            }
+
             mutt_buffer_mktemp(tmpfile);
             FILE *fp_tmp = mutt_file_fopen(mutt_buffer_string(tmpfile), "w");
             if (!fp_tmp)
@@ -577,7 +578,7 @@ int mutt_view_attachment(FILE *fp, struct Body *a, enum ViewAttachMode mode,
       /* interactive cmd */
       int rv = mutt_system(mutt_buffer_string(cmd));
       if (rv == -1)
-        mutt_debug(LL_DEBUG1, "Error running \"%s\"", cmd->data);
+        mutt_debug(LL_DEBUG1, "Error running \"%s\"\n", cmd->data);
 
       if ((rv != 0) || (entry->needsterminal && c_wait_key))
         mutt_any_key_to_continue(NULL);
@@ -900,7 +901,7 @@ int mutt_save_attachment(FILE *fp, struct Body *m, const char *path,
       e_new->msgno = e->msgno; /* required for MH/maildir */
       e_new->read = true;
 
-      if (fseeko(fp, m->offset, SEEK_SET) < 0)
+      if (!mutt_file_seek(fp, m->offset, SEEK_SET))
         return -1;
       if (!fgets(buf, sizeof(buf), fp))
         return -1;
@@ -946,9 +947,8 @@ int mutt_save_attachment(FILE *fp, struct Body *m, const char *path,
         mutt_perror("fopen");
         return -1;
       }
-      if (fseeko((s.fp_in = fp), m->offset, SEEK_SET) != 0)
+      if (!mutt_file_seek((s.fp_in = fp), m->offset, SEEK_SET))
       {
-        mutt_perror("fseeko");
         mutt_file_fclose(&s.fp_out);
         return -1;
       }
@@ -1039,19 +1039,20 @@ int mutt_decode_save_attachment(FILE *fp, struct Body *m, const char *path,
   {
     /* When called from the compose menu, the attachment isn't parsed,
      * so we need to do it here. */
-    struct stat st = { 0 };
-
-    if (stat(m->filename, &st) == -1)
-    {
-      mutt_perror("stat");
-      mutt_file_fclose(&s.fp_out);
-      return -1;
-    }
-
     s.fp_in = fopen(m->filename, "r");
     if (!s.fp_in)
     {
       mutt_perror("fopen");
+      mutt_file_fclose(&s.fp_out);
+      return -1;
+    }
+
+    struct stat st = { 0 };
+    if (fstat(fileno(s.fp_in), &st) == -1)
+    {
+      mutt_perror("stat");
+      mutt_file_fclose(&s.fp_in);
+      mutt_file_fclose(&s.fp_out);
       return -1;
     }
 
@@ -1182,7 +1183,7 @@ int mutt_print_attachment(FILE *fp, struct Body *a)
     {
       int rc2 = mutt_system(mutt_buffer_string(cmd));
       if (rc2 == -1)
-        mutt_debug(LL_DEBUG1, "Error running \"%s\"", cmd->data);
+        mutt_debug(LL_DEBUG1, "Error running \"%s\"\n", cmd->data);
 
       if ((rc2 != 0) || c_wait_key)
         mutt_any_key_to_continue(NULL);

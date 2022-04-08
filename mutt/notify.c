@@ -37,10 +37,10 @@
 /// Lookup table for NotifyType
 /// Must be the same size and order as #NotifyType
 static char *NotifyTypeNames[] = {
-  "NT_ALL",     "NT_ACCOUNT", "NT_ALIAS",   "NT_ALTERN",  "NT_ATTACH",
-  "NT_BINDING", "NT_COLOR",   "NT_COMMAND", "NT_COMPOSE", "NT_CONFIG",
-  "NT_CONTEXT", "NT_EMAIL",   "NT_GLOBAL",  "NT_HEADER",  "NT_INDEX",
-  "NT_MAILBOX", "NT_MENU",    "NT_PAGER",   "NT_SCORE",   "NT_SUBJRX",
+  "NT_ALL",     "NT_ACCOUNT",  "NT_ALIAS",   "NT_ALTERN", "NT_ATTACH",
+  "NT_BINDING", "NT_COLOR",    "NT_COMMAND", "NT_CONFIG", "NT_CONTEXT",
+  "NT_EMAIL",   "NT_ENVELOPE", "NT_GLOBAL",  "NT_HEADER", "NT_INDEX",
+  "NT_MAILBOX", "NT_MENU",     "NT_PAGER",   "NT_SCORE",  "NT_SUBJRX",
   "NT_WINDOW",
 };
 
@@ -121,7 +121,7 @@ static bool send(struct Notify *source, struct Notify *current,
   if (!source || !current)
     return false;
 
-  mutt_debug(LL_NOTIFY, "send: %d, %ld\n", event_type, event_data);
+  mutt_debug(LL_NOTIFY, "send: %d, %p\n", event_type, event_data);
   struct ObserverNode *np = NULL;
   STAILQ_FOREACH(np, &current->observers, entries)
   {

@@ -122,7 +122,7 @@ static int sbar_color_observer(struct NotifyCallback *nc)
   struct EventColor *ev_c = nc->event_data;
 
   // MT_COLOR_MAX is sent on `uncolor *`
-  if ((ev_c->color != MT_COLOR_STATUS) && (ev_c->color != MT_COLOR_MAX))
+  if ((ev_c->cid != MT_COLOR_STATUS) && (ev_c->cid != MT_COLOR_MAX))
     return 0;
 
   struct MuttWindow *win_sbar = nc->global_data;
@@ -180,6 +180,7 @@ static void sbar_wdata_free(struct MuttWindow *win, void **ptr)
 
 /**
  * sbar_data_new - Free the private data attached to the MuttWindow
+ * @retval ptr New SBar
  */
 static struct SBarPrivateData *sbar_data_new(void)
 {

@@ -31,12 +31,12 @@
 #include "config.h"
 #include <dirent.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <unistd.h>
 #include "private.h"
 #include "mutt/lib.h"
@@ -625,7 +625,7 @@ static int active_get_cache(struct NntpAccountData *adata)
   if (!fp)
     return -1;
 
-  if (!fgets(buf, sizeof(buf), fp) || (sscanf(buf, "%ld%4095s", &t, file) != 1) || (t == 0))
+  if (!fgets(buf, sizeof(buf), fp) || (sscanf(buf, "%jd%4095s", &t, file) != 1) || (t == 0))
   {
     mutt_file_fclose(&fp);
     return -1;
@@ -914,7 +914,7 @@ void nntp_clear_cache(struct NntpAccountData *adata)
  * nntp_format_str - Expand the newsrc filename - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
- * |:--------|:--------------------------------------------------------
+ * | :------ | :-------------------------------------------------------
  * | \%a     | Account url
  * | \%p     | Port
  * | \%P     | Port if specified
@@ -1013,6 +1013,8 @@ static const char *nntp_get_field(enum ConnAccountField field, void *gf_data)
  * size/mtime of a newsrc file, if it doesn't match, load again.  Hmm, if a
  * system has broken mtimes, this might mean the file is reloaded every time,
  * which we'd have to fix.
+ *
+ * @sa $newsrc, nntp_format_str()
  */
 struct NntpAccountData *nntp_select_server(struct Mailbox *m, const char *server, bool leave_lock)
 {

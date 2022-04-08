@@ -32,6 +32,7 @@
 #include "mailbox.h"
 
 struct Account;
+struct Buffer;
 struct Email;
 struct stat;
 
@@ -323,7 +324,6 @@ struct MxOps
    * @param m      Mailbox
    * @param tags   Existing tags
    * @param buf    Buffer to store the tags
-   * @param buflen Length of buffer
    * @retval -1 Error
    * @retval  0 No valid user input
    * @retval  1 Buf set
@@ -332,7 +332,7 @@ struct MxOps
    * - @a m   is not NULL
    * - @a buf is not NULL
    */
-  int (*tags_edit)       (struct Mailbox *m, const char *tags, char *buf, size_t buflen);
+  int (*tags_edit)       (struct Mailbox *m, const char *tags, struct Buffer *buf);
 
   /**
    * @defgroup mx_tags_commit tags_commit()
@@ -350,7 +350,7 @@ struct MxOps
    * - @a e   is not NULL
    * - @a buf is not NULL
    */
-  int (*tags_commit)     (struct Mailbox *m, struct Email *e, char *buf);
+  int (*tags_commit)     (struct Mailbox *m, struct Email *e, const char *buf);
 
   /**
    * @defgroup mx_path_probe path_probe()
@@ -429,4 +429,3 @@ struct MxOps
 };
 
 #endif /* MUTT_CORE_MXAPI_H */
-

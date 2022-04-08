@@ -32,7 +32,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <unistd.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
@@ -86,8 +85,7 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
   int oerrno = errno;
 
   mx_mbox_close(m_fname);
-  if (m_fname->flags == MB_HIDDEN)
-    mailbox_free(&m_fname);
+  mailbox_free(&m_fname);
 
   if (rc == -1)
   {

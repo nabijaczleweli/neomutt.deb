@@ -35,10 +35,9 @@
 #include "core/lib.h"
 #include "mutt.h"
 #include "score.h"
+#include "index/lib.h"
 #include "pattern/lib.h"
-#include "context.h"
 #include "init.h"
-#include "mutt_globals.h"
 #include "mutt_thread.h"
 #include "options.h"
 #include "protos.h"
@@ -112,9 +111,10 @@ enum CommandResult mutt_parse_score(struct Buffer *buf, struct Buffer *s,
       break;
   if (!ptr)
   {
+    struct Mailbox *m_cur = get_current_mailbox();
+    struct Menu *menu = get_current_menu();
     struct PatternList *pat =
-        mutt_pattern_comp(ctx_mailbox(Context), Context ? Context->menu : NULL,
-                          pattern, MUTT_PC_NO_FLAGS, err);
+        mutt_pattern_comp(m_cur, menu, pattern, MUTT_PC_NO_FLAGS, err);
     if (!pat)
     {
       FREE(&pattern);
@@ -141,7 +141,7 @@ enum CommandResult mutt_parse_score(struct Buffer *buf, struct Buffer *s,
     ptr->exact = true;
     pc++;
   }
-  if (mutt_str_atoi(pc, &ptr->val) < 0)
+  if (!mutt_str_atoi_full(pc, &ptr->val))
   {
     FREE(&pattern);
     mutt_buffer_strcpy(err, _("Error: score: invalid number"));

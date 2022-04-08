@@ -37,7 +37,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include "mutt/lib.h"
 #include "address/lib.h"
@@ -125,17 +124,7 @@ struct SmtpAuth
  */
 static bool valid_smtp_code(char *buf, size_t buflen, int *n)
 {
-  char code[4];
-
-  if (buflen < 4)
-    return false;
-  code[0] = buf[0];
-  code[1] = buf[1];
-  code[2] = buf[2];
-  code[3] = '\0';
-  if (mutt_str_atoi(code, n) < 0)
-    return false;
-  return true;
+  return (mutt_str_atoi(buf, n) - buf) <= 3;
 }
 
 /**
@@ -287,7 +276,7 @@ static int smtp_data(struct SmtpAccountData *adata, const char *msgfile)
       mutt_file_fclose(&fp);
       goto done;
     }
-    progress_update(progress, ftell(fp), -1);
+    progress_update(progress, MAX(0, ftell(fp)), -1);
   }
   if (!term && buflen &&
       (mutt_socket_send_d(adata->conn, "\r\n", MUTT_SOCK_LOG_FULL) == -1))
@@ -836,6 +825,9 @@ static int smtp_open(struct SmtpAccountData *adata, bool esmtp)
   if (mutt_socket_open(adata->conn))
     return -1;
 
+  const bool force_auth = cs_subset_string(adata->sub, "smtp_user");
+  esmtp |= force_auth;
+
   /* get greeting string */
   rc = smtp_get_resp(adata);
   if (rc != 0)
@@ -884,7 +876,7 @@ static int smtp_open(struct SmtpAccountData *adata, bool esmtp)
   }
 #endif
 
-  if (adata->conn->account.flags & MUTT_ACCT_USER)
+  if (force_auth || adata->conn->account.flags & MUTT_ACCT_USER)
   {
     if (!(adata->capabilities & SMTP_CAP_AUTH))
     {

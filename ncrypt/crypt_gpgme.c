@@ -42,7 +42,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <time.h>
 #include <unistd.h>
 #include "private.h"
@@ -67,6 +66,9 @@
 #include "options.h"
 #ifdef USE_AUTOCRYPT
 #include "autocrypt/lib.h"
+#endif
+#ifdef ENABLE_NLS
+#include <libintl.h>
 #endif
 
 // clang-format off
@@ -1012,7 +1014,7 @@ static bool set_signer_from_address(gpgme_ctx_t ctx, const char *address, bool f
       gpgme_key_unref(key);
       gpgme_key_unref(key2);
       gpgme_release(listctx);
-      mutt_error(_("ambiguous specification of secret key '%s'\n"), address);
+      mutt_error(_("ambiguous specification of secret key '%s'"), address);
       return false;
     }
     else
@@ -2250,9 +2252,8 @@ int pgp_gpgme_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Bo
       return -1;
     }
 
-    if (fseeko(s.fp_in, b->offset, SEEK_SET) != 0)
+    if (!mutt_file_seek(s.fp_in, b->offset, SEEK_SET))
     {
-      mutt_perror("fseeko");
       rc = -1;
       goto bail;
     }
@@ -2323,9 +2324,8 @@ int smime_gpgme_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct 
   saved_b_offset = b->offset;
   saved_b_length = b->length;
   s.fp_in = fp_in;
-  if (fseeko(s.fp_in, b->offset, SEEK_SET) != 0)
+  if (!mutt_file_seek(s.fp_in, b->offset, SEEK_SET))
   {
-    mutt_perror("fseeko");
     return -1;
   }
   FILE *fp_tmp = mutt_file_mkstemp();
@@ -2374,9 +2374,8 @@ int smime_gpgme_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct 
     saved_b_length = bb->length;
     memset(&s, 0, sizeof(s));
     s.fp_in = *fp_out;
-    if (fseeko(s.fp_in, bb->offset, SEEK_SET) != 0)
+    if (!mutt_file_seek(s.fp_in, bb->offset, SEEK_SET))
     {
-      mutt_perror("fseeko");
       return -1;
     }
     FILE *fp_tmp2 = mutt_file_mkstemp();
@@ -2521,7 +2520,7 @@ static int pgp_gpgme_extract_keys(gpgme_data_t keydata, FILE **fp)
       else
       {
         fprintf(*fp, "pub %5.5s %u/%8s %s %s\n", gpgme_pubkey_algo_name(subkey->pubkey_algo),
-                subkey->length, shortid, date, uid->uid);
+                subkey->length, shortid, date, (uid ? uid->uid : ""));
       }
       subkey = subkey->next;
       more = true;
@@ -2860,9 +2859,8 @@ int pgp_gpgme_application_handler(struct Body *m, struct State *s)
   if (!mutt_body_get_charset(m, body_charset, sizeof(body_charset)))
     mutt_str_copy(body_charset, "iso-8859-1", sizeof(body_charset));
 
-  if (fseeko(s->fp_in, m->offset, SEEK_SET) != 0)
+  if (!mutt_file_seek(s->fp_in, m->offset, SEEK_SET))
   {
-    mutt_perror("fseeko");
     return -1;
   }
   last_pos = m->offset;
@@ -3770,9 +3768,9 @@ static struct CryptKeyInfo *crypt_ask_for_key(char *tag, char *whatfor, KeyFlags
                                               unsigned int app, int *forced_valid)
 {
   struct CryptKeyInfo *key = NULL;
-  char resp[128];
   struct CryptCache *l = NULL;
-  int dummy;
+  int dummy = 0;
+  struct Buffer *resp = mutt_buffer_pool_get();
 
   if (!forced_valid)
     forced_valid = &dummy;
@@ -3780,14 +3778,13 @@ static struct CryptKeyInfo *crypt_ask_for_key(char *tag, char *whatfor, KeyFlags
   mutt_clear_error();
 
   *forced_valid = 0;
-  resp[0] = '\0';
   if (whatfor)
   {
     for (l = id_defaults; l; l = l->next)
     {
       if (mutt_istr_equal(whatfor, l->what))
       {
-        mutt_str_copy(resp, l->dflt, sizeof(resp));
+        mutt_buffer_strcpy(resp, l->dflt);
         break;
       }
     }
@@ -3795,33 +3792,36 @@ static struct CryptKeyInfo *crypt_ask_for_key(char *tag, char *whatfor, KeyFlags
 
   while (true)
   {
-    resp[0] = '\0';
-    if (mutt_get_field(tag, resp, sizeof(resp), MUTT_COMP_NO_FLAGS, false, NULL, NULL) != 0)
+    mutt_buffer_reset(resp);
+    if (mutt_buffer_get_field(tag, resp, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0)
     {
-      return NULL;
+      goto done;
     }
 
     if (whatfor)
     {
       if (l)
-        mutt_str_replace(&l->dflt, resp);
+        mutt_str_replace(&l->dflt, mutt_buffer_string(resp));
       else
       {
         l = mutt_mem_malloc(sizeof(struct CryptCache));
         l->next = id_defaults;
         id_defaults = l;
         l->what = mutt_str_dup(whatfor);
-        l->dflt = mutt_str_dup(resp);
+        l->dflt = mutt_buffer_strdup(resp);
       }
     }
 
-    key = crypt_getkeybystr(resp, abilities, app, forced_valid);
+    key = crypt_getkeybystr(mutt_buffer_string(resp), abilities, app, forced_valid);
     if (key)
-      return key;
+      goto done;
 
-    mutt_error(_("No matching keys found for \"%s\""), resp);
+    mutt_error(_("No matching keys found for \"%s\""), mutt_buffer_string(resp));
   }
-  /* not reached */
+
+done:
+  mutt_buffer_pool_release(&resp);
+  return key;
 }
 
 /**
@@ -4424,7 +4424,7 @@ static bool verify_sender(struct Email *e)
             tmp_email += mailbox_length;
             tmp_sender += mailbox_length;
             domainname_match =
-                (strncasecmp(tmp_email, tmp_sender, domainname_length) == 0);
+                (mutt_istrn_cmp(tmp_email, tmp_sender, domainname_length) == 0);
             if (mailbox_match && domainname_match)
               rc = false;
           }

@@ -416,7 +416,7 @@ bool mx_mbox_open(struct Mailbox *m, OpenMailboxFlags flags)
   return true;
 
 error:
-  mx_fastclose_mailbox(m);
+  mx_fastclose_mailbox(m, newly_linked_account);
   if (newly_linked_account)
     account_mailbox_remove(m->account, m);
   return false;
@@ -425,8 +425,9 @@ error:
 /**
  * mx_fastclose_mailbox - Free up memory associated with the Mailbox
  * @param m Mailbox
+ * @param keep_account Make sure not to remove the mailbox's account
  */
-void mx_fastclose_mailbox(struct Mailbox *m)
+void mx_fastclose_mailbox(struct Mailbox *m, bool keep_account)
 {
   if (!m)
     return;
@@ -457,9 +458,9 @@ void mx_fastclose_mailbox(struct Mailbox *m)
     }
   }
 
-  if (m->flags & MB_HIDDEN)
+  if (!m->visible)
   {
-    mx_ac_remove(m);
+    mx_ac_remove(m, keep_account);
   }
 }
 
@@ -592,8 +593,7 @@ static int trash_append(struct Mailbox *m)
 
   mx_mbox_close(m_trash);
   m_trash->append = old_append;
-  if (m_trash->flags == MB_HIDDEN)
-    mailbox_free(&m_trash);
+  mailbox_free(&m_trash);
 
   return 0;
 }
@@ -624,7 +624,7 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
 
   if (m->readonly || m->dontwrite || m->append || m->peekonly)
   {
-    mx_fastclose_mailbox(m);
+    mx_fastclose_mailbox(m, false);
     return 0;
   }
 
@@ -809,7 +809,7 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
       mutt_message(_("Mailbox is unchanged"));
     if ((m->type == MUTT_MBOX) || (m->type == MUTT_MMDF))
       mbox_reset_atime(m, NULL);
-    mx_fastclose_mailbox(m);
+    mx_fastclose_mailbox(m, false);
     rc = MX_STATUS_OK;
     goto cleanup;
   }
@@ -901,7 +901,7 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
   }
 #endif
 
-  mx_fastclose_mailbox(m);
+  mx_fastclose_mailbox(m, false);
 
   rc = MX_STATUS_OK;
 
@@ -930,7 +930,7 @@ enum MxStatus mx_mbox_sync(struct Mailbox *m)
   if (m->dontwrite)
   {
     char buf[256], tmp[256];
-    if (km_expand_key(buf, sizeof(buf), km_find_func(MENU_MAIN, OP_TOGGLE_WRITE)))
+    if (km_expand_key(buf, sizeof(buf), km_find_func(MENU_INDEX, OP_TOGGLE_WRITE)))
       snprintf(tmp, sizeof(tmp), _(" Press '%s' to toggle write"), buf);
     else
       mutt_str_copy(tmp, _("Use 'toggle-write' to re-enable write"), sizeof(tmp));
@@ -1025,7 +1025,7 @@ enum MxStatus mx_mbox_sync(struct Mailbox *m)
         !mutt_is_spool(mailbox_path(m)) && !c_save_empty)
     {
       unlink(mailbox_path(m));
-      mx_fastclose_mailbox(m);
+      mx_fastclose_mailbox(m, false);
       return MX_STATUS_OK;
     }
 
@@ -1102,11 +1102,15 @@ struct Message *mx_msg_open_new(struct Mailbox *m, const struct Email *e, MsgOpe
       }
 
       // Force a 'C' locale for the date, so that day/month names are in English
-      locale_t loc = newlocale(LC_TIME_MASK, "C", 0);
       char buf[64] = { 0 };
       struct tm tm = mutt_date_localtime(msg->received);
+#ifdef LC_TIME_MASK
+      locale_t loc = newlocale(LC_TIME_MASK, "C", 0);
       strftime_l(buf, sizeof(buf), "%a %b %e %H:%M:%S %Y", &tm, loc);
       freelocale(loc);
+#else  /* !LC_TIME_MASK */
+      strftime(buf, sizeof(buf), "%a %b %e %H:%M:%S %Y", &tm);
+#endif /* LC_TIME_MASK */
       fprintf(msg->fp, "From %s %s\n", p ? p->mailbox : NONULL(Username), buf);
     }
   }
@@ -1216,29 +1220,33 @@ int mx_msg_close(struct Mailbox *m, struct Message **msg)
  */
 void mx_alloc_memory(struct Mailbox *m)
 {
+  const int grow = 25;
   size_t s = MAX(sizeof(struct Email *), sizeof(int));
 
-  if ((m->email_max + 25) * s < m->email_max * s)
+  if (((m->email_max + grow) * s) < (m->email_max * s))
   {
     mutt_error(_("Out of memory"));
     mutt_exit(1);
   }
 
-  m->email_max += 25;
+  m->email_max += grow;
   if (m->emails)
   {
-    mutt_mem_realloc(&m->emails, sizeof(struct Email *) * m->email_max);
-    mutt_mem_realloc(&m->v2r, sizeof(int) * m->email_max);
+    mutt_mem_realloc(&m->emails, m->email_max * sizeof(struct Email *));
+    mutt_mem_realloc(&m->v2r, m->email_max * sizeof(int));
   }
   else
   {
     m->emails = mutt_mem_calloc(m->email_max, sizeof(struct Email *));
     m->v2r = mutt_mem_calloc(m->email_max, sizeof(int));
   }
-  for (int i = m->email_max - 25; i < m->email_max; i++)
+  for (int i = m->email_max - grow; i < m->email_max; i++)
   {
-    m->emails[i] = NULL;
-    m->v2r[i] = -1;
+    if (i < m->email_max)
+    {
+      m->emails[i] = NULL;
+      m->v2r[i] = -1;
+    }
   }
 }
 
@@ -1267,18 +1275,17 @@ int mx_path_is_empty(const char *path)
  * @param m      Mailbox
  * @param tags   Existing tags
  * @param buf    Buffer for the results
- * @param buflen Length of the buffer
  * @retval -1 Error
  * @retval 0  No valid user input
  * @retval 1  Buffer set
  */
-int mx_tags_edit(struct Mailbox *m, const char *tags, char *buf, size_t buflen)
+int mx_tags_edit(struct Mailbox *m, const char *tags, struct Buffer *buf)
 {
   if (!m || !buf)
     return -1;
 
   if (m->mx_ops->tags_edit)
-    return m->mx_ops->tags_edit(m, tags, buf, buflen);
+    return m->mx_ops->tags_edit(m, tags, buf);
 
   mutt_message(_("Folder doesn't support tagging, aborting"));
   return -1;
@@ -1292,7 +1299,7 @@ int mx_tags_edit(struct Mailbox *m, const char *tags, char *buf, size_t buflen)
  * @retval  0 Success
  * @retval -1 Failure
  */
-int mx_tags_commit(struct Mailbox *m, struct Email *e, char *tags)
+int mx_tags_commit(struct Mailbox *m, struct Email *e, const char *tags)
 {
   if (!m || !e || !tags)
     return -1;
@@ -1680,7 +1687,6 @@ struct Mailbox *mx_path_resolve(const char *path)
     return m;
 
   m = mailbox_new();
-  m->flags = MB_HIDDEN;
   mutt_buffer_strcpy(&m->pathbuf, path);
   const char *const c_folder = cs_subset_string(NeoMutt->sub, "folder");
   mx_path_canon2(m, c_folder);
@@ -1769,19 +1775,20 @@ bool mx_ac_add(struct Account *a, struct Mailbox *m)
 /**
  * mx_ac_remove - Remove a Mailbox from an Account and delete Account if empty
  * @param m Mailbox to remove
+ * @param keep_account Make sure not to remove the mailbox's account
  * @retval  0 Success
  * @retval -1 Error
  *
  * @note The mailbox is NOT free'd
  */
-int mx_ac_remove(struct Mailbox *m)
+int mx_ac_remove(struct Mailbox *m, bool keep_account)
 {
   if (!m || !m->account)
     return -1;
 
   struct Account *a = m->account;
   account_mailbox_remove(m->account, m);
-  if (STAILQ_EMPTY(&a->mailboxes))
+  if (!keep_account && STAILQ_EMPTY(&a->mailboxes))
   {
     neomutt_account_remove(NeoMutt, a);
   }

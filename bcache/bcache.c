@@ -109,6 +109,8 @@ static int bcache_path(struct ConnAccount *account, const char *mailbox, struct 
  * @param bcache Body cache
  * @param id     Per-mailbox unique identifier for the message
  * @param newid  New id for the message
+ * @retval  0 Success
+ * @retval -1 Error
  */
 static int mutt_bcache_move(struct BodyCache *bcache, const char *id, const char *newid)
 {
@@ -230,7 +232,7 @@ FILE *mutt_bcache_put(struct BodyCache *bcache, const char *id)
     }
   }
 
-  mutt_debug(LL_DEBUG3, "bcache: put: '%s'\n", path);
+  mutt_debug(LL_DEBUG3, "bcache: put: '%s'\n", mutt_buffer_string(path));
 
   FILE *fp = mutt_file_fopen(mutt_buffer_string(path), "w+");
   mutt_buffer_pool_release(&path);

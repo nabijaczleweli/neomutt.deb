@@ -48,7 +48,6 @@
 #include "menu/lib.h"
 #include "init.h"
 #include "keymap.h"
-#include "monitor.h"
 #include "mutt_commands.h"
 #include "mutt_globals.h"
 #include "muttlib.h"
@@ -56,6 +55,9 @@
 #include "myvar.h"
 #include "options.h"
 #include "version.h"
+#ifdef USE_INOTIFY
+#include "monitor.h"
+#endif
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
@@ -86,12 +88,12 @@ static bool is_function(const char *name)
 {
   for (size_t i = 0; MenuNames[i].name; i++)
   {
-    const struct Binding *b = km_get_table(MenuNames[i].value);
-    if (!b)
+    const struct MenuFuncOp *fns = km_get_table(MenuNames[i].value);
+    if (!fns)
       continue;
 
-    for (int j = 0; b[j].name; j++)
-      if (mutt_str_equal(name, b[j].name))
+    for (int j = 0; fns[j].name; j++)
+      if (mutt_str_equal(name, fns[j].name))
         return true;
   }
   return false;
@@ -233,6 +235,8 @@ int source_rc(const char *rcfile_path, struct Buffer *err)
     }
     else if (line_rc == MUTT_CMD_FINISH)
     {
+      if (conv)
+        FREE(&currentline);
       break; /* Found "finish" command */
     }
     else
@@ -581,10 +585,9 @@ enum CommandResult parse_mailboxes(struct Buffer *buf, struct Buffer *s,
       struct Mailbox *m_old = mx_mbox_find(a, m->realpath);
       if (m_old)
       {
-        const bool show = (m_old->flags == MB_HIDDEN);
-        if (show)
+        if (!m_old->visible)
         {
-          m_old->flags = MB_NORMAL;
+          m_old->visible = true;
           m_old->gen = mailbox_gen();
         }
 
@@ -601,7 +604,6 @@ enum CommandResult parse_mailboxes(struct Buffer *buf, struct Buffer *s,
 
     if (!mx_ac_add(a, m))
     {
-      //error
       mailbox_free(&m);
       if (new_account)
       {
@@ -616,6 +618,9 @@ enum CommandResult parse_mailboxes(struct Buffer *buf, struct Buffer *s,
     {
       neomutt_account_add(NeoMutt, a);
     }
+
+    // this is finally a visible mailbox in the sidebar and mailboxes list
+    m->visible = true;
 
 #ifdef USE_INOTIFY
     mutt_monitor_add(m);
@@ -1355,79 +1360,85 @@ enum CommandResult parse_subscribe_to(struct Buffer *buf, struct Buffer *s,
 
 /**
  * parse_tag_formats - Parse the 'tag-formats' command - Implements Command::parse() - @ingroup command_parse
+ *
+ * Parse config like: `tag-formats pgp GP`
+ *
+ * @note This maps format -> tag
  */
 enum CommandResult parse_tag_formats(struct Buffer *buf, struct Buffer *s,
                                      intptr_t data, struct Buffer *err)
 {
-  if (!buf || !s)
+  if (!s)
     return MUTT_CMD_ERROR;
 
-  char *tmp = NULL;
+  struct Buffer *tagbuf = mutt_buffer_pool_get();
+  struct Buffer *fmtbuf = mutt_buffer_pool_get();
 
   while (MoreArgs(s))
   {
-    char *tag = NULL, *format = NULL;
-
-    mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
-    if (buf->data && (*buf->data != '\0'))
-      tag = mutt_str_dup(buf->data);
-    else
+    mutt_extract_token(tagbuf, s, MUTT_TOKEN_NO_FLAGS);
+    const char *tag = mutt_buffer_string(tagbuf);
+    if (*tag == '\0')
       continue;
 
-    mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
-    format = mutt_str_dup(buf->data);
+    mutt_extract_token(fmtbuf, s, MUTT_TOKEN_NO_FLAGS);
+    const char *fmt = mutt_buffer_string(fmtbuf);
 
     /* avoid duplicates */
-    tmp = mutt_hash_find(TagFormats, format);
+    const char *tmp = mutt_hash_find(TagFormats, fmt);
     if (tmp)
     {
-      mutt_debug(LL_DEBUG3, "tag format '%s' already registered as '%s'\n", format, tmp);
-      FREE(&tag);
-      FREE(&format);
+      mutt_debug(LL_DEBUG3, "tag format '%s' already registered as '%s'\n", fmt, tmp);
       continue;
     }
 
-    mutt_hash_insert(TagFormats, format, tag);
+    mutt_hash_insert(TagFormats, fmt, mutt_str_dup(tag));
   }
+
+  mutt_buffer_pool_release(&tagbuf);
+  mutt_buffer_pool_release(&fmtbuf);
   return MUTT_CMD_SUCCESS;
 }
 
 /**
  * parse_tag_transforms - Parse the 'tag-transforms' command - Implements Command::parse() - @ingroup command_parse
+ *
+ * Parse config like: `tag-transforms pgp P`
+ *
+ * @note This maps tag -> transform
  */
 enum CommandResult parse_tag_transforms(struct Buffer *buf, struct Buffer *s,
                                         intptr_t data, struct Buffer *err)
 {
-  if (!buf || !s)
+  if (!s)
     return MUTT_CMD_ERROR;
 
-  char *tmp = NULL;
+  struct Buffer *tagbuf = mutt_buffer_pool_get();
+  struct Buffer *trnbuf = mutt_buffer_pool_get();
 
   while (MoreArgs(s))
   {
-    char *tag = NULL, *transform = NULL;
-
-    mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
-    if (buf->data && (*buf->data != '\0'))
-      tag = mutt_str_dup(buf->data);
-    else
+    mutt_extract_token(tagbuf, s, MUTT_TOKEN_NO_FLAGS);
+    const char *tag = mutt_buffer_string(tagbuf);
+    if (*tag == '\0')
       continue;
 
-    mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
-    transform = mutt_str_dup(buf->data);
+    mutt_extract_token(trnbuf, s, MUTT_TOKEN_NO_FLAGS);
+    const char *trn = mutt_buffer_string(trnbuf);
 
     /* avoid duplicates */
-    tmp = mutt_hash_find(TagTransforms, tag);
+    const char *tmp = mutt_hash_find(TagTransforms, tag);
     if (tmp)
     {
-      mutt_debug(LL_DEBUG3, "tag transform '%s' already registered as '%s'\n", tag, tmp);
-      FREE(&tag);
-      FREE(&transform);
+      mutt_debug(LL_DEBUG3, "tag tranform '%s' already registered as '%s'\n", tag, tmp);
       continue;
     }
 
-    mutt_hash_insert(TagTransforms, tag, transform);
+    mutt_hash_insert(TagTransforms, tag, mutt_str_dup(trn));
   }
+
+  mutt_buffer_pool_release(&tagbuf);
+  mutt_buffer_pool_release(&trnbuf);
   return MUTT_CMD_SUCCESS;
 }
 
@@ -1483,13 +1494,13 @@ static void do_unmailboxes(struct Mailbox *m)
 #ifdef USE_INOTIFY
   mutt_monitor_remove(m);
 #endif
-  m->flags = MB_HIDDEN;
+  m->visible = false;
   m->gen = -1;
   if (m->opened)
   {
     struct EventMailbox ev_m = { NULL };
-    mutt_debug(LL_NOTIFY, "NT_MAILBOX_SWITCH: NULL\n");
-    notify_send(NeoMutt->notify, NT_MAILBOX, NT_MAILBOX_SWITCH, &ev_m);
+    mutt_debug(LL_NOTIFY, "NT_MAILBOX_CHANGE: NULL\n");
+    notify_send(NeoMutt->notify, NT_MAILBOX, NT_MAILBOX_CHANGE, &ev_m);
   }
   else
   {

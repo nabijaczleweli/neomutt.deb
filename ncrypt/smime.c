@@ -175,8 +175,12 @@ bool smime_class_valid_passphrase(void)
 
   smime_class_void_passphrase();
 
-  if (mutt_get_field_unbuffered(_("Enter S/MIME passphrase:"), SmimePass,
-                                sizeof(SmimePass), MUTT_PASS) == 0)
+  struct Buffer *buf = mutt_buffer_pool_get();
+  const int rc = mutt_get_field_unbuffered(_("Enter S/MIME passphrase:"), buf, MUTT_COMP_PASS);
+  mutt_str_copy(SmimePass, mutt_buffer_string(buf), sizeof(SmimePass));
+  mutt_buffer_pool_release(&buf);
+
+  if (rc == 0)
   {
     const short c_smime_timeout =
         cs_subset_number(NeoMutt->sub, "smime_timeout");
@@ -184,7 +188,9 @@ bool smime_class_valid_passphrase(void)
     return true;
   }
   else
+  {
     SmimeExpTime = 0;
+  }
 
   return false;
 }
@@ -197,7 +203,7 @@ bool smime_class_valid_passphrase(void)
  * smime_command_format_str - Format an SMIME command - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
- * |:--------|:-----------------------------------------------------------------
+ * | :------ | :----------------------------------------------------------------
  * | \%a     | Algorithm used for encryption
  * | \%C     | CA location: Depending on whether `$smime_ca_location` points to a directory or file
  * | \%c     | One or more certificate IDs
@@ -361,6 +367,8 @@ static const char *smime_command_format_str(char *buf, size_t buflen, size_t col
  * @param buflen Length of buffer
  * @param cctx   Data to pass to the formatter
  * @param fmt    printf-like formatting string
+ *
+ * @sa smime_command_format_str()
  */
 static void smime_command(char *buf, size_t buflen,
                           struct SmimeCommandContext *cctx, const char *fmt)
@@ -663,7 +671,7 @@ static struct SmimeKey *smime_get_key_by_addr(char *mailbox, KeyFlags abilities,
  * @param only_public_key  If true, only get the public keys
  * @retval ptr Matching key
  */
-static struct SmimeKey *smime_get_key_by_str(char *str, KeyFlags abilities, bool only_public_key)
+static struct SmimeKey *smime_get_key_by_str(const char *str, KeyFlags abilities, bool only_public_key)
 {
   if (!str)
     return NULL;
@@ -712,7 +720,7 @@ static struct SmimeKey *smime_get_key_by_str(char *str, KeyFlags abilities, bool
 static struct SmimeKey *smime_ask_for_key(char *prompt, KeyFlags abilities, bool only_public_key)
 {
   struct SmimeKey *key = NULL;
-  char resp[128];
+  struct Buffer *resp = mutt_buffer_pool_get();
 
   if (!prompt)
     prompt = _("Enter keyID: ");
@@ -721,18 +729,22 @@ static struct SmimeKey *smime_ask_for_key(char *prompt, KeyFlags abilities, bool
 
   while (true)
   {
-    resp[0] = '\0';
-    if (mutt_get_field(prompt, resp, sizeof(resp), MUTT_COMP_NO_FLAGS, false, NULL, NULL) != 0)
+    mutt_buffer_reset(resp);
+    if (mutt_buffer_get_field(prompt, resp, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0)
     {
-      return NULL;
+      goto done;
     }
 
-    key = smime_get_key_by_str(resp, abilities, only_public_key);
+    key = smime_get_key_by_str(mutt_buffer_string(resp), abilities, only_public_key);
     if (key)
-      return key;
+      goto done;
 
-    mutt_error(_("No matching keys found for \"%s\""), resp);
+    mutt_error(_("No matching keys found for \"%s\""), mutt_buffer_string(resp));
   }
+
+done:
+  mutt_buffer_pool_release(&resp);
+  return key;
 }
 
 /**
@@ -1155,36 +1167,32 @@ cleanup:
 void smime_class_invoke_import(const char *infile, const char *mailbox)
 {
   char *certfile = NULL;
-  char buf[256];
-  FILE *fp_smime_in = NULL;
+  struct Buffer *buf = NULL;
 
   FILE *fp_err = mutt_file_mkstemp();
   if (!fp_err)
   {
     mutt_perror(_("Can't create temporary file"));
-    return;
+    goto done;
   }
 
   FILE *fp_out = mutt_file_mkstemp();
   if (!fp_out)
   {
-    mutt_file_fclose(&fp_err);
     mutt_perror(_("Can't create temporary file"));
-    return;
+    goto done;
   }
 
-  buf[0] = '\0';
+  buf = mutt_buffer_pool_get();
   const bool c_smime_ask_cert_label =
       cs_subset_bool(NeoMutt->sub, "smime_ask_cert_label");
   if (c_smime_ask_cert_label)
   {
-    if ((mutt_get_field(_("Label for certificate: "), buf, sizeof(buf),
-                        MUTT_COMP_NO_FLAGS, false, NULL, NULL) != 0) ||
-        (buf[0] == '\0'))
+    if ((mutt_buffer_get_field(_("Label for certificate: "), buf,
+                               MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0) ||
+        mutt_buffer_is_empty(buf))
     {
-      mutt_file_fclose(&fp_out);
-      mutt_file_fclose(&fp_err);
-      return;
+      goto done;
     }
   }
 
@@ -1196,15 +1204,16 @@ void smime_class_invoke_import(const char *infile, const char *mailbox)
 
     const char *const c_smime_import_cert_command =
         cs_subset_string(NeoMutt->sub, "smime_import_cert_command");
+    FILE *fp_smime_in = NULL;
     pid_t pid = smime_invoke(&fp_smime_in, NULL, NULL, -1, fileno(fp_out),
                              fileno(fp_err), certfile, NULL, NULL, NULL, NULL,
                              NULL, NULL, c_smime_import_cert_command);
     if (pid == -1)
     {
       mutt_message(_("Error: unable to create OpenSSL subprocess"));
-      return;
+      goto done;
     }
-    fputs(buf, fp_smime_in);
+    fputs(mutt_buffer_string(buf), fp_smime_in);
     fputc('\n', fp_smime_in);
     mutt_file_fclose(&fp_smime_in);
 
@@ -1222,8 +1231,10 @@ void smime_class_invoke_import(const char *infile, const char *mailbox)
   mutt_file_copy_stream(fp_out, stdout);
   mutt_file_copy_stream(fp_err, stdout);
 
+done:
   mutt_file_fclose(&fp_out);
   mutt_file_fclose(&fp_err);
+  mutt_buffer_pool_release(&buf);
 }
 
 /**
@@ -1884,9 +1895,8 @@ static struct Body *smime_handle_entity(struct Body *m, struct State *s, FILE *f
     goto cleanup;
   }
 
-  if (fseeko(s->fp_in, m->offset, SEEK_SET) != 0)
+  if (!mutt_file_seek(s->fp_in, m->offset, SEEK_SET))
   {
-    mutt_perror("fseeko");
     goto cleanup;
   }
 
@@ -2102,7 +2112,10 @@ int smime_class_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct 
     return -1;
 
   s.fp_in = fp_in;
-  fseeko(s.fp_in, b->offset, SEEK_SET);
+  if (!mutt_file_seek(s.fp_in, b->offset, SEEK_SET))
+  {
+    return -1;
+  }
 
   FILE *fp_tmp = mutt_file_mkstemp();
   if (!fp_tmp)

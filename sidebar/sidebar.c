@@ -148,14 +148,13 @@ void sb_remove_mailbox(struct SidebarWindowData *wdata, struct Mailbox *m)
       if (!sbep_cur)
       {
         // The last entry was deleted, so backtrack
-        select_prev(wdata);
+        sb_prev(wdata);
       }
       else if ((*sbep)->is_hidden)
       {
         // Find the next unhidden entry, or the previous
-        if (!select_next(wdata))
-          if (!select_prev(wdata))
-            wdata->hil_index = -1;
+        if (!sb_next(wdata) && !sb_prev(wdata))
+          wdata->hil_index = -1;
       }
     }
     else if ((wdata->hil_index > 0) && (wdata->hil_index > ARRAY_FOREACH_IDX))
@@ -179,7 +178,7 @@ void sb_set_current_mailbox(struct SidebarWindowData *wdata, struct Mailbox *m)
   struct SbEntry **sbep = NULL;
   ARRAY_FOREACH(sbep, &wdata->entries)
   {
-    if (m)
+    if (m && m->visible)
     {
       if (mutt_str_equal((*sbep)->mailbox->realpath, m->realpath))
       {
@@ -188,7 +187,7 @@ void sb_set_current_mailbox(struct SidebarWindowData *wdata, struct Mailbox *m)
         break;
       }
     }
-    (*sbep)->is_hidden = ((*sbep)->mailbox->flags & MB_HIDDEN);
+    (*sbep)->is_hidden = !(*sbep)->mailbox->visible;
   }
 }
 

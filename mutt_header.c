@@ -32,7 +32,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/stat.h>
-#include <time.h>
 #include "mutt/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
@@ -126,28 +125,28 @@ int mutt_label_message(struct Mailbox *m, struct EmailList *el)
   if (!m || !el)
     return 0;
 
-  char buf[1024] = { 0 };
+  int changed = 0;
+  struct Buffer *buf = mutt_buffer_pool_get();
 
   struct EmailNode *en = STAILQ_FIRST(el);
   if (!STAILQ_NEXT(en, entries))
   {
     // If there's only one email, use its label as a template
     if (en->email->env->x_label)
-      mutt_str_copy(buf, en->email->env->x_label, sizeof(buf));
+      mutt_buffer_strcpy(buf, en->email->env->x_label);
   }
 
-  if (mutt_get_field("Label: ", buf, sizeof(buf), MUTT_LABEL /* | MUTT_CLEAR */,
-                     false, NULL, NULL) != 0)
+  if (mutt_buffer_get_field("Label: ", buf, MUTT_COMP_LABEL /* | MUTT_COMP_CLEAR */,
+                            false, NULL, NULL, NULL) != 0)
   {
-    return 0;
+    goto done;
   }
 
-  char *new_label = buf;
+  char *new_label = buf->data;
   SKIPWS(new_label);
   if (*new_label == '\0')
     new_label = NULL;
 
-  int changed = 0;
   STAILQ_FOREACH(en, el, entries)
   {
     if (label_message(m, en->email, new_label))
@@ -157,6 +156,8 @@ int mutt_label_message(struct Mailbox *m, struct EmailList *el)
     }
   }
 
+done:
+  mutt_buffer_pool_release(&buf);
   return changed;
 }
 
@@ -170,13 +171,6 @@ int mutt_label_message(struct Mailbox *m, struct EmailList *el)
 void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
                        struct Buffer *fcc)
 {
-  char buf[1024];
-  const char *p = NULL;
-  int i;
-  struct Envelope *n = NULL;
-  time_t mtime;
-  struct stat st = { 0 };
-
   struct Buffer *path = mutt_buffer_pool_get();
   mutt_buffer_mktemp(path);
   FILE *fp_out = mutt_file_fopen(mutt_buffer_string(path), "w");
@@ -205,13 +199,14 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
   mutt_file_fclose(&fp_in);
   mutt_file_fclose(&fp_out);
 
+  struct stat st = { 0 };
   if (stat(mutt_buffer_string(path), &st) == -1)
   {
     mutt_perror(mutt_buffer_string(path));
     goto cleanup;
   }
 
-  mtime = mutt_file_decrease_mtime(mutt_buffer_string(path), &st);
+  time_t mtime = mutt_file_decrease_mtime(mutt_buffer_string(path), &st);
   if (mtime == (time_t) -1)
   {
     mutt_perror(mutt_buffer_string(path));
@@ -247,9 +242,12 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
     goto cleanup;
   }
 
-  n = mutt_rfc822_read_header(fp_in, NULL, true, false);
-  while ((i = fread(buf, 1, sizeof(buf), fp_in)) > 0)
-    fwrite(buf, 1, i, fp_out);
+  struct Envelope *env_new = NULL;
+  char buf[1024];
+  env_new = mutt_rfc822_read_header(fp_in, NULL, true, false);
+  int bytes_read;
+  while ((bytes_read = fread(buf, 1, sizeof(buf), fp_in)) > 0)
+    fwrite(buf, 1, bytes_read, fp_out);
   mutt_file_fclose(&fp_out);
   mutt_file_fclose(&fp_in);
   mutt_file_unlink(mutt_buffer_string(path));
@@ -263,8 +261,8 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
 #endif
   {
     if (!STAILQ_EMPTY(&e->env->in_reply_to) &&
-        (STAILQ_EMPTY(&n->in_reply_to) ||
-         !mutt_str_equal(STAILQ_FIRST(&n->in_reply_to)->data,
+        (STAILQ_EMPTY(&env_new->in_reply_to) ||
+         !mutt_str_equal(STAILQ_FIRST(&env_new->in_reply_to)->data,
                          STAILQ_FIRST(&e->env->in_reply_to)->data)))
     {
       mutt_list_free(&e->env->references);
@@ -272,12 +270,12 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
   }
 
   /* restore old info. */
-  mutt_list_free(&n->references);
-  STAILQ_SWAP(&n->references, &e->env->references, ListNode);
+  mutt_list_free(&env_new->references);
+  STAILQ_SWAP(&env_new->references, &e->env->references, ListNode);
 
   mutt_env_free(&e->env);
-  e->env = n;
-  n = NULL;
+  e->env = env_new;
+  env_new = NULL;
 
   mutt_expand_aliases_env(e->env);
 
@@ -292,7 +290,7 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
 
     if (fcc && (plen = mutt_istr_startswith(np->data, "fcc:")))
     {
-      p = mutt_str_skip_email_wsp(np->data + plen);
+      const char *p = mutt_str_skip_email_wsp(np->data + plen);
       if (*p)
       {
         mutt_buffer_strcpy(fcc, p);
@@ -305,7 +303,7 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
       struct Body *body2 = NULL;
       struct Body *parts = NULL;
 
-      p = mutt_str_skip_email_wsp(np->data + plen);
+      const char *p = mutt_str_skip_email_wsp(np->data + plen);
       if (*p)
       {
         mutt_buffer_reset(path);
@@ -342,9 +340,14 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
     else if (((WithCrypto & APPLICATION_PGP) != 0) &&
              (plen = mutt_istr_startswith(np->data, "pgp:")))
     {
-      e->security = mutt_parse_crypt_hdr(np->data + plen, false, APPLICATION_PGP);
-      if (e->security)
-        e->security |= APPLICATION_PGP;
+      SecurityFlags sec = mutt_parse_crypt_hdr(np->data + plen, false, APPLICATION_PGP);
+      if (sec != SEC_NO_FLAGS)
+        sec |= APPLICATION_PGP;
+      if (sec != e->security)
+      {
+        e->security = sec;
+        notify_send(e->notify, NT_EMAIL, NT_EMAIL_CHANGE, NULL);
+      }
       keep = false;
     }
 

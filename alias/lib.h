@@ -31,8 +31,8 @@
  * | alias/array.c       | @subpage alias_array       |
  * | alias/commands.c    | @subpage alias_commands    |
  * | alias/config.c      | @subpage alias_config      |
- * | alias/dlgalias.c    | @subpage alias_dlgalias    |
- * | alias/dlgquery.c    | @subpage alias_dlgquery    |
+ * | alias/dlgalias.c    | @subpage alias_dlg_alias   |
+ * | alias/dlgquery.c    | @subpage alias_dlg_query   |
  * | alias/gui.c         | @subpage alias_gui         |
  * | alias/reverse.c     | @subpage alias_reverse     |
  * | alias/sort.c        | @subpage alias_sort        |
@@ -42,13 +42,12 @@
 #define MUTT_ALIAS_LIB_H
 
 #include <stddef.h>
+#include "core/lib.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include "core/command.h"
 
 struct Address;
 struct AddressList;
-struct AliasViewArray;
 struct Buffer;
 struct ConfigSubset;
 struct Envelope;
@@ -68,12 +67,11 @@ enum CommandResult parse_alias  (struct Buffer *buf, struct Buffer *s, intptr_t 
 enum CommandResult parse_unalias(struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
 
 int  alias_complete(char *buf, size_t buflen, struct ConfigSubset *sub);
+void alias_dialog  (struct Mailbox *m, struct ConfigSubset *sub);
 
-int  query_complete(char *buf, size_t buflen, struct ConfigSubset *sub);
-void query_index   (struct ConfigSubset *sub);
+int  query_complete(struct Buffer *buf, struct ConfigSubset *sub);
+void query_index   (struct Mailbox *m, struct ConfigSubset *sub);
 
 struct Address *alias_reverse_lookup(const struct Address *addr);
-
-void alias_array_sort(struct AliasViewArray *ava, const struct ConfigSubset *sub);
 
 #endif /* MUTT_ALIAS_LIB_H */

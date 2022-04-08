@@ -11,6 +11,7 @@ docs/makedoc
 neomutt
 pgpewrap
 test/neomutt-test
+fuzz/address-fuzz
 
 # Build products
 *.o
@@ -23,6 +24,7 @@ html
 lib*.a
 po/*.mo
 po/neomutt.pot
+po/POTFILES
 
 # Docs
 docs/*.html

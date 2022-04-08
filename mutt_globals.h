@@ -26,8 +26,8 @@
  * Global variables
  */
 
-#ifndef MUTT_GLOBALS_H
-#define MUTT_GLOBALS_H
+#ifndef MUTT_MUTT_GLOBALS_H
+#define MUTT_MUTT_GLOBALS_H
 
 #include "config.h"
 #include <signal.h> // IWYU pragma: keep
@@ -43,8 +43,6 @@
 #include "ncrypt/lib.h"
 #endif /* MAIN_C */
 
-WHERE struct Context *Context;
-
 WHERE bool ErrorBufMessage;            ///< true if the last message was an error
 WHERE char ErrorBuf[256];              ///< Copy of the last error message
 
@@ -57,8 +55,6 @@ WHERE char *CurrentFolder; ///< Currently selected mailbox
 WHERE char *LastFolder;    ///< Previously selected mailbox
 
 extern const char *GitVer;
-
-WHERE struct HashTable *TagFormats; ///< Hash Table of tag-formats (tag -> format string)
 
 /* Lists of strings */
 WHERE struct ListHead AlternativeOrderList INITVAL(STAILQ_HEAD_INITIALIZER(AlternativeOrderList)); ///< List of preferred mime types to display
@@ -75,4 +71,4 @@ WHERE SIG_ATOMIC_VOLATILE_T SigWinch; ///< true after SIGWINCH is received
 
 WHERE enum MenuType CurrentMenu; ///< Current Menu, e.g. #MENU_PAGER
 
-#endif /* MUTT_GLOBALS_H */
+#endif /* MUTT_MUTT_GLOBALS_H */

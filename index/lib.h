@@ -29,7 +29,7 @@
  * | :------------------- | :-------------------------- |
  * | index/config.c       | @subpage index_config       |
  * | index/functions.c    | @subpage index_functions    |
- * | index/dlg_index.c    | @subpage index_dialog       |
+ * | index/dlg_index.c    | @subpage index_dlg_index    |
  * | index/ibar.c         | @subpage index_ibar         |
  * | index/index.c        | @subpage index_index        |
  * | index/ipanel.c       | @subpage index_ipanel       |
@@ -54,6 +54,7 @@ struct Email;
 struct Menu;
 struct MuttWindow;
 
+// Observers of #NT_INDEX will be passed an #IndexSharedData.
 typedef uint8_t NotifyIndex;         ///< Flags, e.g. #NT_INDEX_ACCOUNT
 #define NT_INDEX_NO_FLAGS        0   ///< No flags are set
 #define NT_INDEX_ADD       (1 << 0)  ///< New Index Shared Data has been created
@@ -72,7 +73,7 @@ typedef uint8_t CheckFlags;       ///< Flags, e.g. #CHECK_IN_MAILBOX
 #define CHECK_READONLY   (1 << 3) ///< Is the mailbox readonly?
 #define CHECK_ATTACH     (1 << 4) ///< Is the user in message-attach mode?
 
-int  index_color(struct Menu *menu, int line);
+struct AttrColor *index_color(struct Menu *menu, int line);
 void index_make_entry(struct Menu *menu, char *buf, size_t buflen, int line);
 void mutt_draw_statusline(struct MuttWindow *win, int cols, const char *buf, size_t buflen);
 struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m);
@@ -85,12 +86,15 @@ int ci_next_undeleted(struct Mailbox *m, int msgno);
 void update_index(struct Menu *menu, struct Context *ctx, enum MxStatus check, int oldcount, const struct IndexSharedData *shared);
 void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *oldcount, struct IndexSharedData *shared, bool read_only);
 void collapse_all(struct Context *ctx, struct Menu *menu, int toggle);
-void change_folder_string(struct Menu *menu, char *buf, size_t buflen, int *oldcount, struct IndexSharedData *shared, bool *pager_return, bool read_only);
+void change_folder_string(struct Menu *menu, char *buf, size_t buflen, int *oldcount, struct IndexSharedData *shared, bool read_only);
 int ci_previous_undeleted(struct Mailbox *m, int msgno);
 int ci_first_message(struct Mailbox *m);
 void resort_index(struct Context *ctx, struct Menu *menu);
 int mx_toggle_write(struct Mailbox *m);
 extern const struct Mapping IndexNewsHelp[];
 struct Mailbox *change_folder_notmuch(struct Menu *menu, char *buf, int buflen, int *oldcount, struct IndexSharedData *shared, bool read_only);
+struct Mailbox *get_current_mailbox(void);
+struct Menu *get_current_menu(void);
+void dlg_change_folder(struct MuttWindow *dlg, struct Mailbox *m);
 
 #endif /* MUTT_INDEX_LIB_H */

@@ -38,7 +38,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <unistd.h>
 #include <utime.h>
 #include "config/lib.h"
@@ -216,18 +215,8 @@ void mutt_file_unlink(const char *s)
     return;
   }
 
-  FILE *fp = fdopen(fd, "r+");
-  if (fp)
-  {
-    unlink(s);
-    char buf[2048] = { 0 };
-    while (st.st_size > 0)
-    {
-      fwrite(buf, 1, MIN(sizeof(buf), st.st_size), fp);
-      st.st_size -= MIN(sizeof(buf), st.st_size);
-    }
-    mutt_file_fclose(&fp);
-  }
+  unlink(s);
+  close(fd);
 }
 
 /**
@@ -652,6 +641,30 @@ int mutt_file_sanitize_regex(struct Buffer *dest, const char *src)
   }
 
   return 0;
+}
+
+/**
+ * mutt_file_seek - Wrapper for fseeko with error handling
+ * @param[in] fp File to seek
+ * @param[in] offset Offset
+ * @param[in] whence Seek mode
+ * @retval true Seek was successful
+ * @retval false Seek failed
+ */
+bool mutt_file_seek(FILE *fp, LOFF_T offset, int whence)
+{
+  if (!fp)
+  {
+    return false;
+  }
+
+  if (fseeko(fp, offset, whence) != 0)
+  {
+    mutt_perror(_("Failed to seek file: %s"), strerror(errno));
+    return false;
+  }
+
+  return true;
 }
 
 /**

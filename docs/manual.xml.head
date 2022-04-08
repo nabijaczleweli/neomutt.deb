@@ -79,7 +79,7 @@ vim: ts=2 sw=2 sts=2 expandtab:
             <para>
               For the IRC user community, visit channel
               <emphasis>#neomutt</emphasis> on
-              <ulink url="https://kiwiirc.com/nextclient/irc.libera.chat/#neomutt">irc.libera.chat</ulink>.
+              <ulink url="https://web.libera.chat/#neomutt">irc.libera.chat</ulink>.
             </para>
           </listitem>
         </varlistentry>
@@ -2196,7 +2196,7 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
           In the <emphasis>index</emphasis>, the subject of threaded children
           messages will be prepended with thread tree characters. By default,
           the subject itself will not be duplicated unless
-          <link linkend="hide-thread-subject">$hide_thread_subject</link>is
+          <link linkend="hide-thread-subject">$hide_thread_subject</link> is
           unset.  Special characters will be added to the thread tree as
           detailed in <xref linkend="tab-thread-chars" />.
         </para>
@@ -2215,14 +2215,14 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
                 <entry>&amp;</entry>
                 <entry>hidden message</entry>
                 <entry>see
-                <link linkend="hide-limited">$hide_limited</link>and
+                <link linkend="hide-limited">$hide_limited</link> and
                 <link linkend="hide-top-limited">$hide_top_limited</link></entry>
               </row>
               <row>
                 <entry>?</entry>
                 <entry>missing message</entry>
                 <entry>see
-                <link linkend="hide-missing">$hide_missing</link>and
+                <link linkend="hide-missing">$hide_missing</link> and
                 <link linkend="hide-top-missing">$hide_top_missing</link></entry>
               </row>
               <row>
@@ -2230,7 +2230,7 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
                 <entry>pseudo thread</entry>
                 <entry>see
                 <link linkend="strict-threads">$strict_threads</link>; not displayed
-                when <link linkend="narrow-tree">$narrow_tree</link>is set</entry>
+                when <link linkend="narrow-tree">$narrow_tree</link> is set</entry>
               </row>
               <row>
                 <entry>=</entry>
@@ -2238,7 +2238,7 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
                 <entry>see
                 <link linkend="duplicate-threads">$duplicate_threads</link>; not
                 displayed when
-                <link linkend="narrow-tree">$narrow_tree</link>is set</entry>
+                <link linkend="narrow-tree">$narrow_tree</link> is set</entry>
               </row>
             </tbody>
           </tgroup>
@@ -2279,7 +2279,7 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
             <listitem>
               <para>
                 Calculate statistics for all monitored mailboxes declared using
-                the <command>mailboxes</command>command. It will calculate
+                the <command>mailboxes</command> command. It will calculate
                 statistics despite <link linkend="mail-check-stats">$mail_check_stats</link>
                 being unset.
               </para>
@@ -3793,8 +3793,8 @@ my_hdr X-Disclaimer: Why are you listening to me?   <emphasis role="comment"># T
         <emphasis>not</emphasis> for single quotes.
       </para>
       <para>
-        <quote>\</quote> quotes the next character, just as in shells such as
-        bash and zsh. For example, if want to put quotes <quote>"</quote>
+        <quote>\</quote> quotes the next character, just like in a shell.
+        For example, if want to put quotes <quote>"</quote>
         inside of a string, you can use <quote>\</quote> to force the next
         character to be a literal instead of interpreted character.
       </para>
@@ -4437,6 +4437,10 @@ set alias_file=~/.mail_aliases
               <entry>Return</entry>
             </row>
             <row>
+              <entry>&lt;keypadenter&gt;</entry>
+              <entry>Enter key on numeric keypad</entry>
+            </row>
+            <row>
               <entry>&lt;home&gt;</entry>
               <entry>Home</entry>
             </row>
@@ -4481,6 +4485,31 @@ set alias_file=~/.mail_aliases
         The special function <literal>&lt;noop&gt;</literal> unbinds the
         specified key sequence.
       </para>
+
+      <sect2 id="crlf">
+        <title>Enter versus Return</title>
+        <para>
+          Prior to 2022, NeoMutt used a default ncurses mode
+          (<quote><literal>nl()</literal></quote>).  This mode maps keyboard
+          input of either <literal>&lt;Enter&gt;</literal> or
+          <literal>&lt;Return&gt;</literal> to the same value, which NeoMutt
+          interpreted as <literal>&lt;Return&gt;</literal> internally.
+        </para>
+        <para>
+          However, starting in version 2.2, this mode is turned off,
+          allowing <literal>&lt;Return&gt;</literal> and
+          <literal>&lt;Enter&gt;</literal> to be mapped separately, if
+          desired.  The default keyboard mappings set both, but you can
+          override this or create new bindings with one or the other (or
+          both).
+        </para>
+        <para>
+          Note that in terminal application, such as NeoMutt,
+          <literal>&lt;Enter&gt;</literal> is the same as <quote>\n</quote>
+          and <literal>^J</literal>; while <literal>&lt;Return&gt;</literal>
+          is the same as <quote>\r</quote> and <literal>^M</literal>.
+        </para>
+      </sect2>
 
       <sect2 id="bind-warnings">
         <title>Warnings about Duplicated Bindings</title>
@@ -4545,7 +4574,7 @@ bind index gg first-entry
           undef</quote>.  For example, <quote><literal>stty quit
           undef</literal></quote> will unbind <literal>^\</literal> (and
           <literal>^4</literal>) from sending the quit signal.  Once unbound
-          (e.g, by placing that line in your .bashrc, or in a NeoMutt wrapper
+          (e.g, by placing that line in your .profile, or in a NeoMutt wrapper
           script/function) you can use the key sequence in your NeoMutt
           bindings.
         </para>
@@ -6378,21 +6407,21 @@ message-hook '~f freshmeat-news' 'set pager="less \"+/^  subject: .*\""'
       </cmdsynopsis>
       <para>
         This command is used to inject format strings dynamically into <link
-        linkend="index-format">$index_format</link>based on pattern matching
+        linkend="index-format">$index_format</link> based on pattern matching
         against the current message.
       </para>
       <para>
-        The <link linkend="index-format">$index_format</link>expando
-        <emphasis>%@name@</emphasis>specifies a placeholder for the injection.
-        Index-format-hooks with the same <emphasis>name</emphasis>are matched using
-        <link linkend="patterns"> <emphasis>pattern</emphasis> </link>against the
+        The <link linkend="index-format">$index_format</link> expando
+        <emphasis>%@name@</emphasis> specifies a placeholder for the injection.
+        Index-format-hooks with the same <emphasis>name</emphasis> are matched using
+        <link linkend="patterns"> <emphasis>pattern</emphasis> </link> against the
         current message. Matching is done in the order specified in the .muttrc,
         with the first match being used. The hook's
-        <emphasis>format-string</emphasis>is then substituted and evaluated.
+        <emphasis>format-string</emphasis> is then substituted and evaluated.
       </para>
       <para>
         Because the first match is used, best practice is to put a catch-all
-        <emphasis>~A</emphasis>pattern as the last hook. Here is an example showing
+        <emphasis>~A</emphasis> pattern as the last hook. Here is an example showing
         how to implement dynamic date formatting:
       </para>
 <screen>
@@ -6583,11 +6612,11 @@ folder-hook . 'push "&lt;enter-command&gt;score ~= 10&lt;enter&gt;"'
         defined for a given message.)
       </para>
       <para>
-        Note: the value displayed by <literal>%H</literal>and searched by
-        <literal>~H</literal>is stored in the
+        Note: the value displayed by <literal>%H</literal> and searched by
+        <literal>~H</literal> is stored in the
         <link linkend="caching">header cache</link>. NeoMutt isn't smart enough to
         invalidate a header cache entry based on changing <literal>spam</literal>
-        rules, so if you aren't seeing correct <literal>%H</literal>values, try
+        rules, so if you aren't seeing correct <literal>%H</literal> values, try
         temporarily turning off the header cache. If that fixes the problem,
         then once your spam rules are set to your liking, remove your stale
         header cache files and turn the header cache back on.
@@ -8023,7 +8052,7 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
                 <entry>~B <emphasis>EXPR</emphasis></entry>
                 <entry>d)</entry>
                 <entry>
-                  messages which contain <emphasis>EXPR</emphasis>in the whole
+                  messages which contain <emphasis>EXPR</emphasis> in the whole
                   message
                 </entry>
               </row>
@@ -8032,7 +8061,7 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
                 <entry></entry>
                 <entry>
                   If IMAP is enabled, like ~B but searches for
-                  <emphasis>STRING</emphasis>on the server, rather than
+                  <emphasis>STRING</emphasis> on the server, rather than
                   downloading each message and searching it locally.
                 </entry>
               </row>
@@ -8143,7 +8172,7 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
                 <entry>~h <emphasis>EXPR</emphasis></entry>
                 <entry>d)</entry>
                 <entry>
-                  messages which contain <emphasis>EXPR</emphasis>in the
+                  messages which contain <emphasis>EXPR</emphasis> in the
                   message header
                 </entry>
               </row>
@@ -8152,9 +8181,9 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
                 <entry></entry>
                 <entry>
                   If IMAP is enabled, like ~h but searches for
-                  <emphasis>STRING</emphasis>on the server, rather than
+                  <emphasis>STRING</emphasis> on the server, rather than
                   downloading each message and searching it locally;
-                  <emphasis>STRING</emphasis>must be of the form
+                  <emphasis>STRING</emphasis> must be of the form
                   <quote>header: substring</quote>(see below).
                 </entry>
               </row>
@@ -9909,12 +9938,12 @@ subjectrx '\[[^]]*\]:? *' '%L%R'
       <sect2 id="new-mail-monitoring">
         <title>Monitoring New Mail</title>
         <para>
-          When the <emphasis>Inotify</emphasis>mechanism for monitoring of
+          When the <emphasis>Inotify</emphasis> mechanism for monitoring of
           files is supported (Linux only) and not disabled at compilation time,
           NeoMutt immediately notifies about new mail for all folders configured
           via the <link linkend="mailboxes"><command>mailboxes</command></link>
           command.  Dependent on <link linkend="mailbox-formats">mailbox format</link>
-          also added <emphasis>old</emphasis>mails are tracked (not for Maildir).
+          also added <emphasis>old</emphasis> mails are tracked (not for Maildir).
         </para>
         <para>
           No configuration variables are available. Trace output is given when
@@ -9925,7 +9954,7 @@ subjectrx '\[[^]]*\]:? *' '%L%R'
         <note>
           <para>
             Getting events about new mail is limited to the capabilities of the
-            underlying mechanism.  <emphasis>inotify</emphasis>only reports
+            underlying mechanism.  <emphasis>inotify</emphasis> only reports
             local changes, i. e. new mail notification works for mails
             delivered by an agent on the same machine as NeoMutt, but not when
             delivered remotely on a network file system as nfs. also the
@@ -10077,13 +10106,13 @@ macro index ,a "&lt;save-message&gt;=archive&lt;enter&gt;&lt;enter-command&gt;ec
       <itemizedlist>
         <listitem>
           <para>Reply envelope settings.
-            <link linkend="reverse-name">$reverse_name</link>processing. To, Cc,
+            <link linkend="reverse-name">$reverse_name</link> processing. To, Cc,
             Subject, References header defaults.
           </para>
         </listitem>
         <listitem>
           <para>
-            <link linkend="my-hdr">my_hdr</link>processing for To, Cc, Bcc,
+            <link linkend="my-hdr">my_hdr</link> processing for To, Cc, Bcc,
             Subject headers.
           </para>
         </listitem>
@@ -10130,12 +10159,12 @@ macro index ,a "&lt;save-message&gt;=archive&lt;enter&gt;&lt;enter-command&gt;ec
         </listitem>
         <listitem>
           <para>
-            <link linkend="real-name">$real_name</link>part of From header setting.
+            <link linkend="real-name">$real_name</link> part of From header setting.
           </para>
         </listitem>
         <listitem>
           <para>
-            <link linkend="editor">$editor</link>invocation for the message.
+            <link linkend="editor">$editor</link> invocation for the message.
           </para>
         </listitem>
         <listitem>
@@ -10386,7 +10415,7 @@ macro index ,a "&lt;save-message&gt;=archive&lt;enter&gt;&lt;enter-command&gt;ec
               </term>
               <listitem>
                 <para>
-                  Mutt will display internally supported MIME types (see <xref
+                  NeoMutt will display internally supported MIME types (see <xref
                   linkend="mime-pager"/>) in the pager.  This will respect
                   <link linkend="auto-view">auto_view</link> settings, to determine
                   whether to use a <literal>copiousoutput</literal> mailcap entry or
@@ -10408,7 +10437,7 @@ macro index ,a "&lt;save-message&gt;=archive&lt;enter&gt;&lt;enter-command&gt;ec
               </term>
               <listitem>
                 <para>
-                  Mutt will use the first matching
+                  NeoMutt will use the first matching
                   <literal>copiousoutput</literal> mailcap entry to display the
                   attachment in the pager (regardless of <link
                   linkend="auto-view">auto_view</link> settings).
@@ -11376,10 +11405,12 @@ alternative_order text/enriched text/plain text application/postscript image/*
           <listitem>
             <para>
               Tag the attachments that are alternatives, and press the
-              <command>&lt;group-alternatives&gt;</command> (&amp;) binding to group
-              them together. After this, the separate parts will be replaced by a single
-              new part with the <literal>multipart/alternative</literal> type and the
-              alternatives must be manipulated or deleted as a group.
+              <literal>&lt;group-alternatives&gt;</literal> (&amp;) binding to group
+              them together. After this, the separate parts will be displayed in a tree
+              structure. Attachments can still be edited separately and reordered within
+              the group, but must be ungrouped using the <literal>&lt;ungroup-attachment&gt;</literal>
+              (#) binding for more advanced editing before tagging and grouping together again
+              as described above.
             </para>
           </listitem>
           <listitem>
@@ -11394,15 +11425,6 @@ alternative_order text/enriched text/plain text application/postscript image/*
           as a <literal>multipart/alternative</literal> email, otherwise it will be sent
           as a <literal>multipart/mixed</literal> email.
         </para>
-        <para>
-          Note that after grouping, you can't view, edit or break the
-          <literal>multipart/alternative</literal> bundle, because it is in a temporary
-          form. But you can view and edit its primitive part using the
-          <command>&lt;edit&gt;</command> command. When postponing emails or on error
-          (e.g., no recipients address when sending emails) this
-          <literal>multipart/alternative</literal> will be broken apart and need to
-          be tagged and group together again as described above.
-        </para>
 
         <para>
           Be aware that when sending a <literal>multipart/alternative</literal> email,
@@ -11411,12 +11433,17 @@ alternative_order text/enriched text/plain text application/postscript image/*
           you can compose a plain text email as usual and turn that into a
           <literal>multipart/alternative</literal> email in one single command, with
           one part being <literal>text/plain</literal> and the other
-          <literal>text/html</literal>. An example macro will be the following:
+          <literal>text/html</literal>. An example macro which adds an HTML
+          part to the main body of an email and sends it could be the following:
 
 <screen>
-macro compose K "| pandoc -o /tmp/neomutt-alternative.html&lt;enter&gt; \
+  macro compose Y "&lt;first-entry&gt;&lt;enter-command&gt;set wait_key=no&lt;enter&gt; \
+    | pandoc -o /tmp/neomutt-alternative.html&lt;enter&gt; \
     &lt;attach-file&gt;/tmp/neomutt-alternative.html&lt;enter&gt; \
-    &lt;tag-entry&gt;&lt;previous-entry&gt;&lt;tag-entry&gt;&lt;group-alternatives&gt;"
+    &lt;toggle-unlink&gt;&lt;toggle-disposition&gt; \
+    &lt;tag-entry&gt;&lt;first-entry&gt;&lt;tag-entry&gt;&lt;group-alternatives&gt; \
+    &lt;enter-command&gt;set wait_key=yes&lt;enter&gt;&lt;send-message&gt;" \
+    "send the message as 'multipart/alternative'"
 </screen>
         </para>
       </sect2>
@@ -11478,14 +11505,14 @@ set preferred_languages="fr,en,de"
 
           <listitem>
             <para>
-              Tag them with <command>&lt;tag-entry&gt;</command>
+              Tag them with <literal>&lt;tag-entry&gt;</literal>
             </para>
           </listitem>
 
           <listitem>
             <para>
               Edit the <literal>Content-Language</literal> header of every attachment with command
-              <command>&lt;edit-language&gt;</command> (default to <literal>Ctrl-L</literal>). This
+              <literal>&lt;edit-language&gt;</literal> (default to <literal>Ctrl-L</literal>). This
               is important, otherwise the recipient of this email will not know the corresponding
               languages. You can set arbitrary string as <literal>Content-Language</literal>, but it
               is recommended to set it as some common prefixes such as "en", "zh" and "fr".
@@ -11493,7 +11520,7 @@ set preferred_languages="fr,en,de"
           </listitem>
           <listitem>
             <para>
-              Group all the tag messages together by <command>&lt;group-multilingual&gt;</command>
+              Group all the tag messages together by <literal>&lt;group-multilingual&gt;</literal>
               (default to <literal>^</literal>).
             </para>
           </listitem>
@@ -11511,12 +11538,119 @@ set preferred_languages="fr,en,de"
         </para>
 
         <para>
-          Note that after grouping, you can't view, edit or break the
-          <literal>multipart/multilingual</literal> email bundle, because it is in a temporary form.
-          But you can view and edit its primitive part using the <command>&lt;edit&gt;</command>
-          command. When postponing emails or on error (e.g., no recipients address when sending
-          emails) this <literal>multipart/multilingual</literal> will be broken apart and need to
-          be tagged and group together again as described above.
+          After grouping the separate parts will be displayed in a tree
+          structure. Attachments can still be edited separately and reordered within
+          the group, but must be ungrouped using the <literal>&lt;ungroup-attachment&gt;</literal>
+          (#) binding for more advanced editing before tagging and grouping together again
+          as described above.
+        </para>
+      </sect2>
+    </sect1>
+
+    <sect1 id="related">
+      <title>MIME Multipart/Related</title>
+
+      <para>
+        Neomutt doesn't include any special support for reading <literal>multipart/related</literal>
+        emails, but it is possible to write a <literal>multipart/related</literal> email.
+        A <literal>multipart/related</literal> attachment is intended for compound objects
+        consisting of several inter-related body parts which are linked together using the
+        <literal>Content-ID</literal> header. Its format is described by
+        <ulink url="https://tools.ietf.org/html/rfc2387">RFC2387</ulink>.
+      </para>
+
+      <sect2 id="compose-multipart-related">
+        <title>Composing Multipart/Related Emails</title>
+        <para>
+          The procedure for composing a <literal>multipart/related</literal> email is similar
+          to that in <link linkend="compose-alternative-order">Composing Multipart/Alternative</link>.
+          You have to prepare every part manually or using some scripts, and then tag and group them
+          together into a <literal>multipart/related</literal> bundle before sending it:
+        </para>
+
+        <orderedlist>
+          <listitem>
+            <para>
+              Prepare parts of the related email.
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              Attach them as attachments.
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              Tag them with <literal>&lt;tag-entry&gt;</literal>
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              One part can reference another using its <literal>Content-ID</literal> header.
+              For example, an HTML part that includes an embedded image needs to contain:
+              <literal>&lt;img src="cid:content-id"&gt;</literal> where an
+              attached image has a <literal>Content-ID</literal> header of <literal>content-id</literal>.
+              The <literal>Content-ID</literal> of an attachment can be set using
+              <literal>&lt;edit-content-id&gt;</literal> (default key <literal>Alt-i</literal>).
+              <literal>&lt;edit-content-id&gt;</literal> sets a random ID which can then be
+              changed if desired. Permitted characters for <literal>Content-ID</literal> are:
+              <literal>-.0-9@A-Z_a-z</literal>.
+            </para>
+            <para>
+              If the <literal>multipart/related</literal> group is intended to be inline,
+              members of the group should also have their <literal>Content-Disposition</literal>
+              header set to <literal>inline</literal> which can be toggled using
+              <literal>&lt;toggle-disposition&gt;</literal> (default key <literal>Ctrl-D</literal>).
+            </para>
+            <para>
+              It can also be desirable to give referenced files in the group a
+              <literal>filename</literal> even when the <literal>Content-Disposition</literal> is
+              set to be <literal>inline</literal>. To do this use <literal>&lt;rename-attachment&gt;</literal>
+              (default key <literal>Ctrl-O</literal>).
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              Group all the tagged messages together with <literal>&lt;group-related&gt;</literal>
+              (default key <literal>%</literal>).
+            </para>
+            <para>
+              Top level attachments (excluding <literal>multipart</literal> ones) in the group
+              are automatically given a random <literal>Content-ID</literal> if they do not
+              already have one.
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              Send the email as usual.
+            </para>
+          </listitem>
+        </orderedlist>
+
+        <para>
+          Some care needs to be taken with the construction of a <literal>multipart/related</literal>
+          email to ensure it is correctly displayed by the receiving mail client.
+          A typical email with a <literal>multipart/alternative</literal> part
+          containing a <literal>text/plain</literal> part and a <literal>text/html</literal>
+          part with an embedded image, along with a separate attachment might end up like this:
+        </para>
+
+<screen>
+  I     1 &lt;no description&gt;                                         [multipart/related, 7bit, 0K]
+  I     2 ├─>&lt;no description&gt;                                  [multipart/alternative, 7bit, 0K]
+- I     3 │ ├─>/tmp/neomutt-hostname-XXXX-XXXXXX-XXXXXXXXXX   [text/plain, 7bit, us-ascii, 0.1K]
+- I     4 │ └─>/tmp/neomutt-alternative.html                      [text/html, 8bit, utf-8, 0.6K]
+  I     5 └─>image.png                                                  [image/png, base64, 19K]
+  A     6 attachment.pdf                                         [application/pdf, quoted, 7.1K]
+</screen>
+
+        <para>
+          In the above email <literal>/tmp/neomutt-alternative.html</literal> would reference
+          <literal>image.png</literal> using <literal>&lt;img src="cid:content-id"&gt;</literal>
+          and <literal>image.png</literal> has been given an explicit name of
+          <literal>image.png</literal> using <literal>&lt;rename-attachment&gt;</literal>
+          (regardless of its initial filename). <literal>&lt;group-related&gt;</literal>
+          has set its <literal>Content-ID</literal> header to a random value.
         </para>
       </sect2>
     </sect1>
@@ -11541,7 +11675,7 @@ set preferred_languages="fr,en,de"
         download the message just once.
       </para>
       <para>
-        By default, Mutt will not search inside
+        By default, NeoMutt will not search inside
         <literal>multipart/alternative</literal> containers.  This can be changed
         via the <link linkend="count-alternatives">$count_alternatives</link>
         configuration variable.
@@ -12122,7 +12256,7 @@ set timeout=15
         Preliminary OAUTH support for IMAP, POP, and SMTP is provided via external scripts.
       </para>
       <para>
-        At least for Gmail, you can use the <literal>oauth2.py</literal>script
+        At least for Gmail, you can use the <literal>oauth2.py</literal> script
         from Google's gmail-oauth2-tools:
         <ulink url="https://github.com/google/gmail-oauth2-tools/blob/master/python/oauth2.py">https://github.com/google/gmail-oauth2-tools/blob/master/python/oauth2.py</ulink>
       </para>
@@ -12288,7 +12422,7 @@ folder-hook imap://user@host2/ 'set folder=imap://host2/ ; set record=+INBOX/Sen
         </para>
         <para>
           Additionally,
-          <link linkend="header-cache-backend">$header_cache_backend</link> must
+          <link linkend="header-cache-backend">$header_cache_backend</link> can
           be set to specify which backend to use. The list of available
           backends can be specified at configure time with a set of
           --with-&lt;backend&gt; options. Currently, the following backends are
@@ -16233,17 +16367,16 @@ set nm_open_timeout = 5
 <emphasis role="comment"># This variable specifies notmuch query type, supported types: 'threads' and</emphasis>
 <emphasis role="comment"># 'messages'.</emphasis>
 set nm_query_type = messages
-<emphasis role="comment"># Add messages stored to the NeoMutt record (see $record in the NeoMutt docs)</emphasis>
-<emphasis role="comment"># also to notmuch DB. If you reply to an email then the new email inherits</emphasis>
-<emphasis role="comment"># tags from the original email.</emphasis>
+<emphasis role="comment"># When writing a message in the NeoMutt record (see $record in the NeoMutt docs),</emphasis>
+<emphasis role="comment"># also add it to the notmuch DB. Replies inherit the tags from the original email.</emphasis>
 set nm_record = no
-<emphasis role="comment"># Tags that should be removed or added to the to the messages stored in the NeoMutt record.</emphasis>
+<emphasis role="comment"># Tags modifications to the messages stored in the NeoMutt record.</emphasis>
 <emphasis role="comment"># example:</emphasis>
 <emphasis role="comment">#   set record = "~/sent-mails"</emphasis>
 <emphasis role="comment">#   set nm_record = yes</emphasis>
 <emphasis role="comment">#   set nm_record_tags = "-inbox,archive,me"</emphasis>
 set nm_record_tags = ""
-<emphasis role="comment"># This variable specifies notmuch tag which is used for unread messages.</emphasis>
+<emphasis role="comment"># This variable specifies the notmuch tag used for unread messages.</emphasis>
 set nm_unread_tag = unread
 <emphasis role="comment"># This variable allows you to customize the file browser display for virtual</emphasis>
 <emphasis role="comment"># folders to your personal taste.</emphasis>
@@ -17326,7 +17459,7 @@ color sidebar_unread color136 default
         <para>
           Also, it can be handy to jump directly to the start of the
           email body with the <literal>&lt;skip-headers&gt;</literal>
-          function (by default the <literal>H</literal>key).
+          function (by default the <literal>H</literal> key).
         </para>
       </sect2>
 

@@ -39,7 +39,7 @@
  * - @ref gui_dialog
  *
  * **Children**
- * - @ref compose_envelope
+ * - @ref envelope_window
  * - @ref gui_sbar
  * - @ref compose_attach
  * - @ref compose_cbar
@@ -76,62 +76,19 @@
 #include "gui/lib.h"
 #include "lib.h"
 #include "attach/lib.h"
+#include "envelope/lib.h"
 #include "index/lib.h"
 #include "menu/lib.h"
 #include "ncrypt/lib.h"
 #include "attach_data.h"
 #include "cbar.h"
-#include "context.h"
 #include "functions.h"
-#include "mutt_globals.h"
+#include "hook.h"
+#include "keymap.h"
+#include "mutt_logging.h"
 #include "opcodes.h"
 #include "options.h"
 #include "shared_data.h"
-
-int HeaderPadding[HDR_ATTACH_TITLE] = { 0 };
-int MaxHeaderWidth = 0;
-
-const char *const Prompts[] = {
-  /* L10N: Compose menu field.  May not want to translate. */
-  N_("From: "),
-  /* L10N: Compose menu field.  May not want to translate. */
-  N_("To: "),
-  /* L10N: Compose menu field.  May not want to translate. */
-  N_("Cc: "),
-  /* L10N: Compose menu field.  May not want to translate. */
-  N_("Bcc: "),
-  /* L10N: Compose menu field.  May not want to translate. */
-  N_("Subject: "),
-  /* L10N: Compose menu field.  May not want to translate. */
-  N_("Reply-To: "),
-  /* L10N: Compose menu field.  May not want to translate. */
-  N_("Fcc: "),
-#ifdef MIXMASTER
-  /* L10N: "Mix" refers to the MixMaster chain for anonymous email */
-  N_("Mix: "),
-#endif
-  /* L10N: Compose menu field.  Holds "Encrypt", "Sign" related information */
-  N_("Security: "),
-  /* L10N: This string is used by the compose menu.
-     Since it is hidden by default, it does not increase the indentation of
-     other compose menu fields.  However, if possible, it should not be longer
-     than the other compose menu fields.  Since it shares the row with "Encrypt
-     with:", it should not be longer than 15-20 character cells.  */
-  N_("Sign as: "),
-#ifdef USE_AUTOCRYPT
-  // L10N: The compose menu autocrypt line
-  N_("Autocrypt: "),
-#endif
-#ifdef USE_NNTP
-  /* L10N: Compose menu field.  May not want to translate. */
-  N_("Newsgroups: "),
-  /* L10N: Compose menu field.  May not want to translate. */
-  N_("Followup-To: "),
-  /* L10N: Compose menu field.  May not want to translate. */
-  N_("X-Comment-To: "),
-#endif
-  N_("Headers: "),
-};
 
 /// Help Bar for the Compose dialog
 static const struct Mapping ComposeHelp[] = {
@@ -139,13 +96,13 @@ static const struct Mapping ComposeHelp[] = {
   { N_("Send"),        OP_COMPOSE_SEND_MESSAGE },
   { N_("Abort"),       OP_EXIT },
   /* L10N: compose menu help line entry */
-  { N_("To"),          OP_COMPOSE_EDIT_TO },
+  { N_("To"),          OP_ENVELOPE_EDIT_TO },
   /* L10N: compose menu help line entry */
-  { N_("CC"),          OP_COMPOSE_EDIT_CC },
+  { N_("CC"),          OP_ENVELOPE_EDIT_CC },
   /* L10N: compose menu help line entry */
-  { N_("Subj"),        OP_COMPOSE_EDIT_SUBJECT },
-  { N_("Attach file"), OP_COMPOSE_ATTACH_FILE },
-  { N_("Descrip"),     OP_COMPOSE_EDIT_DESCRIPTION },
+  { N_("Subj"),        OP_ENVELOPE_EDIT_SUBJECT },
+  { N_("Attach file"), OP_ATTACHMENT_ATTACH_FILE },
+  { N_("Descrip"),     OP_ATTACHMENT_EDIT_DESCRIPTION },
   { N_("Help"),        OP_HELP },
   { NULL, 0 },
   // clang-format on
@@ -157,68 +114,15 @@ static const struct Mapping ComposeNewsHelp[] = {
   // clang-format off
   { N_("Send"),        OP_COMPOSE_SEND_MESSAGE },
   { N_("Abort"),       OP_EXIT },
-  { N_("Newsgroups"),  OP_COMPOSE_EDIT_NEWSGROUPS },
-  { N_("Subj"),        OP_COMPOSE_EDIT_SUBJECT },
-  { N_("Attach file"), OP_COMPOSE_ATTACH_FILE },
-  { N_("Descrip"),     OP_COMPOSE_EDIT_DESCRIPTION },
+  { N_("Newsgroups"),  OP_ENVELOPE_EDIT_NEWSGROUPS },
+  { N_("Subj"),        OP_ENVELOPE_EDIT_SUBJECT },
+  { N_("Attach file"), OP_ATTACHMENT_ATTACH_FILE },
+  { N_("Descrip"),     OP_ATTACHMENT_EDIT_DESCRIPTION },
   { N_("Help"),        OP_HELP },
   { NULL, 0 },
   // clang-format on
 };
 #endif
-
-/**
- * calc_header_width_padding - Calculate the width needed for the compose labels
- * @param idx      Store the result at this index of HeaderPadding
- * @param header   Header string
- * @param calc_max If true, calculate the maximum width
- */
-static void calc_header_width_padding(int idx, const char *header, bool calc_max)
-{
-  int width;
-
-  HeaderPadding[idx] = mutt_str_len(header);
-  width = mutt_strwidth(header);
-  if (calc_max && (MaxHeaderWidth < width))
-    MaxHeaderWidth = width;
-  HeaderPadding[idx] -= width;
-}
-
-/**
- * init_header_padding - Calculate how much padding the compose table will need
- *
- * The padding needed for each header is strlen() + max_width - strwidth().
- *
- * calc_header_width_padding sets each entry in HeaderPadding to strlen -
- * width.  Then, afterwards, we go through and add max_width to each entry.
- */
-static void init_header_padding(void)
-{
-  static bool done = false;
-
-  if (done)
-    return;
-  done = true;
-
-  for (int i = 0; i < HDR_ATTACH_TITLE; i++)
-  {
-    if (i == HDR_CRYPTINFO)
-      continue;
-    calc_header_width_padding(i, _(Prompts[i]), true);
-  }
-
-  /* Don't include "Sign as: " in the MaxHeaderWidth calculation.  It
-   * doesn't show up by default, and so can make the indentation of
-   * the other fields look funny. */
-  calc_header_width_padding(HDR_CRYPTINFO, _(Prompts[HDR_CRYPTINFO]), false);
-
-  for (int i = 0; i < HDR_ATTACH_TITLE; i++)
-  {
-    HeaderPadding[i] += MaxHeaderWidth;
-    if (HeaderPadding[i] < 0)
-      HeaderPadding[i] = 0;
-  }
-}
 
 /**
  * compose_config_observer - Notification that a Config Variable has changed - Implements ::observer_t - @ingroup observer_api
@@ -248,6 +152,25 @@ static int compose_config_observer(struct NotifyCallback *nc)
 
   mutt_window_reflow(dlg);
   mutt_debug(LL_DEBUG5, "config done, request WA_REFLOW\n");
+  return 0;
+}
+
+/**
+ * compose_email_observer - Notification that an Email has changed - Implements ::observer_t - @ingroup observer_api
+ */
+static int compose_email_observer(struct NotifyCallback *nc)
+{
+  if (!nc->global_data || !nc->event_data)
+    return -1;
+  if (nc->event_type != NT_ENVELOPE)
+    return 0;
+
+  struct ComposeSharedData *shared = nc->global_data;
+
+  if (nc->event_subtype == NT_ENVELOPE_FCC)
+    shared->fcc_set = true;
+
+  mutt_message_hook(shared->mailbox, shared->email, MUTT_SEND2_HOOK);
   return 0;
 }
 
@@ -285,21 +208,16 @@ static void gen_attach_list(struct AttachCtx *actx, struct Body *m, int parent_t
 {
   for (; m; m = m->next)
   {
+    struct AttachPtr *ap = mutt_aptr_new();
+    mutt_actx_add_attach(actx, ap);
+    ap->body = m;
+    m->aptr = ap;
+    ap->parent_type = parent_type;
+    ap->level = level;
     if ((m->type == TYPE_MULTIPART) && m->parts &&
         (!(WithCrypto & APPLICATION_PGP) || !mutt_is_multipart_encrypted(m)))
     {
-      gen_attach_list(actx, m->parts, m->type, level);
-    }
-    else
-    {
-      struct AttachPtr *ap = mutt_mem_calloc(1, sizeof(struct AttachPtr));
-      mutt_actx_add_attach(actx, ap);
-      ap->body = m;
-      m->aptr = ap;
-      ap->parent_type = parent_type;
-      ap->level = level;
-
-      /* We don't support multipart messages in the compose menu yet */
+      gen_attach_list(actx, m->parts, m->type, level + 1);
     }
   }
 }
@@ -356,7 +274,7 @@ static struct MuttWindow *compose_dlg_init(struct ConfigSubset *sub,
   dlg->wdata = shared;
   dlg->wdata_free = compose_shared_data_free;
 
-  struct MuttWindow *win_env = compose_env_new(shared, fcc);
+  struct MuttWindow *win_env = env_window_new(e, fcc, sub);
   struct MuttWindow *win_attach = attach_new(dlg, shared);
   struct MuttWindow *win_cbar = cbar_new(shared);
   struct MuttWindow *win_abar = sbar_new();
@@ -398,57 +316,67 @@ static struct MuttWindow *compose_dlg_init(struct ConfigSubset *sub,
 int mutt_compose_menu(struct Email *e, struct Buffer *fcc, uint8_t flags,
                       struct ConfigSubset *sub)
 {
-  init_header_padding();
-
-  bool loop = true;
-
   struct MuttWindow *dlg = compose_dlg_init(sub, e, fcc);
   struct ComposeSharedData *shared = dlg->wdata;
-  shared->mailbox = ctx_mailbox(Context);
+  shared->mailbox = get_current_mailbox();
   shared->email = e;
   shared->sub = sub;
   shared->fcc = fcc;
   shared->fcc_set = false;
   shared->flags = flags;
   shared->rc = -1;
-#ifdef USE_NNTP
-  shared->news = OptNewsSend;
-#endif
-
-#ifdef USE_NNTP
-  if (shared->news)
-    dlg->help_data = ComposeNewsHelp;
-#endif
 
   notify_observer_add(NeoMutt->notify, NT_CONFIG, compose_config_observer, dlg);
+  notify_observer_add(e->notify, NT_ALL, compose_email_observer, shared);
   notify_observer_add(dlg->notify, NT_WINDOW, compose_window_observer, dlg);
   dialog_push(dlg);
 
 #ifdef USE_NNTP
-  if (shared->news)
+  if (OptNewsSend)
     dlg->help_data = ComposeNewsHelp;
   else
 #endif
     dlg->help_data = ComposeHelp;
   dlg->help_menu = MENU_COMPOSE;
 
-  update_menu(shared->adata->actx, shared->adata->menu, true);
-  update_crypt_info(shared);
+  struct Menu *menu = shared->adata->menu;
+  update_menu(shared->adata->actx, menu, true);
+  notify_send(shared->email->notify, NT_EMAIL, NT_EMAIL_CHANGE, NULL);
 
-  while (loop)
+  struct MuttWindow *win_env = window_find_child(dlg, WT_CUSTOM);
+
+  // ---------------------------------------------------------------------------
+  // Event Loop
+  int rc = 0;
+  int op = OP_NULL;
+  do
   {
 #ifdef USE_NNTP
     OptNews = false; /* for any case */
 #endif
+    menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
-    const int op = menu_loop(shared->adata->menu);
-    if (op >= 0)
-      mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", OpStrings[op][0], op);
 
-    int rc = compose_function_dispatcher(dlg, op);
-    if (rc == IR_DONE)
-      break;
-  }
+    op = km_dokey(menu->type);
+    mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
+    if (op < 0)
+      continue;
+    if (op == OP_NULL)
+    {
+      km_error_key(menu->type);
+      continue;
+    }
+    mutt_clear_error();
+
+    rc = compose_function_dispatcher(dlg, op);
+    if (rc == FR_UNKNOWN)
+      rc = env_function_dispatcher(win_env, op);
+    if (rc == FR_UNKNOWN)
+      rc = menu_function_dispatcher(menu->win, op);
+    if (rc == FR_UNKNOWN)
+      rc = global_function_dispatcher(menu->win, op);
+  } while (rc != FR_DONE);
+  // ---------------------------------------------------------------------------
 
 #ifdef USE_AUTOCRYPT
   /* This is a fail-safe to make sure the bit isn't somehow turned
@@ -464,7 +392,7 @@ int mutt_compose_menu(struct Email *e, struct Buffer *fcc, uint8_t flags,
   else
     e->body = NULL;
 
-  const int rc = shared->rc;
+  rc = shared->rc;
 
   dialog_pop();
   mutt_window_free(&dlg);

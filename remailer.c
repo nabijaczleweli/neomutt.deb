@@ -76,6 +76,8 @@
 #include "menu/lib.h"
 #include "send/lib.h"
 #include "format_flags.h"
+#include "keymap.h"
+#include "mutt_logging.h"
 #include "muttlib.h"
 #include "opcodes.h"
 #include "options.h"
@@ -217,12 +219,16 @@ static struct Remailer **mix_type2_list(size_t *l)
   if (fd_null == -1)
     return NULL;
 
-  struct Buffer *cmd = mutt_buffer_pool_get();
   const char *const c_mixmaster = cs_subset_string(NeoMutt->sub, "mixmaster");
+  if (!c_mixmaster)
+    return NULL;
+
+  struct Buffer *cmd = mutt_buffer_pool_get();
   mutt_buffer_printf(cmd, "%s -T", c_mixmaster);
 
   pid_t mm_pid =
       filter_create_fd(mutt_buffer_string(cmd), NULL, &fp, NULL, fd_null, -1, fd_null);
+  window_invalidate_all();
   if (mm_pid == -1)
   {
     mutt_buffer_pool_release(&cmd);
@@ -410,7 +416,7 @@ static void mix_redraw_chain(struct MuttWindow *win, struct Remailer **type2_lis
 static void mix_redraw_head(struct MuttWindow *win, struct MixChain *chain)
 {
   char buf[1024];
-  snprintf(buf, sizeof(buf), "-- Remailer chain [Length: %ld]", chain ? chain->cl : 0);
+  snprintf(buf, sizeof(buf), "-- Remailer chain [Length: %zu]", chain ? chain->cl : 0);
   sbar_set_title(win, buf);
 }
 
@@ -467,7 +473,7 @@ static const char *mix_format_caps(struct Remailer *r)
  * mix_format_str - Format a string for the remailer menu - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
- * |:--------|:--------------------------------------------------------
+ * | :------ | :-------------------------------------------------------
  * | \%a     | The remailer's e-mail address
  * | \%c     | Remailer capabilities
  * | \%n     | The running number on the menu
@@ -541,6 +547,8 @@ static const char *mix_format_str(char *buf, size_t buflen, size_t col, int cols
 
 /**
  * mix_make_entry - Format a menu item for the mixmaster chain list - Implements Menu::make_entry() - @ingroup menu_make_entry
+ *
+ * @sa $mix_entry_format, mix_format_str()
  */
 static void mix_make_entry(struct Menu *menu, char *buf, size_t buflen, int num)
 {
@@ -642,12 +650,8 @@ void dlg_select_mixmaster_chain(struct ListHead *chainhead)
   int c_cur = 0, c_old = 0;
   bool c_redraw = true;
   size_t ttll = 0;
-
   struct Coord *coords = NULL;
-
   struct Menu *menu = NULL;
-  bool loop = true;
-
   char *t = NULL;
 
   struct Remailer **type2_list = mix_type2_list(&ttll);
@@ -713,12 +717,17 @@ void dlg_select_mixmaster_chain(struct ListHead *chainhead)
   menu->make_entry = mix_make_entry;
   menu->tag = NULL;
   menu->mdata = type2_list;
+  menu->mdata_free = NULL; // Menu doesn't own the data
 
   notify_observer_add(NeoMutt->notify, NT_CONFIG, remailer_config_observer, dlg);
   notify_observer_add(dlg->notify, NT_WINDOW, remailer_window_observer, dlg);
   dialog_push(dlg);
 
-  while (loop)
+  // ---------------------------------------------------------------------------
+  // Event Loop
+  int op = OP_NULL;
+  int rc;
+  do
   {
     if (c_redraw)
     {
@@ -734,8 +743,21 @@ void dlg_select_mixmaster_chain(struct ListHead *chainhead)
 
     c_old = c_cur;
 
-    window_redraw(dlg);
-    const int op = menu_loop(menu);
+    rc = FR_UNKNOWN;
+    menu_tagging_dispatcher(menu->win, op);
+    window_redraw(NULL);
+
+    op = km_dokey(menu->type);
+    mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
+    if (op < 0)
+      continue;
+    if (op == OP_NULL)
+    {
+      km_error_key(menu->type);
+      continue;
+    }
+    mutt_clear_error();
+
     switch (op)
     {
       case OP_REDRAW:
@@ -743,13 +765,13 @@ void dlg_select_mixmaster_chain(struct ListHead *chainhead)
         mix_redraw_head(win_cbar, chain);
         mix_screen_coordinates(menu->win, type2_list, &coords, chain, 0);
         mix_redraw_chain(win_chain, type2_list, coords, chain, c_cur);
-        break;
+        continue;
       }
 
       case OP_EXIT:
       {
         chain->cl = 0;
-        loop = false;
+        rc = FR_DONE;
         break;
       }
 
@@ -769,11 +791,10 @@ void dlg_select_mixmaster_chain(struct ListHead *chainhead)
           mutt_error(
               _("Error: %s can't be used as the final remailer of a chain"),
               type2_list[chain->ch[chain->cl - 1]]->shortname);
+          continue;
         }
-        else
-        {
-          loop = false;
-        }
+
+        rc = FR_DONE;
         break;
       }
 
@@ -802,7 +823,7 @@ void dlg_select_mixmaster_chain(struct ListHead *chainhead)
           mutt_error(_("Mixmaster chains are limited to %d elements"), MAX_MIXES);
         }
 
-        break;
+        continue;
       }
 
       case OP_MIX_DELETE:
@@ -824,7 +845,7 @@ void dlg_select_mixmaster_chain(struct ListHead *chainhead)
         {
           mutt_error(_("The remailer chain is already empty"));
         }
-        break;
+        continue;
       }
 
       case OP_MIX_CHAIN_PREV:
@@ -834,7 +855,7 @@ void dlg_select_mixmaster_chain(struct ListHead *chainhead)
         else
           mutt_error(_("You already have the first chain element selected"));
 
-        break;
+        continue;
       }
 
       case OP_MIX_CHAIN_NEXT:
@@ -844,10 +865,16 @@ void dlg_select_mixmaster_chain(struct ListHead *chainhead)
         else
           mutt_error(_("You already have the last chain element selected"));
 
-        break;
+        continue;
       }
     }
-  }
+
+    if (rc == FR_UNKNOWN)
+      rc = menu_function_dispatcher(menu->win, op);
+    if (rc == FR_UNKNOWN)
+      rc = global_function_dispatcher(menu->win, op);
+  } while (rc != FR_DONE);
+  // ---------------------------------------------------------------------------
 
   dialog_pop();
   mutt_window_free(&dlg);

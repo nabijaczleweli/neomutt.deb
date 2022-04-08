@@ -46,6 +46,14 @@ static const char *get_event_type(enum NotifyType type)
   {
     case NT_ACCOUNT:
       return "account";
+    case NT_ALIAS:
+      return "alias";
+    case NT_ALTERN:
+      return "altern";
+    case NT_ATTACH:
+      return "attach";
+    case NT_BINDING:
+      return "binding";
     case NT_COLOR:
       return "color";
     case NT_COMMAND:
@@ -56,10 +64,24 @@ static const char *get_event_type(enum NotifyType type)
       return "context";
     case NT_EMAIL:
       return "email";
+    case NT_ENVELOPE:
+      return "envelope";
     case NT_GLOBAL:
       return "global";
+    case NT_HEADER:
+      return "header";
+    case NT_INDEX:
+      return "index";
     case NT_MAILBOX:
       return "mailbox";
+    case NT_MENU:
+      return "menu";
+    case NT_PAGER:
+      return "pager";
+    case NT_SCORE:
+      return "score";
+    case NT_SUBJRX:
+      return "subjrx";
     case NT_WINDOW:
       return "window";
     default:
@@ -160,6 +182,8 @@ static void notify_dump_account(struct NotifyCallback *nc)
 {
   struct EventAccount *ev_a = nc->event_data;
   struct Account *a = ev_a->account;
+  if (!a)
+    return;
 
   mutt_debug(LL_DEBUG1, "    Account: %p (%s) %s\n", a,
              get_mailbox_type(a->type), NONULL(a->name));
@@ -172,15 +196,15 @@ static void notify_dump_color(struct NotifyCallback *nc)
   const char *color = NULL;
   const char *scope = "";
 
-  if (ev_c->color == MT_COLOR_MAX)
+  if (ev_c->cid == MT_COLOR_MAX)
     color = "ALL";
 
   if (!color)
-    color = mutt_map_get_name(ev_c->color, ColorFields);
+    color = mutt_map_get_name(ev_c->cid, ColorFields);
 
   if (!color)
   {
-    color = mutt_map_get_name(ev_c->color, ComposeColorFields);
+    color = mutt_map_get_name(ev_c->cid, ComposeColorFields);
     scope = "compose ";
   }
 
@@ -189,7 +213,7 @@ static void notify_dump_color(struct NotifyCallback *nc)
 
   mutt_debug(LL_DEBUG1, "    Color: %s %s%s (%d)\n",
              (nc->event_subtype == NT_COLOR_SET) ? "set" : "reset", scope,
-             color, ev_c->color);
+             color, ev_c->cid);
 }
 
 static void notify_dump_command(struct NotifyCallback *nc)

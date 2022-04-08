@@ -27,6 +27,7 @@
 #include "mutt/lib.h"
 
 extern struct HashTable *TagTransforms;
+extern struct HashTable *TagFormats;
 
 /**
  * struct Tag - LinkedList Tag Element
@@ -48,7 +49,10 @@ char *driver_tags_get                (struct TagList *list);
 char *driver_tags_get_transformed    (struct TagList *list);
 char *driver_tags_get_transformed_for(struct TagList *list, const char *name);
 char *driver_tags_get_with_hidden    (struct TagList *list);
-bool  driver_tags_replace            (struct TagList *list, char *tags);
+bool  driver_tags_replace            (struct TagList *list, const char *tags);
 void  driver_tags_add                (struct TagList *list, char *tag);
+
+void driver_tags_init(void);
+void driver_tags_cleanup(void);
 
 #endif /* MUTT_EMAIL_TAGS_H */

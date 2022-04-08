@@ -28,8 +28,8 @@
 
 #include "config.h"
 #include "mutt/lib.h"
-#include "email/lib.h"
 #include "attach_data.h"
+#include "attach/lib.h"
 
 /**
  * attach_data_free - Free the Compose Attach Data - Implements Menu::mdata_free() - @ingroup menu_mdata_free

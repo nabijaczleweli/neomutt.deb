@@ -73,7 +73,7 @@ static bool patmatch(const struct Pattern *pat, const char *buf)
   if (pat->is_multi)
     return (mutt_list_find(&pat->p.multi_cases, buf) != NULL);
   if (pat->string_match)
-    return pat->ign_case ? strcasestr(buf, pat->p.str) : strstr(buf, pat->p.str);
+    return pat->ign_case ? mutt_istr_find(buf, pat->p.str) : strstr(buf, pat->p.str);
   if (pat->group_match)
     return mutt_group_match(pat->p.group, buf);
   return (regexec(pat->p.regex, buf, 0, NULL, 0) == 0);
@@ -172,7 +172,10 @@ static bool msg_search(struct Pattern *pat, struct Email *e, struct Message *msg
         return false;
       }
 
-      fseeko(msg->fp, e->offset, SEEK_SET);
+      if (!mutt_file_seek(msg->fp, e->offset, SEEK_SET))
+      {
+        return false;
+      }
       mutt_body_handler(e->body, &s);
     }
 
@@ -202,8 +205,7 @@ static bool msg_search(struct Pattern *pat, struct Email *e, struct Message *msg
 #else
     fp = s.fp_out;
     fflush(fp);
-    fseek(fp, 0, SEEK_SET);
-    if (fstat(fileno(fp), &st))
+    if (!mutt_file_seek(fp, 0, SEEK_SET) || fstat(fileno(fp), &st))
     {
       mutt_perror(_("Error checking length of temporary file"));
       mutt_file_fclose(&fp);
@@ -218,14 +220,20 @@ static bool msg_search(struct Pattern *pat, struct Email *e, struct Message *msg
     fp = msg->fp;
     if (needs_head)
     {
-      fseeko(fp, e->offset, SEEK_SET);
+      if (!mutt_file_seek(fp, e->offset, SEEK_SET))
+      {
+        return false;
+      }
       len = e->body->offset - e->offset;
     }
     if (needs_body)
     {
       if (pat->op == MUTT_PAT_BODY)
       {
-        fseeko(fp, e->body->offset, SEEK_SET);
+        if (!mutt_file_seek(fp, e->body->offset, SEEK_SET))
+        {
+          return false;
+        }
       }
       len += e->body->length;
     }
@@ -417,7 +425,7 @@ static bool match_reference(struct Pattern *pat, struct ListHead *refs)
 /**
  * mutt_is_predicate_recipient - Test an Envelopes Addresses using a predicate function
  * @param all_addr If true, ALL Addresses must match
- * @param e       Envelope
+ * @param env     Envelope
  * @param p       Predicate function, e.g. mutt_is_subscribed_list()
  * @retval true
  * - One Address matches (all_addr is false)
@@ -425,9 +433,9 @@ static bool match_reference(struct Pattern *pat, struct ListHead *refs)
  *
  * Test the 'To' and 'Cc' fields of an Address using a test function (the predicate).
  */
-static int mutt_is_predicate_recipient(bool all_addr, struct Envelope *e, addr_predicate_t p)
+static int mutt_is_predicate_recipient(bool all_addr, struct Envelope *env, addr_predicate_t p)
 {
-  struct AddressList *als[] = { &e->to, &e->cc };
+  struct AddressList *als[] = { &env->to, &env->cc };
   for (size_t i = 0; i < mutt_array_size(als); ++i)
   {
     struct AddressList *al = als[i];
@@ -444,27 +452,27 @@ static int mutt_is_predicate_recipient(bool all_addr, struct Envelope *e, addr_p
 /**
  * mutt_is_subscribed_list_recipient - Matches subscribed mailing lists
  * @param all_addr If true, ALL Addresses must be on the subscribed list
- * @param e       Envelope
+ * @param env     Envelope
  * @retval true
  * - One Address is subscribed (all_addr is false)
  * - All the Addresses are subscribed (all_addr is true)
  */
-int mutt_is_subscribed_list_recipient(bool all_addr, struct Envelope *e)
+int mutt_is_subscribed_list_recipient(bool all_addr, struct Envelope *env)
 {
-  return mutt_is_predicate_recipient(all_addr, e, &mutt_is_subscribed_list);
+  return mutt_is_predicate_recipient(all_addr, env, &mutt_is_subscribed_list);
 }
 
 /**
  * mutt_is_list_recipient - Matches known mailing lists
  * @param all_addr If true, ALL Addresses must be mailing lists
- * @param e       Envelope
+ * @param env     Envelope
  * @retval true
  * - One Address is a mailing list (all_addr is false)
  * - All the Addresses are mailing lists (all_addr is true)
  */
-int mutt_is_list_recipient(bool all_addr, struct Envelope *e)
+int mutt_is_list_recipient(bool all_addr, struct Envelope *env)
 {
-  return mutt_is_predicate_recipient(all_addr, e, &mutt_is_mail_list);
+  return mutt_is_predicate_recipient(all_addr, env, &mutt_is_mail_list);
 }
 
 /**
@@ -699,14 +707,15 @@ static int msg_search_sendmode(struct Email *e, struct Pattern *pat)
     mutt_rfc822_write_header(fp, e->env, e->body, MUTT_WRITE_HEADER_POSTPONE,
                              false, false, NeoMutt->sub);
     fflush(fp);
-    fseek(fp, 0, 0);
-
-    while ((buf = mutt_file_read_line(buf, &blen, fp, NULL, MUTT_RL_NO_FLAGS)) != NULL)
+    if (mutt_file_seek(fp, 0, SEEK_SET))
     {
-      if (patmatch(pat, buf) == 0)
+      while ((buf = mutt_file_read_line(buf, &blen, fp, NULL, MUTT_RL_NO_FLAGS)) != NULL)
       {
-        match = true;
-        break;
+        if (patmatch(pat, buf) == 0)
+        {
+          match = true;
+          break;
+        }
       }
     }
 

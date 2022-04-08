@@ -180,14 +180,14 @@ struct SeqsetIterator
 
 /* -- private IMAP functions -- */
 /* imap.c */
-int imap_create_mailbox(struct ImapAccountData *adata, char *mailbox);
+int imap_create_mailbox(struct ImapAccountData *adata, const char *mailbox);
 int imap_rename_mailbox(struct ImapAccountData *adata, char *oldname, const char *newname);
 int imap_exec_msgset(struct Mailbox *m, const char *pre, const char *post,
                      enum MessageType flag, bool changed, bool invert);
 int imap_open_connection(struct ImapAccountData *adata);
 void imap_close_connection(struct ImapAccountData *adata);
 int imap_read_literal(FILE *fp, struct ImapAccountData *adata, unsigned long bytes, struct Progress *pbar);
-void imap_expunge_mailbox(struct Mailbox *m);
+void imap_expunge_mailbox(struct Mailbox *m, bool resort);
 int imap_login(struct ImapAccountData *adata);
 int imap_sync_message_for_copy(struct Mailbox *m, struct Email *e, struct Buffer *cmd, enum QuadOption *err_continue);
 bool imap_has_flag(struct ListHead *flag_list, const char *flag);

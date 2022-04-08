@@ -32,7 +32,6 @@
 #include "config.h"
 #include <stdbool.h>
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
@@ -245,7 +244,7 @@ static void print_flowed_line(char *line, struct State *s, int ql,
   mutt_debug(LL_DEBUG5, "f=f: line [%s], width = %ld, spaces = %lu\n", line,
              (long) width, fst->spaces);
 
-  for (words = 0; (p = strsep(&line, " "));)
+  for (words = 0; (p = mutt_str_sep(&line, " "));)
   {
     mutt_debug(LL_DEBUG5, "f=f: word [%s], width: %lu, remaining = [%s]\n", p,
                fst->width, line);

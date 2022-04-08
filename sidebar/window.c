@@ -37,7 +37,7 @@
  * | Sidebar Window | WT_SIDEBAR | mutt_window_new() |
  *
  * **Parent**
- * - @ref index_dialog
+ * - @ref index_dlg_index
  *
  * **Children**
  *
@@ -191,6 +191,7 @@ static const char *abbrev_folder(const char *mbox, const char *folder, enum Mail
  * abbrev_url - Abbreviate a url-style Mailbox path
  * @param mbox Mailbox path to shorten
  * @param type Mailbox type
+ * @retval ptr mbox unchanged
  *
  * Use heuristics to shorten a non-local Mailbox path.
  * Strip the host part (or database part for Notmuch).
@@ -226,7 +227,7 @@ static const char *abbrev_url(const char *mbox, enum MailboxType type)
  * @param buf    Output buffer
  * @param buflen Size of output buffer
  * @param sbe    Sidebar entry
- * @retval Number of bytes written
+ * @retval num Bytes written
  */
 static size_t add_indent(char *buf, size_t buflen, const struct SbEntry *sbe)
 {
@@ -247,36 +248,64 @@ static size_t add_indent(char *buf, size_t buflen, const struct SbEntry *sbe)
  * @param highlight true, if this Mailbox has the highlight on it
  * @retval num ColorId, e.g. #MT_COLOR_SIDEBAR_NEW
  */
-static enum ColorId calc_color(const struct Mailbox *m, bool current, bool highlight)
+static struct AttrColor *calc_color(const struct Mailbox *m, bool current, bool highlight)
 {
-  if (current)
-  {
-    if (simple_color_is_set(MT_COLOR_SIDEBAR_INDICATOR))
-      return MT_COLOR_SIDEBAR_INDICATOR;
-    return MT_COLOR_INDICATOR;
-  }
-
-  if (highlight)
-    return MT_COLOR_SIDEBAR_HIGHLIGHT;
+  enum ColorId color = MT_COLOR_NORMAL;
+  struct AttrColor *ac = NULL;
 
   if (m->has_new)
-    return MT_COLOR_SIDEBAR_NEW;
+  {
+    color = MT_COLOR_SIDEBAR_NEW;
+    goto done;
+  }
   if (m->msg_unread > 0)
-    return MT_COLOR_SIDEBAR_UNREAD;
+  {
+    color = MT_COLOR_SIDEBAR_UNREAD;
+    goto done;
+  }
   if (m->msg_flagged > 0)
-    return MT_COLOR_SIDEBAR_FLAGGED;
+  {
+    color = MT_COLOR_SIDEBAR_FLAGGED;
+    goto done;
+  }
 
   const char *const c_spool_file = cs_subset_string(NeoMutt->sub, "spool_file");
   if (simple_color_is_set(MT_COLOR_SIDEBAR_SPOOLFILE) &&
       mutt_str_equal(mailbox_path(m), c_spool_file))
   {
-    return MT_COLOR_SIDEBAR_SPOOLFILE;
+    color = MT_COLOR_SIDEBAR_SPOOLFILE;
+    goto done;
   }
 
   if (simple_color_is_set(MT_COLOR_SIDEBAR_ORDINARY))
-    return MT_COLOR_SIDEBAR_ORDINARY;
+  {
+    color = MT_COLOR_SIDEBAR_ORDINARY;
+    goto done;
+  }
 
-  return MT_COLOR_NORMAL;
+done:
+  ac = simple_color_get(color);
+
+  if (current || highlight)
+  {
+    if (current)
+    {
+      if (simple_color_is_set(MT_COLOR_SIDEBAR_INDICATOR))
+        color = MT_COLOR_SIDEBAR_INDICATOR;
+      else
+        color = MT_COLOR_INDICATOR;
+    }
+    else
+    {
+      color = MT_COLOR_SIDEBAR_HIGHLIGHT;
+    }
+
+    struct AttrColor *ac_overlay = simple_color_get(color);
+
+    ac = merged_color_overlay(ac, ac_overlay);
+  }
+
+  return ac;
 }
 
 /**
@@ -284,6 +313,7 @@ static enum ColorId calc_color(const struct Mailbox *m, bool current, bool highl
  * @param[in]  mbox      Mailbox path to examine
  * @param[in]  delims    Delimiter characters
  * @param[out] last_part Last path component
+ * @retval num Depth
  */
 static int calc_path_depth(const char *mbox, const char *delims, const char **last_part)
 {
@@ -306,7 +336,7 @@ static int calc_path_depth(const char *mbox, const char *delims, const char **la
  * sidebar_format_str - Format a string for the sidebar - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
- * |:--------|:--------------------------------------------------------
+ * | :------ | :-------------------------------------------------------
  * | \%!     | 'n!' Flagged messages
  * | \%B     | Name of the mailbox
  * | \%D     | Description of the mailbox
@@ -497,8 +527,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
  * @param[in]  shared  Shared Index Data
  *
  * Take all the relevant mailbox data and the desired screen width and then get
- * mutt_expando_format to do the actual work. mutt_expando_format will callback to
- * us using sidebar_format_str() for the sidebar specific formatting characters.
+ * mutt_expando_format to do the actual work.
+ *
+ * @sa $sidebar_format, sidebar_format_str()
  */
 static void make_sidebar_entry(char *buf, size_t buflen, int width,
                                struct SbEntry *sbe, struct IndexSharedData *shared)
@@ -557,7 +588,7 @@ static void update_entries_visibility(struct SidebarWindowData *wdata)
 
     sbe->is_hidden = false;
 
-    if (sbe->mailbox->flags & MB_HIDDEN)
+    if (!sbe->mailbox->visible)
     {
       sbe->is_hidden = true;
       continue;
@@ -630,9 +661,9 @@ static bool prepare_sidebar(struct SidebarWindowData *wdata, int page_size)
   {
     ARRAY_FOREACH(sbep, &wdata->entries)
     {
-      if ((opn_entry == *sbep) && ((*sbep)->mailbox->flags != MB_HIDDEN))
+      if ((opn_entry == *sbep) && (*sbep)->mailbox->visible)
         wdata->opn_index = ARRAY_FOREACH_IDX;
-      if ((hil_entry == *sbep) && ((*sbep)->mailbox->flags != MB_HIDDEN))
+      if ((hil_entry == *sbep) && (*sbep)->mailbox->visible)
         wdata->hil_index = ARRAY_FOREACH_IDX;
     }
   }
@@ -646,7 +677,7 @@ static bool prepare_sidebar(struct SidebarWindowData *wdata, int page_size)
     {
       wdata->hil_index = 0;
       /* Note is_hidden will only be set when `$sidebar_new_mail_only` */
-      if ((*ARRAY_GET(&wdata->entries, 0))->is_hidden && !select_next(wdata))
+      if ((*ARRAY_GET(&wdata->entries, 0))->is_hidden && !sb_next(wdata))
         wdata->hil_index = -1;
     }
   }
@@ -706,7 +737,7 @@ int sb_recalc(struct MuttWindow *win)
     struct MailboxNode *np = NULL;
     STAILQ_FOREACH(np, &ml, entries)
     {
-      if (!(np->mailbox->flags & MB_HIDDEN))
+      if (np->mailbox->visible)
         sb_add_mailbox(wdata, np->mailbox);
     }
     neomutt_mailboxlist_clear(&ml);
@@ -917,7 +948,7 @@ int sb_repaint(struct MuttWindow *win)
 
       struct SbEntry *entry = (*sbep);
       mutt_window_move(win, col, row);
-      mutt_curses_set_color_by_id(entry->color);
+      mutt_curses_set_color(entry->color);
       mutt_window_printf(win, "%s", entry->display);
       mutt_refresh();
       row++;

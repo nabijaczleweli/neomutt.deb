@@ -36,6 +36,7 @@
 
 #include "config.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -242,7 +243,7 @@ static void compress_info_free(struct Mailbox *m)
  * compress_format_str - Expand the filenames in a command string - Implements ::format_t - @ingroup expando_api
  *
  * | Expando | Description
- * |:--------|:--------------------------------------------------------
+ * | :------ | :-------------------------------------------------------
  * | \%f     | Compressed file
  * | \%t     | Plaintext, temporary file
  */
@@ -295,6 +296,8 @@ static const char *compress_format_str(char *buf, size_t buflen, size_t col, int
  *
  * Result:
  *      gzip -dc '~/mail/abc.gz' > '/tmp/xyz'
+ *
+ * @sa compress_format_str()
  */
 static void expand_command_str(const struct Mailbox *m, const char *cmd, char *buf, int buflen)
 {
@@ -712,10 +715,13 @@ static enum MxStatus comp_mbox_close(struct Mailbox *m)
   else
   {
     /* If the file was removed, remove the compressed folder too */
-    const bool c_save_empty = cs_subset_bool(NeoMutt->sub, "save_empty");
-    if ((access(mailbox_path(m), F_OK) != 0) && !c_save_empty)
+    if (access(mailbox_path(m), F_OK) != 0)
     {
-      remove(m->realpath);
+      const bool c_save_empty = cs_subset_bool(NeoMutt->sub, "save_empty");
+      if (!c_save_empty)
+      {
+        remove(m->realpath);
+      }
     }
     else
     {
@@ -837,7 +843,7 @@ static int comp_msg_save_hcache(struct Mailbox *m, struct Email *e)
 /**
  * comp_tags_edit - Prompt and validate new messages tags - Implements MxOps::tags_edit() - @ingroup mx_tags_edit
  */
-static int comp_tags_edit(struct Mailbox *m, const char *tags, char *buf, size_t buflen)
+static int comp_tags_edit(struct Mailbox *m, const char *tags, struct Buffer *buf)
 {
   if (!m->compress_info)
     return 0;
@@ -848,13 +854,13 @@ static int comp_tags_edit(struct Mailbox *m, const char *tags, char *buf, size_t
   if (!ops || !ops->tags_edit)
     return 0;
 
-  return ops->tags_edit(m, tags, buf, buflen);
+  return ops->tags_edit(m, tags, buf);
 }
 
 /**
  * comp_tags_commit - Save the tags to a message - Implements MxOps::tags_commit() - @ingroup mx_tags_commit
  */
-static int comp_tags_commit(struct Mailbox *m, struct Email *e, char *buf)
+static int comp_tags_commit(struct Mailbox *m, struct Email *e, const char *buf)
 {
   if (!m->compress_info)
     return 0;

@@ -210,10 +210,10 @@ static int nntp_capabilities(struct NntpAccountData *adata)
   } while (!mutt_str_equal(".", buf));
   *buf = '\0';
 #ifdef USE_SASL
-  if (adata->authenticators && strcasestr(authinfo, " SASL "))
+  if (adata->authenticators && mutt_istr_find(authinfo, " SASL "))
     mutt_str_copy(buf, adata->authenticators, sizeof(buf));
 #endif
-  if (strcasestr(authinfo, " USER "))
+  if (mutt_istr_find(authinfo, " USER "))
   {
     if (*buf != '\0')
       mutt_str_cat(buf, sizeof(buf), " ");
@@ -482,11 +482,9 @@ static int nntp_auth(struct NntpAccountData *adata)
       /* check authenticator */
       if (adata->hasCAPABILITIES)
       {
-        char *m = NULL;
-
         if (!adata->authenticators)
           continue;
-        m = strcasestr(adata->authenticators, method);
+        const char *m = mutt_istr_find(adata->authenticators, method);
         if (!m)
           continue;
         if ((m > adata->authenticators) && (*(m - 1) != ' '))
@@ -2673,7 +2671,10 @@ static bool nntp_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
     mutt_hash_insert(m->subj_hash, e->env->real_subj, e);
 
   /* fix content length */
-  fseek(msg->fp, 0, SEEK_END);
+  if (!mutt_file_seek(msg->fp, 0, SEEK_END))
+  {
+    return false;
+  }
   e->body->length = ftell(msg->fp) - e->body->offset;
 
   /* this is called in neomutt before the open which fetches the message,

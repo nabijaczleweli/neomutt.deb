@@ -30,6 +30,7 @@
 #include <sys/stat.h>
 #include "mutt/lib.h"
 #include "lib.h"
+#include "color/lib.h"
 #include "menu/lib.h"
 
 struct MuttWindow;
@@ -39,8 +40,6 @@ struct MuttWindow;
  */
 struct PagerPrivateData
 {
-  struct Menu *menu;           ///< Pager Menu
-  struct MuttWindow *win_pbar; ///< Pager Bar
   struct PagerView *pview;     ///< Object to view in the pager
 
   FILE *fp;                    ///< File containing decrypted/decoded/weeded Email
@@ -57,7 +56,7 @@ struct PagerPrivateData
   int top_line;                ///< First visible line on screen
   int has_types;               ///< Set to MUTT_TYPES for PAGER_MODE_EMAIL or MUTT_SHOWCOLOR
 
-  struct QClass *quote_list;   ///< Tree of quoting levels
+  struct QuoteStyle *quote_list;///< Tree of quoting levels
   int q_level;                 ///< Number of unique quoting levels
   PagerFlags hide_quoted;      ///< Set to MUTT_HIDE when quoted email is hidden `<toggle-quoted>`
 
@@ -67,18 +66,18 @@ struct PagerPrivateData
   regex_t search_re;           ///< Compiled search string
   bool search_back;            ///< Search backwards
 
-  int index_size;              ///< Size of the mini-index Window `$pager_index_lines`
-  int indicator;               ///< Preferred position of the indicator line in the mini-index Window
-
-  bool force_redraw;           ///< Repaint is needed
-  MenuRedrawFlags redraw;      ///< When to redraw the screen
-  struct Notify *notify;       ///< Notifications: #NotifyPager, #PagerPrivateData
+  bool force_redraw;              ///< Repaint is needed
+  PagerRedrawFlags redraw;        ///< When to redraw the screen
+  struct AttrColorList ansi_list; ///< List of ANSI colours used in the Pager
+  struct Notify *notify;          ///< Notifications: #NotifyPager, #PagerPrivateData
 
   int rc;                        ///< Return code from functions
   int searchctx;                 ///< Space to show around search matches
   bool first;                    ///< First time flag for toggle-new
   bool wrapped;                  ///< Has the search/next wrapped around?
   uint64_t delay_read_timestamp; ///< Time that email was first shown
+  bool pager_redraw;             ///< Force a complete redraw
+  enum PagerLoopMode loop;       ///< What the Event Loop should do next, e.g. #PAGER_LOOP_CONTINUE
 };
 
 void                     pager_private_data_free(struct MuttWindow *win, void **ptr);

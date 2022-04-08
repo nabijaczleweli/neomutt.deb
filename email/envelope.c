@@ -34,6 +34,7 @@
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "envelope.h"
+#include "email.h"
 
 /**
  * mutt_env_new - Create a new Envelope
@@ -41,20 +42,20 @@
  */
 struct Envelope *mutt_env_new(void)
 {
-  struct Envelope *e = mutt_mem_calloc(1, sizeof(struct Envelope));
-  TAILQ_INIT(&e->return_path);
-  TAILQ_INIT(&e->from);
-  TAILQ_INIT(&e->to);
-  TAILQ_INIT(&e->cc);
-  TAILQ_INIT(&e->bcc);
-  TAILQ_INIT(&e->sender);
-  TAILQ_INIT(&e->reply_to);
-  TAILQ_INIT(&e->mail_followup_to);
-  TAILQ_INIT(&e->x_original_to);
-  STAILQ_INIT(&e->references);
-  STAILQ_INIT(&e->in_reply_to);
-  STAILQ_INIT(&e->userhdrs);
-  return e;
+  struct Envelope *env = mutt_mem_calloc(1, sizeof(struct Envelope));
+  TAILQ_INIT(&env->return_path);
+  TAILQ_INIT(&env->from);
+  TAILQ_INIT(&env->to);
+  TAILQ_INIT(&env->cc);
+  TAILQ_INIT(&env->bcc);
+  TAILQ_INIT(&env->sender);
+  TAILQ_INIT(&env->reply_to);
+  TAILQ_INIT(&env->mail_followup_to);
+  TAILQ_INIT(&env->x_original_to);
+  STAILQ_INIT(&env->references);
+  STAILQ_INIT(&env->in_reply_to);
+  STAILQ_INIT(&env->userhdrs);
+  return env;
 }
 
 #ifdef USE_AUTOCRYPT
@@ -140,6 +141,18 @@ void mutt_env_free(struct Envelope **ptr)
 #endif
 
   FREE(ptr);
+}
+
+/**
+ * mutt_env_notify_send - Send an Envelope change notification
+ * @param e Email
+ * @param type Notification type, e.g. #NT_ENVELOPE_SUBJECT
+ * @retval true Successfully sent
+ */
+bool mutt_env_notify_send(struct Email *e, enum NotifyEnvelope type)
+{
+  struct EventEmail ev_e = { 1, &e };
+  return notify_send(e->notify, NT_ENVELOPE, type, &ev_e);
 }
 
 /**
@@ -292,11 +305,11 @@ void mutt_env_to_local(struct Envelope *env)
  * Note that #member escapes and double quotes the argument.
  */
 #define H_TO_INTL(member)                                                      \
-  if (mutt_addrlist_to_intl(&env->member, err) && !e)                          \
+  if (mutt_addrlist_to_intl(&env->member, err) && (rc == 0))                   \
   {                                                                            \
     if (tag)                                                                   \
       *tag = #member;                                                          \
-    e = 1;                                                                     \
+    rc = 1;                                                                    \
     err = NULL;                                                                \
   }
 
@@ -315,7 +328,7 @@ int mutt_env_to_intl(struct Envelope *env, const char **tag, char **err)
   if (!env)
     return 1;
 
-  int e = 0;
+  int rc = 0;
   H_TO_INTL(return_path);
   H_TO_INTL(from);
   H_TO_INTL(to);
@@ -323,7 +336,7 @@ int mutt_env_to_intl(struct Envelope *env, const char **tag, char **err)
   H_TO_INTL(bcc);
   H_TO_INTL(reply_to);
   H_TO_INTL(mail_followup_to);
-  return e;
+  return rc;
 }
 
 #undef H_TO_INTL
