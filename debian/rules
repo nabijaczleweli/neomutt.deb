@@ -36,7 +36,6 @@ override_dh_auto_configure:
 		--idn \
 		--mixmaster \
 		--sasl \
-		--tokyocabinet \
 		--lmdb \
 		--zlib \
 		--zstd \
