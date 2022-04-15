@@ -375,7 +375,7 @@ static void decode_uuencoded(struct State *s, long len, bool istext, iconv_t cd)
   while (len > 0)
   {
     if (!fgets(tmps, sizeof(tmps), s->fp_in))
-      return;
+      goto cleanup;
     len -= mutt_str_len(tmps);
     if (mutt_str_startswith(tmps, "begin "))
       break;
@@ -383,16 +383,16 @@ static void decode_uuencoded(struct State *s, long len, bool istext, iconv_t cd)
   while (len > 0)
   {
     if (!fgets(tmps, sizeof(tmps), s->fp_in))
-      return;
+      goto cleanup;
     len -= mutt_str_len(tmps);
     if (mutt_str_startswith(tmps, "end"))
       break;
     pt = tmps;
     const unsigned char linelen = decode_byte(*pt);
     pt++;
-    for (unsigned char c = 0; c < linelen;)
+    for (unsigned char c = 0; (c < linelen) && *pt;)
     {
-      for (char l = 2; l <= 6; l += 2)
+      for (char l = 2; (l <= 6) && pt[0] && pt[1]; l += 2)
       {
         char out = decode_byte(*pt) << l;
         pt++;
@@ -407,6 +407,7 @@ static void decode_uuencoded(struct State *s, long len, bool istext, iconv_t cd)
     }
   }
 
+cleanup:
   convert_to_state(cd, bufi, &k, s);
   convert_to_state(cd, 0, 0, s);
 
@@ -1727,12 +1728,7 @@ int mutt_body_handler(struct Body *b, struct State *s)
     }
   }
 
-  const bool c_honor_disposition =
-      cs_subset_bool(NeoMutt->sub, "honor_disposition");
-  /* only respect disposition == attachment if we're not
-   * displaying from the attachment menu (i.e. pager) */
-  if ((!c_honor_disposition || ((b->disposition != DISP_ATTACH) || OptViewAttach)) &&
-      (plaintext || handler))
+  if ((plaintext || handler) && !mutt_prefer_as_attachment(b))
   {
     /* Prevent encrypted attachments from being included in replies
      * unless $include_encrypted is set. */
@@ -1750,6 +1746,8 @@ int mutt_body_handler(struct Body *b, struct State *s)
    * if we're not already being called from there */
   else if (s->flags & MUTT_DISPLAY)
   {
+    const bool c_honor_disposition =
+        cs_subset_bool(NeoMutt->sub, "honor_disposition");
     struct Buffer msg = mutt_buffer_make(256);
 
     if (!OptViewAttach)
@@ -1817,39 +1815,57 @@ cleanup:
 }
 
 /**
+ * mutt_prefer_as_attachment - Do we want this part as an attachment?
+ * @param b Body of email to test
+ * @retval true We want this part as an attachment
+ */
+bool mutt_prefer_as_attachment(struct Body *b)
+{
+  if (!mutt_can_decode(b))
+    return true;
+
+  /* only respect disposition == attachment if we're not
+   * displaying from the attachment menu (i.e. pager) */
+  if ((b->disposition != DISP_ATTACH) || OptViewAttach)
+    return false;
+
+  return cs_subset_bool(NeoMutt->sub, "honor_disposition");
+}
+
+/**
  * mutt_can_decode - Will decoding the attachment produce any output
- * @param a Body of email to test
+ * @param b Body of email to test
  * @retval true Decoding the attachment will produce output
  */
-bool mutt_can_decode(struct Body *a)
+bool mutt_can_decode(struct Body *b)
 {
-  if (is_autoview(a))
+  if (is_autoview(b))
     return true;
-  if (a->type == TYPE_TEXT)
+  if (b->type == TYPE_TEXT)
     return true;
-  if (a->type == TYPE_MESSAGE)
+  if (b->type == TYPE_MESSAGE)
     return true;
-  if (a->type == TYPE_MULTIPART)
+  if (b->type == TYPE_MULTIPART)
   {
     if (WithCrypto)
     {
-      if (mutt_istr_equal(a->subtype, "signed") || mutt_istr_equal(a->subtype, "encrypted"))
+      if (mutt_istr_equal(b->subtype, "signed") || mutt_istr_equal(b->subtype, "encrypted"))
       {
         return true;
       }
     }
 
-    for (struct Body *b = a->parts; b; b = b->next)
+    for (struct Body *part = b->parts; part; part = part->next)
     {
-      if (mutt_can_decode(b))
+      if (mutt_can_decode(part))
         return true;
     }
   }
-  else if ((WithCrypto != 0) && (a->type == TYPE_APPLICATION))
+  else if ((WithCrypto != 0) && (b->type == TYPE_APPLICATION))
   {
-    if (((WithCrypto & APPLICATION_PGP) != 0) && mutt_is_application_pgp(a))
+    if (((WithCrypto & APPLICATION_PGP) != 0) && mutt_is_application_pgp(b))
       return true;
-    if (((WithCrypto & APPLICATION_SMIME) != 0) && mutt_is_application_smime(a))
+    if (((WithCrypto & APPLICATION_SMIME) != 0) && mutt_is_application_smime(b))
       return true;
   }
 

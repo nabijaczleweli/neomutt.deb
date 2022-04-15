@@ -185,7 +185,7 @@ static int helpbar_repaint(struct MuttWindow *win)
   if (!wdata)
     return 0;
 
-  mutt_curses_set_color_by_id(MT_COLOR_STATUS);
+  mutt_curses_set_normal_backed_color_by_id(MT_COLOR_STATUS);
   mutt_window_move(win, 0, 0);
   mutt_paddstr(win, win->state.cols, wdata->help_str);
   mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
@@ -236,8 +236,11 @@ static int helpbar_color_observer(struct NotifyCallback *nc)
   struct EventColor *ev_c = nc->event_data;
 
   // MT_COLOR_MAX is sent on `uncolor *`
-  if ((ev_c->cid != MT_COLOR_STATUS) && (ev_c->cid != MT_COLOR_MAX))
+  if ((ev_c->cid != MT_COLOR_STATUS) && (ev_c->cid != MT_COLOR_NORMAL) &&
+      (ev_c->cid != MT_COLOR_MAX))
+  {
     return 0;
+  }
 
   struct MuttWindow *win_helpbar = nc->global_data;
 

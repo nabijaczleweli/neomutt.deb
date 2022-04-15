@@ -337,8 +337,8 @@ void resort_index(struct Context *ctx, struct Menu *menu)
 
   int new_index = -1;
   mutt_sort_headers(m, ctx->threads, false, &ctx->vsize);
-  /* Restore the current message */
 
+  /* Restore the current message */
   for (int i = 0; i < m->vcount; i++)
   {
     struct Email *e = mutt_get_virt_email(m, i);
@@ -357,6 +357,7 @@ void resort_index(struct Context *ctx, struct Menu *menu)
   if (old_index < 0)
     new_index = ci_first_message(m);
 
+  menu->max = m->vcount;
   menu_set_index(menu, new_index);
   menu_queue_redraw(menu, MENU_REDRAW_INDEX);
 }
@@ -898,6 +899,8 @@ void mutt_draw_statusline(struct MuttWindow *win, int cols, const char *buf, siz
     int last;  ///< Last character of that colour
   } *syntax = NULL;
 
+  struct AttrColor *ac_base = merged_color_overlay(
+      simple_color_get(MT_COLOR_NORMAL), simple_color_get(MT_COLOR_STATUS));
   do
   {
     struct RegexColor *cl = NULL;
@@ -930,8 +933,7 @@ void mutt_draw_statusline(struct MuttWindow *win, int cols, const char *buf, siz
       if (!found || (first < syntax[i].first) ||
           ((first == syntax[i].first) && (last > syntax[i].last)))
       {
-        struct AttrColor *ac_merge =
-            merged_color_overlay(simple_color_get(MT_COLOR_STATUS), &cl->attr_color);
+        struct AttrColor *ac_merge = merged_color_overlay(ac_base, &cl->attr_color);
 
         syntax[i].attr_color = ac_merge;
         syntax[i].first = first;
@@ -955,7 +957,7 @@ void mutt_draw_statusline(struct MuttWindow *win, int cols, const char *buf, siz
   {
     /* Text before the first highlight */
     mutt_window_addnstr(win, buf, MIN(len, syntax[0].first));
-    mutt_curses_set_color_by_id(MT_COLOR_STATUS);
+    mutt_curses_set_color(ac_base);
     if (len <= syntax[0].first)
       goto dsl_finish; /* no more room */
 
@@ -980,7 +982,7 @@ void mutt_draw_statusline(struct MuttWindow *win, int cols, const char *buf, siz
       next = MIN(len, syntax[i + 1].first);
     }
 
-    mutt_curses_set_color_by_id(MT_COLOR_STATUS);
+    mutt_curses_set_color(ac_base);
     offset = syntax[i].last;
     mutt_window_addnstr(win, buf + offset, next - offset);
 
@@ -989,7 +991,7 @@ void mutt_draw_statusline(struct MuttWindow *win, int cols, const char *buf, siz
       goto dsl_finish; /* no more room */
   }
 
-  mutt_curses_set_color_by_id(MT_COLOR_STATUS);
+  mutt_curses_set_color(ac_base);
   if (offset < len)
   {
     /* Text after the last highlight */
@@ -1214,7 +1216,7 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
     {
       /* check for new mail in the incoming folders */
       priv->oldcount = priv->newcount;
-      priv->newcount = mutt_mailbox_check(shared->mailbox, 0);
+      priv->newcount = mutt_mailbox_check(shared->mailbox, MUTT_MAILBOX_CHECK_NO_FLAGS);
       if (priv->do_mailbox_notify)
       {
         if (mutt_mailbox_notify(shared->mailbox))
@@ -1380,20 +1382,24 @@ void mutt_set_header_color(struct Mailbox *m, struct Email *e)
 
   struct RegexColor *color = NULL;
   struct PatternCache cache = { 0 };
-  bool match = false;
 
+  struct AttrColor *ac_merge = NULL;
   STAILQ_FOREACH(color, regex_colors_get_list(MT_COLOR_INDEX), entries)
   {
     if (mutt_pattern_exec(SLIST_FIRST(color->color_pattern),
                           MUTT_MATCH_FULL_ADDRESS, m, e, &cache))
     {
-      e->attr_color = &color->attr_color;
-      match = true;
+      ac_merge = merged_color_overlay(ac_merge, &color->attr_color);
     }
   }
 
-  if (!match)
-    e->attr_color = simple_color_get(MT_COLOR_NORMAL);
+  struct AttrColor *ac_normal = simple_color_get(MT_COLOR_NORMAL);
+  if (ac_merge)
+    ac_merge = merged_color_overlay(ac_normal, ac_merge);
+  else
+    ac_merge = ac_normal;
+
+  e->attr_color = ac_merge;
 }
 
 /**

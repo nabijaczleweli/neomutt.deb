@@ -189,7 +189,7 @@ static int cbar_repaint(struct MuttWindow *win)
   struct ComposeBarData *cbar_data = win->wdata;
 
   mutt_window_move(win, 0, 0);
-  mutt_curses_set_color_by_id(MT_COLOR_STATUS);
+  mutt_curses_set_normal_backed_color_by_id(MT_COLOR_STATUS);
   mutt_window_clrtoeol(win);
 
   mutt_window_move(win, 0, 0);
@@ -212,8 +212,11 @@ int cbar_color_observer(struct NotifyCallback *nc)
   struct EventColor *ev_c = nc->event_data;
 
   // MT_COLOR_MAX is sent on `uncolor *`
-  if ((ev_c->cid != MT_COLOR_STATUS) && (ev_c->cid != MT_COLOR_MAX))
+  if ((ev_c->cid != MT_COLOR_STATUS) && (ev_c->cid != MT_COLOR_NORMAL) &&
+      (ev_c->cid != MT_COLOR_MAX))
+  {
     return 0;
+  }
 
   struct MuttWindow *win_cbar = nc->global_data;
   win_cbar->actions |= WA_REPAINT;

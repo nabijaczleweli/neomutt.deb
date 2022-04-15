@@ -87,7 +87,8 @@ const struct MenuFuncOp OpAttach[] = { /* map: attachment */
   { "list-reply",                    OP_LIST_REPLY },
   { "list-subscribe",                OP_LIST_SUBSCRIBE },
   { "list-unsubscribe",              OP_LIST_UNSUBSCRIBE },
-  { "pipe-entry",                    OP_ATTACHMENT_PIPE },
+  { "pipe-entry",                    OP_PIPE },
+  { "pipe-message",                  OP_PIPE },
   { "print-entry",                   OP_ATTACHMENT_PRINT },
   { "reply",                         OP_REPLY },
   { "resend-message",                OP_RESEND },
@@ -221,7 +222,8 @@ const struct MenuFuncOp OpCompose[] = { /* map: compose */
   { "move-up",                       OP_ATTACHMENT_MOVE_UP },
   { "new-mime",                      OP_ATTACHMENT_NEW_MIME },
   { "pgp-menu",                      OP_COMPOSE_PGP_MENU },
-  { "pipe-entry",                    OP_ATTACHMENT_PIPE },
+  { "pipe-entry",                    OP_PIPE },
+  { "pipe-message",                  OP_PIPE },
   { "postpone-message",              OP_COMPOSE_POSTPONE_MESSAGE },
   { "print-entry",                   OP_ATTACHMENT_PRINT },
   { "rename-attachment",             OP_ATTACHMENT_RENAME_ATTACHMENT },
@@ -425,6 +427,7 @@ const struct MenuFuncOp OpIndex[] = { /* map: index */
   { "next-unread",                   OP_MAIN_NEXT_UNREAD },
   { "next-unread-mailbox",           OP_MAIN_NEXT_UNREAD_MAILBOX },
   { "parent-message",                OP_MAIN_PARENT_MESSAGE },
+  { "pipe-entry",                    OP_PIPE },
   { "pipe-message",                  OP_PIPE },
 #ifdef USE_NNTP
   { "post-message",                  OP_POST },
@@ -603,6 +606,7 @@ const struct MenuFuncOp OpPager[] = { /* map: pager */
   { "next-unread",                   OP_MAIN_NEXT_UNREAD },
   { "next-unread-mailbox",           OP_MAIN_NEXT_UNREAD_MAILBOX },
   { "parent-message",                OP_MAIN_PARENT_MESSAGE },
+  { "pipe-entry",                    OP_PIPE },
   { "pipe-message",                  OP_PIPE },
 #ifdef USE_NNTP
   { "post-message",                  OP_POST },
@@ -616,6 +620,7 @@ const struct MenuFuncOp OpPager[] = { /* map: pager */
   { "previous-thread",               OP_MAIN_PREV_THREAD },
   { "previous-undeleted",            OP_MAIN_PREV_UNDELETED },
   { "previous-unread",               OP_MAIN_PREV_UNREAD },
+  { "print-entry",                   OP_ATTACHMENT_PRINT },
   { "print-message",                 OP_PRINT },
   { "purge-message",                 OP_PURGE_MESSAGE },
   { "purge-thread",                  OP_PURGE_THREAD },
@@ -631,6 +636,7 @@ const struct MenuFuncOp OpPager[] = { /* map: pager */
   { "reply",                         OP_REPLY },
   { "resend-message",                OP_RESEND },
   { "root-message",                  OP_MAIN_ROOT_MESSAGE },
+  { "save-entry",                    OP_ATTACHMENT_SAVE },
   { "save-message",                  OP_SAVE },
   { "search",                        OP_SEARCH },
   { "search-next",                   OP_SEARCH_NEXT },
@@ -743,7 +749,7 @@ const struct MenuOpSeq AttachDefaultBindings[] = { /* map: attachment */
   { OP_ATTACHMENT_COLLAPSE,                "v" },
   { OP_ATTACHMENT_DELETE,                  "d" },
   { OP_ATTACHMENT_EDIT_TYPE,               "\005" },           // <Ctrl-E>
-  { OP_ATTACHMENT_PIPE,                    "|" },
+  { OP_PIPE,                               "|" },
   { OP_ATTACHMENT_PRINT,                   "p" },
   { OP_ATTACHMENT_SAVE,                    "s" },
   { OP_ATTACHMENT_UNDELETE,                "u" },
@@ -836,7 +842,7 @@ const struct MenuOpSeq ComposeDefaultBindings[] = { /* map: compose */
   { OP_ATTACHMENT_MOVE_DOWN,               "+" },
   { OP_ATTACHMENT_MOVE_UP,                 "-" },
   { OP_ATTACHMENT_NEW_MIME,                "n" },
-  { OP_ATTACHMENT_PIPE,                    "|" },
+  { OP_PIPE,                               "|" },
   { OP_ATTACHMENT_PRINT,                   "l" },
   { OP_ATTACHMENT_RENAME_ATTACHMENT,       "\017" },           // <Ctrl-O>
   { OP_ATTACHMENT_SAVE,                    "C" },
@@ -1123,10 +1129,6 @@ const struct MenuOpSeq PagerDefaultBindings[] = { /* map: pager */
   { OP_MAIN_BREAK_THREAD,                  "#" },
   { OP_MAIN_CHANGE_FOLDER,                 "c" },
   { OP_MAIN_CHANGE_FOLDER_READONLY,        "\033c" },          // <Alt-c>
-#ifdef USE_NNTP
-  { OP_MAIN_CHANGE_GROUP,                  "i" },
-  { OP_MAIN_CHANGE_GROUP_READONLY,         "\033i" },          // <Alt-i>
-#endif
   { OP_MAIN_CLEAR_FLAG,                    "W" },
   { OP_MAIN_LINK_THREADS,                  "&" },
   { OP_MAIN_NEXT_NEW_THEN_UNREAD,          "\t" },             // <Tab>

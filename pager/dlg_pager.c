@@ -1,5 +1,4 @@
 /**
-          pager_queue_redraw(priv, PAGER_REDRAW_PAGER);
  * @file
  * Pager Dialog
  *
@@ -329,7 +328,6 @@ int mutt_pager(struct PagerView *pview)
 
   //---------- initialize redraw pdata  -----------------------------------------
   pview->win_pager->size = MUTT_WIN_SIZE_MAXIMISE;
-  priv->pview = pview;
   priv->lines_max = LINES; // number of lines on screen, from curses
   priv->lines = mutt_mem_calloc(priv->lines_max, sizeof(struct Line));
   priv->fp = fopen(pview->pdata->fname, "r");
@@ -361,6 +359,7 @@ int mutt_pager(struct PagerView *pview)
     return -1;
   }
   unlink(pview->pdata->fname);
+  priv->pview = pview;
 
   //---------- show windows, set focus and visibility --------------------------
   window_set_visible(pview->win_pager->parent, true);
@@ -559,7 +558,7 @@ int mutt_pager(struct PagerView *pview)
     if (rc == FR_UNKNOWN)
       rc = global_function_dispatcher(dlg, op);
 
-    if (rc == FR_UNKNOWN &&
+    if ((rc == FR_UNKNOWN) &&
         ((pview->mode == PAGER_MODE_ATTACH) || (pview->mode == PAGER_MODE_ATTACH_E)))
     {
       // Some attachment functions still need to be delegated
@@ -607,6 +606,8 @@ int mutt_pager(struct PagerView *pview)
     }
     color_debug(LL_DEBUG5, "AnsiColors %d\n", count);
   }
+
+  priv->pview = NULL;
 
   if (priv->loop == PAGER_LOOP_RELOAD)
     return PAGER_LOOP_RELOAD;
