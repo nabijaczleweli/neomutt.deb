@@ -105,6 +105,7 @@ enum ResolveMethod
  * @param menu   Menu
  * @param shared Shared Index data
  * @param rm     How to advance the cursor, e.g. #RESOLVE_NEXT_EMAIL
+ * @retval true Resolve succeeded
  */
 static bool resolve_email(struct Menu *menu, struct IndexSharedData *shared, enum ResolveMethod rm)
 {
@@ -138,6 +139,34 @@ static bool resolve_email(struct Menu *menu, struct IndexSharedData *shared, enu
   if ((index < 0) || (index >= shared->mailbox->vcount))
   {
     // Resolve failed
+    notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, NULL);
+    return false;
+  }
+
+  menu_set_index(menu, index);
+  return true;
+}
+
+/**
+ * index_next_undeleted - Select the next undeleted Email (if possible)
+ * @param win_index Index Window
+ * @retval true Selection succeeded
+ */
+bool index_next_undeleted(struct MuttWindow *win_index)
+{
+  struct MuttWindow *dlg = dialog_find(win_index);
+  if (!dlg)
+    return false;
+
+  struct Menu *menu = win_index->wdata;
+  struct IndexSharedData *shared = dlg->wdata;
+  if (!shared)
+    return false;
+
+  int index = ci_next_undeleted(shared->mailbox, menu_get_index(menu));
+  if ((index < 0) || (index >= shared->mailbox->vcount))
+  {
+    // Selection failed
     notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, NULL);
     return false;
   }
@@ -1267,6 +1296,7 @@ static int op_main_next_new(struct IndexSharedData *shared,
       else
         mutt_error(_("No unread messages"));
     }
+    notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, NULL);
     return FR_ERROR;
   }
   else
@@ -1333,6 +1363,8 @@ static int op_main_next_thread(struct IndexSharedData *shared,
       mutt_error(_("No more threads"));
     else
       mutt_error(_("You are on the first thread"));
+
+    notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, NULL);
   }
   else
     menu_queue_redraw(priv->menu, MENU_REDRAW_MOTION);
@@ -1349,6 +1381,7 @@ static int op_main_next_undeleted(struct IndexSharedData *shared,
   int index = menu_get_index(priv->menu);
   if (index >= (shared->mailbox->vcount - 1))
   {
+    notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, NULL);
     mutt_message(_("You are on the last message"));
     return FR_ERROR;
   }
@@ -1358,6 +1391,7 @@ static int op_main_next_undeleted(struct IndexSharedData *shared,
 
   if (index == -1)
   {
+    notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, NULL);
     mutt_error(_("No undeleted messages"));
   }
   else
@@ -1398,6 +1432,7 @@ static int op_main_prev_undeleted(struct IndexSharedData *shared,
   int index = menu_get_index(priv->menu);
   if (index < 1)
   {
+    notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, NULL);
     mutt_message(_("You are on the first message"));
     return FR_ERROR;
   }
@@ -1408,6 +1443,7 @@ static int op_main_prev_undeleted(struct IndexSharedData *shared,
   if (index == -1)
   {
     mutt_error(_("No undeleted messages"));
+    notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, NULL);
   }
   else
     menu_queue_redraw(priv->menu, MENU_REDRAW_MOTION);
@@ -1610,6 +1646,7 @@ static int op_main_sync_folder(struct IndexSharedData *shared,
     ctx_free(&shared->ctx);
   }
 
+  priv->menu->max = shared->mailbox->vcount;
   menu_queue_redraw(priv->menu, MENU_REDRAW_FULL);
 
   return FR_SUCCESS;
@@ -1765,6 +1802,7 @@ static int op_prev_entry(struct IndexSharedData *shared, struct IndexPrivateData
   int index = menu_get_index(priv->menu);
   if (index < 1)
   {
+    notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, NULL);
     mutt_message(_("You are on the first message"));
     return FR_ERROR;
   }

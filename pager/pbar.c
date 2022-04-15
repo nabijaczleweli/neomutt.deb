@@ -100,6 +100,8 @@ static int pbar_recalc(struct MuttWindow *win)
   struct PBarPrivateData *pbar_data = win->wdata;
   struct IndexSharedData *shared = pbar_data->shared;
   struct PagerPrivateData *priv = pbar_data->priv;
+  if (!priv || !priv->pview)
+    return 0;
 
   char pager_progress_str[65]; /* Lots of space for translations */
 
@@ -159,7 +161,7 @@ static int pbar_repaint(struct MuttWindow *win)
   // struct IndexSharedData *shared = pbar_data->shared;
 
   mutt_window_move(win, 0, 0);
-  mutt_curses_set_color_by_id(MT_COLOR_STATUS);
+  mutt_curses_set_normal_backed_color_by_id(MT_COLOR_STATUS);
   mutt_window_clrtoeol(win);
 
   mutt_window_move(win, 0, 0);
@@ -182,7 +184,7 @@ static int pbar_color_observer(struct NotifyCallback *nc)
   struct EventColor *ev_c = nc->event_data;
   enum ColorId cid = ev_c->cid;
 
-  if (cid != MT_COLOR_STATUS)
+  if ((cid != MT_COLOR_STATUS) && (cid != MT_COLOR_NORMAL) && (cid != MT_COLOR_MAX))
     return 0;
 
   struct MuttWindow *win_pbar = nc->global_data;

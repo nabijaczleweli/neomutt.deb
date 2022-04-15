@@ -99,7 +99,7 @@ static int sbar_repaint(struct MuttWindow *win)
 
   mutt_window_move(win, 0, 0);
 
-  mutt_curses_set_color_by_id(MT_COLOR_STATUS);
+  mutt_curses_set_normal_backed_color_by_id(MT_COLOR_STATUS);
   mutt_window_move(win, 0, 0);
   mutt_paddstr(win, win->state.cols, priv->display);
   mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
@@ -122,8 +122,11 @@ static int sbar_color_observer(struct NotifyCallback *nc)
   struct EventColor *ev_c = nc->event_data;
 
   // MT_COLOR_MAX is sent on `uncolor *`
-  if ((ev_c->cid != MT_COLOR_STATUS) && (ev_c->cid != MT_COLOR_MAX))
+  if ((ev_c->cid != MT_COLOR_STATUS) && (ev_c->cid != MT_COLOR_NORMAL) &&
+      (ev_c->cid != MT_COLOR_MAX))
+  {
     return 0;
+  }
 
   struct MuttWindow *win_sbar = nc->global_data;
 

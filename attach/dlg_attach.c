@@ -95,7 +95,7 @@ static const struct Mapping AttachHelp[] = {
   // clang-format off
   { N_("Exit"),  OP_EXIT },
   { N_("Save"),  OP_ATTACHMENT_SAVE },
-  { N_("Pipe"),  OP_ATTACHMENT_PIPE },
+  { N_("Pipe"),  OP_PIPE },
   { N_("Print"), OP_ATTACHMENT_PRINT },
   { N_("Help"),  OP_HELP },
   { NULL, 0 },
@@ -509,10 +509,8 @@ void dlg_select_attachment(struct ConfigSubset *sub, struct Mailbox *m,
     if (rc == FR_CONTINUE)
     {
       op = priv->op;
-      continue;
     }
 
-    op = OP_NULL;
   } while (rc != FR_DONE);
   // ---------------------------------------------------------------------------
 
