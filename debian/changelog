@@ -1,11 +1,12 @@
-neomutt (20220408+dfsg-0.2) UNRELEASED; urgency=medium
+neomutt (20220415+dfsg-0.1) unstable; urgency=medium
 
   * Remove tokyocabinet support
     (it's dead upstream, segfaulty in neomutt, and 10x slower than lmdb ‒
      no intervention required, as despite the confgured back-end lmdb will be
-     chosen)
+     chosen as the only option)
+  * New upstream version 20220415+dfsg (CVE-2022-1328)
 
- -- наб <nabijaczleweli@nabijaczleweli.xyz>  Fri, 08 Apr 2022 17:24:14 +0200
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Fri, 15 Apr 2022 16:29:06 +0200
 
 neomutt (20220408+dfsg-0.1) unstable; urgency=medium
 
