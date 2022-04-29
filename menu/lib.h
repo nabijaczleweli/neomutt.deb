@@ -29,6 +29,7 @@
  * | :--------------- | :---------------------- |
  * | menu/config.c    | @subpage menu_config    |
  * | menu/draw.c      | @subpage menu_draw      |
+ * | menu/functions.c | @subpage menu_functions |
  * | menu/menu.c      | @subpage menu_menu      |
  * | menu/move.c      | @subpage menu_move      |
  * | menu/observer.c  | @subpage menu_observer  |
@@ -56,8 +57,6 @@ typedef uint8_t MenuRedrawFlags;       ///< Flags, e.g. #MENU_REDRAW_INDEX
 #define MENU_REDRAW_MOTION    (1 << 1) ///< Redraw after moving the menu list
 #define MENU_REDRAW_CURRENT   (1 << 2) ///< Redraw the current line of the menu
 #define MENU_REDRAW_FULL      (1 << 3) ///< Redraw everything
-
-ARRAY_HEAD(DialogLines, char *);
 
 /**
  * @defgroup menu_api Menu API
@@ -132,15 +131,6 @@ struct Menu
    * @retval  0 No colour
    */
   struct AttrColor *(*color)(struct Menu *menu, int line);
-
-  /**
-   * @defgroup menu_custom_redraw custom_redraw()
-   * @ingroup menu_api
-   *
-   * custom_redraw - Redraw the menu
-   * @param menu Menu to redraw
-   */
-  void (*custom_redraw)(struct Menu *menu);
 
   struct Notify *notify;  ///< Notifications
 

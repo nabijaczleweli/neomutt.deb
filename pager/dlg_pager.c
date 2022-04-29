@@ -49,7 +49,6 @@
 #include "color/lib.h"
 #include "index/lib.h"
 #include "menu/lib.h"
-#include "context.h"
 #include "display.h"
 #include "functions.h"
 #include "hook.h"
@@ -57,6 +56,7 @@
 #include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
+#include "mview.h"
 #include "mx.h"
 #include "opcodes.h"
 #include "options.h"
@@ -241,7 +241,7 @@ int mutt_pager(struct PagerView *pview)
       // This case was previously identified by IsEmail macro
       // we expect data to contain email and not contain body
       // We also expect email to always belong to some mailbox
-      assert(shared->ctx);
+      assert(shared->mailboxview);
       assert(shared->mailbox);
       assert(shared->email);
       assert(!pview->pdata->body);
@@ -263,7 +263,7 @@ int mutt_pager(struct PagerView *pview)
 
     case PAGER_MODE_HELP:
     case PAGER_MODE_OTHER:
-      assert(!shared->ctx);
+      assert(!shared->mailboxview);
       assert(!shared->email);
       assert(!pview->pdata->body);
       break;
@@ -309,10 +309,9 @@ int mutt_pager(struct PagerView *pview)
 
   if ((pview->mode == PAGER_MODE_EMAIL) && !shared->email->read)
   {
-    if (shared->ctx)
-      shared->ctx->msg_in_pager = shared->email->msgno;
-    const short c_pager_read_delay =
-        cs_subset_number(NeoMutt->sub, "pager_read_delay");
+    if (shared->mailboxview)
+      shared->mailboxview->msg_in_pager = shared->email->msgno;
+    const short c_pager_read_delay = cs_subset_number(NeoMutt->sub, "pager_read_delay");
     if (c_pager_read_delay == 0)
     {
       mutt_set_flag(shared->mailbox, shared->email, MUTT_READ, true);
@@ -331,10 +330,9 @@ int mutt_pager(struct PagerView *pview)
   priv->lines_max = LINES; // number of lines on screen, from curses
   priv->lines = mutt_mem_calloc(priv->lines_max, sizeof(struct Line));
   priv->fp = fopen(pview->pdata->fname, "r");
-  priv->has_types =
-      ((pview->mode == PAGER_MODE_EMAIL) || (pview->flags & MUTT_SHOWCOLOR)) ?
-          MUTT_TYPES :
-          0; // main message or rfc822 attachment
+  priv->has_types = ((pview->mode == PAGER_MODE_EMAIL) || (pview->flags & MUTT_SHOWCOLOR)) ?
+                        MUTT_TYPES :
+                        0; // main message or rfc822 attachment
 
   for (size_t i = 0; i < priv->lines_max; i++)
   {
@@ -395,8 +393,7 @@ int mutt_pager(struct PagerView *pview)
     notify_send(priv->notify, NT_PAGER, NT_PAGER_VIEW, priv);
     window_redraw(NULL);
 
-    const bool c_braille_friendly =
-        cs_subset_bool(NeoMutt->sub, "braille_friendly");
+    const bool c_braille_friendly = cs_subset_bool(NeoMutt->sub, "braille_friendly");
     if (c_braille_friendly)
     {
       if (braille_row != -1)
@@ -462,8 +459,7 @@ int mutt_pager(struct PagerView *pview)
         const bool c_beep_new = cs_subset_bool(NeoMutt->sub, "beep_new");
         if (c_beep_new)
           mutt_beep(true);
-        const char *const c_new_mail_command =
-            cs_subset_string(NeoMutt->sub, "new_mail_command");
+        const char *const c_new_mail_command = cs_subset_string(NeoMutt->sub, "new_mail_command");
         if (c_new_mail_command)
         {
           char cmd[1024];
@@ -578,8 +574,8 @@ int mutt_pager(struct PagerView *pview)
   mutt_file_fclose(&priv->fp);
   if (pview->mode == PAGER_MODE_EMAIL)
   {
-    if (shared->ctx)
-      shared->ctx->msg_in_pager = -1;
+    if (shared->mailboxview)
+      shared->mailboxview->msg_in_pager = -1;
   }
 
   qstyle_free_tree(&priv->quote_list);

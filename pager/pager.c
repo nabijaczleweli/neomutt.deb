@@ -60,9 +60,9 @@
 
 #include "config.h"
 #include <stddef.h>
-#include <assert.h>
 #include <inttypes.h> // IWYU pragma: keep
 #include <stdbool.h>
+#include <sys/stat.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
@@ -70,7 +70,6 @@
 #include "lib.h"
 #include "color/lib.h"
 #include "index/lib.h"
-#include "menu/lib.h"
 #include "display.h"
 #include "opcodes.h"
 #include "private_data.h"
@@ -92,8 +91,7 @@ static int config_pager_index_lines(struct MuttWindow *win)
   if (!win_index)
     return -1;
 
-  const short c_pager_index_lines =
-      cs_subset_number(NeoMutt->sub, "pager_index_lines");
+  const short c_pager_index_lines = cs_subset_number(NeoMutt->sub, "pager_index_lines");
 
   if (c_pager_index_lines > 0)
   {
@@ -425,9 +423,9 @@ static int pager_window_observer(struct NotifyCallback *nc)
 struct MuttWindow *pager_window_new(struct IndexSharedData *shared,
                                     struct PagerPrivateData *priv)
 {
-  struct MuttWindow *win =
-      mutt_window_new(WT_CUSTOM, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_MAXIMISE,
-                      MUTT_WIN_SIZE_UNLIMITED, MUTT_WIN_SIZE_UNLIMITED);
+  struct MuttWindow *win = mutt_window_new(WT_CUSTOM, MUTT_WIN_ORIENT_VERTICAL,
+                                           MUTT_WIN_SIZE_MAXIMISE, MUTT_WIN_SIZE_UNLIMITED,
+                                           MUTT_WIN_SIZE_UNLIMITED);
   win->wdata = priv;
   win->recalc = pager_recalc;
   win->repaint = pager_repaint;
