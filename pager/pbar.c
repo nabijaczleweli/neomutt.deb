@@ -71,10 +71,10 @@
 #include "lib.h"
 #include "color/lib.h"
 #include "index/lib.h"
-#include "context.h"
 #include "display.h"
 #include "format_flags.h"
 #include "hdrline.h"
+#include "mview.h"
 #include "private_data.h"
 
 /**
@@ -128,7 +128,7 @@ static int pbar_recalc(struct MuttWindow *win)
 
   if ((priv->pview->mode == PAGER_MODE_EMAIL) || (priv->pview->mode == PAGER_MODE_ATTACH_E))
   {
-    int msg_in_pager = shared->ctx ? shared->ctx->msg_in_pager : -1;
+    int msg_in_pager = shared->mailboxview ? shared->mailboxview->msg_in_pager : -1;
 
     const char *c_pager_format = cs_subset_string(shared->sub, "pager_format");
     mutt_make_string(buf, sizeof(buf), win->state.cols, NONULL(c_pager_format),
@@ -327,9 +327,9 @@ static struct PBarPrivateData *pbar_data_new(struct IndexSharedData *shared,
  */
 struct MuttWindow *pbar_new(struct IndexSharedData *shared, struct PagerPrivateData *priv)
 {
-  struct MuttWindow *win_pbar =
-      mutt_window_new(WT_STATUS_BAR, MUTT_WIN_ORIENT_VERTICAL,
-                      MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
+  struct MuttWindow *win_pbar = mutt_window_new(WT_STATUS_BAR, MUTT_WIN_ORIENT_VERTICAL,
+                                                MUTT_WIN_SIZE_FIXED,
+                                                MUTT_WIN_SIZE_UNLIMITED, 1);
 
   win_pbar->wdata = pbar_data_new(shared, priv);
   win_pbar->wdata_free = pbar_data_free;

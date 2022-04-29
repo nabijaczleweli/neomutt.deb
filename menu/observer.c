@@ -79,6 +79,9 @@ static int menu_config_observer(struct NotifyCallback *nc)
   struct Menu *menu = nc->global_data;
   menu_adjust(menu);
 
+  menu->redraw |= MENU_REDRAW_FULL;
+  menu->win->actions |= WA_RECALC;
+
   mutt_debug(LL_DEBUG5, "config done, request WA_RECALC, MENU_REDRAW_FULL\n");
   return 0;
 }
@@ -103,8 +106,7 @@ static int menu_window_observer(struct NotifyCallback *nc)
     menu->redraw |= MENU_REDRAW_FULL;
 
     win->actions |= WA_RECALC | WA_REPAINT;
-    mutt_debug(LL_DEBUG5,
-               "window state done, request MENU_REDRAW_INDEX, WA_REPAINT\n");
+    mutt_debug(LL_DEBUG5, "window state done, request MENU_REDRAW_INDEX, WA_REPAINT\n");
   }
   else if (nc->event_subtype == NT_WINDOW_DELETE)
   {

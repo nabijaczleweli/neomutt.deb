@@ -31,6 +31,7 @@
  * | debug/email.c       | @subpage debug_email       |
  * | debug/graphviz.c    | @subpage debug_graphviz    |
  * | debug/notify.c      | @subpage debug_notify      |
+ * | debug/pager.c       | @subpage debug_pager       |
  * | debug/parse_test.c  | @subpage debug_parse       |
  * | debug/window.c      | @subpage debug_window      |
  */
@@ -47,8 +48,8 @@ struct AddressList;
 struct AttachCtx;
 struct AttachPtr;
 struct Buffer;
-struct Context;
 struct ListHead;
+struct MailboxView;
 struct NotifyCallback;
 struct PagerPrivateData;
 
@@ -73,7 +74,7 @@ const char *get_content_type       (enum ContentType type);
 
 // Graphviz
 void        add_flag               (struct Buffer *buf, bool is_set, const char *name);
-void        dump_graphviz          (const char *title, struct Context *ctx);
+void        dump_graphviz          (const char *title, struct MailboxView *mv);
 void        dump_graphviz_attach_ctx(struct AttachCtx *actx);
 void        dump_graphviz_body     (struct Body *b);
 void        dump_graphviz_email    (struct Email *e);

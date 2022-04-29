@@ -269,6 +269,8 @@ MenuRedrawFlags menu_move_view_relative(struct Menu *menu, int relative)
   {
     top = menu->max - menu->page_len;
   }
+  if (top < 0)
+    top = 0;
 
   // Move the selection on-screen
   int index = menu->current;
@@ -489,8 +491,8 @@ MenuRedrawFlags menu_current_bottom(struct Menu *menu)
     return MENU_REDRAW_NO_FLAGS;
 
   context = MIN(context, (menu->page_len / 2));
-  return menu_move_view_relative(
-      menu, 0 - (menu->top + menu->page_len - 1 - menu->current - context));
+  return menu_move_view_relative(menu, 0 - (menu->top + menu->page_len - 1 -
+                                            menu->current - context));
 }
 
 /**

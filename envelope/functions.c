@@ -48,7 +48,7 @@
 #include "opcodes.h"
 #include "wdata.h"
 #ifdef MIXMASTER
-#include "remailer.h"
+#include "mixmaster/lib.h"
 #endif
 #ifdef USE_AUTOCRYPT
 #include "autocrypt/lib.h"
@@ -88,8 +88,7 @@ static void autocrypt_compose_menu(struct Email *e, const struct ConfigSubset *s
     case 3:
     {
       e->security &= ~SEC_AUTOCRYPT_OVERRIDE;
-      const bool c_crypt_opportunistic_encrypt =
-          cs_subset_bool(sub, "crypt_opportunistic_encrypt");
+      const bool c_crypt_opportunistic_encrypt = cs_subset_bool(sub, "crypt_opportunistic_encrypt");
       if (c_crypt_opportunistic_encrypt)
         e->security |= SEC_OPPENCRYPT;
       break;
@@ -133,8 +132,7 @@ static bool edit_address_list(enum HeaderField field, struct AddressList *al)
     FREE(&err);
   }
 
-  const bool rc =
-      !mutt_str_equal(mutt_buffer_string(new_list), mutt_buffer_string(old_list));
+  const bool rc = !mutt_str_equal(mutt_buffer_string(new_list), mutt_buffer_string(old_list));
   mutt_buffer_pool_release(&old_list);
   mutt_buffer_pool_release(&new_list);
   return rc;
@@ -148,8 +146,7 @@ void update_crypt_info(struct EnvelopeWindowData *wdata)
 {
   struct Email *e = wdata->email;
 
-  const bool c_crypt_opportunistic_encrypt =
-      cs_subset_bool(wdata->sub, "crypt_opportunistic_encrypt");
+  const bool c_crypt_opportunistic_encrypt = cs_subset_bool(wdata->sub, "crypt_opportunistic_encrypt");
   if (c_crypt_opportunistic_encrypt)
     crypt_opportunistic_encrypt(e);
 
@@ -513,7 +510,7 @@ static int op_envelope_edit_x_comment_to(struct EnvelopeWindowData *wdata, int o
  */
 static int op_compose_mix(struct EnvelopeWindowData *wdata, int op)
 {
-  dlg_select_mixmaster_chain(&wdata->email->chain);
+  dlg_mixmaster(&wdata->email->chain);
   mutt_message_hook(NULL, wdata->email, MUTT_SEND2_HOOK);
   mutt_env_notify_send(wdata->email, NT_ENVELOPE_MIXMASTER);
   return FR_SUCCESS;
