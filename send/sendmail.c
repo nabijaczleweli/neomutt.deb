@@ -30,6 +30,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <regex.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <string.h>
@@ -43,8 +44,8 @@
 #include "lib.h"
 #include "pager/lib.h"
 #include "format_flags.h"
+#include "globals.h"
 #include "muttlib.h"
-#include "options.h"
 #ifdef USE_NNTP
 #include "nntp/lib.h"
 #endif
@@ -57,7 +58,9 @@
 struct Mailbox;
 
 /* For execvp environment setting in send_msg() */
+#ifndef __USE_GNU
 extern char **environ;
+#endif
 
 SIG_ATOMIC_VOLATILE_T SigAlrm; ///< true after SIGALRM is received
 
@@ -302,7 +305,7 @@ int mutt_invoke_sendmail(struct Mailbox *m, struct AddressList *from,
 #ifdef USE_NNTP
   if (OptNewsSend)
   {
-    char cmd[1024];
+    char cmd[1024] = { 0 };
 
     const char *const c_inews = cs_subset_string(sub, "inews");
     mutt_expando_format(cmd, sizeof(cmd), 0, sizeof(cmd), NONULL(c_inews),

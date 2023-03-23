@@ -49,17 +49,16 @@
 #include "mbox/lib.h"
 #include "menu/lib.h"
 #include "question/lib.h"
-#include "commands.h"
 #include "copy.h"
+#include "external.h"
+#include "globals.h" // IWYU pragma: keep
 #include "hook.h"
 #include "keymap.h"
-#include "mutt_globals.h"
 #include "mutt_header.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
 #include "muttlib.h"
 #include "opcodes.h"
-#include "options.h"
 #include "protos.h"
 #ifdef USE_COMP_MBOX
 #include "compmbox/lib.h"
@@ -951,7 +950,7 @@ enum MxStatus mx_mbox_sync(struct Mailbox *m)
 
   if (m->msg_deleted != 0)
   {
-    char buf[128];
+    char buf[128] = { 0 };
 
     snprintf(buf, sizeof(buf),
              ngettext("Purge %d deleted message?", "Purge %d deleted messages?", m->msg_deleted),
@@ -1081,7 +1080,7 @@ struct Message *mx_msg_open_new(struct Mailbox *m, const struct Email *e, MsgOpe
   }
 
   if (msg->received == 0)
-    msg->received = mutt_date_epoch();
+    msg->received = mutt_date_now();
 
   if (m->mx_ops->msg_open_new(m, msg, e))
   {
@@ -1479,7 +1478,7 @@ int mx_path_canon2(struct Mailbox *m, const char *folder)
   if (!m)
     return -1;
 
-  char buf[PATH_MAX];
+  char buf[PATH_MAX] = { 0 };
 
   if (m->realpath)
     mutt_str_copy(buf, m->realpath, sizeof(buf));
@@ -1530,7 +1529,7 @@ int mx_path_pretty(char *buf, size_t buflen, const char *folder)
 /**
  * mx_path_parent - Find the parent of a mailbox path - Wrapper for MxOps::path_parent()
  */
-int mx_path_parent(char *buf, size_t buflen)
+int mx_path_parent(const char *buf, size_t buflen)
 {
   if (!buf)
     return -1;
@@ -1651,7 +1650,7 @@ struct Mailbox *mx_mbox_find2(const char *path)
   if (!path)
     return NULL;
 
-  char buf[PATH_MAX];
+  char buf[PATH_MAX] = { 0 };
   mutt_str_copy(buf, path, sizeof(buf));
   const char *const c_folder = cs_subset_string(NeoMutt->sub, "folder");
   mx_path_canon(buf, sizeof(buf), c_folder, NULL);

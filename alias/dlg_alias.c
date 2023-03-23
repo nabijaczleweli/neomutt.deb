@@ -126,7 +126,7 @@ static const char *alias_format_str(char *buf, size_t buflen, size_t col, int co
                                     const char *if_str, const char *else_str,
                                     intptr_t data, MuttFormatFlags flags)
 {
-  char fmt[128], addr[1024];
+  char tmp[1024];
   struct AliasView *av = (struct AliasView *) data;
   struct Alias *alias = av->alias;
 
@@ -139,18 +139,22 @@ static const char *alias_format_str(char *buf, size_t buflen, size_t col, int co
       mutt_format_s(buf, buflen, prec, alias->comment);
       break;
     case 'f':
-      snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-      snprintf(buf, buflen, fmt, av->is_deleted ? "D" : " ");
+      snprintf(tmp, sizeof(tmp), "%%%ss", prec);
+      snprintf(buf, buflen, tmp, av->is_deleted ? "D" : " ");
       break;
     case 'n':
-      snprintf(fmt, sizeof(fmt), "%%%sd", prec);
-      snprintf(buf, buflen, fmt, av->num + 1);
+      snprintf(tmp, sizeof(tmp), "%%%sd", prec);
+      snprintf(buf, buflen, tmp, av->num + 1);
       break;
     case 'r':
-      addr[0] = '\0';
-      mutt_addrlist_write(&alias->addr, addr, sizeof(addr), true);
-      mutt_format_s(buf, buflen, prec, addr);
+    {
+      struct Buffer *tmpbuf = mutt_buffer_pool_get();
+      mutt_addrlist_write(&alias->addr, tmpbuf, true);
+      mutt_str_copy(tmp, mutt_buffer_string(tmpbuf), sizeof(tmp));
+      mutt_buffer_pool_release(&tmpbuf);
+      mutt_format_s(buf, buflen, prec, tmp);
       break;
+    }
     case 't':
       buf[0] = av->is_tagged ? '*' : ' ';
       buf[1] = '\0';
@@ -171,9 +175,9 @@ static void alias_make_entry(struct Menu *menu, char *buf, size_t buflen, int li
   const struct AliasViewArray *ava = &mdata->ava;
   const struct AliasView *av = ARRAY_GET(ava, line);
 
-  const char *const alias_format = cs_subset_string(mdata->sub, "alias_format");
+  const char *const c_alias_format = cs_subset_string(mdata->sub, "alias_format");
 
-  mutt_expando_format(buf, buflen, 0, menu->win->state.cols, NONULL(alias_format),
+  mutt_expando_format(buf, buflen, 0, menu->win->state.cols, NONULL(c_alias_format),
                       alias_format_str, (intptr_t) av, MUTT_FORMAT_ARROWCURSOR);
 }
 
@@ -198,7 +202,9 @@ static int alias_tag(struct Menu *menu, int sel, int act)
  */
 static int alias_alias_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_ALIAS) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_ALIAS)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventAlias *ev_a = nc->event_data;
@@ -243,9 +249,10 @@ static int alias_alias_observer(struct NotifyCallback *nc)
  */
 static int alias_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
-
   if (nc->event_subtype != NT_WINDOW_DELETE)
     return 0;
 
@@ -338,13 +345,13 @@ static bool dlg_select_alias(struct Buffer *buf, struct AliasMenuData *mdata)
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(menu->type);
+    op = km_dokey(MENU_ALIAS);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
     if (op == OP_NULL)
     {
-      km_error_key(menu->type);
+      km_error_key(MENU_ALIAS);
       continue;
     }
     mutt_clear_error();
@@ -353,7 +360,7 @@ static bool dlg_select_alias(struct Buffer *buf, struct AliasMenuData *mdata)
     if (rc == FR_UNKNOWN)
       rc = menu_function_dispatcher(menu->win, op);
     if (rc == FR_UNKNOWN)
-      rc = global_function_dispatcher(menu->win, op);
+      rc = global_function_dispatcher(NULL, op);
   } while ((rc != FR_DONE) && (rc != FR_CONTINUE));
   // ---------------------------------------------------------------------------
 
@@ -460,14 +467,17 @@ int alias_complete(char *buf, size_t buflen, struct ConfigSubset *sub)
   buf[0] = '\0';
 
   // Extract the selected aliases
+  struct Buffer *tmpbuf = mutt_buffer_pool_get();
   struct AliasView *avp = NULL;
   ARRAY_FOREACH(avp, &mdata.ava)
   {
     if (!avp->is_tagged)
       continue;
 
-    mutt_addrlist_write(&avp->alias->addr, buf, buflen, true);
+    mutt_addrlist_write(&avp->alias->addr, tmpbuf, true);
   }
+  mutt_str_copy(buf, mutt_buffer_string(tmpbuf), buflen);
+  mutt_buffer_pool_release(&tmpbuf);
 
 done:
   // Process any deleted aliases

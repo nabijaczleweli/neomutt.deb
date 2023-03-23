@@ -36,14 +36,13 @@
 #include "status.h"
 #include "index/lib.h"
 #include "menu/lib.h"
+#include "postpone/lib.h"
 #include "format_flags.h"
-#include "mutt_globals.h"
+#include "globals.h"
 #include "mutt_mailbox.h"
 #include "mutt_thread.h"
 #include "muttlib.h"
 #include "mview.h"
-#include "options.h"
-#include "protos.h"
 
 /**
  * get_sort_str - Get the sort method as a string

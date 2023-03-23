@@ -56,6 +56,7 @@
  */
 
 #include "config.h"
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include "mutt/lib.h"
@@ -64,6 +65,7 @@
 #include "lib.h"
 #include "menu/lib.h"
 #include "format_flags.h"
+#include "functions.h"
 #include "keymap.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
@@ -129,7 +131,7 @@ void dlg_select_history(char *buf, size_t buflen, char **matches, int match_coun
   struct MuttWindow *dlg = simple_dialog_new(MENU_GENERIC, WT_DLG_HISTORY, HistoryHelp);
 
   struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
-  char title[256];
+  char title[256] = { 0 };
   snprintf(title, sizeof(title), _("History '%s'"), buf);
   sbar_set_title(sbar, title);
 
@@ -139,47 +141,41 @@ void dlg_select_history(char *buf, size_t buflen, char **matches, int match_coun
   menu->mdata = matches;
   menu->mdata_free = NULL; // Menu doesn't own the data
 
+  struct HistoryData hd = { false, false,   buf,        buflen,
+                            menu,  matches, match_count };
+  dlg->wdata = &hd;
+
   // ---------------------------------------------------------------------------
   // Event Loop
   int op = OP_NULL;
-  int rc;
   do
   {
-    rc = FR_UNKNOWN;
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(menu->type);
+    struct KeyEvent event = km_dokey_event(MENU_GENERIC);
+    if (event.ch == 'q')
+      op = OP_EXIT;
+    else
+      op = event.op;
+
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
     if (op == OP_NULL)
     {
-      km_error_key(menu->type);
+      km_error_key(MENU_GENERIC);
       continue;
     }
     mutt_clear_error();
 
-    switch (op)
-    {
-      case OP_GENERIC_SELECT_ENTRY:
-      {
-        const int index = menu_get_index(menu);
-        mutt_str_copy(buf, matches[index], buflen);
-        rc = FR_DONE;
-        break;
-      }
-
-      case OP_EXIT:
-        rc = FR_DONE;
-        break;
-    }
+    int rc = history_function_dispatcher(dlg, op);
 
     if (rc == FR_UNKNOWN)
       rc = menu_function_dispatcher(menu->win, op);
     if (rc == FR_UNKNOWN)
-      rc = global_function_dispatcher(menu->win, op);
-  } while (rc != FR_DONE);
+      rc = global_function_dispatcher(NULL, op);
+  } while (!hd.done);
   // ---------------------------------------------------------------------------
 
   simple_dialog_free(&dlg);

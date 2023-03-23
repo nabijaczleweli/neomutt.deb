@@ -45,12 +45,15 @@ const struct Mapping SortSidebarMethods[] = {
   { "flagged",       SORT_FLAGGED },
   { "unsorted",      SORT_ORDER },
   { "mailbox-order", SORT_ORDER },
-  { "new",           SORT_UNREAD },
   { "unread",        SORT_UNREAD },
+  { "new",           SORT_UNREAD },
   { NULL, 0 },
   // clang-format on
 };
 
+/**
+ * SidebarVars - Config definitions for the sidebar
+ */
 static struct ConfigDef SidebarVars[] = {
   // clang-format off
   { "sidebar_component_depth", DT_NUMBER, 0, 0, NULL,
@@ -59,7 +62,7 @@ static struct ConfigDef SidebarVars[] = {
   { "sidebar_delim_chars", DT_STRING, IP "/.", 0, NULL,
     "(sidebar) Characters that separate nested folders"
   },
-  { "sidebar_divider_char", DT_STRING, 0, 0, NULL,
+  { "sidebar_divider_char", DT_STRING, IP "\342\224\202", 0, NULL, // Box Drawings Light Vertical, U+2502
     "(sidebar) Character to draw between the sidebar and index"
   },
   { "sidebar_folder_indent", DT_BOOL, false, 0, NULL,
@@ -104,5 +107,5 @@ static struct ConfigDef SidebarVars[] = {
  */
 bool config_init_sidebar(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, SidebarVars, 0);
+  return cs_register_variables(cs, SidebarVars, DT_NO_FLAGS);
 }

@@ -31,6 +31,9 @@
 #include <config/lib.h>
 #include <stdbool.h>
 
+/**
+ * IndexVars - Config definitions for the Index
+ */
 static struct ConfigDef IndexVars[] = {
   // clang-format off
   { "change_folder_next", DT_BOOL, false, 0, NULL,
@@ -57,5 +60,5 @@ static struct ConfigDef IndexVars[] = {
  */
 bool config_init_index(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, IndexVars, 0);
+  return cs_register_variables(cs, IndexVars, DT_NO_FLAGS);
 }

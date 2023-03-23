@@ -30,7 +30,7 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "mutt/lib.h"
-#include "gui/lib.h" // IWYU pragma: keep
+#include "gui/lib.h"
 #include "lib.h"
 
 struct CursesColorList CursesColors; ///< List of all Curses colours
@@ -103,8 +103,8 @@ static int curses_color_init(int fg, int bg)
   if (bg == COLOR_DEFAULT)
     bg = COLOR_UNSET;
 
-  color_debug(LL_DEBUG5, "init_pair(%d,%d,%d) -> %d\n", index, fg, bg);
-  init_pair(index, fg, bg);
+  int rc = init_pair(index, fg, bg);
+  color_debug(LL_DEBUG5, "init_pair(%d,%d,%d) -> %d\n", index, fg, bg, rc);
 
   return index;
 }

@@ -164,7 +164,8 @@ static void parse_parameters(struct ParameterList *pl, const char *s, bool allow
           s++;
           for (; *s; s++)
           {
-            const char *const c_assumed_charset = cs_subset_string(NeoMutt->sub, "assumed_charset");
+            const struct Slist *const c_assumed_charset =
+                cs_subset_slist(NeoMutt->sub, "assumed_charset");
             if (c_assumed_charset)
             {
               // As iso-2022-* has a character of '"' with non-ascii state, ignore it
@@ -489,7 +490,7 @@ void mutt_parse_content_type(const char *s, struct Body *ct)
       ct->subtype = mutt_str_dup("rfc822");
     else if (ct->type == TYPE_OTHER)
     {
-      char buf[128];
+      char buf[128] = { 0 };
 
       ct->type = TYPE_APPLICATION;
       snprintf(buf, sizeof(buf), "x-%s", s);
@@ -512,10 +513,8 @@ void mutt_parse_content_type(const char *s, struct Body *ct)
     }
     else
     {
-      const char *const c_assumed_charset = cs_subset_string(NeoMutt->sub, "assumed_charset");
       mutt_param_set(&ct->parameter, "charset",
-                     (c_assumed_charset) ? (const char *) mutt_ch_get_default_charset() :
-                                           "us-ascii");
+                     (const char *) mutt_ch_get_default_charset());
     }
   }
 }
@@ -761,7 +760,7 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, const char *na
 
     case 'e':
       if (mutt_istr_equal("xpires", name + 1) && e &&
-          (mutt_date_parse_date(body, NULL) < mutt_date_epoch()))
+          (mutt_date_parse_date(body, NULL) < mutt_date_now()))
       {
         e->expired = true;
       }
@@ -923,7 +922,7 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, const char *na
       }
       else if (mutt_istr_equal(name + 1, "eceived"))
       {
-        if (e && !e->received)
+        if (e && (e->received == 0))
         {
           char *d = strrchr(body, ';');
           if (d)
@@ -957,8 +956,7 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e, const char *na
             {
               case 'O':
               {
-                const bool c_mark_old = cs_subset_bool(NeoMutt->sub, "mark_old");
-                e->old = c_mark_old;
+                e->old = true;
                 break;
               }
               case 'R':
@@ -1193,8 +1191,8 @@ struct Envelope *mutt_rfc822_read_header(FILE *fp, struct Email *e, bool user_hd
     p = strpbrk(line, ": \t");
     if (!p || (*p != ':'))
     {
-      char return_path[1024];
-      time_t t;
+      char return_path[1024] = { 0 };
+      time_t t = 0;
 
       /* some bogus MTAs will quote the original "From " line */
       if (mutt_str_startswith(line, ">From "))
@@ -1202,7 +1200,7 @@ struct Envelope *mutt_rfc822_read_header(FILE *fp, struct Email *e, bool user_hd
       else if (is_from(line, return_path, sizeof(return_path), &t))
       {
         /* MH sometimes has the From_ line in the middle of the header! */
-        if (e && !e->received)
+        if (e && (e->received == 0))
           e->received = t - mutt_date_local_tz(t);
         continue;
       }
@@ -1541,7 +1539,7 @@ static struct Body *parse_multipart(FILE *fp, const char *boundary,
     return NULL;
   }
 
-  char buf[1024];
+  char buf[1024] = { 0 };
   struct Body *head = NULL, *last = NULL, *new_body = NULL;
   bool final = false; /* did we see the ending boundary? */
 

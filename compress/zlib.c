@@ -112,6 +112,8 @@ static void *compr_zlib_decompress(void *cctx, const char *cbuf, size_t clen)
 
   /* first 4 bytes store the size */
   const unsigned char *cs = (const unsigned char *) cbuf;
+  if (clen < 4)
+    return NULL;
   uLong ulen = cs[0] + (cs[1] << 8) + (cs[2] << 16) + ((uLong) cs[3] << 24);
   if (ulen == 0)
     return NULL;
@@ -119,8 +121,8 @@ static void *compr_zlib_decompress(void *cctx, const char *cbuf, size_t clen)
   mutt_mem_realloc(&ctx->buf, ulen);
   Bytef *ubuf = ctx->buf;
   cs = (const unsigned char *) cbuf;
-  int ret = uncompress(ubuf, &ulen, cs + 4, clen - 4);
-  if (ret != Z_OK)
+  int rc = uncompress(ubuf, &ulen, cs + 4, clen - 4);
+  if (rc != Z_OK)
     return NULL;
 
   return ubuf;

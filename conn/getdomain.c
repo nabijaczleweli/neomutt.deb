@@ -34,7 +34,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "mutt/lib.h"
-#include "lib.h" // IWYU pragma: keep
+#include "lib.h"
 
 #ifdef HAVE_GETADDRINFO_A
 /**
@@ -56,30 +56,34 @@ static struct addrinfo *mutt_getaddrinfo_a(const char *node, const struct addrin
    * If it takes longer, the system is mis-configured and the network is not
    * working properly, so...  */
   struct timespec timeout = { 0, 100000000 };
-  struct gaicb *reqs[1];
-  reqs[0] = mutt_mem_calloc(1, sizeof(*reqs[0]));
-  reqs[0]->ar_name = node;
-  reqs[0]->ar_request = hints;
+  struct gaicb req = { 0 };
+  req.ar_name = node;
+  req.ar_request = hints;
+  struct gaicb *reqs[1] = { &req };
   if (getaddrinfo_a(GAI_NOWAIT, reqs, 1, NULL) == 0)
   {
     gai_suspend((const struct gaicb *const *) reqs, 1, &timeout);
     const int status = gai_error(reqs[0]);
     if (status == 0)
+    {
       result = reqs[0]->ar_result;
+    }
     else if (status == EAI_INPROGRESS)
     {
       mutt_debug(LL_DEBUG1, "timeout\n");
       /* request is not finished, cancel it to free it safely */
       if (gai_cancel(reqs[0]) == EAI_NOTCANCELED)
       {
-        while (gai_suspend((const struct gaicb *const *) reqs, 1, NULL) != 0)
-          continue;
+        // try once more for half-a-second, then bail out
+        timeout.tv_nsec = 50000000;
+        gai_suspend((const struct gaicb *const *) reqs, 1, &timeout);
       }
     }
     else
+    {
       mutt_debug(LL_DEBUG1, "fail: (%d) %s\n", status, gai_strerror(status));
+    }
   }
-  FREE(&reqs[0]);
   return result;
 }
 
@@ -121,7 +125,7 @@ int getdnsdomainname(struct Buffer *result)
   int rc = -1;
 
 #if defined(HAVE_GETADDRINFO) || defined(HAVE_GETADDRINFO_A)
-  char node[256];
+  char node[256] = { 0 };
   if (gethostname(node, sizeof(node)) != 0)
     return rc;
 
@@ -139,14 +143,14 @@ int getdnsdomainname(struct Buffer *result)
   lookup_result = mutt_getaddrinfo(node, &hints);
 #endif
 
-  char *hostname = NULL;
   if (lookup_result && lookup_result->ai_canonname)
-    hostname = strchr(lookup_result->ai_canonname, '.');
-
-  if (hostname)
   {
-    mutt_buffer_strcpy(result, ++hostname);
-    rc = 0;
+    const char *hostname = strchr(lookup_result->ai_canonname, '.');
+    if (hostname && hostname[1] != '\0')
+    {
+      mutt_buffer_strcpy(result, ++hostname);
+      rc = 0;
+    }
   }
 
   if (lookup_result)

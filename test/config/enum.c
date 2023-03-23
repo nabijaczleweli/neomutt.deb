@@ -28,9 +28,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "mutt/lib.h"
-#include "config/common.h"
 #include "config/lib.h"
 #include "core/lib.h"
+#include "common.h" // IWYU pragma: keep
 #include "test_common.h"
 
 // clang-format off
@@ -672,7 +672,7 @@ void test_config_enum(void)
   struct ConfigSubset *sub = NeoMutt->sub;
   struct ConfigSet *cs = sub->cs;
 
-  if (!TEST_CHECK(cs_register_variables(cs, Vars, 0)))
+  if (!TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS)))
     return;
 
   notify_observer_add(NeoMutt->notify, NT_CONFIG, log_observer, 0);

@@ -38,10 +38,10 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "conn/lib.h"
-#include "gui/lib.h"
 #include "mutt.h"
 #include "lib.h"
 #include "browser/lib.h"
+#include "enter/lib.h"
 #include "adata.h"
 #include "mdata.h"
 #include "mutt_logging.h"
@@ -62,10 +62,10 @@
 static void add_folder(char delim, char *folder, bool noselect, bool noinferiors,
                        struct BrowserState *state, bool isparent)
 {
-  char tmp[PATH_MAX];
-  char relpath[PATH_MAX];
+  char tmp[PATH_MAX] = { 0 };
+  char relpath[PATH_MAX] = { 0 };
   struct ConnAccount cac = { { 0 } };
-  char mailbox[1024];
+  char mailbox[1024] = { 0 };
   struct FolderFile ff = { 0 };
 
   if (imap_parse_path(state->folder, &cac, mailbox, sizeof(mailbox)))
@@ -134,17 +134,17 @@ static void add_folder(char delim, char *folder, bool noselect, bool noinferiors
  * browse_add_list_result - Add entries to the folder browser
  * @param adata    Imap Account data
  * @param cmd      Command string from server
- * @param state    Browser state to add to
+ * @param bstate   Browser state to add to
  * @param isparent Is this a shortcut for the parent directory?
  * @retval  0 Success
  * @retval -1 Failure
  */
 static int browse_add_list_result(struct ImapAccountData *adata, const char *cmd,
-                                  struct BrowserState *state, bool isparent)
+                                  struct BrowserState *bstate, bool isparent)
 {
   struct ImapList list = { 0 };
   int rc;
-  struct Url *url = url_parse(state->folder);
+  struct Url *url = url_parse(bstate->folder);
 
   imap_cmd_start(adata, cmd);
   adata->cmdresult = &list;
@@ -160,7 +160,7 @@ static int browse_add_list_result(struct ImapAccountData *adata, const char *cmd
         list.noselect = true;
       /* prune current folder from output */
       if (isparent || !mutt_str_startswith(url->path, list.name))
-        add_folder(list.delim, list.name, list.noselect, list.noinferiors, state, isparent);
+        add_folder(list.delim, list.name, list.noselect, list.noinferiors, bstate, isparent);
     }
   } while (rc == IMAP_RES_CONTINUE);
   adata->cmdresult = NULL;
@@ -185,8 +185,8 @@ int imap_browse(const char *path, struct BrowserState *state)
   struct ImapList list = { 0 };
   struct ConnAccount cac = { { 0 } };
   char buf[PATH_MAX + 16];
-  char mbox[PATH_MAX];
-  char munged_mbox[PATH_MAX];
+  char mbox[PATH_MAX] = { 0 };
+  char munged_mbox[PATH_MAX] = { 0 };
   const char *list_cmd = NULL;
   int len;
   int n;
@@ -322,7 +322,7 @@ int imap_browse(const char *path, struct BrowserState *state)
     /* "/bbbb/" -> add  "/", "aaaa/" -> add "" */
     else
     {
-      char relpath[2];
+      char relpath[2] = { 0 };
       /* folder may be "/" */
       snprintf(relpath, sizeof(relpath), "%c", (n < 0) ? '\0' : adata->delim);
       if (showparents)
@@ -400,7 +400,7 @@ int imap_mailbox_create(const char *path)
   }
 
   if (mutt_buffer_get_field(_("Create mailbox: "), name, MUTT_COMP_FILE, false,
-                            NULL, NULL, NULL) < 0)
+                            NULL, NULL, NULL) != 0)
   {
     goto done;
   }
@@ -460,8 +460,10 @@ int imap_mailbox_rename(const char *path)
   mutt_buffer_strcpy(newname, mdata->name);
 
   if (mutt_buffer_get_field(mutt_buffer_string(buf), newname, MUTT_COMP_FILE,
-                            false, NULL, NULL, NULL) < 0)
+                            false, NULL, NULL, NULL) != 0)
+  {
     goto done;
+  }
 
   if (mutt_buffer_is_empty(newname))
   {

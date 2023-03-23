@@ -25,7 +25,6 @@
 
 #include <stdbool.h>
 #include "config.h"
-#include "mutt/lib.h"
 #ifdef USE_AUTOCRYPT
 #include "autocrypt/lib.h"
 #endif
@@ -40,10 +39,6 @@ struct EnvelopeWindowData
   struct ConfigSubset *sub;        ///< Inherited config items
   struct Email *email;             ///< Email being composed
   struct Buffer *fcc;              ///< Where the outgoing Email will be saved
-
-  struct ListHead to_list;         ///< 'To:' list of addresses
-  struct ListHead cc_list;         ///< 'Cc:' list of addresses
-  struct ListHead bcc_list;        ///< 'Bcc:' list of addresses
 
   short to_rows;                   ///< Number of rows used by the 'To:' field
   short cc_rows;                   ///< Number of rows used by the 'Cc:' field

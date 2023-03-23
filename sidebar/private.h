@@ -32,7 +32,7 @@
 struct IndexSharedData;
 struct MuttWindow;
 
-extern struct ListHead SidebarWhitelist;
+extern struct ListHead SidebarPinned;
 
 /**
  * struct SbEntry - Info about folders in the sidebar
@@ -55,7 +55,6 @@ enum DivType
 {
   SB_DIV_USER,  ///< User configured using $sidebar_divider_char
   SB_DIV_ASCII, ///< An ASCII vertical bar (pipe)
-  SB_DIV_UTF8,  ///< A unicode line-drawing character
 };
 
 /**
@@ -79,13 +78,13 @@ struct SidebarWindowData
 
 // sidebar.c
 void sb_add_mailbox        (struct SidebarWindowData *wdata, struct Mailbox *m);
-void sb_remove_mailbox     (struct SidebarWindowData *wdata, struct Mailbox *m);
+void sb_remove_mailbox     (struct SidebarWindowData *wdata, const struct Mailbox *m);
 void sb_set_current_mailbox(struct SidebarWindowData *wdata, struct Mailbox *m);
 struct Mailbox *sb_get_highlight(struct MuttWindow *win);
 
 // commands.c
-enum CommandResult sb_parse_unwhitelist(struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
-enum CommandResult sb_parse_whitelist  (struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
+enum CommandResult sb_parse_sidebar_unpin(struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
+enum CommandResult sb_parse_sidebar_pin  (struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
 
 // functions.c
 bool sb_next(struct SidebarWindowData *wdata);

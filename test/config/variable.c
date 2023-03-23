@@ -23,14 +23,12 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
-#include <limits.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include "mutt/lib.h"
-#include "config/common.h"
 #include "config/lib.h"
 #include "core/lib.h"
+#include "common.h" // IWYU pragma: keep
 #include "test_common.h"
 
 // clang-format off
@@ -49,7 +47,7 @@ void test_config_variable(void)
   struct ConfigSubset *sub = NeoMutt->sub;
   struct ConfigSet *cs = sub->cs;
 
-  if (!TEST_CHECK(cs_register_variables(cs, Vars, 0)))
+  if (!TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS)))
     return;
 
   struct Buffer *err = mutt_buffer_pool_get();

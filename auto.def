@@ -16,16 +16,16 @@ use system cc cc-lib mutt-gettext mutt-iconv pkg-config
 ###############################################################################
 # Names and versions
 define PACKAGE          "neomutt"
-define PACKAGE_VERSION  "20220429"
+define PACKAGE_VERSION  "20230322"
 define BUGS_ADDRESS     "neomutt-devel@neomutt.org"
 
 # Subdirectories that contain additional Makefile.autosetup files
-set subdirs {po docs contrib}
+set subdirs {po data docs contrib}
 ###############################################################################
 
 ###############################################################################
 # Add any user options here
-options {
+set valid_options {
 # Curses
   with-ncurses:path         => "Location of ncurses"
 # Features w/o 3rd party dependencies
@@ -52,11 +52,12 @@ options {
   with-gnutls:path          => "Location of GnuTLS"
   # GPGME
   gpgme=0                   => "Enable GPGME support"
-  with-gpgme:path           => "Location of GPGME"
   # GSS (IMAP auth)
   gss=0                     => "Use GSSAPI authentication for IMAP"
   with-gss:path             => "Location of GSSAPI library"
   # SASL (IMAP and POP auth)
+  gsasl=0                   => "Use the GNU SASL network security library"
+  with-gsasl:path           => "Location of the GNU SASL network security library"
   sasl=0                    => "Use the SASL network security library"
   with-sasl:path            => "Location of the SASL network security library"
   # AutoCrypt
@@ -101,11 +102,9 @@ options {
   with-sqlite:path          => "Location of SQLite"
 # compression
   lz4=0                     => "Enable LZ4 header cache compression support"
-  with-lz4:path             => "Location of LZ4"
   zlib=0                    => "Enable zlib support"
   with-zlib:path            => "Location of zlib"
   zstd=0                    => "Enable Zstandard header cache compression support"
-  with-zstd:path            => "Location of Zstandard"
 # System
   with-sysroot:path         => "Target system root"
   with-tmpdir:=/tmp         => "location of the tmp directory"
@@ -113,11 +112,11 @@ options {
   include-path-in-cflags=1  => "Remove include paths from CFLAGS in the output of neomutt -v"
 # Testing
   asan=0                    => "Enable the Address Sanitizer"
+  ubsan=0                   => "Enable the Undefined Behaviour Sanitizer"
   coverage=0                => "Enable Coverage Testing"
   testing=0                 => "Enable Unit Testing"
   fuzzing                   => "Enable Fuzz Testing"
-# Configure with pkg-config
-  pkgconf=0                 => "Use pkg-config during configure"
+  compile-commands          => "Generate compile_commands.json (requires clang)"
 # Enable all options
   everything=0              => "Enable all options"
 # Debug options
@@ -127,21 +126,37 @@ options {
   debug-email=0             => "DEBUG: Enable Email dump"
   debug-graphviz=0          => "DEBUG: Enable Graphviz dump"
   debug-notify=0            => "DEBUG: Enable Notifications dump"
-  debug-parse-test=0        => "DEBUG: Enable 'neomutt -T' for config testing"
   debug-queue=0             => "DEBUG: Enable TAILQ debugging"
   debug-window=0            => "DEBUG: Enable windows dump"
-# Deprecated stuff
-  with-ui:=deprecated       => "Deprecated"
-  with-slang:deprecated     => "Deprecated"
 }
+
+set deprecated_options  {
+  pkgconf:=
+  with-slang:
+  with-ui:=
+  with-gpgme:
+  with-lz4:
+  with-zstd:
+}
+
+foreach dep $deprecated_options {
+  append valid_options "${dep}deprecated => Deprecated\n"
+}
+
+options $valid_options
 ###############################################################################
 
 ###############################################################################
-# Deprecated config options
-foreach dep {with-ui with-slang} {
-  if {[opt-bool -nodefault $dep] != -1} {
-    user-notice "\nThe configure option \"--$dep\" is not used anymore\n"
+# Issue a warning for deprecated options on the command line
+set notices {}
+foreach dep $deprecated_options {
+  lassign [split $dep :] name
+  if {[opt-bool -nodefault $name] != -1} {
+    lappend notices --$name
   }
+}
+if {[llength $notices]} {
+  user-notice "\nThe following options are deprecated: [join $notices {, }]\n"
 }
 ###############################################################################
 
@@ -152,12 +167,12 @@ foreach dep {with-ui with-slang} {
 if {1} {
   # Keep sorted, please.
   foreach opt {
-    asan autocrypt bdb coverage debug-backtrace debug-color debug-email
-    debug-graphviz debug-notify debug-parse-test debug-queue debug-window doc
-    everything fmemopen full-doc fuzzing gdbm gnutls gpgme gss homespool idn
+    asan autocrypt bdb compile-commands coverage debug-backtrace debug-color debug-email
+    debug-graphviz debug-notify debug-queue debug-window doc
+    everything fmemopen full-doc fuzzing gdbm gnutls gpgme gsasl gss homespool idn
     idn2 include-path-in-cflags inotify kyotocabinet lmdb locales-fix lua lz4
-    mixmaster nls notmuch pcre2 pgp pkgconf qdbm rocksdb sasl smime sqlite ssl
-    testing tdb tokyocabinet zlib zstd
+    mixmaster nls notmuch pcre2 pgp qdbm rocksdb sasl smime sqlite ssl
+    testing tdb tokyocabinet ubsan zlib zstd
   } {
     define want-$opt [opt-bool $opt]
   }
@@ -166,8 +181,8 @@ if {1} {
   # relative --enable-opt to true. This allows "--with-opt=/usr" to be used as
   # a shortcut for "--opt --with-opt=/usr".
   foreach opt {
-    bdb gdbm gnutls gpgme gss homespool idn idn2 kyotocabinet lmdb lua lz4 
-    mixmaster nls notmuch pcre2 qdbm rocksdb sasl sqlite ssl tdb tokyocabinet 
+    bdb gdbm gnutls gpgme gsasl gss homespool idn idn2 kyotocabinet lmdb lua lz4
+    mixmaster nls notmuch pcre2 qdbm rocksdb sasl sqlite ssl tdb tokyocabinet
     zlib zstd
   } {
     if {[opt-val with-$opt] ne {}} {
@@ -294,11 +309,18 @@ if {1} {
     define SENDMAIL /usr/sbin/sendmail
   }
 
+  # Compiler vendor
+  if {[has-define {} __clang__]} {
+    define COMPILER_IS_CLANG
+  } elseif {[has-define {} __GNUC__]} {
+    define COMPILER_IS_GCC
+  } else {
+    define COMPILER_IS_UNKNOWN
+  }
+
   # GCC-specifc CFLAGS
-  if {![catch {exec {*}[get-define CC] --version} res]} {
-    if {[regexp -nocase gcc $res]} {
-      define-append CFLAGS "-fno-delete-null-pointer-checks"
-    }
+  if {[get-define COMPILER_IS_GCC]} {
+    define-append CFLAGS "-fno-delete-null-pointer-checks"
   }
 
   # Enable extensions (reverse-engineered from AC_SYSTEM_EXTENSIONS)
@@ -311,6 +333,7 @@ if {1} {
     lappend extensions -D_ALL_SOURCE=1
     lappend extensions -D_GNU_SOURCE=1
     lappend extensions -D__EXTENSIONS__
+    lappend extensions -D_XOPEN_SOURCE_EXTENDED
     define-append CFLAGS_FOR_BUILD {*}$extensions
     define-append CFLAGS {*}$extensions
   }
@@ -477,89 +500,8 @@ if {[get-define want-gpgme]} {
   if {[is-defined _FILE_OFFSET_BITS]} {
     define-append CFLAGS -D_FILE_OFFSET_BITS=[get-define _FILE_OFFSET_BITS]
   }
-
-  msg-checking "Checking for GPGME..."
-  if {1} {
-    # Locate gpgme-config
-    set gpgme_prefix [opt-val with-gpgme $prefix]
-    set gpgme_config_guess [file join $gpgme_prefix bin gpgme-config]
-    if {[file-isexec $gpgme_config_guess]} {
-      define GPGME-CONFIG $gpgme_config_guess
-    } else {
-      if {![cc-check-progs gpgme-config]} {
-        user-error "Unable to find gpgme-config"
-      }
-    }
-    set gpgme_config [get-define GPGME-CONFIG]
-
-    # Version
-    if {[catch {exec-with-stderr $gpgme_config --version} gpgme_version err]} {
-      user-error "Could not derive --version from $gpgme_config"
-    }
-    if {[scan $gpgme_version "%d.%d.%d" gpgme_maj gpgme_min gpgme_patch] != 3} {
-      user-error "Could not parse GPGME version $gpgme_version"
-    }
-    msg-result $gpgme_version
-    if {[get-define want-autocrypt]} {
-      if {$gpgme_maj < 1 || $gpgme_min < 8} {
-        user-error "Found GPGME version $gpgme_version, need 1.8.0 for AutoCrypt"
-      }
-    } else {
-      if {$gpgme_maj < 1 || $gpgme_min < 4} {
-        user-error "Found GPGME version $gpgme_version, need 1.4.0"
-      }
-    }
-    define GPGME_VERSION_NUMBER [format "0x%02x%02x%02x" $gpgme_maj $gpgme_min $gpgme_patch]
-
-    # RHEL6 doesn't have this function yet
-    cc-check-function-in-lib gpgme_op_export_keys gpgme
-
-    # CFLAGS
-    if {[catch {exec-with-stderr $gpgme_config --cflags} res err]} {
-      user-error "Could not derive --cflags from $gpgme_config"
-    }
-    define-append CFLAGS $res
-
-    # LIBS
-    if {[catch {exec-with-stderr $gpgme_config --libs} res err]} {
-      user-error "Could not derive --libs from $gpgme_config"
-    }
-    define-append LIBS $res
-  }
-  define-feature gpgme
-
-  msg-checking "Checking for gpg-error..."
-  if {1} {
-    # Locate gpg-error-config
-    set gpg_error_config_guess [file join $gpgme_prefix bin gpg-error-config]
-    if {[file-isexec $gpg_error_config_guess]} {
-      define GPG-ERROR-CONFIG $gpg_error_config_guess
-    } else {
-      if {![cc-check-progs gpg-error-config]} {
-        user-error "Unable to find gpg-error-config"
-      }
-    }
-    set gpg_error_config [get-define GPG-ERROR-CONFIG]
-
-    # Version
-    if {[catch {exec-with-stderr $gpg_error_config --version} gpg_error_version err]} {
-      user-error "Could not derive --version from $gpg_error_config"
-    }
-
-    # CFLAGS
-    if {[catch {exec-with-stderr $gpg_error_config --cflags} res err]} {
-      user-error "Could not derive --cflags from $gpg_error_config"
-    }
-    define-append CFLAGS $res
-
-    # LIBS
-    if {[catch {exec-with-stderr $gpg_error_config --libs} res err]} {
-      user-error "Could not derive --libs from $gpg_error_config"
-    }
-    define-append LIBS $res
-  }
-  msg-result $gpg_error_version
-
+  pkgconf true gpgme
+  pkgconf true gpg-error
   define CRYPT_BACKEND_GPGME
 }
 
@@ -588,28 +530,22 @@ if {[get-define want-smime]} {
 }
 
 ###############################################################################
+# GNU SASL
+if {[get-define want-gsasl] && [get-define want-sasl]} {
+  user-error "Cannot specify both --gsasl and --sasl"
+}
+if {[get-define want-gsasl]} {
+  pkgconf true libgsasl
+  define USE_SASL_GNU
+  define-feature SASL
+}
+
+###############################################################################
 # SASL
 if {[get-define want-sasl]} {
-  if {[get-define want-pkgconf]} {
-    pkgconf true libsasl2
-    # RHEL6 doesn't have this function yet
-    cc-check-functions sasl_client_done
-    define USE_SASL
-    define-feature SASL
-  } else {
-    foreach sasl_lib {sasl2 sasl} {
-      if {[check-inc-and-lib sasl [opt-val with-sasl $prefix] \
-                             sasl/sasl.h sasl_encode64 $sasl_lib]} {
-        # RHEL6 doesn't have this function yet
-        cc-check-functions sasl_client_done
-        define USE_SASL
-        break
-      }
-    }
-    if {![get-define USE_SASL]} {
-      user-error "Unable to find SASL"
-    }
-  }
+  pkgconf true libsasl2
+  define USE_SASL_CYRUS
+  define-feature SASL
 }
 
 ###############################################################################
@@ -623,39 +559,10 @@ if {[get-define want-testing]} {
 # Lua
 if {[get-define want-lua]} {
 
-  if {[get-define want-pkgconf]} {
-    if {![pkgconf false lua] && ![pkgconf false lua-5.4] && ![pkgconf false lua-5.3] && ![pkgconf false lua-5.2]} {
-      user-error "Unable to find LUA"
-    }
-    define USE_LUA
-  } else {
-    set lua_versions { 5.4 5.3 5.2 } ;# Will be checked in order
-
-    apply {{lua_prefix lua_versions} {
-      foreach ver $lua_versions {
-        lassign [split $ver .] maj min
-
-        foreach lua_suffix [list /lua${maj}${min} /lua${maj}.${min} /lua-${maj}${min} /lua-${maj}.${min} /lua {}] {
-          msg-checking "Checking for include$lua_suffix/lua.h..."
-          if {[file exists $lua_prefix/include$lua_suffix/lua.h]} {
-            msg-result "yes"
-            set libs [list lua-${maj}.${min} lua${maj}.${min} lua]
-            cc-with [list -libs "-L$lua_prefix/$::libdir_tail"] {
-              if {![cc-check-function-in-lib luaL_openlibs $libs]} {
-                continue
-              }
-            }
-            define-append CFLAGS -I$lua_prefix/include$lua_suffix
-            define-append LDFLAGS -L$lua_prefix/$::libdir_tail
-            define USE_LUA
-            return
-          }
-          msg-result "no"
-        }
-      }
-      user-error "Unable to find Lua"
-    }} [opt-val with-lua $prefix] $lua_versions
+  if {![pkgconf false lua] && ![pkgconf false lua-5.4] && ![pkgconf false lua-5.3] && ![pkgconf false lua-5.2]} {
+    user-error "Unable to find LUA"
   }
+  define USE_LUA
 }
 
 ###############################################################################
@@ -731,7 +638,7 @@ set ncurses_prefix [opt-val with-ncurses $prefix]
 
 cc-with [list -libs -L$ncurses_prefix/$::libdir_tail] {
 
-  set tinfo_libs   {tinfow tinfo}
+  set tinfo_libs   {tinfow tinfo terminfo}
   set ncurses_libs {ncursesw ncurses curses}
 
   # Locate the library defining tgetent()
@@ -754,7 +661,7 @@ cc-with [list -libs -L$ncurses_prefix/$::libdir_tail] {
     user-error "Unable to find ncursesw library"
   }
 
-  foreach f {bkgrndset setcchar} {
+  foreach f {bkgrndset setcchar use_extended_names} {
     cc-check-function-in-lib $f $ncurses_lib
   }
 }
@@ -804,7 +711,7 @@ if {[opt-val with-domain] ne {}} {
 # TLS support
 if {[get-define want-ssl] && ![get-define want-gnutls]} {
   # OpenSSL
-  if {[get-define want-pkgconf] && [pkgconf false openssl]} {
+  if {[pkgconf false openssl]} {
     # cool - we do not make pkg-config mandatory for OpenSSL because BSDs still
     # ship OpenSSL in the base system. Those aren't available through
     # pkg-config.
@@ -834,19 +741,7 @@ if {[get-define want-ssl] && ![get-define want-gnutls]} {
   }
 } elseif {[get-define want-gnutls]} {
   # GnuTLS
-  if {[get-define want-pkgconf]} {
-    pkgconf true gnutls
-  } else {
-    set gnutls_prefix [opt-val with-gnutls $prefix]
-    cc-with [list -cflags -I$gnutls_prefix/include \
-                   -libs -L$gnutls_prefix/$::libdir_tail] {
-      if {![cc-check-function-in-lib gnutls_check_version gnutls]} {
-        user-error "Unable to find GnuTLS"
-      }
-      define-append CFLAGS -I$gnutls_prefix/include
-      define-append LDFLAGS -L$gnutls_prefix/$::libdir_tail
-    }
-  }
+  pkgconf true gnutls
   cc-check-function-in-lib gnutls_priority_set_direct gnutls
   cc-with {-includes {gnutls/x509.h gnutls/gnutls.h}} {
     cc-check-decls GNUTLS_VERIFY_DISABLE_TIME_CHECKS
@@ -875,18 +770,8 @@ if {[get-define want-idn]} {
       user-error "Unable to find GNU libidn"
     }
   }
-  if {[get-define want-pkgconf]} {
-    pkgconf true libidn
-    find-idn1-includes
-  } else {
-    set idn_prefix [opt-val with-idn $prefix]
-    cc-with [list -cflags -I$idn_prefix/include \
-                   -libs -L$idn_prefix/$::libdir_tail] {
-      find-idn1-includes
-      define-append CFLAGS -I$idn_prefix/include
-      define-append LDFLAGS -L$idn_prefix/$::libdir_tail
-    }
-  }
+  pkgconf true libidn
+  find-idn1-includes
   if {![cc-check-function-in-lib stringprep_check_version idn]} {
     user-error "Unable to find stringprep_check_version in libidn"
   }
@@ -901,18 +786,8 @@ if {[get-define want-idn]} {
       user-error "Unable to find GNU libidn2"
     }
   }
-  if {[get-define want-pkgconf]} {
-    pkgconf true libidn2
-    find-idn2-includes
-  } else {
-    set idn_prefix [opt-val with-idn2 $prefix]
-    cc-with [list -cflags -I$idn_prefix/include \
-                  -libs -L$idn_prefix/$::libdir_tail] {
-      find-idn2-includes
-      define-append CFLAGS -I$idn_prefix/include
-      define-append LDFLAGS -L$idn_prefix/$::libdir_tail
-    }
-  }
+  pkgconf true libidn2
+  find-idn2-includes
   if {![cc-check-function-in-lib idn2_to_ascii_8z     idn2] ||
       ![cc-check-function-in-lib idn2_to_unicode_8z8z idn2] ||
       ![cc-check-function-in-lib idn2_check_version   idn2]} {
@@ -925,18 +800,9 @@ if {[get-define want-idn]} {
 ###############################################################################
 # PCRE2
 if {[get-define want-pcre2]} {
-  if {[get-define want-pkgconf]} {
-    pkgconf true libpcre2-8
-  } else {
-    cc-with {-cflags -DPCRE2_CODE_UNIT_WIDTH=8} {
-      if {![check-inc-and-lib pcre2 [opt-val with-pcre2 $prefix] \
-                              pcre2.h pcre2_compile_8 pcre2-8]} {
-        user-error "Unable to find PCRE2"
-      }
-    }
-  }
+  pkgconf true libpcre2-8
   define-feature pcre2
-} elseif {[check-inc-and-lib pcre2_unwarranted {} {} pcre2_regcomp {}]} {
+} elseif {[cc-check-functions pcre2_regcomp]} {
   # See https://bugs.exim.org/show_bug.cgi?id=2707 and
   # https://github.com/neomutt/neomutt/issues/2865
   user-error "Found libpcre2-posix: please reconfigure with --pcre2"
@@ -945,28 +811,16 @@ if {[get-define want-pcre2]} {
 ###############################################################################
 # Header cache - bdb
 if {[get-define want-bdb]} {
-  set bdb_versions [opt-val with-bdb-version { 5.3 6.2 4.8 }] ;# Will be checked in order
-  set bdb_prefix [opt-val with-bdb $prefix]
-
-  foreach ver $bdb_versions {
-    lassign [split $ver .] maj min
-    # This is ugly, but it allows us to not have an inner loop
-    lappend bdb_majors   $maj $maj         $maj           $maj        $maj    $maj
-    lappend bdb_minors   $min $min         $min           $min        $min    $min
-    lappend bdb_exploded ""   db-$maj-$min db${maj}${min} db$maj.$min db-$maj db$maj
-  }
-
-  foreach maj $bdb_majors min $bdb_minors ver $bdb_exploded {
-    set ver_inc_dir $bdb_prefix/include/$ver
-    set ver_lib_dir $bdb_prefix/$::libdir_tail/$ver
+  proc find_bdb {bdb_prefix maj min path_tail lib_names} {
+    set ver_inc_dir $bdb_prefix/include/$path_tail
+    set ver_lib_dir $bdb_prefix/$::libdir_tail/$path_tail
     set ver_inc_file $ver_inc_dir/db.h
-    set ver_lib_file  db-$maj.$min
 
     # File exists?
     msg-checking "Checking for BerkeleyDB in $ver_inc_dir..."
     if {![file exists $ver_inc_file]} {
       msg-result "no"
-      continue
+      return 0
     }
 
     # Version is coherent?
@@ -975,23 +829,41 @@ if {[get-define want-bdb]} {
     if {$inc_maj eq {}   || $inc_min eq {} ||
         $inc_maj != $maj || $inc_min != $min} {
       msg-result "no (expecting $maj.$min, got $inc_maj.$inc_min)"
-      continue
+      return 0
     }
     msg-result "yes"
 
     # Can link?
-    cc-with [list -libs -L$ver_lib_dir -cflags -I$ver_inc_dir] {
-      if {![check-inc-and-lib bdb {} db.h db_env_create db-$maj.$min]} {
-        msg-result "no"
-        continue
+    foreach lib_name $lib_names {
+      cc-with [list -libs -L$ver_lib_dir -cflags -I$ver_inc_dir] {
+        check-inc-and-lib bdb {} db.h db_env_create $lib_name
+      }
+      if {[have-feature bdb]} {
+        define-append CFLAGS  -I$ver_inc_dir
+        define-append LDFLAGS -L$ver_lib_dir
+        define-append LIBS    -l$lib_name
+        define-append HCACHE_BACKENDS "bdb"
+        define USE_HCACHE
+        return 1
       }
     }
-    define-append CFLAGS  -I$ver_inc_dir
-    define-append LDFLAGS -L$ver_lib_dir
-    define-append LIBS    -ldb-$maj.$min
-    define-append HCACHE_BACKENDS "bdb"
-    define USE_HCACHE
-    break
+    return 0
+  }
+
+  set bdb_versions [opt-val with-bdb-version { 5.3 6.2 4.8 }] ;# Will be checked in order
+  set bdb_prefix [opt-val with-bdb $prefix]
+
+  foreach ver $bdb_versions {
+    lassign [split $ver .] maj min
+    foreach path_tail [list "" db-$maj-$min db${maj}${min} db$maj.$min db-$maj db$maj] {
+      set lib_names [list db$maj-$maj.$min db$maj-$maj db-$maj.$min db-$maj]
+      if {[find_bdb $bdb_prefix $maj $min $path_tail $lib_names]} {
+        break
+      }
+    }
+    if {[have-feature bdb]} {
+      break
+    }
   }
 
   if {![have-feature bdb]} {
@@ -1003,28 +875,11 @@ if {[get-define want-bdb]} {
 # Header cache - QDBM
 # Note: qdbm must come before gdbm because they share library symbols.
 if {[get-define want-qdbm]} {
-  if {[get-define want-pkgconf]} {
-    pkgconf true qdbm
-    define-feature qdbm
-  } else {
-    # On Linux, headers are in a dedicated subdirectory
-    set qdbm_prefix [opt-val with-qdbm $prefix]
-    if {[file isdirectory $qdbm_prefix/include/qdbm]} {
-      set qdbm_inc_subdir qdbm/
-    } else {
-      set qdbm_inc_subdir ""
-    }
-    if {[check-inc-and-lib qdbm [opt-val with-qdbm $qdbm_prefix] \
-                            ${qdbm_inc_subdir}villa.h vlopen qdbm]} {
-      define-append CFLAGS -I$qdbm_prefix/include/$qdbm_inc_subdir
-    } else {
-      user-error "Unable to find QDBM"
-    }
-  }
+  pkgconf true qdbm
+  define-feature qdbm
   define-append HCACHE_BACKENDS "qdbm"
   define USE_HCACHE
 }
-
 
 ###############################################################################
 # Header Cache - GNU dbm
@@ -1040,8 +895,10 @@ if {[get-define want-gdbm]} {
 ###############################################################################
 # Header cache - LMDB
 if {[get-define want-lmdb]} {
-  if {![check-inc-and-lib lmdb [opt-val with-lmdb $prefix] \
-                          lmdb.h mdb_env_create lmdb]} {
+  if {[pkgconf false lmdb]} {
+    define-feature lmdb
+  } elseif {![check-inc-and-lib lmdb [opt-val with-lmdb $prefix] \
+                                lmdb.h mdb_env_create lmdb]} {
     user-error "Unable to find LMDB"
   }
   define-append HCACHE_BACKENDS "lmdb"
@@ -1051,15 +908,8 @@ if {[get-define want-lmdb]} {
 ###############################################################################
 # Header cache - KyotoCabinet
 if {[get-define want-kyotocabinet]} {
-  if {[get-define want-pkgconf]} {
-    pkgconf true kyotocabinet
-    define-feature kc
-  } else {
-    if {![check-inc-and-lib kc [opt-val with-kyotocabinet $prefix] \
-                            kclangc.h kcdbopen kyotocabinet]} {
-      user-error "Unable to find KyotoCabinet"
-    }
-  }
+  pkgconf true kyotocabinet
+  define-feature kc
   define-append HCACHE_BACKENDS "kyotocabinet"
   define USE_HCACHE
 }
@@ -1078,17 +928,8 @@ if {[get-define want-rocksdb]} {
 ###############################################################################
 # Header Cache - TDB
 if {[get-define want-tdb]} {
-  if {[get-define want-pkgconf]} {
-    pkgconf true tdb
-    define-feature tdb
-  } else {
-    cc-with {-includes {sys/stat.h stddef.h} } {
-      if {![check-inc-and-lib tdb [opt-val with-tdb $prefix] \
-                              tdb.h tdb_close tdb]} {
-        user-error "Unable to find TDB"
-      }
-    }
-  }
+  pkgconf true tdb
+  define-feature tdb
   define-append HCACHE_BACKENDS "tdb"
   define USE_HCACHE
 }
@@ -1096,15 +937,8 @@ if {[get-define want-tdb]} {
 ###############################################################################
 # Header Cache - TokyoCabinet
 if {[get-define want-tokyocabinet]} {
-  if {[get-define want-pkgconf]} {
-    pkgconf true tokyocabinet
-    define-feature tc
-  } else {
-    if {![check-inc-and-lib tc [opt-val with-tokyocabinet $prefix] \
-                            tcbdb.h tcbdbopen tokyocabinet]} {
-      user-error "Unable to find TokyoCabinet"
-    }
-  }
+  pkgconf true tokyocabinet
+  define-feature tc
   define-append HCACHE_BACKENDS "tokyocabinet"
   define USE_HCACHE
 }
@@ -1112,12 +946,9 @@ if {[get-define want-tokyocabinet]} {
 ###############################################################################
 # Header Cache Compression with LZ4
 if {[get-define want-lz4]} {
-  if {![check-inc-and-lib lz4 [opt-val with-lz4 $prefix] \
-                          lz4.h LZ4_compress_default lz4]} {
-    user-error "Unable to find LZ4"
-  }
-  define-append LIBS -llz4
+  pkgconf true liblz4
   define USE_LZ4
+  define-feature lz4
   define USE_HCACHE_COMPRESSION
   define-append COMPRESS_BACKENDS "lz4"
 }
@@ -1138,12 +969,9 @@ if {[get-define want-zlib]} {
 ###############################################################################
 # Header Cache Compression with Zstandard
 if {[get-define want-zstd]} {
-  if {![check-inc-and-lib zstd [opt-val with-zstd $prefix] \
-                          zstd.h ZSTD_compress zstd]} {
-    user-error "Unable to find Zstandard"
-  }
-  define-append LIBS -lzstd
+  pkgconf true libzstd
   define USE_ZSTD
+  define-feature zstd
   define USE_HCACHE_COMPRESSION
   define-append COMPRESS_BACKENDS "zstd"
 }
@@ -1230,11 +1058,6 @@ if {[get-define want-debug-notify]} {
   define USE_DEBUG_NOTIFY 1
 }
 
-# Parse Test
-if {[get-define want-debug-parse-test]} {
-  define USE_DEBUG_PARSE_TEST 1
-}
-
 # TAILQ debugging
 if {[get-define want-debug-queue]} {
   # Store the last 2 places the queue element or head was altered
@@ -1262,6 +1085,19 @@ if {[get-define want-asan]} {
 }
 
 ###############################################################################
+# Undefined Behaviour Sanitizer
+if {[get-define want-ubsan]} {
+  msg-checking "Checking for UBSAN..."
+  if {![cctest -link 1 -cflags -fsanitize=undefined]} {
+    user-error "Unable to compile with -fsanitize=undefined"
+  }
+  msg-result "yes"
+  define-append CFLAGS -fsanitize=undefined -O0 -fno-omit-frame-pointer -fno-common
+  define-append LDFLAGS -fsanitize=undefined
+  define USE_UBSAN
+}
+
+###############################################################################
 # Fuzz Testing
 if {[get-define want-fuzzing]} {
   define ENABLE_FUZZ_TESTS
@@ -1271,8 +1107,21 @@ if {[get-define want-fuzzing]} {
 }
 
 ###############################################################################
+# Generate compile_commands.json
+if {[get-define want-compile-commands]} {
+  if {![get-define COMPILER_IS_CLANG]} {
+    user-error "The clang compiler is required to generate compile_commands.json"
+  }
+  define COMPILE_COMMANDS
+  define-append ALL_TARGETS compile_commands.json
+  define-append CLEAN_TARGETS clean-compile_commands.json
+  define-append CFLAGS {-MJ$(@:.o=.o.json)}
+}
+
+###############################################################################
 # Coverage Testing
 if {[get-define want-coverage]} {
+  define ENABLE_UNIT_TESTS
   define ENABLE_COVERAGE
   define-append CFLAGS -fprofile-arcs -ftest-coverage
   define-append LDFLAGS -fprofile-arcs -ftest-coverage
@@ -1296,12 +1145,13 @@ if {[catch {set fd [open conststrings.c w]
 }
 
 ###############################################################################
-# Definitions that are going to be substituted in Makefiles and config.h
+# Definitions that are going to be substituted in config.h
 set auto_rep {
   _*
   *_TARGETS
   BINDIR
   BUILD_DOC
+  COMPILE_COMMANDS
   CRYPT_*
   DOMAIN
   ENABLE_*
@@ -1370,7 +1220,16 @@ make-config-header config.h -auto $auto_rep -bare $bare_rep -str $str_rep
 
 ###############################################################################
 # Generate .clang_complete
-define cflags-one-per-line [string map {" " "\n"} [get-define CFLAGS]]
+proc cflags-for-clang-complete {} {
+  lmap x [get-define CFLAGS] {
+    if {[string match "-MJ*" $x]} {
+      continue
+    } else {
+      set x
+    }
+  }
+}
+define cflags-one-per-line [string map {" " "\n"} [cflags-for-clang-complete]]
 make-template .clang_complete.in
 
 ###############################################################################

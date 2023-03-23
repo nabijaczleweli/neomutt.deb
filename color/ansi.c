@@ -32,7 +32,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include "mutt/lib.h"
-#include "gui/lib.h" // IWYU pragma: keep
+#include "gui/lib.h"
 #include "ansi.h"
 #include "lib.h"
 
@@ -51,7 +51,7 @@ static inline bool ansi_is_end_char(char c)
  * @param str String to examine
  * @retval num Number of characters to skip over
  */
-int ansi_skip_sequence(const char *str)
+static int ansi_skip_sequence(const char *str)
 {
   if (!str || (str[0] == '\0'))
     return 0;
@@ -121,6 +121,11 @@ static int ansi_color_parse_single(const char *buf, struct AnsiColor *ansi, bool
     if ((buf[pos] == '1') && ansi_is_end_char(buf[pos + 1]))
     {
       ansi->attrs |= A_BOLD;
+      pos += 2;
+    }
+    else if ((buf[pos] == '3') && ansi_is_end_char(buf[pos + 1]))
+    {
+      ansi->attrs |= A_ITALIC;
       pos += 2;
     }
     else if ((buf[pos] == '4') && ansi_is_end_char(buf[pos + 1]))
@@ -262,11 +267,14 @@ static void ansi_color_list_add(struct AttrColorList *acl, struct AnsiColor *ans
     {
       case 0:
         return;
-      case A_UNDERLINE:
-        ansi->attr_color = simple_color_get(MT_COLOR_UNDERLINE);
-        return;
       case A_BOLD:
         ansi->attr_color = simple_color_get(MT_COLOR_BOLD);
+        return;
+      case A_ITALIC:
+        ansi->attr_color = simple_color_get(MT_COLOR_ITALIC);
+        return;
+      case A_UNDERLINE:
+        ansi->attr_color = simple_color_get(MT_COLOR_UNDERLINE);
         return;
     }
   }

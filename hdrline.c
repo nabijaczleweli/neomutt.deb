@@ -126,7 +126,7 @@ enum FieldType
  *
  * The colors are stored as "magic" strings embedded in the text.
  */
-static size_t add_index_color(char *buf, size_t buflen, MuttFormatFlags flags, char color)
+static size_t add_index_color(char *buf, size_t buflen, MuttFormatFlags flags, enum ColorId color)
 {
   /* only add color markers if we are operating on main index entries. */
   if (!(flags & MUTT_FORMAT_INDEX))
@@ -579,7 +579,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
         if (optional && ((op == '[') || (op == '(')))
         {
-          now = mutt_date_epoch();
+          now = mutt_date_now();
           struct tm tm = mutt_date_localtime(now);
           now -= (op == '(') ? e->received : e->date_sent;
 
@@ -728,7 +728,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
           tm = mutt_date_localtime(e->received);
         else if (op == '<')
         {
-          tm = mutt_date_localtime(MUTT_DATE_NOW);
+          tm = mutt_date_localtime(mutt_date_now());
         }
         else
         {
@@ -772,10 +772,14 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       break;
 
     case 'f':
-      tmp[0] = '\0';
-      mutt_addrlist_write(&e->env->from, tmp, sizeof(tmp), true);
+    {
+      struct Buffer *tmpbuf = mutt_buffer_pool_get();
+      mutt_addrlist_write(&e->env->from, tmpbuf, true);
+      mutt_str_copy(tmp, mutt_buffer_string(tmpbuf), sizeof(tmp));
+      mutt_buffer_pool_release(&tmpbuf);
       mutt_format_s(buf, buflen, prec, tmp);
       break;
+    }
 
     case 'F':
       if (!optional)
@@ -811,7 +815,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
     case 'G':
     {
-      char format[3];
+      char format[3] = { 0 };
       char *tag = NULL;
 
       if (!optional)
@@ -1008,20 +1012,28 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 #endif
 
     case 'r':
-      tmp[0] = '\0';
-      mutt_addrlist_write(&e->env->to, tmp, sizeof(tmp), true);
+    {
+      struct Buffer *tmpbuf = mutt_buffer_pool_get();
+      mutt_addrlist_write(&e->env->to, tmpbuf, true);
+      mutt_str_copy(tmp, mutt_buffer_string(tmpbuf), sizeof(tmp));
+      mutt_buffer_pool_release(&tmpbuf);
       if (optional && (tmp[0] == '\0'))
         optional = false;
       mutt_format_s(buf, buflen, prec, tmp);
       break;
+    }
 
     case 'R':
-      tmp[0] = '\0';
-      mutt_addrlist_write(&e->env->cc, tmp, sizeof(tmp), true);
+    {
+      struct Buffer *tmpbuf = mutt_buffer_pool_get();
+      mutt_addrlist_write(&e->env->cc, tmpbuf, true);
+      mutt_str_copy(tmp, mutt_buffer_string(tmpbuf), sizeof(tmp));
+      mutt_buffer_pool_release(&tmpbuf);
       if (optional && (tmp[0] == '\0'))
         optional = false;
       mutt_format_s(buf, buflen, prec, tmp);
       break;
+    }
 
     case 's':
     {

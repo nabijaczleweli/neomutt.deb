@@ -24,6 +24,9 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
@@ -33,21 +36,23 @@
 
 static struct ConfigDef Vars[] = {
   // clang-format off
-  { "assumed_charset", DT_STRING, 0, 0, NULL, },
+  { "assumed_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY, 0, 0, NULL, },
   { NULL },
   // clang-format on
 };
 
 static void check_addrlist(struct AddressList *list, const char *const exp[], size_t num)
 {
-  char parsed[1024] = { 0 };
-  if (mutt_addrlist_write(list, parsed, sizeof(parsed), false) == 0)
+  struct Buffer *parsed = mutt_buffer_pool_get();
+  if (mutt_addrlist_write(list, parsed, false) == 0)
   {
     TEST_MSG("Expected: parsed %s (...)", exp[0]);
     TEST_MSG("Actual  : not parsed");
   }
 
-  char *pp = parsed;
+  char *pp = mutt_buffer_strdup(parsed);
+  char *orig = pp;
+  mutt_buffer_pool_release(&parsed);
   for (size_t i = 0; i < num; ++i)
   {
     char *tok = mutt_str_skip_whitespace(mutt_str_sep(&pp, ","));
@@ -57,6 +62,7 @@ static void check_addrlist(struct AddressList *list, const char *const exp[], si
       TEST_MSG("Actual  : %s", tok);
     }
   }
+  FREE(&orig);
 }
 
 void test_mutt_parse_mailto(void)
@@ -64,7 +70,7 @@ void test_mutt_parse_mailto(void)
   // int mutt_parse_mailto(struct Envelope *e, char **body, const char *src);
 
   NeoMutt = test_neomutt_create();
-  TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, 0));
+  TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, DT_NO_FLAGS));
 
   mutt_list_insert_head(&MailToAllow, "cc");
   mutt_list_insert_head(&MailToAllow, "body");

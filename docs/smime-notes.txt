@@ -13,9 +13,9 @@ How to use neomutt's S/MIME capabilities
   browser.
 
 - Assuming you are using Firefox, follow the instructions at
-  https://www.sslsupportdesk.com/export-certificate-firefox/ to export the
-  certificate into a file called cert.p12. If you don't use Firefox, you're
-  on your own.
+  https://www.sslsupportdesk.com/2016/04/15/export-certificate-firefox/
+  to export the certificate into a file called cert.p12. If you don't use
+  Firefox, you're on your own.
 
 - Run "smime_keys add_p12 cert.p12"
 
@@ -38,12 +38,12 @@ How to use neomutt's S/MIME capabilities
 - Edit the smime_default_key line in your muttrc, replacing the keyid with your
   own.
 
-- You probably want to import trusted root certificates from Mozilla or
-  the system. This makes you trust anything that was ultimately signed by
-  one of them. You can use "smime_keys add_root" to do so, or just download
-  https://curl.haxx.se/ca/cacert.pem into the place you point neomutt's
+- There is no more ca-bundle.crt file with the trusted roots to import shipped
+  in neomutt. The upstream file is out-dated and user is encouraged to use
+  ca-bundle.crt from ca-certificate package.  This makes you trust anything
+  that was ultimately signed by one of them. You can use "smime_keys add_root"
+  to do so, or just copy ca-bundle.crt into the place you point neomutt's
   smime_ca_location variable to.
-
 
 
 Other notes
@@ -88,9 +88,9 @@ will not create them. If you wish to sign messages yourself, note that this
 neomutt does not address any PKCS10 or PKCS12 issues (yet?); that is, you have
 to get a valid certificate outside of neomutt. (See above)
 
-
-
 A certificate can be viewed by adding the following to your ~/.mailcap:
 
+application/pkcs7-signature;openssl pkcs7 -in %s -inform der -noout \
+-print_certs -text | less; needsterminal
 application/x-pkcs7-signature;openssl pkcs7 -in %s -inform der -noout \
 -print_certs -text | less; needsterminal

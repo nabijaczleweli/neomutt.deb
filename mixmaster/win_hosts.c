@@ -121,7 +121,7 @@ static const char *mix_format_str(char *buf, size_t buflen, size_t col, int cols
                                   const char *if_str, const char *else_str,
                                   intptr_t data, MuttFormatFlags flags)
 {
-  char fmt[128];
+  char fmt[128] = { 0 };
   struct Remailer *remailer = (struct Remailer *) data;
   bool optional = (flags & MUTT_FORMAT_OPTIONAL);
 
@@ -206,7 +206,7 @@ static void mix_make_entry(struct Menu *menu, char *buf, size_t buflen, int num)
  */
 struct MuttWindow *win_hosts_new(struct RemailerArray *ra)
 {
-  struct MuttWindow *win_hosts = menu_new_window(MENU_MIX, NeoMutt->sub);
+  struct MuttWindow *win_hosts = menu_window_new(MENU_MIX, NeoMutt->sub);
   win_hosts->focus = win_hosts;
 
   struct Menu *menu = win_hosts->wdata;
@@ -227,9 +227,6 @@ struct MuttWindow *win_hosts_new(struct RemailerArray *ra)
  */
 struct Remailer *win_hosts_get_selection(struct MuttWindow *win)
 {
-  if (!win)
-    return NULL;
-
   if (!win || !win->wdata)
     return NULL;
 

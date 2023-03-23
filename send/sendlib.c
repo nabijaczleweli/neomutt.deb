@@ -29,15 +29,12 @@
  */
 
 #include "config.h"
-#include <errno.h>
-#include <iconv.h>
 #include <inttypes.h> // IWYU pragma: keep
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <unistd.h>
 #include "mutt/lib.h"
 #include "address/lib.h"
@@ -48,503 +45,14 @@
 #include "sendlib.h"
 #include "lib.h"
 #include "attach/lib.h"
+#include "convert/lib.h"
 #include "ncrypt/lib.h"
 #include "copy.h"
+#include "globals.h" // IWYU pragma: keep
 #include "handler.h"
-#include "mutt_globals.h"
 #include "mutt_mailbox.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "options.h"
-
-/**
- * struct ContentState - Info about the body of an email
- */
-struct ContentState
-{
-  bool from;
-  int whitespace;
-  bool dot;
-  int linelen;
-  bool was_cr;
-};
-
-/**
- * update_content_info - Cache some info about an email
- * @param info   Info about an Attachment
- * @param s      Info about the Body of an email
- * @param buf    Buffer for the result
- * @param buflen Length of the buffer
- */
-static void update_content_info(struct Content *info, struct ContentState *s,
-                                char *buf, size_t buflen)
-{
-  bool from = s->from;
-  int whitespace = s->whitespace;
-  bool dot = s->dot;
-  int linelen = s->linelen;
-  bool was_cr = s->was_cr;
-
-  if (!buf) /* This signals EOF */
-  {
-    if (was_cr)
-      info->binary = true;
-    if (linelen > info->linemax)
-      info->linemax = linelen;
-
-    return;
-  }
-
-  for (; buflen; buf++, buflen--)
-  {
-    char ch = *buf;
-
-    if (was_cr)
-    {
-      was_cr = false;
-      if (ch == '\n')
-      {
-        if (whitespace)
-          info->space = true;
-        if (dot)
-          info->dot = true;
-        if (linelen > info->linemax)
-          info->linemax = linelen;
-        whitespace = 0;
-        dot = false;
-        linelen = 0;
-        continue;
-      }
-
-      info->binary = true;
-    }
-
-    linelen++;
-    if (ch == '\n')
-    {
-      info->crlf++;
-      if (whitespace)
-        info->space = true;
-      if (dot)
-        info->dot = true;
-      if (linelen > info->linemax)
-        info->linemax = linelen;
-      whitespace = 0;
-      linelen = 0;
-      dot = false;
-    }
-    else if (ch == '\r')
-    {
-      info->crlf++;
-      info->cr = true;
-      was_cr = true;
-      continue;
-    }
-    else if (ch & 0x80)
-      info->hibin++;
-    else if ((ch == '\t') || (ch == '\f'))
-    {
-      info->ascii++;
-      whitespace++;
-    }
-    else if (ch == 0)
-    {
-      info->nulbin++;
-      info->lobin++;
-    }
-    else if ((ch < 32) || (ch == 127))
-      info->lobin++;
-    else
-    {
-      if (linelen == 1)
-      {
-        if ((ch == 'F') || (ch == 'f'))
-          from = true;
-        else
-          from = false;
-        if (ch == '.')
-          dot = true;
-        else
-          dot = false;
-      }
-      else if (from)
-      {
-        if ((linelen == 2) && (ch != 'r'))
-          from = false;
-        else if ((linelen == 3) && (ch != 'o'))
-          from = false;
-        else if (linelen == 4)
-        {
-          if (ch == 'm')
-            info->from = true;
-          from = false;
-        }
-      }
-      if (ch == ' ')
-        whitespace++;
-      info->ascii++;
-    }
-
-    if (linelen > 1)
-      dot = false;
-    if ((ch != ' ') && (ch != '\t'))
-      whitespace = 0;
-  }
-
-  s->from = from;
-  s->whitespace = whitespace;
-  s->dot = dot;
-  s->linelen = linelen;
-  s->was_cr = was_cr;
-}
-
-/**
- * convert_file_to - Change the encoding of a file
- * @param[in]  fp         File to convert
- * @param[in]  fromcode   Original encoding
- * @param[in]  ncodes     Number of target encodings
- * @param[in]  tocodes    List of target encodings
- * @param[out] tocode     Chosen encoding
- * @param[in]  info       Encoding information
- * @retval -1 Error, no conversion was possible
- * @retval >0 Success, number of bytes converted
- *
- * Find the best charset conversion of the file from fromcode into one
- * of the tocodes. If successful, set *tocode and Content *info and
- * return the number of characters converted inexactly.
- *
- * We convert via UTF-8 in order to avoid the condition -1(EINVAL),
- * which would otherwise prevent us from knowing the number of inexact
- * conversions. Where the candidate target charset is UTF-8 we avoid
- * doing the second conversion because iconv_open("UTF-8", "UTF-8")
- * fails with some libraries.
- *
- * We assume that the output from iconv is never more than 4 times as
- * long as the input for any pair of charsets we might be interested
- * in.
- */
-static size_t convert_file_to(FILE *fp, const char *fromcode, int ncodes,
-                              char const *const *tocodes, int *tocode, struct Content *info)
-{
-  char bufi[256], bufu[512], bufo[4 * sizeof(bufi)];
-  size_t ret;
-
-  const iconv_t cd1 = mutt_ch_iconv_open("utf-8", fromcode, MUTT_ICONV_NO_FLAGS);
-  if (cd1 == (iconv_t) (-1))
-    return -1;
-
-  iconv_t *cd = mutt_mem_calloc(ncodes, sizeof(iconv_t));
-  size_t *score = mutt_mem_calloc(ncodes, sizeof(size_t));
-  struct ContentState *states = mutt_mem_calloc(ncodes, sizeof(struct ContentState));
-  struct Content *infos = mutt_mem_calloc(ncodes, sizeof(struct Content));
-
-  for (int i = 0; i < ncodes; i++)
-  {
-    if (!mutt_istr_equal(tocodes[i], "utf-8"))
-      cd[i] = mutt_ch_iconv_open(tocodes[i], "utf-8", MUTT_ICONV_NO_FLAGS);
-    else
-    {
-      /* Special case for conversion to UTF-8 */
-      cd[i] = (iconv_t) (-1);
-      score[i] = (size_t) (-1);
-    }
-  }
-
-  rewind(fp);
-  size_t ibl = 0;
-  while (true)
-  {
-    /* Try to fill input buffer */
-    size_t n = fread(bufi + ibl, 1, sizeof(bufi) - ibl, fp);
-    ibl += n;
-
-    /* Convert to UTF-8 */
-    const char *ib = bufi;
-    char *ob = bufu;
-    size_t obl = sizeof(bufu);
-    n = iconv(cd1, (ICONV_CONST char **) ((ibl != 0) ? &ib : 0), &ibl, &ob, &obl);
-    /* assert(n == (size_t)(-1) || !n); */
-    if ((n == (size_t) (-1)) && (((errno != EINVAL) && (errno != E2BIG)) || (ib == bufi)))
-    {
-      /* assert(errno == EILSEQ || (errno == EINVAL && ib == bufi && ibl < sizeof(bufi))); */
-      ret = (size_t) (-1);
-      break;
-    }
-    const size_t ubl1 = ob - bufu;
-
-    /* Convert from UTF-8 */
-    for (int i = 0; i < ncodes; i++)
-    {
-      if ((cd[i] != (iconv_t) (-1)) && (score[i] != (size_t) (-1)))
-      {
-        const char *ub = bufu;
-        size_t ubl = ubl1;
-        ob = bufo;
-        obl = sizeof(bufo);
-        n = iconv(cd[i], (ICONV_CONST char **) ((ibl || ubl) ? &ub : 0), &ubl, &ob, &obl);
-        if (n == (size_t) (-1))
-        {
-          /* assert(errno == E2BIG || (BUGGY_ICONV && (errno == EILSEQ || errno == ENOENT))); */
-          score[i] = (size_t) (-1);
-        }
-        else
-        {
-          score[i] += n;
-          update_content_info(&infos[i], &states[i], bufo, ob - bufo);
-        }
-      }
-      else if ((cd[i] == (iconv_t) (-1)) && (score[i] == (size_t) (-1)))
-      {
-        /* Special case for conversion to UTF-8 */
-        update_content_info(&infos[i], &states[i], bufu, ubl1);
-      }
-    }
-
-    if (ibl)
-    {
-      /* Save unused input */
-      memmove(bufi, ib, ibl);
-    }
-    else if (!ubl1 && (ib < bufi + sizeof(bufi)))
-    {
-      ret = 0;
-      break;
-    }
-  }
-
-  if (ret == 0)
-  {
-    /* Find best score */
-    ret = (size_t) (-1);
-    for (int i = 0; i < ncodes; i++)
-    {
-      if ((cd[i] == (iconv_t) (-1)) && (score[i] == (size_t) (-1)))
-      {
-        /* Special case for conversion to UTF-8 */
-        *tocode = i;
-        ret = 0;
-        break;
-      }
-      else if ((cd[i] == (iconv_t) (-1)) || (score[i] == (size_t) (-1)))
-        continue;
-      else if ((ret == (size_t) (-1)) || (score[i] < ret))
-      {
-        *tocode = i;
-        ret = score[i];
-        if (ret == 0)
-          break;
-      }
-    }
-    if (ret != (size_t) (-1))
-    {
-      memcpy(info, &infos[*tocode], sizeof(struct Content));
-      update_content_info(info, &states[*tocode], 0, 0); /* EOF */
-    }
-  }
-
-  for (int i = 0; i < ncodes; i++)
-    if (cd[i] != (iconv_t) (-1))
-      iconv_close(cd[i]);
-
-  iconv_close(cd1);
-  FREE(&cd);
-  FREE(&infos);
-  FREE(&score);
-  FREE(&states);
-
-  return ret;
-}
-
-/**
- * convert_file_from_to - Convert a file between encodings
- * @param[in]  fp        File to read from
- * @param[in]  fromcodes Charsets to try converting FROM
- * @param[in]  tocodes   Charsets to try converting TO
- * @param[out] fromcode  From charset selected
- * @param[out] tocode    To charset selected
- * @param[out] info      Info about the file
- * @retval num Characters converted
- * @retval -1  Error (as a size_t)
- *
- * Find the first of the fromcodes that gives a valid conversion and the best
- * charset conversion of the file into one of the tocodes. If successful, set
- * *fromcode and *tocode to dynamically allocated strings, set Content *info,
- * and return the number of characters converted inexactly. If no conversion
- * was possible, return -1.
- *
- * Both fromcodes and tocodes may be colon-separated lists of charsets.
- * However, if fromcode is zero then fromcodes is assumed to be the name of a
- * single charset even if it contains a colon.
- */
-static size_t convert_file_from_to(FILE *fp, const char *fromcodes, const char *tocodes,
-                                   char **fromcode, char **tocode, struct Content *info)
-{
-  char *fcode = NULL;
-  char **tcode = NULL;
-  const char *c = NULL, *c1 = NULL;
-  size_t ret;
-  int ncodes, i, cn;
-
-  /* Count the tocodes */
-  ncodes = 0;
-  for (c = tocodes; c; c = c1 ? c1 + 1 : 0)
-  {
-    c1 = strchr(c, ':');
-    if (c1 == c)
-      continue;
-    ncodes++;
-  }
-
-  /* Copy them */
-  tcode = mutt_mem_malloc(ncodes * sizeof(char *));
-  for (c = tocodes, i = 0; c; c = c1 ? c1 + 1 : 0, i++)
-  {
-    c1 = strchr(c, ':');
-    if (c1 == c)
-      continue;
-    if (c1)
-      tcode[i] = mutt_strn_dup(c, c1 - c);
-    else
-      tcode[i] = mutt_str_dup(c);
-  }
-
-  ret = (size_t) (-1);
-  if (fromcode)
-  {
-    /* Try each fromcode in turn */
-    for (c = fromcodes; c; c = c1 ? c1 + 1 : 0)
-    {
-      c1 = strchr(c, ':');
-      if (c1 == c)
-        continue;
-      if (c1)
-        fcode = mutt_strn_dup(c, c1 - c);
-      else
-        fcode = mutt_str_dup(c);
-
-      ret = convert_file_to(fp, fcode, ncodes, (char const *const *) tcode, &cn, info);
-      if (ret != (size_t) (-1))
-      {
-        *fromcode = fcode;
-        *tocode = tcode[cn];
-        tcode[cn] = 0;
-        break;
-      }
-      FREE(&fcode);
-    }
-  }
-  else
-  {
-    /* There is only one fromcode */
-    ret = convert_file_to(fp, fromcodes, ncodes, (char const *const *) tcode, &cn, info);
-    if (ret != (size_t) (-1))
-    {
-      *tocode = tcode[cn];
-      tcode[cn] = 0;
-    }
-  }
-
-  /* Free memory */
-  for (i = 0; i < ncodes; i++)
-    FREE(&tcode[i]);
-
-  FREE(&tcode);
-
-  return ret;
-}
-
-/**
- * mutt_get_content_info - Analyze file to determine MIME encoding to use
- * @param fname File to examine
- * @param b     Body to update
- * @param sub   Config Subset
- * @retval ptr Newly allocated Content
- *
- * Also set the body charset, sometimes, or not.
- */
-struct Content *mutt_get_content_info(const char *fname, struct Body *b,
-                                      struct ConfigSubset *sub)
-{
-  struct Content *info = NULL;
-  struct ContentState state = { 0 };
-  FILE *fp = NULL;
-  char *fromcode = NULL;
-  char *tocode = NULL;
-  char buf[100];
-  size_t r;
-
-  struct stat st = { 0 };
-
-  if (b && !fname)
-    fname = b->filename;
-  if (!fname)
-    return NULL;
-
-  if (stat(fname, &st) == -1)
-  {
-    mutt_error(_("Can't stat %s: %s"), fname, strerror(errno));
-    return NULL;
-  }
-
-  if (!S_ISREG(st.st_mode))
-  {
-    mutt_error(_("%s isn't a regular file"), fname);
-    return NULL;
-  }
-
-  fp = fopen(fname, "r");
-  if (!fp)
-  {
-    mutt_debug(LL_DEBUG1, "%s: %s (errno %d)\n", fname, strerror(errno), errno);
-    return NULL;
-  }
-
-  info = mutt_mem_calloc(1, sizeof(struct Content));
-
-  const char *const c_charset = cs_subset_string(sub, "charset");
-
-  if (b && (b->type == TYPE_TEXT) && (!b->noconv && !b->force_charset))
-  {
-    const char *const c_attach_charset = cs_subset_string(sub, "attach_charset");
-    const char *const c_send_charset = cs_subset_string(sub, "send_charset");
-
-    char *chs = mutt_param_get(&b->parameter, "charset");
-    const char *fchs = b->use_disp ? (c_attach_charset ? c_attach_charset : c_charset) : c_charset;
-    if (c_charset && (chs || c_send_charset) &&
-        (convert_file_from_to(fp, fchs, chs ? chs : c_send_charset, &fromcode,
-                              &tocode, info) != (size_t) (-1)))
-    {
-      if (!chs)
-      {
-        char chsbuf[256];
-        mutt_ch_canonical_charset(chsbuf, sizeof(chsbuf), tocode);
-        mutt_param_set(&b->parameter, "charset", chsbuf);
-      }
-      FREE(&b->charset);
-      b->charset = fromcode;
-      FREE(&tocode);
-      mutt_file_fclose(&fp);
-      return info;
-    }
-  }
-
-  rewind(fp);
-  while ((r = fread(buf, 1, sizeof(buf), fp)))
-    update_content_info(info, &state, buf, r);
-  update_content_info(info, &state, 0, 0);
-
-  mutt_file_fclose(&fp);
-
-  if (b && (b->type == TYPE_TEXT) && (!b->noconv && !b->force_charset))
-  {
-    mutt_param_set(&b->parameter, "charset",
-                   (!info->hibin                                 ? "us-ascii" :
-                    c_charset && !mutt_ch_is_us_ascii(c_charset) ? c_charset :
-                                                                   "unknown-8bit"));
-  }
-
-  return info;
-}
 
 /**
  * mutt_lookup_mime_type - Find the MIME type for an attachment
@@ -562,7 +70,7 @@ enum ContentType mutt_lookup_mime_type(struct Body *att, const char *path)
 {
   FILE *fp = NULL;
   char *p = NULL, *q = NULL, *ct = NULL;
-  char buf[PATH_MAX];
+  char buf[PATH_MAX] = { 0 };
   char subtype[256] = { 0 };
   char xtype[256] = { 0 };
   int sze, cur_sze = 0;
@@ -681,7 +189,7 @@ bye:
 static void transform_to_7bit(struct Body *a, FILE *fp_in, struct ConfigSubset *sub)
 {
   struct Buffer *buf = NULL;
-  struct State s = { 0 };
+  struct State state = { 0 };
   struct stat st = { 0 };
 
   for (; a; a = a->next)
@@ -704,16 +212,16 @@ static void transform_to_7bit(struct Body *a, FILE *fp_in, struct ConfigSubset *
        * restrict the lifetime of the buffer tightly */
       buf = mutt_buffer_pool_get();
       mutt_buffer_mktemp(buf);
-      s.fp_out = mutt_file_fopen(mutt_buffer_string(buf), "w");
-      if (!s.fp_out)
+      state.fp_out = mutt_file_fopen(mutt_buffer_string(buf), "w");
+      if (!state.fp_out)
       {
         mutt_perror("fopen");
         mutt_buffer_pool_release(&buf);
         return;
       }
-      s.fp_in = fp_in;
-      mutt_decode_attachment(a, &s);
-      mutt_file_fclose(&s.fp_out);
+      state.fp_in = fp_in;
+      mutt_decode_attachment(a, &state);
+      mutt_file_fclose(&state.fp_out);
       FREE(&a->d_filename);
       a->d_filename = a->filename;
       a->filename = mutt_buffer_strdup(buf);
@@ -837,7 +345,7 @@ static void set_encoding(struct Body *b, struct Content *info, struct ConfigSubs
   if (b->type == TYPE_TEXT)
   {
     const bool c_encode_from = cs_subset_bool(sub, "encode_from");
-    char send_charset[128];
+    char send_charset[128] = { 0 };
     char *chsname = mutt_body_get_charset(b, send_charset, sizeof(send_charset));
     if ((info->lobin && !mutt_istr_startswith(chsname, "iso-2022")) ||
         (info->linemax > 990) || (info->from && c_encode_from))
@@ -890,7 +398,7 @@ static void set_encoding(struct Body *b, struct Content *info, struct ConfigSubs
  */
 void mutt_stamp_attachment(struct Body *a)
 {
-  a->stamp = mutt_date_epoch();
+  a->stamp = mutt_date_now();
 }
 
 /**
@@ -903,7 +411,7 @@ void mutt_stamp_attachment(struct Body *a)
 void mutt_update_encoding(struct Body *a, struct ConfigSubset *sub)
 {
   struct Content *info = NULL;
-  char chsbuf[256];
+  char chsbuf[256] = { 0 };
 
   /* override noconv when it's us-ascii */
   if (mutt_ch_is_us_ascii(mutt_body_get_charset(a, chsbuf, sizeof(chsbuf))))
@@ -1151,7 +659,7 @@ static void encode_headers(struct ListHead *h, struct ConfigSubset *sub)
   char *p = NULL;
   int i;
 
-  const char *const c_send_charset = cs_subset_string(sub, "send_charset");
+  const struct Slist *const c_send_charset = cs_subset_slist(sub, "send_charset");
 
   struct ListNode *np = NULL;
   STAILQ_FOREACH(np, h, entries)
@@ -1209,25 +717,42 @@ const char *mutt_fqdn(bool may_hide_host, const struct ConfigSubset *sub)
 }
 
 /**
- * gen_msgid - Generate a unique Message ID
+ * gen_msgid - Generate a random Message ID
  * @retval ptr Message ID
+ *
+ * The length of the message id is chosen such that it is maximal and fits in
+ * the recommended 78 character line length for the headers Message-ID:,
+ * References:, and In-Reply-To:, this leads to 62 available characters
+ * (excluding `@` and `>`).  Since we choose from 32 letters, we have 32^62
+ * = 2^310 different message ids.
+ *
+ * Examples:
+ * ```
+ * Message-ID: <12345678901111111111222222222233333333334444444444@123456789011>
+ * In-Reply-To: <12345678901111111111222222222233333333334444444444@123456789011>
+ * References: <12345678901111111111222222222233333333334444444444@123456789011>
+ * ```
+ *
+ * The distribution of the characters to left-of-@ and right-of-@ was arbitrary.
+ * The choice was made to put more into the left-id and shorten the right-id to
+ * slightly mimic a common length domain name.
  *
  * @note The caller should free the string
  */
-static char *gen_msgid(struct ConfigSubset *sub)
+static char *gen_msgid(void)
 {
-  char buf[128];
-  char rndid[MUTT_RANDTAG_LEN + 1];
+  const int ID_LEFT_LEN = 50;
+  const int ID_RIGHT_LEN = 12;
+  char rnd_id_left[ID_LEFT_LEN + 1];
+  char rnd_id_right[ID_RIGHT_LEN + 1];
+  char buf[128] = { 0 };
 
-  mutt_rand_base32(rndid, sizeof(rndid) - 1);
-  rndid[MUTT_RANDTAG_LEN] = 0;
-  const char *fqdn = mutt_fqdn(false, sub);
-  if (!fqdn)
-    fqdn = NONULL(ShortHostname);
+  mutt_rand_base32(rnd_id_left, sizeof(rnd_id_left) - 1);
+  mutt_rand_base32(rnd_id_right, sizeof(rnd_id_right) - 1);
+  rnd_id_left[ID_LEFT_LEN] = 0;
+  rnd_id_right[ID_RIGHT_LEN] = 0;
 
-  struct tm tm = mutt_date_gmtime(MUTT_DATE_NOW);
-  snprintf(buf, sizeof(buf), "<%d%02d%02d%02d%02d%02d.%s@%s>", tm.tm_year + 1900,
-           tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, rndid, fqdn);
+  snprintf(buf, sizeof(buf), "<%s@%s>", rnd_id_left, rnd_id_right);
   return mutt_str_dup(buf);
 }
 
@@ -1255,7 +780,7 @@ void mutt_prepare_envelope(struct Envelope *env, bool final, struct ConfigSubset
       mutt_addrlist_append(&env->to, to);
       mutt_addrlist_append(&env->to, mutt_addr_new());
 
-      char buf[1024];
+      char buf[1024] = { 0 };
       buf[0] = '\0';
       mutt_addr_cat(buf, sizeof(buf), "undisclosed-recipients", AddressSpecials);
 
@@ -1265,7 +790,7 @@ void mutt_prepare_envelope(struct Envelope *env, bool final, struct ConfigSubset
     mutt_set_followup_to(env, sub);
 
     if (!env->message_id)
-      env->message_id = gen_msgid(sub);
+      env->message_id = gen_msgid();
   }
 
   /* Take care of 8-bit => 7-bit conversion. */
@@ -1338,11 +863,10 @@ static int bounce_message(FILE *fp, struct Mailbox *m, struct Email *e,
     fprintf(fp_tmp, "Resent-Date: %s\n", mutt_buffer_string(date));
     mutt_buffer_pool_release(&date);
 
-    char *msgid_str = gen_msgid(sub);
+    char *msgid_str = gen_msgid();
     fprintf(fp_tmp, "Resent-Message-ID: %s\n", msgid_str);
     FREE(&msgid_str);
-    fputs("Resent-To: ", fp_tmp);
-    mutt_addrlist_write_file(to, fp_tmp, 11, false);
+    mutt_addrlist_write_file(to, fp_tmp, "Resent-To");
     mutt_copy_header(fp, e, fp_tmp, chflags, NULL, 0);
     fputc('\n', fp_tmp);
     mutt_file_copy_bytes(fp, fp_tmp, e->body->length);
@@ -1388,10 +912,8 @@ int mutt_bounce_message(FILE *fp, struct Mailbox *m, struct Email *e,
     return -1;
 
   const char *fqdn = mutt_fqdn(true, sub);
-  char resent_from[256];
   char *err = NULL;
 
-  resent_from[0] = '\0';
   struct Address *from = mutt_default_from(sub);
   struct AddressList from_list = TAILQ_HEAD_INITIALIZER(from_list);
   mutt_addrlist_append(&from_list, from);
@@ -1417,7 +939,8 @@ int mutt_bounce_message(FILE *fp, struct Mailbox *m, struct Email *e,
     mutt_addrlist_clear(&from_list);
     return -1;
   }
-  mutt_addrlist_write(&from_list, resent_from, sizeof(resent_from), false);
+  struct Buffer *resent_from = mutt_buffer_pool_get();
+  mutt_addrlist_write(&from_list, resent_from, false);
 
 #ifdef USE_NNTP
   OptNewsSend = false;
@@ -1429,10 +952,11 @@ int mutt_bounce_message(FILE *fp, struct Mailbox *m, struct Email *e,
   struct AddressList resent_to = TAILQ_HEAD_INITIALIZER(resent_to);
   mutt_addrlist_copy(&resent_to, to, false);
   rfc2047_encode_addrlist(&resent_to, "Resent-To");
-  int rc = bounce_message(fp, m, e, &resent_to, resent_from, &from_list, sub);
+  int rc = bounce_message(fp, m, e, &resent_to, mutt_buffer_string(resent_from),
+                          &from_list, sub);
   mutt_addrlist_clear(&resent_to);
   mutt_addrlist_clear(&from_list);
-
+  mutt_buffer_pool_release(&resent_from);
   return rc;
 }
 
@@ -1472,8 +996,8 @@ static void set_noconv_flags(struct Body *b, bool flag)
 int mutt_write_multiple_fcc(const char *path, struct Email *e, const char *msgid, bool post,
                             char *fcc, char **finalpath, struct ConfigSubset *sub)
 {
-  char fcc_tok[PATH_MAX];
-  char fcc_expanded[PATH_MAX];
+  char fcc_tok[PATH_MAX] = { 0 };
+  char fcc_expanded[PATH_MAX] = { 0 };
 
   mutt_str_copy(fcc_tok, path, sizeof(fcc_tok));
 
@@ -1588,12 +1112,12 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
    * point in time.  This will allow the message to be marked as replied if
    * the same mailbox is still open.  */
   if (post && msgid)
-    fprintf(msg->fp, "X-Mutt-References: %s\n", msgid);
+    fprintf(msg->fp, "Mutt-References: %s\n", msgid);
 
   /* (postponement) save the Fcc: using a special X-Mutt- header so that
    * it can be picked up when the message is recalled */
   if (post && fcc)
-    fprintf(msg->fp, "X-Mutt-Fcc: %s\n", fcc);
+    fprintf(msg->fp, "Mutt-Fcc: %s\n", fcc);
 
   if ((m_fcc->type == MUTT_MMDF) || (m_fcc->type == MUTT_MBOX))
     fprintf(msg->fp, "Status: RO\n");
@@ -1601,7 +1125,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
   /* (postponement) if the mail is to be signed or encrypted, save this info */
   if (((WithCrypto & APPLICATION_PGP) != 0) && post && (e->security & APPLICATION_PGP))
   {
-    fputs("X-Mutt-PGP: ", msg->fp);
+    fputs("Mutt-PGP: ", msg->fp);
     if (e->security & SEC_ENCRYPT)
       fputc('E', msg->fp);
     if (e->security & SEC_OPPENCRYPT)
@@ -1628,7 +1152,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
   /* (postponement) if the mail is to be signed or encrypted, save this info */
   if (((WithCrypto & APPLICATION_SMIME) != 0) && post && (e->security & APPLICATION_SMIME))
   {
-    fputs("X-Mutt-SMIME: ", msg->fp);
+    fputs("Mutt-SMIME: ", msg->fp);
     if (e->security & SEC_ENCRYPT)
     {
       fputc('E', msg->fp);
@@ -1658,7 +1182,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
 
   if (post && !STAILQ_EMPTY(&e->chain))
   {
-    fputs("X-Mutt-Mix:", msg->fp);
+    fputs("Mutt-Mix:", msg->fp);
     struct ListNode *p = NULL;
     STAILQ_FOREACH(p, &e->chain, entries)
     {
@@ -1695,7 +1219,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
 
     /* count the number of lines */
     int lines = 0;
-    char line_buf[1024];
+    char line_buf[1024] = { 0 };
     rewind(fp_tmp);
     while (fgets(line_buf, sizeof(line_buf), fp_tmp))
       lines++;

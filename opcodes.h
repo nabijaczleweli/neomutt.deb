@@ -137,7 +137,8 @@ const char *opcodes_get_name       (int op);
   _fmt(OP_EDITOR_HISTORY_UP,                  N_("scroll up through the history list")) \
   _fmt(OP_EDITOR_KILL_EOL,                    N_("delete chars from cursor to end of line")) \
   _fmt(OP_EDITOR_KILL_EOW,                    N_("delete chars from the cursor to the end of the word")) \
-  _fmt(OP_EDITOR_KILL_LINE,                   N_("delete all chars on the line")) \
+  _fmt(OP_EDITOR_KILL_LINE,                   N_("delete chars from cursor to beginning the line")) \
+  _fmt(OP_EDITOR_KILL_WHOLE_LINE,             N_("delete all chars on the line")) \
   _fmt(OP_EDITOR_KILL_WORD,                   N_("delete the word in front of the cursor")) \
   _fmt(OP_EDITOR_MAILBOX_CYCLE,               N_("cycle among incoming mailboxes")) \
   _fmt(OP_EDITOR_QUOTE_CHAR,                  N_("quote the next typed key")) \
@@ -192,7 +193,7 @@ const char *opcodes_get_name       (int op);
   _fmt(OP_MAIN_CLEAR_FLAG,                    N_("clear a status flag from a message")) \
   _fmt(OP_MAIN_COLLAPSE_ALL,                  N_("collapse/uncollapse all threads")) \
   _fmt(OP_MAIN_COLLAPSE_THREAD,               N_("collapse/uncollapse current thread")) \
-  _fmt(OP_MAIN_DELETE_PATTERN,                N_("delete messages matching a pattern")) \
+  _fmt(OP_MAIN_DELETE_PATTERN,                N_("delete non-hidden messages matching a pattern")) \
   _fmt(OP_MAIN_FETCH_MAIL,                    N_("retrieve mail from POP server")) \
   _fmt(OP_MAIN_IMAP_FETCH,                    N_("force retrieval of mail from IMAP server")) \
   _fmt(OP_MAIN_IMAP_LOGOUT_ALL,               N_("logout from all IMAP servers")) \
@@ -221,9 +222,9 @@ const char *opcodes_get_name       (int op);
   _fmt(OP_MAIN_SET_FLAG,                      N_("set a status flag on a message")) \
   _fmt(OP_MAIN_SHOW_LIMIT,                    N_("show currently active limit pattern")) \
   _fmt(OP_MAIN_SYNC_FOLDER,                   N_("save changes to mailbox")) \
-  _fmt(OP_MAIN_TAG_PATTERN,                   N_("tag messages matching a pattern")) \
-  _fmt(OP_MAIN_UNDELETE_PATTERN,              N_("undelete messages matching a pattern")) \
-  _fmt(OP_MAIN_UNTAG_PATTERN,                 N_("untag messages matching a pattern")) \
+  _fmt(OP_MAIN_TAG_PATTERN,                   N_("tag non-hidden messages matching a pattern")) \
+  _fmt(OP_MAIN_UNDELETE_PATTERN,              N_("undelete non-hidden messages matching a pattern")) \
+  _fmt(OP_MAIN_UNTAG_PATTERN,                 N_("untag non-hidden messages matching a pattern")) \
   _fmt(OP_MARK_MSG,                           N_("create a hotkey macro for the current message")) \
   _fmt(OP_MIDDLE_PAGE,                        N_("move to the middle of the page")) \
   _fmt(OP_NEXT_ENTRY,                         N_("move to the next entry")) \

@@ -46,17 +46,15 @@
 #include "browser/lib.h"
 #include "color/lib.h"
 #include "enter/lib.h"
-#include "menu/lib.h"
 #include "question/lib.h"
+#include "globals.h"
 #include "keymap.h"
 #include "msgwin.h"
 #include "mutt_curses.h"
-#include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "mutt_thread.h"
 #include "mutt_window.h"
 #include "opcodes.h"
-#include "options.h"
 #include "protos.h"
 #ifdef HAVE_ISWBLANK
 #include <wctype.h>
@@ -68,34 +66,61 @@
 /* not possible to unget more than one char under some curses libs, so roll our
  * own input buffering routines.  */
 
+ARRAY_HEAD(KeyEventArray, struct KeyEvent);
+
 /* These are used for macros and exec/push commands.
  * They can be temporarily ignored by setting OptIgnoreMacroEvents */
-static size_t MacroBufferCount = 0;
-static size_t MacroBufferLen = 0;
-static struct KeyEvent *MacroEvents = NULL;
+static struct KeyEventArray MacroEvents = ARRAY_HEAD_INITIALIZER;
 
 /* These are used in all other "normal" situations, and are not
  * ignored when setting OptIgnoreMacroEvents */
-static size_t UngetCount = 0;
-static size_t UngetLen = 0;
-static struct KeyEvent *UngetKeyEvents = NULL;
+static struct KeyEventArray UngetKeyEvents = ARRAY_HEAD_INITIALIZER;
+
+/**
+ * array_pop - Remove an event from the array
+ * @param a Array
+ * @retval ptr Event
+ */
+static struct KeyEvent *array_pop(struct KeyEventArray *a)
+{
+  if (ARRAY_EMPTY(a))
+  {
+    return NULL;
+  }
+
+  struct KeyEvent *event = ARRAY_LAST(a);
+  ARRAY_SHRINK(a, 1);
+  return event;
+}
+
+/**
+ * array_add - Add an event to the end of the array
+ * @param a  Array
+ * @param ch Character
+ * @param op Operation, e.g. OP_DELETE
+ */
+static void array_add(struct KeyEventArray *a, int ch, int op)
+{
+  struct KeyEvent event = { .ch = ch, .op = op };
+  ARRAY_ADD(a, event);
+}
+
+/**
+ * array_to_endcond - Clear the array until an OP_END_COND
+ * @param a Array
+ */
+static void array_to_endcond(struct KeyEventArray *a)
+{
+  while (!ARRAY_EMPTY(a))
+  {
+    if (array_pop(a)->op == OP_END_COND)
+    {
+      return;
+    }
+  }
+}
 
 int MuttGetchTimeout = -1;
-
-/// Help Bar for the Command Line Editor
-static const struct Mapping EditorHelp[] = {
-  // clang-format off
-  { N_("Complete"),    OP_EDITOR_COMPLETE },
-  { N_("Hist Up"),     OP_EDITOR_HISTORY_UP },
-  { N_("Hist Down"),   OP_EDITOR_HISTORY_DOWN },
-  { N_("Hist Search"), OP_EDITOR_HISTORY_SEARCH },
-  { N_("Begin Line"),  OP_EDITOR_BOL },
-  { N_("End Line"),    OP_EDITOR_EOL },
-  { N_("Kill Line"),   OP_EDITOR_KILL_LINE },
-  { N_("Kill Word"),   OP_EDITOR_KILL_WORD },
-  { NULL, 0 },
-  // clang-format on
-};
 
 /**
  * mutt_beep - Irritate the user
@@ -118,7 +143,7 @@ void mutt_refresh(void)
     return;
 
   /* don't refresh in the middle of macros unless necessary */
-  if (MacroBufferCount && !OptForceRefresh && !OptIgnoreMacroEvents)
+  if (!ARRAY_EMPTY(&MacroEvents) && !OptForceRefresh && !OptIgnoreMacroEvents)
     return;
 
   /* else */
@@ -145,18 +170,35 @@ void mutt_need_hard_redraw(void)
 }
 
 /**
- * mutt_getch_timeout - Set the getch() timeout
+ * set_timeout - Set the getch() timeout
  * @param delay Timeout delay in ms
+ * delay is just like for timeout() or poll(): the number of milliseconds
+ * mutt_getch() should block for input.
+ * * delay == 0 means mutt_getch() is non-blocking.
+ * * delay < 0 means mutt_getch is blocking.
+ */
+static void set_timeout(int delay)
+{
+  MuttGetchTimeout = delay;
+  timeout(delay);
+}
+
+/**
+ * mutt_getch_timeout - Get an event with a timeout
+ * @param delay Timeout delay in ms
+ * @retval Same as mutt_get_ch
  *
  * delay is just like for timeout() or poll(): the number of milliseconds
  * mutt_getch() should block for input.
  * * delay == 0 means mutt_getch() is non-blocking.
  * * delay < 0 means mutt_getch is blocking.
  */
-void mutt_getch_timeout(int delay)
+struct KeyEvent mutt_getch_timeout(int delay)
 {
-  MuttGetchTimeout = delay;
-  timeout(delay);
+  set_timeout(delay);
+  struct KeyEvent event = mutt_getch();
+  set_timeout(-1);
+  return event;
 }
 
 #ifdef USE_INOTIFY
@@ -199,15 +241,19 @@ static int mutt_monitor_getch(void)
 struct KeyEvent mutt_getch(void)
 {
   int ch;
-  struct KeyEvent err = { OP_ABORT, OP_NULL };
-  struct KeyEvent timeout = { OP_TIMEOUT, OP_NULL };
-  struct KeyEvent ret = { OP_NULL, OP_NULL };
+  const struct KeyEvent err = { 0, OP_ABORT };
+  const struct KeyEvent timeout = { 0, OP_TIMEOUT };
 
-  if (UngetCount)
-    return UngetKeyEvents[--UngetCount];
+  struct KeyEvent *key = array_pop(&UngetKeyEvents);
+  if (key)
+  {
+    return *key;
+  }
 
-  if (!OptIgnoreMacroEvents && MacroBufferCount)
-    return MacroEvents[--MacroBufferCount];
+  if (!OptIgnoreMacroEvents && (key = array_pop(&MacroEvents)))
+  {
+    return *key;
+  }
 
   SigInt = false;
 
@@ -247,110 +293,14 @@ struct KeyEvent mutt_getch(void)
   {
     /* send ALT-x as ESC-x */
     ch &= ~0x80;
-    mutt_unget_event(ch, OP_NULL);
-    ret.ch = '\033'; // Escape
-    ret.op = OP_NULL;
-    return ret;
+    mutt_unget_ch(ch);
+    return (struct KeyEvent){ .ch = '\033' /* Escape */, .op = OP_NULL };
   }
 
-  ret.ch = ch;
-  ret.op = OP_NULL;
-  return (ch == AbortKey) ? err : ret;
-}
+  if (ch == AbortKey)
+    return err;
 
-/**
- * mutt_buffer_get_field - Ask the user for a string
- * @param[in]  field    Prompt
- * @param[in]  buf      Buffer for the result
- * @param[in]  complete Flags, see #CompletionFlags
- * @param[in]  multiple Allow multiple selections
- * @param[in]  m        Mailbox
- * @param[out] files    List of files selected
- * @param[out] numfiles Number of files selected
- * @retval 1  Redraw the screen and call the function again
- * @retval 0  Selection made
- * @retval -1 Aborted
- */
-int mutt_buffer_get_field(const char *field, struct Buffer *buf, CompletionFlags complete,
-                          bool multiple, struct Mailbox *m, char ***files, int *numfiles)
-{
-  struct MuttWindow *win = msgwin_get_window();
-  if (!win)
-    return -1;
-
-  int ret;
-  int col;
-
-  struct EnterState *es = mutt_enter_state_new();
-
-  const struct Mapping *old_help = win->help_data;
-  int old_menu = win->help_menu;
-
-  win->help_data = EditorHelp;
-  win->help_menu = MENU_EDITOR;
-  struct MuttWindow *old_focus = window_set_focus(win);
-
-  enum MuttCursorState cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
-  window_redraw(win);
-  do
-  {
-    if (SigWinch)
-    {
-      SigWinch = false;
-      mutt_resize_screen();
-      clearok(stdscr, true);
-      window_redraw(NULL);
-    }
-    mutt_window_clearline(win, 0);
-    mutt_curses_set_normal_backed_color_by_id(MT_COLOR_PROMPT);
-    mutt_window_addstr(win, field);
-    mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
-    mutt_refresh();
-    mutt_window_get_coords(win, &col, NULL);
-    ret = mutt_enter_string_full(buf->data, buf->dsize, col, complete, multiple,
-                                 m, files, numfiles, es);
-  } while (ret == 1);
-  mutt_curses_set_cursor(cursor);
-
-  win->help_data = old_help;
-  win->help_menu = old_menu;
-  mutt_window_move(win, 0, 0);
-  mutt_window_clearline(win, 0);
-  window_set_focus(old_focus);
-
-  if (ret == 0)
-    mutt_buffer_fix_dptr(buf);
-  else
-    mutt_buffer_reset(buf);
-
-  mutt_enter_state_free(&es);
-
-  return ret;
-}
-
-/**
- * mutt_get_field_unbuffered - Ask the user for a string (ignoring macro buffer)
- * @param msg    Prompt
- * @param buf    Buffer for the result
- * @param flags  Flags, see #CompletionFlags
- * @retval 1  Redraw the screen and call the function again
- * @retval 0  Selection made
- * @retval -1 Aborted
- */
-int mutt_get_field_unbuffered(const char *msg, struct Buffer *buf, CompletionFlags flags)
-{
-  bool reset_ignoremacro = false;
-
-  if (!OptIgnoreMacroEvents)
-  {
-    OptIgnoreMacroEvents = true;
-    reset_ignoremacro = true;
-  }
-  int rc = mutt_buffer_get_field(msg, buf, flags, false, NULL, NULL, NULL);
-  if (reset_ignoremacro)
-    OptIgnoreMacroEvents = false;
-
-  return rc;
+  return (struct KeyEvent){ .ch = ch, .op = OP_NULL };
 }
 
 /**
@@ -387,10 +337,10 @@ void mutt_query_exit(void)
   enum MuttCursorState cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
   const short c_timeout = cs_subset_number(NeoMutt->sub, "timeout");
   if (c_timeout)
-    mutt_getch_timeout(-1); /* restore blocking operation */
-  if (mutt_yesorno(_("Exit NeoMutt?"), MUTT_YES) == MUTT_YES)
+    set_timeout(-1); /* restore blocking operation */
+  if (mutt_yesorno(_("Exit NeoMutt without saving?"), MUTT_YES) == MUTT_YES)
   {
-    mutt_exit(1);
+    mutt_exit(0); /* This call never returns */
   }
   mutt_clear_error();
   mutt_curses_set_cursor(cursor);
@@ -466,7 +416,7 @@ int mutt_any_key_to_continue(const char *s)
   term.c_cc[VTIME] = 0; // Don't wait
   tcsetattr(fd, TCSANOW, &term);
 
-  char buf[64];
+  char buf[64] = { 0 };
   while (read(fd, buf, sizeof(buf)) > 0)
     ; // Mop up any remaining chars
 
@@ -515,7 +465,7 @@ int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
   do
   {
     ch = mutt_getch();
-  } while (ch.ch == OP_TIMEOUT);
+  } while (ch.op == OP_TIMEOUT);
   mutt_curses_set_cursor(cursor);
 
   mutt_window_move(win, 0, 0);
@@ -545,9 +495,9 @@ int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
 
     sprintf(pc, "%s: ", prompt);
     if (ch.op == OP_NULL)
-      mutt_unget_event(ch.ch, OP_NULL);
+      mutt_unget_ch(ch.ch);
     else
-      mutt_unget_event(0, ch.op);
+      mutt_unget_op(ch.op);
 
     mutt_buffer_alloc(fname, 1024);
     if (mutt_buffer_get_field(pc, fname, (mailbox ? MUTT_COMP_FILE_MBOX : MUTT_COMP_FILE) | MUTT_COMP_CLEAR,
@@ -562,23 +512,25 @@ int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
 }
 
 /**
- * mutt_unget_event - Return a keystroke to the input buffer
+ * mutt_unget_ch - Return a keystroke to the input buffer
  * @param ch Key press
+ *
+ * This puts events into the `UngetKeyEvents` buffer
+ */
+void mutt_unget_ch(int ch)
+{
+  array_add(&UngetKeyEvents, ch, OP_NULL);
+}
+
+/**
+ * mutt_unget_op - Return an operation to the input buffer
  * @param op Operation, e.g. OP_DELETE
  *
  * This puts events into the `UngetKeyEvents` buffer
  */
-void mutt_unget_event(int ch, int op)
+void mutt_unget_op(int op)
 {
-  struct KeyEvent tmp = { OP_NULL, OP_NULL };
-
-  tmp.ch = ch;
-  tmp.op = op;
-
-  if (UngetCount >= UngetLen)
-    mutt_mem_realloc(&UngetKeyEvents, (UngetLen += 16) * sizeof(struct KeyEvent));
-
-  UngetKeyEvents[UngetCount++] = tmp;
+  array_add(&UngetKeyEvents, 0, op);
 }
 
 /**
@@ -593,7 +545,7 @@ void mutt_unget_string(const char *s)
 
   while (p >= s)
   {
-    mutt_unget_event((unsigned char) *p--, 0);
+    mutt_unget_ch((unsigned char) *p--);
   }
 }
 
@@ -607,15 +559,7 @@ void mutt_unget_string(const char *s)
  */
 void mutt_push_macro_event(int ch, int op)
 {
-  struct KeyEvent tmp = { OP_NULL, OP_NULL };
-
-  tmp.ch = ch;
-  tmp.op = op;
-
-  if (MacroBufferCount >= MacroBufferLen)
-    mutt_mem_realloc(&MacroEvents, (MacroBufferLen += 128) * sizeof(struct KeyEvent));
-
-  MacroEvents[MacroBufferCount++] = tmp;
+  array_add(&MacroEvents, ch, op);
 }
 
 /**
@@ -626,12 +570,7 @@ void mutt_push_macro_event(int ch, int op)
  */
 void mutt_flush_macro_to_endcond(void)
 {
-  UngetCount = 0;
-  while (MacroBufferCount > 0)
-  {
-    if (MacroEvents[--MacroBufferCount].op == OP_END_COND)
-      return;
-  }
+  array_to_endcond(&MacroEvents);
 }
 
 /**
@@ -643,11 +582,7 @@ void mutt_flush_macro_to_endcond(void)
  */
 void mutt_flush_unget_to_endcond(void)
 {
-  while (UngetCount > 0)
-  {
-    if (UngetKeyEvents[--UngetCount].op == OP_END_COND)
-      return;
-  }
+  array_to_endcond(&UngetKeyEvents);
 }
 
 /**
@@ -655,8 +590,8 @@ void mutt_flush_unget_to_endcond(void)
  */
 void mutt_flushinp(void)
 {
-  UngetCount = 0;
-  MacroBufferCount = 0;
+  ARRAY_SHRINK(&UngetKeyEvents, ARRAY_SIZE(&UngetKeyEvents));
+  ARRAY_SHRINK(&MacroEvents, ARRAY_SIZE(&MacroEvents));
   flushinp();
 }
 
@@ -706,8 +641,8 @@ void mutt_simple_format(char *buf, size_t buflen, int min_width, int max_width,
 {
   wchar_t wc = 0;
   int w;
-  size_t k, k2;
-  char scratch[MB_LEN_MAX];
+  size_t k;
+  char scratch[MB_LEN_MAX] = { 0 };
   mbstate_t mbstate1 = { 0 };
   mbstate_t mbstate2 = { 0 };
   bool escaped = false;
@@ -751,8 +686,12 @@ void mutt_simple_format(char *buf, size_t buflen, int min_width, int max_width,
     }
     if (w >= 0)
     {
-      if ((w > max_width) || ((k2 = wcrtomb(scratch, wc, &mbstate2)) > buflen))
+      if (w > max_width)
         continue;
+      size_t k2 = wcrtomb(scratch, wc, &mbstate2);
+      if ((k2 == (size_t) -1) || (k2 > buflen))
+        continue;
+
       min_width -= w;
       max_width -= w;
       strncpy(p, scratch, k2);

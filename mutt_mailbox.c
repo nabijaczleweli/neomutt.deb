@@ -35,9 +35,9 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt_mailbox.h"
+#include "postpone/lib.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "protos.h"
 
 static time_t MailboxTime = 0; ///< last time we started checking for mail
 static time_t MailboxStatsTime = 0; ///< last time we check performed mail_check_stats
@@ -173,7 +173,7 @@ int mutt_mailbox_check(struct Mailbox *m_cur, CheckStatsFlags flags)
   const bool c_mail_check_stats = cs_subset_bool(NeoMutt->sub, "mail_check_stats");
   const short c_mail_check_stats_interval = cs_subset_number(NeoMutt->sub, "mail_check_stats_interval");
 
-  t = mutt_date_epoch();
+  t = mutt_date_now();
   if ((flags == MUTT_MAILBOX_CHECK_NO_FLAGS) && (t - MailboxTime < c_mail_check))
     return MailboxCount;
 
@@ -242,7 +242,7 @@ bool mutt_mailbox_notify(struct Mailbox *m_cur)
  */
 bool mutt_mailbox_list(void)
 {
-  char mailboxlist[512];
+  char mailboxlist[512] = { 0 };
   size_t pos = 0;
   int first = 1;
 
@@ -318,7 +318,7 @@ void mutt_mailbox_set_notified(struct Mailbox *m)
 #ifdef HAVE_CLOCK_GETTIME
   clock_gettime(CLOCK_REALTIME, &m->last_visited);
 #else
-  m->last_visited.tv_sec = mutt_date_epoch();
+  m->last_visited.tv_sec = mutt_date_now();
   m->last_visited.tv_nsec = 0;
 #endif
 }
@@ -449,7 +449,7 @@ void mutt_mailbox_cleanup(const char *path, struct stat *st)
       utimensat(AT_FDCWD, buf, ts, 0);
 #else
       ut.actime = st->st_atime;
-      ut.modtime = mutt_date_epoch();
+      ut.modtime = mutt_date_now();
       utime(path, &ut);
 #endif
     }

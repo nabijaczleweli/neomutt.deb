@@ -25,20 +25,22 @@
  *
  * Network connections and their encryption
  *
- * | File                | Description                  |
- * | :------------------ | :--------------------------- |
- * | conn/config.c       | @subpage conn_config         |
- * | conn/connaccount.c  | @subpage conn_account        |
- * | conn/getdomain.c    | @subpage conn_getdomain      |
- * | conn/gnutls.c       | @subpage conn_gnutls         |
- * | conn/gui.c          | @subpage conn_dlg_verifycert |
- * | conn/openssl.c      | @subpage conn_openssl        |
- * | conn/raw.c          | @subpage conn_raw            |
- * | conn/sasl.c         | @subpage conn_sasl           |
- * | conn/sasl_plain.c   | @subpage conn_sasl_plain     |
- * | conn/socket.c       | @subpage conn_socket         |
- * | conn/tunnel.c       | @subpage conn_tunnel         |
- * | conn/zstrm.c        | @subpage conn_zstrm          |
+ * | File                  | Description                   |
+ * | :-------------------- | :---------------------------- |
+ * | conn/accountcmd.c     | @subpage conn_account_ext_cmd |
+ * | conn/config.c         | @subpage conn_config          |
+ * | conn/connaccount.c    | @subpage conn_account         |
+ * | conn/dlg_verifycert.c | @subpage conn_dlg_verifycert  |
+ * | conn/getdomain.c      | @subpage conn_getdomain       |
+ * | conn/gnutls.c         | @subpage conn_gnutls          |
+ * | conn/gsasl.c          | @subpage conn_gsasl           |
+ * | conn/openssl.c        | @subpage conn_openssl         |
+ * | conn/raw.c            | @subpage conn_raw             |
+ * | conn/sasl.c           | @subpage conn_sasl            |
+ * | conn/sasl_plain.c     | @subpage conn_sasl_plain      |
+ * | conn/socket.c         | @subpage conn_socket          |
+ * | conn/tunnel.c         | @subpage conn_tunnel          |
+ * | conn/zstrm.c          | @subpage conn_zstrm           |
  */
 
 #ifndef MUTT_CONN_LIB_H
@@ -50,7 +52,10 @@
 #include "connection.h"
 #include "sasl_plain.h"
 #include "socket.h"
-#ifdef USE_SASL
+#ifdef USE_SASL_GNU
+#include "gsasl2.h"
+#endif
+#ifdef USE_SASL_CYRUS
 #include "sasl.h"
 #endif
 #ifdef USE_ZLIB

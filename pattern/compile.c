@@ -42,10 +42,9 @@
 #include "config/lib.h"
 #include "email/lib.h" // IWYU pragma: keep
 #include "core/lib.h"
-#include "mutt.h"
 #include "lib.h"
 #include "menu/lib.h"
-#include "init.h"
+#include "parse/lib.h"
 #include "mview.h"
 
 // clang-format off
@@ -83,7 +82,7 @@ static bool eat_regex(struct Pattern *pat, PatternCompFlags flags,
   struct Buffer *buf = mutt_buffer_pool_get();
   bool rc = false;
   char *pexpr = s->dptr;
-  if ((mutt_extract_token(buf, s, MUTT_TOKEN_PATTERN | MUTT_TOKEN_COMMENT) != 0) || !buf->data)
+  if ((parse_extract_token(buf, s, TOKEN_PATTERN | TOKEN_COMMENT) != 0) || !buf->data)
   {
     mutt_buffer_printf(err, _("Error in expression: %s"), pexpr);
     goto out;
@@ -113,9 +112,9 @@ static bool eat_regex(struct Pattern *pat, PatternCompFlags flags,
     int rc2 = REG_COMP(pat->p.regex, buf->data, REG_NEWLINE | REG_NOSUB | case_flags);
     if (rc2 != 0)
     {
-      char errmsg[256];
+      char errmsg[256] = { 0 };
       regerror(rc2, pat->p.regex, errmsg, sizeof(errmsg));
-      mutt_buffer_add_printf(err, "'%s': %s", buf->data, errmsg);
+      mutt_buffer_printf(err, "'%s': %s", buf->data, errmsg);
       FREE(&pat->p.regex);
       goto out;
     }
@@ -169,7 +168,7 @@ static bool eat_query(struct Pattern *pat, PatternCompFlags flags,
   }
 
   char *pexpr = s->dptr;
-  if ((mutt_extract_token(tok_buf, s, MUTT_TOKEN_PATTERN | MUTT_TOKEN_COMMENT) != 0) ||
+  if ((parse_extract_token(tok_buf, s, TOKEN_PATTERN | TOKEN_COMMENT) != 0) ||
       !tok_buf->data)
   {
     mutt_buffer_printf(err, _("Error in expression: %s"), pexpr);
@@ -290,7 +289,7 @@ static const char *get_offset(struct tm *tm, const char *s, int sign)
 static const char *get_date(const char *s, struct tm *t, struct Buffer *err)
 {
   char *p = NULL;
-  struct tm tm = mutt_date_localtime(MUTT_DATE_NOW);
+  struct tm tm = mutt_date_localtime(mutt_date_now());
   bool iso8601 = true;
 
   for (int v = 0; v < 8; v++)
@@ -317,12 +316,12 @@ static const char *get_date(const char *s, struct tm *t, struct Buffer *err)
 
     if ((t->tm_mday < 1) || (t->tm_mday > 31))
     {
-      snprintf(err->data, err->dsize, _("Invalid day of month: %s"), s);
+      mutt_buffer_printf(err, _("Invalid day of month: %s"), s);
       return NULL;
     }
     if ((t->tm_mon < 0) || (t->tm_mon > 11))
     {
-      snprintf(err->data, err->dsize, _("Invalid month: %s"), s);
+      mutt_buffer_printf(err, _("Invalid month: %s"), s);
       return NULL;
     }
 
@@ -527,12 +526,12 @@ bool eval_date_minmax(struct Pattern *pat, const char *s, struct Buffer *err)
 
     if (s[0] == '<')
     {
-      min = mutt_date_localtime(MUTT_DATE_NOW);
+      min = mutt_date_localtime(mutt_date_now());
       tm = &min;
     }
     else
     {
-      max = mutt_date_localtime(MUTT_DATE_NOW);
+      max = mutt_date_localtime(mutt_date_now());
       tm = &max;
 
       if (s[0] == '=')
@@ -594,7 +593,7 @@ bool eval_date_minmax(struct Pattern *pat, const char *s, struct Buffer *err)
       if (!have_min)
       { /* save base minimum and set current date, e.g. for "-3d+1d" */
         memcpy(&base_min, &min, sizeof(base_min));
-        min = mutt_date_localtime(MUTT_DATE_NOW);
+        min = mutt_date_localtime(mutt_date_now());
         min.tm_hour = 0;
         min.tm_sec = 0;
         min.tm_min = 0;
@@ -737,7 +736,7 @@ static int report_regerror(int regerr, regex_t *preg, struct Buffer *err)
  * @retval true  Otherwise
  */
 static bool is_menu_available(struct Buffer *s, regmatch_t pmatch[], int kind,
-                              struct Buffer *err, struct Menu *menu)
+                              struct Buffer *err, const struct Menu *menu)
 {
   const char *context_req_chars[] = {
     [RANGE_K_REL] = ".0123456789",
@@ -850,7 +849,7 @@ static void order_range(struct Pattern *pat)
 {
   if (pat->min <= pat->max)
     return;
-  int num = pat->min;
+  long num = pat->min;
   pat->min = pat->max;
   pat->max = num;
 }
@@ -893,7 +892,7 @@ static int eat_range_by_regex(struct Pattern *pat, struct Buffer *s, int kind,
   /* Snarf the contents of the two sides of the range. */
   pat->min = scan_range_slot(s, pmatch, pspec->lgrp, RANGE_S_LEFT, kind, m, menu);
   pat->max = scan_range_slot(s, pmatch, pspec->rgrp, RANGE_S_RIGHT, kind, m, menu);
-  mutt_debug(LL_DEBUG1, "pat->min=%d pat->max=%d\n", pat->min, pat->max);
+  mutt_debug(LL_DEBUG1, "pat->min=%ld pat->max=%ld\n", pat->min, pat->max);
 
   /* Special case for a bare 0. */
   if ((kind == RANGE_K_BARE) && (pat->min == 0) && (pat->max == 0))
@@ -981,15 +980,15 @@ static bool eat_date(struct Pattern *pat, PatternCompFlags flags,
   bool rc = false;
 
   char *pexpr = s->dptr;
-  if (mutt_extract_token(tmp, s, MUTT_TOKEN_COMMENT | MUTT_TOKEN_PATTERN) != 0)
+  if (parse_extract_token(tmp, s, TOKEN_COMMENT | TOKEN_PATTERN) != 0)
   {
-    snprintf(err->data, err->dsize, _("Error in expression: %s"), pexpr);
+    mutt_buffer_printf(err, _("Error in expression: %s"), pexpr);
     goto out;
   }
 
   if (mutt_buffer_is_empty(tmp))
   {
-    snprintf(err->data, err->dsize, "%s", _("Empty expression"));
+    mutt_buffer_printf(err, "%s", _("Empty expression"));
     goto out;
   }
 

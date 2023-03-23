@@ -62,17 +62,17 @@ struct BodyCache
  */
 static int bcache_path(struct ConnAccount *account, const char *mailbox, struct BodyCache *bcache)
 {
-  char host[256];
+  char host[256] = { 0 };
   struct Url url = { 0 };
 
-  const char *const c_message_cachedir = cs_subset_path(NeoMutt->sub, "message_cachedir");
-  if (!account || !c_message_cachedir || !bcache)
+  const char *const c_message_cache_dir = cs_subset_path(NeoMutt->sub, "message_cache_dir");
+  if (!account || !c_message_cache_dir || !bcache)
     return -1;
 
   struct stat st = { 0 };
-  if (!((stat(c_message_cachedir, &st) == 0) && S_ISDIR(st.st_mode)))
+  if (!((stat(c_message_cache_dir, &st) == 0) && S_ISDIR(st.st_mode)))
   {
-    mutt_error(_("Cache disabled, $message_cachedir isn't a directory: %s"), c_message_cachedir);
+    mutt_error(_("Cache disabled, $message_cache_dir isn't a directory: %s"), c_message_cache_dir);
     return -1;
   }
 
@@ -91,7 +91,7 @@ static int bcache_path(struct ConnAccount *account, const char *mailbox, struct 
   struct Buffer *dst = mutt_buffer_pool_get();
   mutt_encode_path(path, NONULL(mailbox));
 
-  mutt_buffer_printf(dst, "%s/%s%s", c_message_cachedir, host, mutt_buffer_string(path));
+  mutt_buffer_printf(dst, "%s/%s%s", c_message_cache_dir, host, mutt_buffer_string(path));
   if (*(dst->dptr - 1) != '/')
     mutt_buffer_addch(dst, '/');
 
@@ -329,18 +329,18 @@ int mutt_bcache_exists(struct BodyCache *bcache, const char *id)
  */
 int mutt_bcache_list(struct BodyCache *bcache, bcache_list_t want_id, void *data)
 {
-  DIR *d = NULL;
+  DIR *dir = NULL;
   struct dirent *de = NULL;
   int rc = -1;
 
-  if (!bcache || !(d = opendir(bcache->path)))
+  if (!bcache || !(dir = mutt_file_opendir(bcache->path, MUTT_OPENDIR_NONE)))
     goto out;
 
   rc = 0;
 
   mutt_debug(LL_DEBUG3, "bcache: list: dir: '%s'\n", bcache->path);
 
-  while ((de = readdir(d)))
+  while ((de = readdir(dir)))
   {
     if (mutt_str_startswith(de->d_name, ".") || mutt_str_startswith(de->d_name, ".."))
     {
@@ -356,9 +356,9 @@ int mutt_bcache_list(struct BodyCache *bcache, bcache_list_t want_id, void *data
   }
 
 out:
-  if (d)
+  if (dir)
   {
-    if (closedir(d) < 0)
+    if (closedir(dir) < 0)
       rc = -1;
   }
   mutt_debug(LL_DEBUG3, "bcache: list: did %d entries\n", rc);

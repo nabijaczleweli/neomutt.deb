@@ -78,88 +78,6 @@ void dot_email(FILE *fp, struct Email *e, struct ListHead *links);
 void dot_envelope(FILE *fp, struct Envelope *env, struct ListHead *links);
 void dot_patternlist(FILE *fp, struct PatternList *pl, struct ListHead *links);
 
-const char *get_content_type(enum ContentType type)
-{
-  switch (type)
-  {
-    case TYPE_OTHER:
-      return "TYPE_OTHER";
-    case TYPE_AUDIO:
-      return "TYPE_AUDIO";
-    case TYPE_APPLICATION:
-      return "TYPE_APPLICATION";
-    case TYPE_IMAGE:
-      return "TYPE_IMAGE";
-    case TYPE_MESSAGE:
-      return "TYPE_MESSAGE";
-    case TYPE_MODEL:
-      return "TYPE_MODEL";
-    case TYPE_MULTIPART:
-      return "TYPE_MULTIPART";
-    case TYPE_TEXT:
-      return "TYPE_TEXT";
-    case TYPE_VIDEO:
-      return "TYPE_VIDEO";
-    case TYPE_ANY:
-      return "TYPE_ANY";
-    default:
-      return "UNKNOWN";
-  }
-}
-
-const char *get_content_encoding(enum ContentEncoding enc)
-{
-  switch (enc)
-  {
-    case ENC_OTHER:
-      return "ENC_OTHER";
-    case ENC_7BIT:
-      return "ENC_7BIT";
-    case ENC_8BIT:
-      return "ENC_8BIT";
-    case ENC_QUOTED_PRINTABLE:
-      return "ENC_QUOTED_PRINTABLE";
-    case ENC_BASE64:
-      return "ENC_BASE64";
-    case ENC_BINARY:
-      return "ENC_BINARY";
-    case ENC_UUENCODED:
-      return "ENC_UUENCODED";
-    default:
-      return "UNKNOWN";
-  }
-}
-
-const char *get_content_disposition(enum ContentDisposition disp)
-{
-  switch (disp)
-  {
-    case DISP_INLINE:
-      return "DISP_INLINE";
-    case DISP_ATTACH:
-      return "DISP_ATTACH";
-    case DISP_FORM_DATA:
-      return "DISP_FORM_DATA";
-    case DISP_NONE:
-      return "DISP_NONE";
-    default:
-      return "UNKNOWN";
-  }
-}
-
-void add_flag(struct Buffer *buf, bool is_set, const char *name)
-{
-  if (!buf || !name)
-    return;
-
-  if (is_set)
-  {
-    if (!mutt_buffer_is_empty(buf))
-      mutt_buffer_addch(buf, ',');
-    mutt_buffer_addstr(buf, name);
-  }
-}
-
 void dot_type_bool(FILE *fp, const char *name, bool val)
 {
   static const char *values[] = { "false", "true" };
@@ -1284,10 +1202,10 @@ void dot_addr_list(FILE *fp, const char *name, const struct AddressList *al,
   if (TAILQ_EMPTY(al))
     return;
 
-  char buf[1024] = { 0 };
-
-  mutt_addrlist_write(al, buf, sizeof(buf), true);
-  dot_type_string(fp, name, buf, false);
+  struct Buffer *buf = mutt_buffer_pool_get();
+  mutt_addrlist_write(al, buf, true);
+  dot_type_string(fp, name, mutt_buffer_string(buf), false);
+  mutt_buffer_pool_release(&buf);
 }
 
 void dot_envelope(FILE *fp, struct Envelope *env, struct ListHead *links)
@@ -1694,6 +1612,7 @@ const char *pattern_type_name(int type)
     // clang-format off
     { "address",         MUTT_PAT_ADDRESS },
     { "AND",             MUTT_PAT_AND },
+    { "bcc",             MUTT_PAT_BCC },
     { "body",            MUTT_PAT_BODY },
     { "broken",          MUTT_PAT_BROKEN },
     { "cc",              MUTT_PAT_CC },

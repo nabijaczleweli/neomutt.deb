@@ -29,7 +29,6 @@
  */
 
 #include "config.h"
-#include <locale.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -42,16 +41,16 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
-#include "gui/lib.h"
 #include "mutt.h"
 #include "pgpkey.h"
 #include "lib.h"
+#include "enter/lib.h"
 #include "send/lib.h"
 #include "crypt.h"
+#include "globals.h" // IWYU pragma: keep
 #include "gnupgparse.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "options.h"
 #include "pgpinvoke.h"
 #ifdef CRYPT_BACKEND_CLASSIC_PGP
 #include "pgp.h"
@@ -238,8 +237,8 @@ done:
 struct Body *pgp_class_make_key_attachment(void)
 {
   struct Body *att = NULL;
-  char buf[1024];
-  char tmp[256];
+  char buf[1024] = { 0 };
+  char tmp[256] = { 0 };
   struct stat st = { 0 };
   pid_t pid;
   OptPgpCheckTrust = false;

@@ -24,7 +24,8 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
-#include "mutt/lib.h"
+#include <stddef.h>
+#include <stdbool.h>
 #include "address/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
@@ -59,7 +60,7 @@ void test_mutt_addr_for_display(void)
     };
 
     NeoMutt = test_neomutt_create();
-    TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, 0));
+    TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, DT_NO_FLAGS));
 
     const char *expected = "bob@bobsdomain";
     const char *actual = mutt_addr_for_display(&addr);

@@ -76,7 +76,9 @@
  */
 static int simple_config_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_CONFIG)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventConfig *ev_c = nc->event_data;
@@ -98,9 +100,10 @@ static int simple_config_observer(struct NotifyCallback *nc)
  */
 static int simple_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
-
   if (nc->event_subtype != NT_WINDOW_DELETE)
     return 0;
 
@@ -132,7 +135,7 @@ struct MuttWindow *simple_dialog_new(enum MenuType mtype, enum WindowType wtype,
   dlg->help_menu = mtype;
   dlg->help_data = help_data;
 
-  struct MuttWindow *win_menu = menu_new_window(mtype, NeoMutt->sub);
+  struct MuttWindow *win_menu = menu_window_new(mtype, NeoMutt->sub);
   dlg->focus = win_menu;
   dlg->wdata = win_menu->wdata;
 

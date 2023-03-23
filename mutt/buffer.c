@@ -30,11 +30,17 @@
 #include "config.h"
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include "buffer.h"
+#include "exit.h"
+#include "logging.h"
 #include "memory.h"
+#include "message.h"
 #include "string2.h"
+
+static const int BufferStepSize = 128;
 
 /**
  * mutt_buffer_init - Initialise a new Buffer
@@ -101,8 +107,14 @@ size_t mutt_buffer_addstr_n(struct Buffer *buf, const char *s, size_t len)
   if (!buf || !s)
     return 0;
 
+  if (len > (SIZE_MAX - BufferStepSize))
+  {
+    mutt_error(_("Out of memory"));
+    mutt_exit(1);
+  }
+
   if (!buf->data || !buf->dptr || ((buf->dptr + len + 1) > (buf->data + buf->dsize)))
-    mutt_buffer_alloc(buf, buf->dsize + MAX(128, len + 1));
+    mutt_buffer_alloc(buf, buf->dsize + MAX(BufferStepSize, len + 1));
 
   memcpy(buf->dptr, s, len);
   buf->dptr += len;
@@ -123,8 +135,7 @@ static int buffer_printf(struct Buffer *buf, const char *fmt, va_list ap)
   if (!buf || !fmt)
     return 0; /* LCOV_EXCL_LINE */
 
-  if (!buf->data || !buf->dptr || (buf->dsize < 128))
-    mutt_buffer_alloc(buf, 128);
+  mutt_buffer_alloc(buf, 128);
 
   int doff = buf->dptr - buf->data;
   int blen = buf->dsize - doff;
@@ -135,11 +146,8 @@ static int buffer_printf(struct Buffer *buf, const char *fmt, va_list ap)
   int len = vsnprintf(buf->dptr, blen, fmt, ap);
   if (len >= blen)
   {
-    blen = ++len - blen;
-    if (blen < 128)
-      blen = 128;
-    mutt_buffer_alloc(buf, buf->dsize + blen);
-    len = vsnprintf(buf->dptr, len, fmt, ap_retry);
+    mutt_buffer_alloc(buf, buf->dsize + len - blen + 1);
+    len = vsnprintf(buf->dptr, len + 1, fmt, ap_retry);
   }
   if (len > 0)
     buf->dptr += len;
@@ -245,6 +253,44 @@ size_t mutt_buffer_addch(struct Buffer *buf, char c)
 }
 
 /**
+ * mutt_buffer_insert - Add a string in the middle of a buffer
+ * @param buf    Buffer
+ * @param offset Position for the insertion
+ * @param s      String to insert
+ * @retval num Characters written
+ * @retval -1  Error
+ */
+size_t mutt_buffer_insert(struct Buffer *buf, size_t offset, const char *s)
+{
+  if (!buf || !s || (*s == '\0'))
+  {
+    return -1;
+  }
+
+  const size_t slen = mutt_str_len(s);
+  const size_t curlen = mutt_buffer_len(buf);
+  mutt_buffer_alloc(buf, curlen + slen + 1);
+
+  if (offset > curlen)
+  {
+    for (size_t i = curlen; i < offset; ++i)
+    {
+      mutt_buffer_addch(buf, ' ');
+    }
+    mutt_buffer_addstr(buf, s);
+  }
+  else
+  {
+    memmove(buf->data + offset + slen, buf->data + offset, curlen - offset);
+    memcpy(buf->data + offset, s, slen);
+    buf->data[curlen + slen] = '\0';
+    buf->dptr = buf->data + curlen + slen;
+  }
+
+  return mutt_buffer_len(buf) - curlen;
+}
+
+/**
  * mutt_buffer_is_empty - Is the Buffer empty?
  * @param buf Buffer to inspect
  * @retval true Buffer is empty
@@ -261,29 +307,36 @@ bool mutt_buffer_is_empty(const struct Buffer *buf)
  * mutt_buffer_alloc - Make sure a buffer can store at least new_size bytes
  * @param buf      Buffer to change
  * @param new_size New size
+ *
+ * @note new_size will be rounded up to #BufferStepSize
  */
 void mutt_buffer_alloc(struct Buffer *buf, size_t new_size)
 {
   if (!buf)
-  {
     return;
+
+  if (buf->data && (new_size <= buf->dsize))
+    return;
+
+  if (new_size > (SIZE_MAX - BufferStepSize))
+  {
+    mutt_error(_("Out of memory"));
+    mutt_exit(1);
   }
 
-  if (!buf->dptr)
-  {
-    mutt_buffer_seek(buf, 0);
-  }
+  const bool was_empty = (buf->dptr == NULL);
+  const size_t offset = (buf->dptr && buf->data) ? (buf->dptr - buf->data) : 0;
 
-  if ((new_size > buf->dsize) || !buf->data)
-  {
-    size_t offset = (buf->dptr && buf->data) ? buf->dptr - buf->data : 0;
+  buf->dsize = ROUND_UP(new_size + 1, BufferStepSize);
 
-    buf->dsize = new_size;
-    mutt_mem_realloc(&buf->data, buf->dsize);
-    mutt_buffer_seek(buf, offset);
-    /* This ensures an initially NULL buf->data is now properly terminated. */
-    if (buf->dptr)
-      *buf->dptr = '\0';
+  mutt_mem_realloc(&buf->data, buf->dsize);
+  mutt_buffer_seek(buf, offset);
+
+  // Ensures that initially NULL buf->data is properly terminated
+  if (was_empty)
+  {
+    buf->dptr = buf->data;
+    *buf->dptr = '\0';
   }
 }
 
@@ -468,5 +521,7 @@ size_t mutt_buffer_copy(struct Buffer *dst, const struct Buffer *src)
 void mutt_buffer_seek(struct Buffer *buf, size_t offset)
 {
   if (buf)
-    buf->dptr = buf->data + offset;
+  {
+    buf->dptr = buf->data ? buf->data + offset : NULL;
+  }
 }

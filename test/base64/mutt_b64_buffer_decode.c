@@ -23,6 +23,7 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include <stddef.h>
 #include "mutt/lib.h"
 
 void test_mutt_b64_buffer_decode(void)
@@ -36,5 +37,6 @@ void test_mutt_b64_buffer_decode(void)
   {
     struct Buffer buf = mutt_buffer_make(0);
     TEST_CHECK(mutt_b64_buffer_decode(&buf, NULL) != 0);
+    mutt_buffer_dealloc(&buf);
   }
 }

@@ -45,7 +45,11 @@ void dump_addr_list(char *buf, size_t buflen, const struct AddressList *al, cons
     return;
 
   buf[0] = '\0';
-  mutt_addrlist_write(al, buf, buflen, true);
+  struct Buffer *tmpbuf = mutt_buffer_pool_get();
+  mutt_addrlist_write(al, tmpbuf, true);
+  mutt_str_copy(buf, mutt_buffer_string(tmpbuf), buflen);
+  mutt_buffer_pool_release(&tmpbuf);
+
   mutt_debug(LL_DEBUG1, "\t%s: %s\n", name, buf);
 }
 
@@ -72,10 +76,16 @@ void dump_list_head(const struct ListHead *list, const char *name)
 
 void dump_envelope(const struct Envelope *env)
 {
+  mutt_debug(LL_DEBUG1, "Envelope\n");
+
+  if (!env)
+  {
+    mutt_debug(LL_DEBUG1, "\tNULL pointer\n");
+    return;
+  }
+
   struct Buffer buf = mutt_buffer_make(256);
   char arr[1024];
-
-  mutt_debug(LL_DEBUG1, "Envelope\n");
 
 #define ADD_FLAG(F) add_flag(&buf, (env->changed & F), #F)
   ADD_FLAG(MUTT_ENV_CHANGED_IRT);
@@ -139,13 +149,17 @@ void dump_envelope(const struct Envelope *env)
 
 void dump_email(const struct Email *e)
 {
+  mutt_debug(LL_DEBUG1, "Email\n");
+
   if (!e)
+  {
+    mutt_debug(LL_DEBUG1, "\tNULL pointer\n");
     return;
+  }
 
   struct Buffer buf = mutt_buffer_make(256);
   char arr[256];
 
-  mutt_debug(LL_DEBUG1, "Email\n");
   mutt_debug(LL_DEBUG1, "\tpath: %s\n", e->path);
 
 #define ADD_FLAG(F) add_flag(&buf, e->F, #F)
@@ -229,10 +243,20 @@ void dump_email(const struct Email *e)
 
 void dump_param_list(const struct ParameterList *pl)
 {
-  if (!pl || TAILQ_EMPTY(pl))
-    return;
-
   mutt_debug(LL_DEBUG1, "\tparameters\n");
+
+  if (!pl)
+  {
+    mutt_debug(LL_DEBUG1, "\tNULL pointer\n");
+    return;
+  }
+
+  if (TAILQ_EMPTY(pl))
+  {
+    mutt_debug(LL_DEBUG1, "\tempty\n");
+    return;
+  }
+
   struct Parameter *np = NULL;
   TAILQ_FOREACH(np, pl, entries)
   {
@@ -242,13 +266,16 @@ void dump_param_list(const struct ParameterList *pl)
 
 void dump_body(const struct Body *body)
 {
+  mutt_debug(LL_DEBUG1, "Body\n");
+
   if (!body)
+  {
+    mutt_debug(LL_DEBUG1, "\tNULL pointer\n");
     return;
+  }
 
   struct Buffer buf = mutt_buffer_make(256);
   char arr[256];
-
-  mutt_debug(LL_DEBUG1, "Body\n");
 
 #define ADD_FLAG(F) add_flag(&buf, body->F, #F)
   ADD_FLAG(attach_qualifies);
@@ -323,12 +350,15 @@ void dump_body(const struct Body *body)
 
 void dump_attach(const struct AttachPtr *att)
 {
+  mutt_debug(LL_DEBUG1, "AttachPtr\n");
+
   if (!att)
+  {
+    mutt_debug(LL_DEBUG1, "\tNULL pointer\n");
     return;
+  }
 
   struct Buffer buf = mutt_buffer_make(256);
-
-  mutt_debug(LL_DEBUG1, "AttachPtr\n");
 
 #define ADD_FLAG(F) add_flag(&buf, att->F, #F)
   ADD_FLAG(unowned);

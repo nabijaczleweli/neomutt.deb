@@ -23,8 +23,8 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
-#include "mutt/lib.h"
-#include "config/common.h"
+#include <stddef.h>
+#include "config/common.h" // IWYU pragma: keep
 #include "config/lib.h"
 #include "core/lib.h"
 
@@ -47,7 +47,7 @@ void test_neomutt_new(void)
   {
     struct ConfigSet *cs = cs_new(30);
     cs_register_type(cs, &CstNumber);
-    TEST_CHECK(cs_register_variables(cs, Vars, 0));
+    TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS));
 
     NeoMutt = neomutt_new(cs);
     TEST_CHECK(NeoMutt != NULL);

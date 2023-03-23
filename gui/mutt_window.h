@@ -152,10 +152,9 @@ struct MuttWindow
    * @param win Window
    * @param ptr Window data to free
    *
-   * **Contract**
-   * - @a win  is not NULL
-   * - @a ptr  is not NULL
-   * - @a *ptr is not NULL
+   * @pre win  is not NULL
+   * @pre ptr  is not NULL
+   * @pre *ptr is not NULL
    */
   void (*wdata_free)(struct MuttWindow *win, void **ptr);
 
@@ -247,7 +246,7 @@ void               window_notify_all (struct MuttWindow *win);
 void               window_set_visible(struct MuttWindow *win, bool visible);
 struct MuttWindow *window_set_focus  (struct MuttWindow *win);
 struct MuttWindow *window_get_focus  (void);
-bool               window_is_focused (struct MuttWindow *win);
+bool               window_is_focused (const struct MuttWindow *win);
 
 void window_redraw(struct MuttWindow *win);
 void window_invalidate_all(void);

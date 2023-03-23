@@ -46,13 +46,15 @@
 #include "lib.h"
 #include "attach/lib.h"
 #include "browser/lib.h"
+#include "enter/lib.h"
 #include "index/lib.h"
 #include "menu/lib.h"
 #include "ncrypt/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "attach_data.h"
-#include "commands.h"
+#include "external.h"
+#include "globals.h" // IWYU pragma: keep
 #include "hook.h"
 #include "mutt_header.h"
 #include "mutt_logging.h"
@@ -60,7 +62,6 @@
 #include "mview.h"
 #include "mx.h"
 #include "opcodes.h"
-#include "options.h"
 #include "protos.h"
 #include "rfc3676.h"
 #include "shared_data.h"
@@ -1421,9 +1422,9 @@ static int op_attachment_rename_attachment(struct ComposeSharedData *shared, int
     src = cur_att->body->filename;
   struct Buffer *fname = mutt_buffer_pool_get();
   mutt_buffer_strcpy(fname, mutt_path_basename(NONULL(src)));
-  int ret = mutt_buffer_get_field(_("Send attachment with name: "), fname,
-                                  MUTT_COMP_FILE, false, NULL, NULL, NULL);
-  if (ret == 0)
+  int rc = mutt_buffer_get_field(_("Send attachment with name: "), fname,
+                                 MUTT_COMP_FILE, false, NULL, NULL, NULL);
+  if (rc == 0)
   {
     // It's valid to set an empty string here, to erase what was set
     mutt_str_replace(&cur_att->body->d_filename, mutt_buffer_string(fname));
@@ -1708,7 +1709,7 @@ static int op_compose_ispell(struct ComposeSharedData *shared, int op)
 {
   endwin();
   const char *const c_ispell = cs_subset_string(shared->sub, "ispell");
-  char buf[PATH_MAX];
+  char buf[PATH_MAX] = { 0 };
   snprintf(buf, sizeof(buf), "%s -x %s", NONULL(c_ispell), shared->email->body->filename);
   if (mutt_system(buf) == -1)
   {

@@ -23,8 +23,7 @@
 #ifndef MUTT_ENTER_STATE_H
 #define MUTT_ENTER_STATE_H
 
-#include <stddef.h>
-#include <wchar.h> // IWYU pragma: keep
+#include <wchar.h>
 
 /**
  * struct EnterState - Keep our place when entering a string
@@ -36,10 +35,10 @@ struct EnterState
   size_t lastchar; ///< Position of the last character
   size_t curpos;   ///< Position of the cursor
   size_t begin;    ///< Position of the start
-  int tabs;        ///< Number of times the user has hit tab
 };
 
-void               mutt_enter_state_free(struct EnterState **ptr);
-struct EnterState *mutt_enter_state_new(void);
+void               enter_state_free(struct EnterState **ptr);
+struct EnterState *enter_state_new(void);
+void               enter_state_resize(struct EnterState *es, size_t num);
 
 #endif /* MUTT_ENTER_STATE_H */

@@ -21,13 +21,12 @@
  */
 
 /**
- * @page attach_attachments Attachment commmands
+ * @page attach_attachments Attachment commands
  *
  * Handle the attachments command
  */
 
 #include "config.h"
-#include <regex.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -37,10 +36,9 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
-#include "mutt.h"
 #include "attachments.h"
 #include "ncrypt/lib.h"
-#include "init.h"
+#include "parse/lib.h"
 
 /**
  * struct AttachMatch - An attachment matching a regex for attachment counter
@@ -249,7 +247,7 @@ static int count_body_parts(struct Body *body)
  * @param fp File to parse
  * @retval num Number of MIME Body parts
  */
-int mutt_count_body_parts(struct Mailbox *m, struct Email *e, FILE *fp)
+int mutt_count_body_parts(const struct Mailbox *m, struct Email *e, FILE *fp)
 {
   if (!m || !e)
     return 0;
@@ -313,11 +311,11 @@ static enum CommandResult parse_attach_list(struct Buffer *buf, struct Buffer *s
   char *p = NULL;
   char *tmpminor = NULL;
   size_t len;
-  int ret;
+  int rc;
 
   do
   {
-    mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+    parse_extract_token(buf, s, TOKEN_NO_FLAGS);
 
     if (!buf->data || (*buf->data == '\0'))
       continue;
@@ -352,13 +350,13 @@ static enum CommandResult parse_attach_list(struct Buffer *buf, struct Buffer *s
     tmpminor[len + 2] = '\0';
 
     a->major_int = mutt_check_mime_type(a->major);
-    ret = REG_COMP(&a->minor_regex, tmpminor, REG_ICASE);
+    rc = REG_COMP(&a->minor_regex, tmpminor, REG_ICASE);
 
     FREE(&tmpminor);
 
-    if (ret != 0)
+    if (rc != 0)
     {
-      regerror(ret, &a->minor_regex, err->data, err->dsize);
+      regerror(rc, &a->minor_regex, err->data, err->dsize);
       FREE(&a->major);
       FREE(&a);
       return MUTT_CMD_ERROR;
@@ -395,7 +393,7 @@ static enum CommandResult parse_unattach_list(struct Buffer *buf, struct Buffer 
 
   do
   {
-    mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+    parse_extract_token(buf, s, TOKEN_NO_FLAGS);
     FREE(&tmp);
 
     if (mutt_istr_equal(buf->data, "any"))
@@ -471,7 +469,7 @@ static int print_attach_list(struct ListHead *h, const char op, const char *name
 enum CommandResult parse_attachments(struct Buffer *buf, struct Buffer *s,
                                      intptr_t data, struct Buffer *err)
 {
-  mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+  parse_extract_token(buf, s, TOKEN_NO_FLAGS);
   if (!buf->data || (*buf->data == '\0'))
   {
     mutt_buffer_strcpy(err, _("attachments: no disposition"));
@@ -534,7 +532,7 @@ enum CommandResult parse_unattachments(struct Buffer *buf, struct Buffer *s,
   char *p = NULL;
   struct ListHead *head = NULL;
 
-  mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+  parse_extract_token(buf, s, TOKEN_NO_FLAGS);
   if (!buf->data || (*buf->data == '\0'))
   {
     mutt_buffer_strcpy(err, _("unattachments: no disposition"));

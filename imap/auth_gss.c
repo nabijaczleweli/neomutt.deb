@@ -34,7 +34,7 @@
  */
 
 #include "config.h"
-#include <netinet/in.h>
+#include <arpa/inet.h>
 #include <stdio.h>
 #include <string.h>
 #include "private.h"
@@ -44,7 +44,6 @@
 #include "conn/lib.h"
 #include "adata.h"
 #include "auth.h"
-#include "mutt_socket.h"
 #ifdef HAVE_HEIMDAL
 #include <gssapi/gssapi.h>
 #define gss_nt_service_name GSS_C_NT_HOSTBASED_SERVICE
@@ -67,8 +66,8 @@ static void print_gss_error(OM_uint32 err_maj, OM_uint32 err_min)
   OM_uint32 maj_stat, min_stat;
   OM_uint32 msg_ctx = 0;
   gss_buffer_desc status_string;
-  char buf_maj[512];
-  char buf_min[512];
+  char buf_maj[512] = { 0 };
+  char buf_min[512] = { 0 };
 
   do
   {

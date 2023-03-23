@@ -68,13 +68,14 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
+#include "cbar.h"
 #include "color/lib.h"
 #include "index/lib.h"
 #include "menu/lib.h"
 #include "attach_data.h"
 #include "cbar_data.h"
 #include "format_flags.h"
-#include "mutt_globals.h"
+#include "globals.h" // IWYU pragma: keep
 #include "muttlib.h"
 #include "shared_data.h"
 
@@ -182,9 +183,6 @@ static int cbar_recalc(struct MuttWindow *win)
  */
 static int cbar_repaint(struct MuttWindow *win)
 {
-  if (!mutt_window_is_visible(win))
-    return 0;
-
   struct ComposeBarData *cbar_data = win->wdata;
 
   mutt_window_move(win, 0, 0);
@@ -205,7 +203,9 @@ static int cbar_repaint(struct MuttWindow *win)
  */
 int cbar_color_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_COLOR) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_COLOR)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventColor *ev_c = nc->event_data;
@@ -229,7 +229,9 @@ int cbar_color_observer(struct NotifyCallback *nc)
  */
 int cbar_config_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_CONFIG)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventConfig *ev_c = nc->event_data;
@@ -246,9 +248,11 @@ int cbar_config_observer(struct NotifyCallback *nc)
 /**
  * cbar_email_observer - Notification that the Email has changed - Implements ::observer_t - @ingroup observer_api
  */
-int cbar_email_observer(struct NotifyCallback *nc)
+static int cbar_email_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_EMAIL) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_EMAIL)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct MuttWindow *win_cbar = nc->global_data;
@@ -261,9 +265,11 @@ int cbar_email_observer(struct NotifyCallback *nc)
 /**
  * cbar_window_observer - Notification that a Window has changed - Implements ::observer_t - @ingroup observer_api
  */
-int cbar_window_observer(struct NotifyCallback *nc)
+static int cbar_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct MuttWindow *win_cbar = nc->global_data;

@@ -109,7 +109,9 @@ static const struct Mapping AttachHelp[] = {
  */
 static int attach_config_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_CONFIG)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventConfig *ev_c = nc->event_data;
@@ -151,8 +153,8 @@ const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols, ch
                               const char *src, const char *prec, const char *if_str,
                               const char *else_str, intptr_t data, MuttFormatFlags flags)
 {
-  char fmt[128];
-  char charset[128];
+  char fmt[128] = { 0 };
+  char charset[128] = { 0 };
   struct AttachPtr *aptr = (struct AttachPtr *) data;
   bool optional = (flags & MUTT_FORMAT_OPTIONAL);
 
@@ -199,7 +201,7 @@ const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols, ch
         if (mutt_is_message_type(aptr->body->type, aptr->body->subtype) &&
             c_message_format && aptr->body->email)
         {
-          char s[128];
+          char s[128] = { 0 };
           mutt_make_string(s, sizeof(s), cols, c_message_format, NULL, -1,
                            aptr->body->email,
                            MUTT_FORMAT_FORCESUBJ | MUTT_FORMAT_ARROWCURSOR, NULL);
@@ -321,7 +323,7 @@ const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols, ch
 
       if (!optional)
       {
-        char tmp[128];
+        char tmp[128] = { 0 };
         mutt_str_pretty_size(tmp, sizeof(tmp), l);
         mutt_format_s(buf, buflen, prec, tmp);
       }
@@ -416,9 +418,10 @@ static int attach_tag(struct Menu *menu, int sel, int act)
  */
 static int attach_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
-
   if (nc->event_subtype != NT_WINDOW_DELETE)
     return 0;
 
@@ -487,13 +490,13 @@ void dlg_select_attachment(struct ConfigSubset *sub, struct Mailbox *m,
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(menu->type);
+    op = km_dokey(MENU_ATTACH);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
     if (op == OP_NULL)
     {
-      km_error_key(menu->type);
+      km_error_key(MENU_ATTACH);
       continue;
     }
     mutt_clear_error();
@@ -502,7 +505,7 @@ void dlg_select_attachment(struct ConfigSubset *sub, struct Mailbox *m,
     if (rc == FR_UNKNOWN)
       rc = menu_function_dispatcher(menu->win, op);
     if (rc == FR_UNKNOWN)
-      rc = global_function_dispatcher(menu->win, op);
+      rc = global_function_dispatcher(NULL, op);
 
     if (rc == FR_CONTINUE)
     {

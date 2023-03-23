@@ -84,7 +84,7 @@ struct Mailbox
   off_t size;                         ///< Size of the Mailbox
   bool has_new;                       ///< Mailbox has new mail
 
-  // These next three are only set when MailCheckStats is set
+  // These next three are only set when $mail_check_stats is set
   int msg_count;                      ///< Total number of messages
   int msg_unread;                     ///< Number of unread messages
   int msg_flagged;                    ///< Number of flagged messages
@@ -103,7 +103,6 @@ struct Mailbox
   bool newly_created;                 ///< Mbox or mmdf just popped into existence
   struct timespec mtime;              ///< Time Mailbox was last changed
   struct timespec last_visited;       ///< Time of last exit from this mailbox
-  struct timespec stats_last_checked; ///< Mtime of mailbox the last time stats where checked.
 
   const struct MxOps *mx_ops;         ///< MXAPI callback functions
 
@@ -136,9 +135,8 @@ struct Mailbox
    * mdata_free - Free the private data attached to the Mailbox
    * @param ptr Private data to be freed
    *
-   * **Contract**
-   * - @a ptr  is not NULL
-   * - @a *ptr is not NULL
+   * @pre ptr  is not NULL
+   * @pre *ptr is not NULL
    */
   void (*mdata_free)(void **ptr);
 

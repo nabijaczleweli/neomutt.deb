@@ -41,7 +41,7 @@ int NumQuotedColors; ///< Number of colours for quoted email text
  * find_highest_used - Find the highest-numbered quotedN in use
  * @retval num Highest number
  */
-int find_highest_used(void)
+static int find_highest_used(void)
 {
   for (int i = COLOR_QUOTES_MAX - 1; i >= 0; i--)
   {
@@ -106,7 +106,7 @@ bool quoted_colors_parse_color(enum ColorId cid, uint32_t fg, uint32_t bg,
   if (q_level >= COLOR_QUOTES_MAX)
   {
     mutt_buffer_printf(err, _("Maximum quoting level is %d"), COLOR_QUOTES_MAX - 1);
-    return MUTT_CMD_WARNING;
+    return false;
   }
 
   if (q_level >= NumQuotedColors)

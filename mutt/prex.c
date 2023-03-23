@@ -253,17 +253,25 @@ static struct PrexStorage *prex(enum Prex which)
         ":[[:digit:]]{2})"
       ")"
       " +"
-      "([[:alpha:] ]*)"         // Timezone (which we skip)
+      "("
+        "([[:alpha:] ]+)|"      // Timezone name (which we skip)
+        "([+][[:digit:]]{4} )"  // Timezone offset (which we skip)
+      ")?"
       "("
         PREX_YEAR               // Year (YYYY)
         "|"
         "([[:digit:]]{2})"      // Year (YY)
       ")"
-    }
+    },
+    {
+      PREX_ACCOUNT_CMD,
+      PREX_ACCOUNT_CMD_MATCH_MAX,
+      "^([[:alpha:]]+): (.*)$"
+    },
     // clang-format on
   };
 
-  assert((which >= 0) && (which < PREX_MAX) && "Invalid 'which' argument");
+  assert((which < PREX_MAX) && "Invalid 'which' argument");
   struct PrexStorage *h = &storage[which];
   assert((which == h->which) && "Fix 'storage' array");
   if (!h->re)

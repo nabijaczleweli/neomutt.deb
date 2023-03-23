@@ -34,6 +34,7 @@
  * | menu/move.c      | @subpage menu_move      |
  * | menu/observer.c  | @subpage menu_observer  |
  * | menu/tagging.c   | @subpage menu_tagging   |
+ * | menu/type.c      | @subpage menu_type      |
  * | menu/window.c    | @subpage menu_window    |
  */
 
@@ -144,10 +145,9 @@ struct Menu
    * @param menu Menu
    * @param ptr Menu data to free
    *
-   * **Contract**
-   * - @a menu is not NULL
-   * - @a ptr  is not NULL
-   * - @a *ptr is not NULL
+   * @pre menu is not NULL
+   * @pre ptr  is not NULL
+   * @pre *ptr is not NULL
    */
   void (*mdata_free)(struct Menu *menu, void **ptr);
 };
@@ -181,7 +181,7 @@ void         menu_cleanup(void);
 enum MenuType menu_get_current_type(void);
 void         menu_init(void);
 
-struct MuttWindow *menu_new_window(enum MenuType type, struct ConfigSubset *sub);
+struct MuttWindow *menu_window_new(enum MenuType type, struct ConfigSubset *sub);
 
 int  menu_get_index(struct Menu *menu);
 MenuRedrawFlags menu_set_index(struct Menu *menu, int index);

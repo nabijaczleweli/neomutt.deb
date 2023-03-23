@@ -33,9 +33,8 @@
 #include "config/lib.h"
 #include "mutt_window.h"
 #include "curs_lib.h"
+#include "globals.h"
 #include "mutt_curses.h"
-#include "mutt_globals.h"
-#include "options.h"
 #include "reflow.h"
 #include "rootwin.h"
 #ifdef USE_DEBUG_WINDOW
@@ -108,7 +107,7 @@ static void window_notify(struct MuttWindow *win)
     return;
 
   const struct WindowState *old = &win->old;
-  const struct WindowState *state = &win->state;
+  const struct WindowState *wstate = &win->state;
   WindowNotifyFlags flags = WN_NO_FLAGS;
 
   const bool was_visible = window_was_visible(win);
@@ -116,17 +115,17 @@ static void window_notify(struct MuttWindow *win)
   if (was_visible != is_visible)
     flags |= is_visible ? WN_VISIBLE : WN_HIDDEN;
 
-  if ((state->row_offset != old->row_offset) || (state->col_offset != old->col_offset))
+  if ((wstate->row_offset != old->row_offset) || (wstate->col_offset != old->col_offset))
     flags |= WN_MOVED;
 
-  if (state->rows > old->rows)
+  if (wstate->rows > old->rows)
     flags |= WN_TALLER;
-  else if (state->rows < old->rows)
+  else if (wstate->rows < old->rows)
     flags |= WN_SHORTER;
 
-  if (state->cols > old->cols)
+  if (wstate->cols > old->cols)
     flags |= WN_WIDER;
-  else if (state->cols < old->cols)
+  else if (wstate->cols < old->cols)
     flags |= WN_NARROWER;
 
   if (flags == WN_NO_FLAGS)
@@ -626,7 +625,7 @@ void window_redraw(struct MuttWindow *win)
  * @param win Window to check
  * @retval true Window has focus
  */
-bool window_is_focused(struct MuttWindow *win)
+bool window_is_focused(const struct MuttWindow *win)
 {
   if (!win)
     return false;
@@ -760,18 +759,27 @@ bool window_status_on_top(struct MuttWindow *panel, struct ConfigSubset *sub)
 {
   const bool c_status_on_top = cs_subset_bool(sub, "status_on_top");
 
-  struct MuttWindow *win_first = TAILQ_FIRST(&panel->children);
+  struct MuttWindow *win = TAILQ_FIRST(&panel->children);
 
-  if ((c_status_on_top && (win_first->type == WT_STATUS_BAR)) ||
-      (!c_status_on_top && (win_first->type != WT_STATUS_BAR)))
+  if ((c_status_on_top && (win->type == WT_STATUS_BAR)) ||
+      (!c_status_on_top && (win->type != WT_STATUS_BAR)))
   {
     return false;
   }
 
-  TAILQ_REMOVE(&panel->children, win_first, entries);
-  TAILQ_INSERT_TAIL(&panel->children, win_first, entries);
+  if (c_status_on_top)
+  {
+    win = TAILQ_LAST(&panel->children, MuttWindowList);
+    TAILQ_REMOVE(&panel->children, win, entries);
+    TAILQ_INSERT_HEAD(&panel->children, win, entries);
+  }
+  else
+  {
+    TAILQ_REMOVE(&panel->children, win, entries);
+    TAILQ_INSERT_TAIL(&panel->children, win, entries);
+  }
 
   mutt_window_reflow(panel);
-  mutt_debug(LL_DEBUG5, "config done, request WA_REFLOW\n");
+  window_invalidate_all();
   return true;
 }

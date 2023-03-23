@@ -80,6 +80,19 @@
 ** to \fIno\fP, composition will never be aborted.
 */
 
+{ "account_command", DT_COMMAND, 0 },
+/*
+** .pp
+** If set, this command is used to retrieve account credentials. The command
+** is invoked passing a number of \fI--key value\fP arguments with the
+** specifics of the account to lookup. The command writes to standard output a
+** number of \fIkey: value\fP lines. Currently supported arguments are
+** \fI--hostname\fP, \fI--username\fP, and \fI--type\fP, where type can be
+** any of \fIimap\fP, \fIimaps\fP, \fIpop\fP, \fIpops\fP, \fIsmtp\fP,
+** \fIsmtps\fP, \fInntp\fP, and \fInntps\fP. Currently supported output lines
+** are \fIlogin\fP, \fIusername\fP, and \fIpassword\fP.
+*/
+
 { "alias_file", DT_PATH, "~/.neomuttrc" },
 /*
 ** .pp
@@ -176,7 +189,7 @@
 */
 
 #ifdef USE_NNTP
-{ "ask_follow_up", DT_BOOL, false },
+{ "ask_followup_to", DT_BOOL, false },
 /*
 ** .pp
 ** If set, NeoMutt will prompt you for follow-up groups before editing
@@ -191,7 +204,7 @@
 */
 #endif
 
-{ "assumed_charset", DT_STRING, 0 },
+{ "assumed_charset", DT_SLIST, 0 },
 /*
 ** .pp
 ** This variable is a colon-separated list of character encoding
@@ -209,7 +222,7 @@
 ** However, only the first content is valid for the message body.
 */
 
-{ "attach_charset", DT_STRING, 0 },
+{ "attach_charset", DT_SLIST, 0 },
 /*
 ** .pp
 ** This variable is a colon-separated list of character encoding
@@ -291,25 +304,42 @@
 ** NeoMutt will operate on the attachments one by one.
 */
 
-{ "attribution", DT_STRING, "On %d, %n wrote:" },
+{ "attribution_intro", DT_STRING, "On %d, %n wrote:" },
 /*
 ** .pp
-** This is the string that will precede a message which has been included
-** in a reply.  For a full listing of defined \fCprintf(3)\fP-like sequences see
-** the section on $$index_format.
+** This is the string that will precede a replied-to message which is
+** quoted in the main body of the reply (this is the case when $$include is
+** set).
+** .pp
+** For a full listing of defined \fCprintf(3)\fP-like sequences see the section
+** on $$index_format.  See also $$attribution_locale.
 */
 
 { "attribution_locale", DT_STRING, 0 },
 /*
 ** .pp
 ** The locale used by \fCstrftime(3)\fP to format dates in the
-** $attribution string.  Legal values are the strings your system
+** attribution strings.  Legal values are the strings your system
 ** accepts for the locale environment variable \fC$$$LC_TIME\fP.
 ** .pp
 ** This variable is to allow the attribution date format to be
 ** customized by recipient or folder using hooks.  By default, NeoMutt
 ** will use your locale environment, so there is no need to set
 ** this except to override that default.
+** .pp
+** Affected variables are: $$attribution_intro, $$attribution_trailer,
+** $$forward_attribution_intro, $$forward_attribution_trailer, $$indent_string.
+*/
+
+{ "attribution_trailer", DT_STRING, 0 },
+/*
+** .pp
+** Similar to the $$attribution_intro variable, this is the string that will
+** come after a replied-to message which is quoted in the main body of the reply
+** (this is the case when $$include is set).
+** .pp
+** For a full listing of defined \fCprintf(3)\fP-like sequences see the section
+** on $$index_format.  See also $$attribution_locale.
 */
 
 { "auto_edit", DT_BOOL, false },
@@ -603,14 +633,6 @@
 ** mailbox which does not yet exist before creating it.
 */
 
-{ "connect_timeout", DT_NUMBER, 30 },
-/*
-** .pp
-** Causes NeoMutt to timeout a network connection (for IMAP, POP or SMTP) after this
-** many seconds if the connection is not able to be established.  A negative
-** value causes NeoMutt to wait indefinitely for the connection attempt to succeed.
-*/
-
 { "content_type", DT_STRING, "text/plain" },
 /*
 ** .pp
@@ -897,6 +919,11 @@
 { "date_format", DT_STRING, "!%a, %b %d, %Y at %I:%M:%S%p %Z" },
 /*
 ** .pp
+** Instead of using $$date_format it is encouraged to use "%[fmt]"
+** directly in the corresponding format strings, where "fmt" is the
+** value of $$date_format.  This allows for a more fine grained control
+** of the different menu needs.
+** .pp
 ** This variable controls the format of the date printed by the "%d"
 ** sequence in $$index_format.  This is passed to the \fCstrftime(3)\fP
 ** function to process the date, see the man page for the proper syntax.
@@ -907,6 +934,15 @@
 ** bang, the bang is discarded, and the month and week day names in the
 ** rest of the string are expanded in the \fIC\fP locale (that is in US
 ** English).
+** .pp
+** Format strings using this variable are:
+** .pp
+** UI: $$folder_format, $$index_format, $$mailbox_folder_format,
+** $$message_format
+** .pp
+** Composing: $$attribution_intro, $$forward_attribution_intro,
+** $$forward_attribution_trailer, $$forward_format, $$indent_string.
+** .pp
 */
 
 { "debug_file", DT_PATH, "~/.neomuttdebug" },
@@ -942,18 +978,19 @@
 { "default_hook", DT_STRING, "~f %s !~P | (~P ~C %s)" },
 /*
 ** .pp
-** This variable controls how "$message-hook", "$reply-hook", "$send-hook",
-** "$send2-hook", "$save-hook", and "$fcc-hook" will
-** be interpreted if they are specified with only a simple regex,
-** instead of a matching pattern.  The hooks are expanded when they are
-** declared, so a hook will be interpreted according to the value of this
-** variable at the time the hook is declared.
+** This variable controls how some hooks are interpreted if their pattern is a
+** plain string or a regex. i.e.  They don't contain a pattern, like \fC~f\fP
 ** .pp
-** The default value matches
-** if the message is either from a user matching the regular expression
-** given, or if it is from you (if the from address matches
-** "$alternates") and is to or cc'ed to a user matching the given
-** regular expression.
+** The hooks are: $fcc-hook, $fcc-save-hook, $index-format-hook, $message-hook,
+** $reply-hook, $save-hook, $send-hook and $send2-hook.
+** .pp
+** The hooks are expanded when they are declared, so a hook will be interpreted
+** according to the value of this variable at the time the hook is declared.
+** .pp
+** The default value matches if the message is either from a user matching the
+** regular expression given, or if it is from you (if the from address matches
+** "$alternates") and is to or cc'ed to a user matching the given regular
+** expression.
 */
 
 { "delete", DT_QUAD, MUTT_ASKYES },
@@ -1252,6 +1289,8 @@
 ** .dt %C  .dd   .dd Current file number
 ** .dt %d  .dd   .dd Date/time folder was last modified
 ** .dt %D  .dd   .dd Date/time folder was last modified using $$date_format.
+**                   It is encouraged to use "%[fmt]" instead, where "fmt" is
+**                   the value of $$date_format.
 ** .dt %f  .dd   .dd Filename ("/" is appended to directory names,
 **                   "@" to symbolic links and "*" to executable files)
 ** .dt %F  .dd   .dd File permissions
@@ -1260,10 +1299,11 @@
 ** .dt %l  .dd   .dd Number of hard links
 ** .dt %m  .dd * .dd Number of messages in the mailbox
 ** .dt %n  .dd * .dd Number of unread messages in the mailbox
-** .dt %N  .dd   .dd "N" if mailbox has new mail, blank otherwise
+** .dt %N  .dd   .dd "N" if mailbox has new mail, " " (space) otherwise
 ** .dt %s  .dd   .dd Size in bytes (see $formatstrings-size)
 ** .dt %t  .dd   .dd "*" if the file is tagged, blank otherwise
 ** .dt %u  .dd   .dd Owner name (or numeric uid, if missing)
+** .dt %[fmt] .dd   .dd Date/time folder was last modified using an \fCstrftime(3)\fP expression
 ** .dt %>X .dd   .dd Right justify the rest of the string and pad with character "X"
 ** .dt %|X .dd   .dd Pad to the end of the line with character "X"
 ** .dt %*X .dd   .dd Soft-fill with character "X" as pad
@@ -1365,7 +1405,6 @@
 ** When \fIset\fP, the outer layer of encryption is stripped off.  This
 ** variable is only used if $$mime_forward is \fIset\fP and
 ** $$mime_forward_decode is \fIunset\fP.
-** (PGP only)
 */
 
 { "forward_edit", DT_QUAD, MUTT_YES },
@@ -1518,7 +1557,7 @@
 ** By default it is \fIunset\fP so no header caching will be used.
 ** .pp
 ** Header caching can greatly improve speed when opening POP, IMAP
-** MH or Maildir folders, see "$caching" for details.
+** MH or Maildir folders, see "$caching" in the NeoMutt Guide for details.
 */
 
 { "header_cache_backend", DT_STRING, 0 },
@@ -1576,9 +1615,7 @@
 /*
 ** .pp
 ** When \fIset\fP, NeoMutt will skip the host name part of $$hostname variable
-** when adding the domain part to addresses.  This variable does not
-** affect the generation of Message-IDs, and it will not lead to the
-** cut-off of first-level domains.
+** when adding the domain part to addresses.
 */
 
 { "hidden_tags", DT_SLIST, "unread,draft,flagged,passed,replied,attachment,signed,encrypted" },
@@ -1632,6 +1669,15 @@
 ** This variable controls the size (in number of strings remembered) of
 ** the string history buffer per category. The buffer is cleared each time the
 ** variable is set.
+** .pp
+** Note that strings (e.g. commands) starting with a space are never recorded
+** in the history.  This is for example useful to prevent leaking sensitive
+** information into the history file or for one off tests.
+** .pp
+** Also note that a string is not added to the history if it exactly matches
+** its immediate predecessor, e.g. executing the same command twice in a row
+** results in only one copy being added to the history.  To prevent duplicates
+** over all entries use $$history_remove_dups.
 */
 
 { "history_file", DT_PATH, "~/.mutthistory" },
@@ -1674,8 +1720,7 @@
 ** .pp
 ** Specifies the fully-qualified hostname of the system NeoMutt is running on
 ** containing the host's name and the DNS domain it belongs to. It is used
-** as the domain part (after "@") for local email addresses as well as
-** Message-Id headers.
+** as the domain part (after "@") for local email addresses.
 ** .pp
 ** If not specified in a config file, then NeoMutt will try to determine the hostname itself.
 ** .pp
@@ -1947,7 +1992,7 @@
 */
 #endif
 
-{ "implicit_autoview", DT_BOOL, false },
+{ "implicit_auto_view", DT_BOOL, false },
 /*
 ** .pp
 ** If set to "yes", NeoMutt will look for a mailcap entry with the
@@ -2016,7 +2061,9 @@
 ** .dt %c .dd Number of characters (bytes) in the body of the message (see $formatstrings-size)
 ** .dt %cr .dd Number of characters (bytes) in the raw message, including the header (see $formatstrings-size)
 ** .dt %D .dd Date and time of message using $date_format and local timezone
+**            It is encouraged to use "%[fmt]" instead, where "fmt" is the value of $$date_format.
 ** .dt %d .dd Date and time of message using $date_format and sender's timezone
+**            It is encouraged to use "%{fmt}" instead, where "fmt" is the value of $$date_format.
 ** .dt %e .dd Current message number in thread
 ** .dt %E .dd Number of messages in current thread
 ** .dt %F .dd Author name, or recipient name if the message is from you
@@ -2145,8 +2192,10 @@
 /*
 ** .pp
 ** If \fIset\fP, read messages marked as flagged will not be moved
-** from your spool mailbox to your $$mbox mailbox, or as a result of
-** a "$mbox-hook" command.
+** from your spool mailbox to your $$mbox mailbox or to the "mbox"
+** specified by a $mbox-hook command.
+** .pp
+** Note that $$keep_flagged only has an effect if $$move is set.
 */
 
 { "local_date_header", DT_BOOL, true },
@@ -2195,6 +2244,15 @@
 ** .pp
 ** When $$mail_check_stats is \fIset\fP, this variable configures
 ** how often (in seconds) NeoMutt will update message counts.
+*/
+
+{ "mailbox_folder_format", DT_STRING, "%2C %?n?%6n&%6 ? %6m %i" },
+/*
+** .pp
+** This variable allows you to customize the file browser display to your
+** personal taste. It's only used to customize network mailboxes (e.g. imap).
+** This string is identical in formatting to the one used by
+** "$$folder_format".
 */
 
 { "mailcap_path", DT_SLIST, "~/.mailcap:" PKGDATADIR "/mailcap:" SYSCONFDIR "/mailcap:/etc/mailcap:/usr/etc/mailcap:/usr/local/etc/mailcap" },
@@ -2346,7 +2404,7 @@
 ** (especially for large folders).
 */
 
-{ "message_cachedir", DT_PATH, 0 },
+{ "message_cache_dir", DT_PATH, 0 },
 /*
 ** .pp
 ** Set this to a directory and NeoMutt will cache copies of messages from
@@ -2499,9 +2557,11 @@
 { "move", DT_QUAD, MUTT_NO },
 /*
 ** .pp
-** Controls whether or not NeoMutt will move read messages
-** from your spool mailbox to your $$mbox mailbox, or as a result of
-** a "$mbox-hook" command.
+** If this variable is \fIset\fP, then NeoMutt will move read messages
+** from your spool mailbox to your $$mbox mailbox or to the "mbox"
+** specified by a $mbox-hook command.
+** .pp
+** See also $$keep_flagged.
 */
 
 { "narrow_tree", DT_BOOL, false },
@@ -2578,6 +2638,18 @@
 #endif
 
 #ifdef USE_NOTMUCH
+{ "nm_config_file", DT_PATH, "auto" },
+/*
+** .pp
+** Configuration file for notmuch. Use 'auto' to detect configuration.
+*/
+
+{ "nm_config_profile", DT_STRING, 0 },
+/*
+** .pp
+** Configuration profile for notmuch.
+*/
+
 { "nm_db_limit", DT_NUMBER, 0 },
 /*
 ** .pp
@@ -2722,7 +2794,7 @@
 ** authentication fails, NeoMutt will not connect to the IMAP server.
 */
 
-{ "nntp_context", DT_NUMBER, 1000 },
+{ "nntp_context", DT_LONG, 1000 },
 /*
 ** .pp
 ** This variable defines number of articles which will be in index when
@@ -2954,10 +3026,6 @@
 **            of a \fCmultipart/signed\fP attachment when verifying it.
 ** .de
 ** .pp
-** For examples on how to configure these formats for the various versions
-** of PGP which are floating around, see the pgp and gpg sample configuration files in
-** the \fCsamples/\fP subdirectory which has been installed on your system
-** alongside the documentation.
 ** (PGP only)
 */
 
@@ -3044,6 +3112,7 @@
 ** .dt %a     .dd Algorithm
 ** .dt %c     .dd Capabilities
 ** .dt %f     .dd Flags
+** .dt %i     .dd Key fingerprint (or long key id if non-existent)
 ** .dt %k     .dd Key id
 ** .dt %l     .dd Key length
 ** .dt %n     .dd Number
@@ -3052,6 +3121,10 @@
 ** .dt %u     .dd User id
 ** .dt %[<s>] .dd Date of the key where <s> is an \fCstrftime(3)\fP expression
 ** .de
+** .pp
+** See the section "Sending Cryptographically Signed/Encrypted Messages" of the
+** user manual for the meaning of the letters some of these sequences expand
+** to.
 ** .pp
 ** (Crypto only) or (PGP only when GPGME disabled)
 */
@@ -3458,13 +3531,6 @@
 */
 #endif
 
-{ "post_indent_string", DT_STRING, 0 },
-/*
-** .pp
-** Similar to the $$attribution variable, NeoMutt will append this
-** string after the inclusion of a message which is being replied to.
-*/
-
 #ifdef USE_NNTP
 { "post_moderated", DT_QUAD, MUTT_ASKYES },
 /*
@@ -3648,6 +3714,10 @@
 ** from NeoMutt.  If this option is \fIset\fP, they do quit, if it is \fIunset\fP, they
 ** have no effect, and if it is set to \fIask-yes\fP or \fIask-no\fP, you are
 ** prompted for confirmation when you try to quit.
+** .pp
+** In order to quit from NeoMutt if this variable is \fIunset\fP, you must send
+** the signal SIGINT to NeoMutt.  This can usually be achieved by pressing
+** CTRL-C in the terminal.
 */
 
 { "quote_regex", DT_REGEX, "^([ \t]*[|>:}#])+" },
@@ -3757,6 +3827,12 @@
 ** paragraph width relative to the left margin.  A negative value set the
 ** paragraph width relative to the right margin.
 ** .pp
+** Be aware that the reformatted lines of a paragraph are still subject to $$wrap.
+** This means if $$reflow_wrap is 40 and $$wrap is 30, then the paragraph gets
+** reformatted to 40 characters a line (due to $$reflow_wrap) and afterwards
+** each 40-character-line is split at 30 characters (due to $$wrap), resulting in
+** alternating line lengths of 30 and 10 characters.
+** .pp
 ** Also see $$wrap.
 */
 
@@ -3803,9 +3879,12 @@
 { "resolve", DT_BOOL, true },
 /*
 ** .pp
-** When \fIset\fP, the cursor will be automatically advanced to the next
-** (possibly undeleted) message whenever a command that modifies the
-** current message is executed.
+** When \fIset\fP, the cursor in a list will be automatically advanced to the
+** next (possibly undeleted) message/attachment/entry whenever a command that
+** modifies the current message/attachment/entry is executed.
+** .pp
+** Examples of such commands are tagging a message, deleting an entry, or
+** saving an attachment.
 */
 
 { "resume_draft_files", DT_BOOL, false },
@@ -3887,7 +3966,7 @@
 ** using the value of $$real_name.
 */
 
-{ "rfc2047_parameters", DT_BOOL, false },
+{ "rfc2047_parameters", DT_BOOL, true },
 /*
 ** .pp
 ** When this variable is \fIset\fP, NeoMutt will decode RFC2047-encoded MIME
@@ -3934,6 +4013,10 @@
 ** .pp
 ** This variable controls the size of the history (per category) saved in the
 ** $$history_file file.
+** .pp
+** Setting this to a value greater than $$history is possible.  However, there
+** will never be more than $$history entries to select from even if more are
+** recorded in the history file.
 */
 
 { "save_name", DT_BOOL, false },
@@ -3999,7 +4082,7 @@
 ** before search results. By default, search results will be top-aligned.
 */
 
-{ "send_charset", DT_STRING, "us-ascii:iso-8859-1:utf-8" },
+{ "send_charset", DT_SLIST, "us-ascii:iso-8859-1:utf-8" },
 /*
 ** .pp
 ** A colon-delimited list of character sets for outgoing messages. NeoMutt will use the
@@ -4111,12 +4194,18 @@
 ** \fBSee also:\fP $$sidebar_short_path, $$sidebar_folder_indent, $$sidebar_indent_string.
 */
 
-{ "sidebar_divider_char", DT_STRING, 0 },
+{ "sidebar_divider_char", DT_STRING, "|" },
 /*
+** .pp
+** The default is a Unicode vertical line.
 ** .pp
 ** This specifies the characters to be drawn between the sidebar (when
 ** visible) and the other NeoMutt panels. ASCII and Unicode line-drawing
 ** characters are supported.
+** .pp
+** The divider char can be set to an empty string for some extra space.
+** If empty, setting the sidebar_background color may help distinguish the
+** sidebar from other panels.
 */
 
 { "sidebar_folder_indent", DT_BOOL, false },
@@ -4139,7 +4228,7 @@
 ** .dt %D .dd     .dd Descriptive name of the mailbox
 ** .dt %F .dd *   .dd Number of flagged messages in the mailbox
 ** .dt %L .dd * @ .dd Number of messages after limiting
-** .dt %n .dd     .dd 'N' if mailbox has new mail, ' ' (space) otherwise
+** .dt %n .dd     .dd "N" if mailbox has new mail, " " (space) otherwise
 ** .dt %N .dd *   .dd Number of unread messages in the mailbox (seen or unseen)
 ** .dt %o .dd *   .dd Number of old messages in the mailbox (unread, seen)
 ** .dt %r .dd *   .dd Number of read messages in the mailbox (read, seen)
@@ -4179,7 +4268,7 @@
 ** When set, the sidebar will only display mailboxes containing new, or
 ** flagged, mail.
 ** .pp
-** \fBSee also:\fP $$sidebar_whitelist, $$sidebar_non_empty_mailbox_only.
+** \fBSee also:\fP $sidebar_pin, $$sidebar_non_empty_mailbox_only.
 */
 
 { "sidebar_next_new_wrap", DT_BOOL, false },
@@ -4196,7 +4285,7 @@
 ** .pp
 ** When set, the sidebar will only display mailboxes that contain one or more mails.
 ** .pp
-** \fBSee also:\fP $$sidebar_new_mail_only, $$sidebar_whitelist.
+** \fBSee also:\fP $$sidebar_new_mail_only, $sidebar_pin.
 */
 
 { "sidebar_on_right", DT_BOOL, false },
@@ -4227,20 +4316,20 @@
 /*
 ** .pp
 ** Specifies how to sort mailbox entries in the sidebar.  By default, the
-** entries are sorted alphabetically.  Valid values:
+** entries are \fBunsorted\fP.  Valid values:
 ** .il
-** .dd path (alphabetically)
-** .dd count (all message count)
-** .dd flagged (flagged message count)
-** .dd new (unread message count)
-** .dd unread (unread message count)
-** .dd unsorted
+** .dd \fBpath\fP (alphabetically)
+** .dd \fBcount\fP (all message count)
+** .dd \fBflagged\fP (flagged message count)
+** .dd \fBunread\fP (unread message count)
+** .dd \fBunsorted\fP
 ** .ie
 ** .pp
 ** You may optionally use the "reverse-" prefix to specify reverse sorting
-** order (example: "\fCset sidebar_sort_method=reverse-alpha\fP").
+** order (example: "\fCset sidebar_sort_method=reverse-path\fP").
 ** .pp
-** The "alpha" and "name" values are synonyms for "path".
+** The \fBalpha\fP and \fBname\fP values are synonyms for \fBpath\fP. The
+** \fBnew\fP value is a synonym for \fBunread\fP.
 */
 
 { "sidebar_visible", DT_BOOL, false },
@@ -4296,6 +4385,9 @@
 ** Specifies how NeoMutt should expand a simple search into a real search
 ** pattern.  A simple search is one that does not contain any of the "~" pattern
 ** operators.  See "$patterns" for more information on search patterns.
+** .pp
+** simple_search applies to several functions, e.g. \fC<delete-pattern>\fP,
+** \fC<limit>\fP, searching in the index, and all of the index colors.
 ** .pp
 ** For example, if you simply type "joe" at a search or limit prompt, NeoMutt
 ** will automatically expand it to the value specified by this variable by
@@ -4394,7 +4486,7 @@
 /*
 ** .pp
 ** This format string specifies a command which is used to decrypt
-** \fCapplication/x-pkcs7-mime\fP attachments.
+** \fCapplication/pkcs7-mime\fP attachments.
 ** .pp
 ** The OpenSSL command formats have their own set of \fCprintf(3)\fP-like sequences
 ** similar to PGP's:
@@ -4611,7 +4703,7 @@
 /*
 ** .pp
 ** This command is used to verify S/MIME signatures of type
-** \fCapplication/x-pkcs7-mime\fP.
+** \fCapplication/pkcs7-mime\fP.
 ** .pp
 ** This is a format string, see the $$smime_decrypt_command command for
 ** possible \fCprintf(3)\fP-like sequences.
@@ -4685,6 +4777,14 @@
 */
 #endif
 
+{ "socket_timeout", DT_NUMBER, 30 },
+/*
+** .pp
+** Causes NeoMutt to timeout any socket connect/read/write operation (for IMAP,
+** POP or SMTP) after this many seconds.  A negative value causes NeoMutt to
+** wait indefinitely.
+*/
+
 { "sort", DT_SORT, SORT_DATE },
 /*
 ** .pp
@@ -4718,7 +4818,7 @@
 ** a synonym for "unsorted".
 ** .pp
 ** The values of "threads" and "reverse-threads" are legacy options,
-** which cause the value of \fC$$sort_aux\fP to also contol sorting
+** which cause the value of \fC$$sort_aux\fP to also control sorting
 ** between threads, and they may not be used with the "last-" prefix.
 ** The preferred way to enable a threaded view is via
 ** \fC$$use_threads\fP.  This variable can also be set via the
@@ -4730,7 +4830,7 @@
 ** will sort to.
 ** .pp
 ** See the "Use Threads Feature" section for further explanation and
-** examples, https://neomutt.org/feature/use-threads.
+** examples, https://neomutt.org/feature/use-threads
 */
 
 { "sort_alias", DT_SORT, SORT_ALIAS },
@@ -4770,7 +4870,7 @@
 ** more common to use "last-" with $$sort and not with $$sort_aux.
 ** .pp
 ** See the "Use Threads Feature" section for further explanation and
-** examples, https://neomutt.org/feature/use-threads.
+** examples, https://neomutt.org/feature/use-threads
 */
 
 { "sort_browser", DT_SORT, SORT_ALPHA },
@@ -4905,7 +5005,7 @@
 ** .pp
 ** If \fIset\fP , NeoMutt will use SSLv2 when communicating with servers that
 ** request it. \fBN.B. As of 2011, SSLv2 is considered insecure, and using
-** is inadvisable. See https://tools.ietf.org/html/rfc6176 .\fP
+** is inadvisable\fP. See https://tools.ietf.org/html/rfc6176
 ** (OpenSSL only)
 */
 #endif
@@ -4916,7 +5016,7 @@
 ** .pp
 ** If \fIset\fP , NeoMutt will use SSLv3 when communicating with servers that
 ** request it. \fBN.B. As of 2015, SSLv3 is considered insecure, and using
-** it is inadvisable. See https://tools.ietf.org/html/rfc7525 .\fP
+** it is inadvisable\fP. See https://tools.ietf.org/html/rfc7525
 */
 #endif
 
@@ -4936,7 +5036,7 @@
 ** .pp
 ** If \fIset\fP , NeoMutt will use TLSv1.0 when communicating with servers that
 ** request it. \fBN.B. As of 2015, TLSv1.0 is considered insecure, and using
-** it is inadvisable. See https://tools.ietf.org/html/rfc7525 .\fP
+** it is inadvisable\fP. See https://tools.ietf.org/html/rfc7525
 */
 
 { "ssl_use_tlsv1_1", DT_BOOL, false },
@@ -4944,7 +5044,7 @@
 ** .pp
 ** If \fIset\fP , NeoMutt will use TLSv1.1 when communicating with servers that
 ** request it. \fBN.B. As of 2015, TLSv1.1 is considered insecure, and using
-** it is inadvisable. See https://tools.ietf.org/html/rfc7525 .\fP
+** it is inadvisable\fP. See https://tools.ietf.org/html/rfc7525
 */
 
 { "ssl_use_tlsv1_2", DT_BOOL, true },
@@ -5125,6 +5225,10 @@
 ** When \fIunset\fP, NeoMutt won't stop when the user presses the terminal's
 ** \fIsusp\fP key, usually "^Z". This is useful if you run NeoMutt
 ** inside an xterm using a command like "\fCxterm -e neomutt\fP".
+** .pp
+** On startup NeoMutt tries to detect if it is the process session leader.
+** If so, the default of $suspend is "no" otherwise "yes".  This default covers
+** the above mentioned use case of "\fCxterm -e neomutt\fP".
 */
 
 { "text_flowed", DT_BOOL, false },
@@ -5161,8 +5265,18 @@
 { "thread_received", DT_BOOL, false },
 /*
 ** .pp
-** When \fIset\fP, NeoMutt uses the date received rather than the date sent
-** to thread messages by subject.
+** If $$strict_threads is \fIunset\fP, then messages may also be grouped by
+** subject.  Unlike threading by "In-Reply-To:" and "References:" header,
+** grouping by subject does not imply a parent-child relation between two
+** messages.
+** .pp
+** To determine the ancestry between messages grouped by subject, Neomutt uses
+** their date: only newer messages can be descendants of older ones.
+** .pp
+** When $$thread_received is \fIset\fP, NeoMutt uses the date received rather
+** than the date sent when comparing messages for the date.
+** .pp
+** See also $$strict_threads, and $$sort_re.
 */
 
 { "tilde", DT_BOOL, false },
@@ -5200,7 +5314,7 @@
 ** A value of zero or less will cause NeoMutt to never time out.
 */
 
-{ "tmpdir", DT_PATH, TMPDIR },
+{ "tmp_dir", DT_PATH, TMPDIR },
 /*
 ** .pp
 ** This variable allows you to specify where NeoMutt will place its
@@ -5407,22 +5521,14 @@
 */
 
 #ifdef USE_NOTMUCH
-{ "vfolder_format", DT_STRING, "%2C %?n?%4n/&     ?%4m %f" },
-/*
-** .pp
-** This variable allows you to customize the file browser display for virtual
-** folders to your personal taste.  This string uses many of the same
-** expandos as $$folder_format.
-*/
-
 { "virtual_spool_file", DT_BOOL, false },
 /*
 ** .pp
-** When \fIset\fP, NeoMutt will use the first defined virtual mailbox (see
-** virtual-mailboxes) as a spool file.
-** .pp
 ** This command is now unnecessary. $$spool_file has been extended to support
 ** mailbox descriptions as a value.
+** .pp
+** When \fIset\fP, NeoMutt will use the first defined virtual mailbox (see
+** virtual-mailboxes) as a spool file.
 */
 #endif
 

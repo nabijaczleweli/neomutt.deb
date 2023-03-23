@@ -36,12 +36,15 @@ char *AutocryptSignAs;     ///< Autocrypt Key id to sign as
 char *AutocryptDefaultKey; ///< Autocrypt default key id (used for postponing messages)
 // clang-format on
 
+/**
+ * AutocryptVars - Config definitions for the autocrypt library
+ */
 static struct ConfigDef AutocryptVars[] = {
   // clang-format off
   { "autocrypt", DT_BOOL, false, 0, NULL,
     "Enables the Autocrypt feature"
   },
-  { "autocrypt_acct_format", DT_STRING|R_MENU, IP "%4n %-30a %20p %10s", 0, NULL,
+  { "autocrypt_acct_format", DT_STRING, IP "%4n %-30a %20p %10s", 0, NULL,
     "Format of the autocrypt account menu"
   },
   { "autocrypt_dir", DT_PATH|DT_PATH_DIR, IP "~/.mutt/autocrypt", 0, NULL,
@@ -62,7 +65,7 @@ bool config_init_autocrypt(struct ConfigSet *cs)
   bool rc = false;
 
 #if defined(USE_AUTOCRYPT)
-  rc |= cs_register_variables(cs, AutocryptVars, 0);
+  rc |= cs_register_variables(cs, AutocryptVars, DT_NO_FLAGS);
 #endif
 
   return rc;

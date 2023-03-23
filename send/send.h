@@ -45,7 +45,7 @@ typedef uint16_t SendFlags;             ///< Flags for mutt_send_message(), e.g.
 #define SEND_BATCH            (1 << 5)  ///< Send email in batch mode (without user interaction)
 #define SEND_KEY              (1 << 6)  ///< Mail a PGP public key
 #define SEND_RESEND           (1 << 7)  ///< Reply using the current email as a template
-#define SEND_POSTPONED_FCC    (1 << 8)  ///< Used by mutt_get_postponed() to signal that the x-mutt-fcc header field was present
+#define SEND_POSTPONED_FCC    (1 << 8)  ///< Used by mutt_get_postponed() to signal that the Mutt-Fcc header field was present
 #define SEND_NO_FREE_HEADER   (1 << 9)  ///< Used by the -E flag
 #define SEND_DRAFT_FILE       (1 << 10) ///< Used by the -H flag
 #define SEND_TO_SENDER        (1 << 11) ///< Compose new email to sender
@@ -61,14 +61,14 @@ int             mutt_fetch_recips(struct Envelope *out, struct Envelope *in, Sen
 void            mutt_fix_reply_recipients(struct Envelope *env, struct ConfigSubset *sub);
 void            mutt_forward_intro(struct Email *e, FILE *fp, struct ConfigSubset *sub);
 void            mutt_forward_trailer(struct Email *e, FILE *fp, struct ConfigSubset *sub);
-void            mutt_make_attribution(struct Email *e, FILE *fp_out, struct ConfigSubset *sub);
+void            mutt_make_attribution_intro(struct Email *e, FILE *fp_out, struct ConfigSubset *sub);
+void            mutt_make_attribution_trailer(struct Email *e, FILE *fp_out, struct ConfigSubset *sub);
 void            mutt_make_forward_subject(struct Envelope *env, struct Email *e, struct ConfigSubset *sub);
 void            mutt_make_misc_reply_headers(struct Envelope *env, struct Envelope *curenv, struct ConfigSubset *sub);
-void            mutt_make_post_indent(struct Email *e, FILE *fp_out, struct ConfigSubset *sub);
 int             mutt_resend_message(FILE *fp, struct Mailbox *m, struct Email *e_cur, struct ConfigSubset *sub);
 int             mutt_send_message(SendFlags flags, struct Email *e_templ, const char *tempfile, struct Mailbox *m, struct EmailList *el, struct ConfigSubset *sub);
 void            mutt_set_followup_to(struct Envelope *env, struct ConfigSubset *sub);
-bool            mutt_send_list_subscribe(struct Mailbox *m, const struct Email *e);
-bool            mutt_send_list_unsubscribe(struct Mailbox *m, const struct Email *e);
+bool            mutt_send_list_subscribe(struct Mailbox *m, struct Email *e);
+bool            mutt_send_list_unsubscribe(struct Mailbox *m, struct Email *e);
 
 #endif /* MUTT_SEND_SEND_H */

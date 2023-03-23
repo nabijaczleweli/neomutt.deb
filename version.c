@@ -35,7 +35,7 @@
 #include <sys/utsname.h>
 #include <unistd.h>
 #include "mutt/lib.h"
-#include "gui/lib.h" // IWYU pragma: keep
+#include "gui/lib.h"
 #include "version.h"
 #include "compress/lib.h"
 #ifdef HAVE_LIBIDN
@@ -198,6 +198,11 @@ static struct CompileOptions comp_opts[] = {
 #else
   { "gpgme", 0 },
 #endif
+#ifdef USE_SASL_GNU
+  { "gsasl", 1 },
+#else
+  { "gsasl", 0 },
+#endif
 #ifdef USE_GSS
   { "gss", 1 },
 #else
@@ -264,7 +269,7 @@ static struct CompileOptions comp_opts[] = {
 #ifndef HAVE_PCRE2
   { "regex", 1 },
 #endif
-#ifdef USE_SASL
+#ifdef USE_SASL_CYRUS
   { "sasl", 1 },
 #else
   { "sasl", 0 },
@@ -306,11 +311,11 @@ static struct CompileOptions debug_opts[] = {
 #ifdef USE_DEBUG_NOTIFY
   { "notify", 2 },
 #endif
-#ifdef USE_DEBUG_PARSE_TEST
-  { "parse-test", 2 },
-#endif
 #ifdef QUEUE_MACRO_DEBUG_TRACE
   { "queue", 2 },
+#endif
+#ifdef USE_UBSAN
+  { "ubsan", 2 },
 #endif
 #ifdef USE_DEBUG_WINDOW
   { "window", 2 },
@@ -430,8 +435,12 @@ bool print_version(FILE *fp)
 
   fprintf(fp, " (%s)", uts.machine);
 
+#ifdef NCURSES_VERSION
   fprintf(fp, "\nncurses: %s (compiled with %s.%d)", curses_version(),
           NCURSES_VERSION, NCURSES_VERSION_PATCH);
+#else
+  fprintf(fp, "\nncurses: %s", curses_version());
+#endif
 
 #ifdef _LIBICONV_VERSION
   fprintf(fp, "\nlibiconv: %d.%d", _LIBICONV_VERSION >> 8, _LIBICONV_VERSION & 0xff);
@@ -465,7 +474,7 @@ bool print_version(FILE *fp)
 
 #ifdef HAVE_PCRE2
   {
-    char version[24];
+    char version[24] = { 0 };
     pcre2_config(PCRE2_CONFIG_VERSION, version);
     fprintf(fp, "\nPCRE2: %s", version);
   }

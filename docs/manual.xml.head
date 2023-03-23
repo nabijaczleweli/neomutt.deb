@@ -182,7 +182,7 @@ vim: ts=2 sw=2 sts=2 expandtab:
       <title>Copyright</title>
       <para>
         NeoMutt is Copyright © 1996-2021 Michael R. Elkins
-        <email>me@neomutt.org</email> and others.
+        <email>me@mutt.org</email> and others.
       </para>
       <para>
         This program is free software; you can redistribute it and/or modify it
@@ -532,7 +532,7 @@ Cars            4|  3    + Feb 28  Imogen Baker     (193)  Pechora Sea
             </listitem>
             <listitem>
               <para>
-                Whitelist mailboxes to display always
+                Pin mailboxes to display always
               </para>
             </listitem>
           </itemizedlist>
@@ -887,19 +887,19 @@ set sidebar_divider_char = '│'          <emphasis role="comment"># Pretty line
                 <tbody>
                   <row>
                     <entry><literal>%B%?F? [%F]?%* %?N?%N/?%S</literal></entry>
-                    <entry><screen>mailbox [F]            N/S</screen></entry>
+                    <entry><screen>mailbox [F]            N/S </screen></entry>
                   </row>
                   <row>
                     <entry><literal>%B%* %F:%N:%S</literal></entry>
-                    <entry><screen>mailbox              F:N:S</screen></entry>
+                    <entry><screen>mailbox              F:N:S </screen></entry>
                   </row>
                   <row>
                     <entry><literal>%B %?N?(%N)?%* %S</literal></entry>
-                    <entry><screen>mailbox (N)              S</screen></entry>
+                    <entry><screen>mailbox (N)              S </screen></entry>
                   </row>
                   <row>
                     <entry><literal>%B%* ?F?%F/?%N</literal></entry>
-                    <entry><screen>mailbox                F/S</screen></entry>
+                    <entry><screen>mailbox                F/S </screen></entry>
                   </row>
                 </tbody>
               </tgroup>
@@ -1056,13 +1056,13 @@ set sidebar_indent_string="  "          <emphasis role="comment"># Indent with t
             </para>
             <para>
               If you want some mailboxes to be always visible, then use the
-              <literal>sidebar_whitelist</literal> command. It takes a list of
+              <literal>sidebar_pin</literal> command. It takes a list of
               mailboxes as parameters.
             </para>
 
 <screen>
-set sidebar_new_mail_only               <emphasis role="comment"># Only mailboxes with new/flagged email</emphasis>
-sidebar_whitelist +fruit +fruit/apple   <emphasis role="comment"># Always display these two mailboxes</emphasis>
+set sidebar_new_mail_only         <emphasis role="comment"># Only mailboxes with new/flagged email</emphasis>
+sidebar_pin +fruit +fruit/apple   <emphasis role="comment"># Always display these two mailboxes</emphasis>
 </screen>
 
           </sect4>
@@ -1075,14 +1075,15 @@ sidebar_whitelist +fruit +fruit/apple   <emphasis role="comment"># Always displa
           </para>
 
 <screen>
-color sidebar_indicator default color17     <emphasis role="comment"># Dark blue background</emphasis>
-color sidebar_highlight white   color238    <emphasis role="comment"># Grey background</emphasis>
+color sidebar_background default black       <emphasis role="comment"># Black background</emphasis>
+color sidebar_indicator  default color17     <emphasis role="comment"># Dark blue background</emphasis>
+color sidebar_highlight  white   color238    <emphasis role="comment"># Grey background</emphasis>
 color sidebar_spool_file yellow  default     <emphasis role="comment"># Yellow</emphasis>
-color sidebar_unread    cyan    default     <emphasis role="comment"># Light blue</emphasis>
-color sidebar_new       green   default     <emphasis role="comment"># Green</emphasis>
-color sidebar_ordinary  default default     <emphasis role="comment"># Default colors</emphasis>
-color sidebar_flagged   red     default     <emphasis role="comment"># Red</emphasis>
-color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey</emphasis>
+color sidebar_unread     cyan    default     <emphasis role="comment"># Light blue</emphasis>
+color sidebar_new        green   default     <emphasis role="comment"># Green</emphasis>
+color sidebar_ordinary   default default     <emphasis role="comment"># Default colors</emphasis>
+color sidebar_flagged    red     default     <emphasis role="comment"># Red</emphasis>
+color sidebar_divider    color8  default     <emphasis role="comment"># Dark grey</emphasis>
 </screen>
 
           <para>
@@ -1137,64 +1138,6 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
                   <entry>Lowest</entry>
                   <entry><literal>sidebar_ordinary</literal></entry>
                   <entry>Mailbox does not match above</entry>
-                </row>
-              </tbody>
-            </tgroup>
-          </table>
-        </sect3>
-
-        <sect3 id="intro-sidebar-config-changes">
-          <title>Config Changes</title>
-          <para>
-            If you haven't used Sidebar before, you can ignore this section.
-          </para>
-          <para>
-            Some of the Sidebar config has been changed to make its meaning
-            clearer. These changes have been made since the previous Sidebar
-            release: 2015-11-11.
-          </para>
-
-          <table id="table-intro-sidebar-config-changes">
-            <title>Config Changes</title>
-            <tgroup cols="2">
-              <thead>
-                <row>
-                  <entry>Old Name</entry>
-                  <entry>New Name</entry>
-                </row>
-              </thead>
-              <tbody>
-                <row>
-                  <entry><literal>$sidebar_delim</literal></entry>
-                  <entry><literal>$sidebar_divider_char</literal></entry>
-                </row>
-                <row>
-                  <entry><literal>$sidebar_folderindent</literal></entry>
-                  <entry><literal>$sidebar_folder_indent</literal></entry>
-                </row>
-                <row>
-                  <entry><literal>$sidebar_indentstr</literal></entry>
-                  <entry><literal>$sidebar_indent_string</literal></entry>
-                </row>
-                <row>
-                  <entry><literal>$sidebar_newmail_only</literal></entry>
-                  <entry><literal>$sidebar_new_mail_only</literal></entry>
-                </row>
-                <row>
-                  <entry><literal>$sidebar_shortpath</literal></entry>
-                  <entry><literal>$sidebar_short_path</literal></entry>
-                </row>
-                <row>
-                  <entry><literal>$sidebar_sort</literal></entry>
-                  <entry><literal>$sidebar_sort_method</literal></entry>
-                </row>
-                <row>
-                  <entry><literal>&lt;sidebar-scroll-down&gt;</literal></entry>
-                  <entry><literal>&lt;sidebar-page-down&gt;</literal></entry>
-                </row>
-                <row>
-                  <entry><literal>&lt;sidebar-scroll-up&gt;</literal></entry>
-                  <entry><literal>&lt;sidebar-page-up&gt;</literal></entry>
                 </row>
               </tbody>
             </tgroup>
@@ -1983,6 +1926,12 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
                 <entry>1</entry>
                 <entry>
                   Bold on
+                </entry>
+              </row>
+              <row>
+                <entry>3</entry>
+                <entry>
+                  Italics on
                 </entry>
               </row>
               <row>
@@ -2782,9 +2731,9 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
           message body should start on a new line after the existing blank line
           at the end of headers. Any messages you are replying to will be added
           in sort order to the message, with appropriate
-          <link linkend="attribution">$attribution</link>,
+          <link linkend="attribution-intro">$attribution_intro</link>,
           <link linkend="indent-string">$indent_string</link> and
-          <link linkend="post-indent-string">$post_indent_string</link>. When
+          <link linkend="attribution-trailer">$attribution_trailer</link>. When
           forwarding a message, if the
           <link linkend="mime-forward">$mime_forward</link> variable is unset,
           a copy of the forwarded message will be included. If you have
@@ -2954,7 +2903,10 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
         <sect3 id="fcc-header">
           <title>Fcc: Pseudo Header</title>
           <para>
-            If you specify
+            If you specify either of
+          </para>
+          <para>
+            <literal>Mutt-Fcc:</literal> <emphasis>filename</emphasis>
           </para>
           <para>
             <literal>Fcc:</literal> <emphasis>filename</emphasis>
@@ -2970,7 +2922,11 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
         <sect3 id="attach-header">
           <title>Attach: Pseudo Header</title>
           <para>
-            You can also attach files to your message by specifying
+            You can also attach files to your message by specifying either of
+          </para>
+          <para>
+            <literal>Mutt-Attach:</literal>
+            <emphasis>filename</emphasis> [<emphasis>description</emphasis>]
           </para>
           <para>
             <literal>Attach:</literal>
@@ -2988,7 +2944,14 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
         <sect3 id="pgp-header">
           <title>Pgp: Pseudo Header</title>
           <para>
-            If you want to use PGP, you can specify
+            If you want to use PGP, you can specify either of
+          </para>
+          <para>
+            <literal>Mutt-PGP:</literal> [
+            <literal>E</literal> |
+            <literal>S</literal> |
+            <literal>S</literal>
+            <emphasis>&lt;id&gt;</emphasis> ]
           </para>
           <para>
             <literal>Pgp:</literal> [
@@ -3001,6 +2964,34 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
             <quote>E</quote> selects encryption, <quote>S</quote> selects signing
             and <quote>S&lt;id&gt;</quote> selects signing with the given key,
             setting <link linkend="pgp-sign-as">$pgp_sign_as</link> for the
+            duration of the message composition session. The selection can later
+            be changed in the compose menu.
+          </para>
+        </sect3>
+
+        <sect3 id="smime-header">
+          <title>Smime: Pseudo Header</title>
+          <para>
+            If you want to use S/MIME, you can specify either of
+          </para>
+          <para>
+            <literal>Mutt-SMIME:</literal> [
+            <literal>E</literal> |
+            <literal>S</literal> |
+            <literal>S</literal>
+            <emphasis>&lt;id&gt;</emphasis> ]
+          </para>
+          <para>
+            <literal>Smime:</literal> [
+            <literal>E</literal> |
+            <literal>S</literal> |
+            <literal>S</literal>
+            <emphasis>&lt;id&gt;</emphasis> ]
+          </para>
+          <para>
+            <quote>E</quote> selects encryption, <quote>S</quote> selects signing
+            and <quote>S&lt;id&gt;</quote> selects signing with the given key,
+            setting <link linkend="smime-sign-as">$smime_sign_as</link> for the
             duration of the message composition session. The selection can later
             be changed in the compose menu.
           </para>
@@ -3024,6 +3015,24 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
             <quote>thread hijacking</quote>.
           </para>
         </sect3>
+
+        <sect3 id="mutt-mix-header">
+          <title>Mutt-Mix: Pseudo Header</title>
+          <para>
+            If you want to use <link linkend="sending-mixmaster">Mixmaster</link>,
+            you can specify the chain via:
+          </para>
+          <para>
+            <literal>Mutt-Mix:</literal>
+            [ <emphasis>remailer1</emphasis>
+            [ <emphasis>remailer2</emphasis>
+            [ ... ] ] ]
+          </para>
+          <para>
+            The chain can later be changed in the mixmaster menu.
+          </para>
+        </sect3>
+
       </sect2>
 
       <sect2 id="sending-crypto">
@@ -3115,12 +3124,60 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
         </para>
         <para>
           Finally, the validity field (<quote>%t</quote>) indicates how
-          well-certified a user-id is. A question mark (<quote>?</quote>)
-          indicates undefined validity, a minus character (<quote>-</quote>)
-          marks an untrusted association, a space character means a partially
-          trusted association, and a plus character (<quote>+</quote>)
-          indicates complete validity.
+          well-certified a user-id is.  It's values depend on the backend used.
+          Note that S/MIME (which uses X509 certificates) has no concept of
+          validity, so this field simply shows <literal>x</literal>.
+          The possible values listed in <xref linkend="tab-pgp-menuvalidity" />.
         </para>
+        <table id="tab-pgp-menuvalidity">
+          <title>PGP key menu validity</title>
+          <tgroup cols="3">
+            <thead>
+              <row>
+                <entry>Flag (classic PGP)</entry>
+                <entry>Flag (GPGME)</entry>
+                <entry>Description</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry>N/A</entry>
+                <entry>?</entry>
+                <entry>indicates unknown validity</entry>
+              </row>
+              <row>
+                <entry>?</entry>
+                <entry>q</entry>
+                <entry>indicates undefined validity</entry>
+              </row>
+              <row>
+                <entry>-</entry>
+                <entry>n</entry>
+                <entry>indicates a never valid key (untrusted association)</entry>
+              </row>
+              <row>
+                <entry>space</entry>
+                <entry>m</entry>
+                <entry>indicates marginal validity (partially trusted)</entry>
+              </row>
+              <row>
+                <entry>+</entry>
+                <entry>f</entry>
+                <entry>indicates fully validity (fully trusted)</entry>
+              </row>
+              <row>
+                <entry>N/A</entry>
+                <entry>u</entry>
+                <entry>indicates ultimate validity</entry>
+              </row>
+              <row>
+                <entry>N/A</entry>
+                <entry>x</entry>
+                <entry>the entry is an X509 certificate (S/MIME)</entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
       </sect2>
 
       <sect2 id="ff">
@@ -3419,15 +3476,7 @@ color sidebar_divider   color8  default     <emphasis role="comment"># Dark grey
       </para>
 
       <para>
-        To enable <quote>classic mode</quote>, ensure GPGME is disabled and use
-        the <literal>gpg.rc</literal> or <literal>smime.rc</literal> files that
-        come with NeoMutt.  These are typically installed under
-        <literal>/usr/local/share/doc/neomutt/samples/</literal>.  Source them, either
-        directly or by copying them to your .mutt directory and sourcing them.
-        Sourcing them directly from
-        <literal>/usr/local/share/doc/neomutt/samples/</literal> has the benefit of
-        automatically using fixes and security improvements to the command
-        invocations, and is recommended.
+        To enable <quote>classic mode</quote>, ensure GPGME is disabled.
       </para>
 
 <screen>
@@ -3484,6 +3533,18 @@ set crypt_use_gpgme
           have a separate signing key, or only have a signing key, then set the
           second.  Most people will only need to set
           <link linkend="smime-default-key">$smime_default_key</link>.
+        </para>
+
+        <para>
+          When using GPGME as S/MIME backend, keys and certificates are
+          managed by GnuPG.  You can add your key (or certificates) to
+          GnuPG with the command
+          <quote><literal>gpgsm --import mykey.p12</literal></quote>.
+          Note that in order to use the key for signing or encrypting, the root
+          certificate of that key must be trusted, which might involve editing
+          <literal>~/.gnupg/trustlist.txt</literal>.
+          Consult your documentation of GnuPG for details, in particular
+          <literal>gpgsm</literal>.
         </para>
 
         <para>
@@ -3690,7 +3751,7 @@ set crypt_use_gpgme
           <link linkend="news-server">$news_server</link>,
           <link linkend="shell">shell</link>,
           <link linkend="spool-file">$spool_file</link>,
-          <link linkend="tmpdir">$tmpdir</link>,
+          <link linkend="tmp-dir">$tmp_dir</link>,
         </para>
         <para>
           Finally, it's possible to
@@ -3747,11 +3808,8 @@ set crypt_use_gpgme
         NeoMutt is highly configurable because it's <emphasis>meant</emphasis>
         to be customized to your needs and preferences.  However, this
         configurability can make it difficult when just getting started.  A few
-        sample neomuttrc files come with NeoMutt, under
-        <literal>doc/neomutt/samples/</literal>.  Among them,
-        <ulink url="https://github.com/neomutt/neomutt/blob/main/contrib/samples/sample.neomuttrc-starter">sample.neomuttrc-starter</ulink>
-        is a basic example config with a few suggested settings and pointers to
-        useful programs.
+        sample neomuttrc files are available in the
+        <ulink url="https://github.com/neomutt/neomutt-contrib">Contrib Repo</ulink>.
       </para>
     </sect1>
 
@@ -3939,11 +3997,11 @@ set imap_pass="`gpg --batch -q --decrypt ~/.neomutt/account.gpg`"
         <group choice="req">
           <arg choice="plain" rep="repeat">
             <option>-rx</option>
-            <replaceable class="parameter">expr</replaceable>
+            <replaceable class="parameter">regex</replaceable>
           </arg>
           <arg choice="plain" rep="repeat">
             <option>-addr</option>
-            <replaceable class="parameter">expr</replaceable>
+            <replaceable class="parameter">address</replaceable>
           </arg>
         </group>
         <command>ungroup</command>
@@ -3957,17 +4015,17 @@ set imap_pass="`gpg --batch -q --decrypt ~/.neomutt/account.gpg`"
           </arg>
           <arg choice="plain" rep="repeat">
             <option>-rx</option>
-            <replaceable class="parameter">expr</replaceable>
+            <replaceable class="parameter">regex</replaceable>
           </arg>
           <arg choice="plain" rep="repeat">
             <option>-addr</option>
-            <replaceable class="parameter">expr</replaceable>
+            <replaceable class="parameter">address</replaceable>
           </arg>
         </group>
       </cmdsynopsis>
       <para>
         NeoMutt supports grouping addresses logically into named groups. An
-        address or address pattern can appear in several groups at the same
+        address or regular expression can appear in several groups at the same
         time. These groups can be used in
         <link linkend="patterns">patterns</link> (for searching, limiting and
         tagging) and in hooks by using group patterns. This can be useful to
@@ -4008,7 +4066,7 @@ alternates -group me -group work address3
 </screen>
 
       <para>
-        would create a group named <quote>me</quote> which contains all your
+        would create a group named <quote>me</quote> which contains all three
         addresses and a group named <quote>work</quote> which contains only
         your work address <emphasis>address3</emphasis>. Besides many other
         possibilities, this could be used to automatically mark your own
@@ -4023,8 +4081,8 @@ alternates -group me -group work address3
         its contents. As soon as a group gets empty because all addresses and
         regular expressions have been removed, it'll internally be removed, too
         (i.e. there cannot be an empty group). When removing regular
-        expressions from a group, the pattern must be specified exactly as
-        given to the <command>group</command> command or
+        expressions from a group, the <emphasis>regex</emphasis> must be
+        specified exactly as given to the <command>group</command> command or
         <literal>-group</literal> argument.
       </para>
     </sect1>
@@ -4158,7 +4216,7 @@ set alias_file=~/.mail_aliases
       </para>
     </sect1>
 
-    <sect1 id="bind">
+    <sect1 id="key-bindings">
       <title>Changing the Default Key Bindings</title>
       <para>
         Usage:
@@ -4183,10 +4241,12 @@ set alias_file=~/.mail_aliases
             <replaceable class="parameter">*</replaceable>
           </arg>
           <arg choice="plain">
-            <replaceable class="parameter">map</replaceable>
-          </arg>
-          <arg choice="opt" rep="repeat">
-            <replaceable class="parameter">,map</replaceable>
+            <arg choice="plain">
+              <replaceable class="parameter">map</replaceable>
+            </arg>
+            <arg choice="opt" rep="repeat">
+              <replaceable class="parameter">,map</replaceable>
+            </arg>
           </arg>
         </group>
         <group choice="opt">
@@ -4199,292 +4259,535 @@ set alias_file=~/.mail_aliases
         This command allows you to change the default key bindings (operation
         invoked when pressing a key).
       </para>
-      <para>
-        <emphasis>map</emphasis> specifies in which menu the binding belongs.
-        Multiple maps may be specified by separating them with commas (no
-        additional whitespace is allowed). The currently defined maps are:
-      </para>
-      <note>
-        <para>
-          Missing key sequence in unbind command means unibind all bindings in menus
-          given in <emphasis>map</emphasis>.
-        </para>
-      </note>
-      <anchor id="maps" />
-      <variablelist>
-        <varlistentry>
-          <term>generic</term>
-          <listitem>
-            <para>
-              This is not a real menu, but is used as a fallback for all of the
-              other menus except for the pager and editor modes. If a key is
-              not defined in another menu, NeoMutt will look for a binding to
-              use in this menu. This allows you to bind a key to a certain
-              function in multiple menus instead of having multiple
-              <command>bind</command> statements to accomplish the same task.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term>alias</term>
-          <listitem>
-            <para>
-              The alias menu is the list of your personal aliases as defined in
-              your <literal>.neomuttrc</literal>. It is the mapping from
-              a short alias name to the full email address(es) of the
-              recipient(s).
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term>attach</term>
-          <listitem>
-            <para>
-              The attachment menu is used to access the attachments on received
-              messages.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term>browser</term>
-          <listitem>
-            <para>
-              The browser is used for both browsing the local directory
-              structure, and for listing all of your incoming mailboxes.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term>editor</term>
-          <listitem>
-            <para>
-              The editor is used to allow the user to enter a single line of
-              text, such as the <emphasis>To</emphasis> or
-              <emphasis>Subject</emphasis> prompts in the
-              <literal>compose</literal> menu.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term>index</term>
-          <listitem>
-            <para>
-              The index is the list of messages contained in a mailbox.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term>compose</term>
-          <listitem>
-            <para>
-              The compose menu is the screen used when sending a new message.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term>pager</term>
-          <listitem>
-            <para>
-              The pager is the mode used to display message/attachment data,
-              and help listings.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term>pgp</term>
-          <listitem>
-            <para>
-              The pgp menu is used to select the OpenPGP keys used to encrypt
-              outgoing messages.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term>smime</term>
-          <listitem>
-            <para>
-              The smime menu is used to select the OpenSSL certificates used to
-              encrypt outgoing messages.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term>postpone</term>
-          <listitem>
-            <para>
-              The postpone menu is similar to the index menu, except is used
-              when recalling a message the user was composing, but saved until
-              later.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term>query</term>
-          <listitem>
-            <para>
-              The query menu is the browser for results returned by
-              <link linkend="query-command">$query_command</link>.
-            </para>
-          </listitem>
-        </varlistentry>
-        <varlistentry>
-          <term>mix</term>
-          <listitem>
-            <para>
-              The mixmaster screen is used to select remailer options for
-              outgoing messages (if NeoMutt is compiled with Mixmaster
-              support).
-            </para>
-          </listitem>
-        </varlistentry>
-      </variablelist>
-      <para>
-        <emphasis>key</emphasis> is the key (or key sequence) you wish to bind.
-        To specify a control character, use the sequence
-        <emphasis>\Cx</emphasis>, where <emphasis>x</emphasis> is the letter of
-        the control character (for example, to specify control-A use
-        <quote>\Ca</quote>). Note that the case of <emphasis>x</emphasis> as
-        well as <emphasis>\C</emphasis> is ignored, so that
-        <emphasis>\CA</emphasis>, <emphasis>\Ca</emphasis>,
-        <emphasis>\cA</emphasis> and <emphasis>\ca</emphasis> are all
-        equivalent. An alternative form is to specify the key as a three digit
-        octal number prefixed with a <quote>\</quote> (for example
-        <emphasis>\177</emphasis> is equivalent to <emphasis>\c?</emphasis>).
-        In addition, <emphasis>key</emphasis> may be a symbolic name as shown
-        in <xref linkend="tab-key-names" />.
-      </para>
 
-      <table id="tab-key-names">
-        <title>Symbolic key names</title>
-        <tgroup cols="2">
-          <thead>
-            <row>
-              <entry>Symbolic name</entry>
-              <entry>Meaning</entry>
-            </row>
-          </thead>
-          <tbody>
-            <row>
-              <entry>\t</entry>
-              <entry>tab</entry>
-            </row>
-            <row>
-              <entry>&lt;tab&gt;</entry>
-              <entry>tab</entry>
-            </row>
-            <row>
-              <entry>&lt;backtab&gt;</entry>
-              <entry>backtab / shift-tab</entry>
-            </row>
-            <row>
-              <entry>\r</entry>
-              <entry>carriage return</entry>
-            </row>
-            <row>
-              <entry>\n</entry>
-              <entry>newline</entry>
-            </row>
-            <row>
-              <entry>\e</entry>
-              <entry>escape/alt</entry>
-            </row>
-            <row>
-              <entry>&lt;esc&gt;</entry>
-              <entry>escape/alt</entry>
-            </row>
-            <row>
-              <entry>&lt;up&gt;</entry>
-              <entry>up arrow</entry>
-            </row>
-            <row>
-              <entry>&lt;down&gt;</entry>
-              <entry>down arrow</entry>
-            </row>
-            <row>
-              <entry>&lt;left&gt;</entry>
-              <entry>left arrow</entry>
-            </row>
-            <row>
-              <entry>&lt;right&gt;</entry>
-              <entry>right arrow</entry>
-            </row>
-            <row>
-              <entry>&lt;pageup&gt;</entry>
-              <entry>Page Up</entry>
-            </row>
-            <row>
-              <entry>&lt;pagedown&gt;</entry>
-              <entry>Page Down</entry>
-            </row>
-            <row>
-              <entry>&lt;backspace&gt;</entry>
-              <entry>Backspace</entry>
-            </row>
-            <row>
-              <entry>&lt;delete&gt;</entry>
-              <entry>Delete</entry>
-            </row>
-            <row>
-              <entry>&lt;insert&gt;</entry>
-              <entry>Insert</entry>
-            </row>
-            <row>
-              <entry>&lt;enter&gt;</entry>
-              <entry>Enter</entry>
-            </row>
-            <row>
-              <entry>&lt;return&gt;</entry>
-              <entry>Return</entry>
-            </row>
-            <row>
-              <entry>&lt;keypadenter&gt;</entry>
-              <entry>Enter key on numeric keypad</entry>
-            </row>
-            <row>
-              <entry>&lt;home&gt;</entry>
-              <entry>Home</entry>
-            </row>
-            <row>
-              <entry>&lt;end&gt;</entry>
-              <entry>End</entry>
-            </row>
-            <row>
-              <entry>&lt;space&gt;</entry>
-              <entry>Space bar</entry>
-            </row>
-            <row>
-              <entry>&lt;f1&gt;</entry>
-              <entry>function key 1</entry>
-            </row>
-            <row>
-              <entry>&lt;f10&gt;</entry>
-              <entry>function key 10</entry>
-            </row>
-          </tbody>
-        </tgroup>
-      </table>
-      <para>
-        The <literal>&lt;what-key&gt;</literal> function can be used to explore
-        keycode and symbolic names for other keys on your keyboard. Executing
-        this function will display information about each key pressed, until
-        terminated by <literal>^G</literal>.
-      </para>
-      <para>
-        <emphasis>key</emphasis> does not need to be enclosed in quotes unless
-        it contains a space (<quote>&#160;</quote>) or semi-colon
-        (<quote>;</quote>).
-      </para>
-      <para>
-        <emphasis>function</emphasis> specifies which action to take when
-        <emphasis>key</emphasis> is pressed. For a complete list of functions,
-        see the <link linkend="functions">reference</link>. Note that the
-        <command>bind</command> expects <emphasis>function</emphasis> to be
-        specified without angle brackets.
-      </para>
-      <para>
-        The special function <literal>&lt;noop&gt;</literal> unbinds the
-        specified key sequence.
-      </para>
+      <sect2 id="bind">
+        <title>Binding a Key Sequence to a Function</title>
+        <para>
+          The <literal>bind</literal> command allows to assign a new effect to
+          a key (e.g. <literal>a</literal>) or a keysequence
+          (e.g. <literal>gh</literal> – that is pressing <literal>g</literal>
+          followed by a press of <literal>h</literal>).  Its syntax is:
+        </para>
+        <cmdsynopsis>
+          <command>bind</command>
+          <arg choice="plain">
+            <replaceable class="parameter">map</replaceable>
+          </arg>
+          <arg choice="opt" rep="repeat">
+            <replaceable class="parameter">,map</replaceable>
+          </arg>
+          <arg choice="plain">
+            <replaceable class="parameter">key</replaceable>
+          </arg>
+          <arg choice="plain">
+            <replaceable class="parameter">function</replaceable>
+          </arg>
+        </cmdsynopsis>
+        <para>
+          <emphasis>map</emphasis> specifies in which menu the binding belongs.
+          Multiple maps may be specified by separating them with commas (no
+          additional whitespace is allowed). The currently defined maps are:
+        </para>
+        <anchor id="maps" />
+        <variablelist>
+          <varlistentry>
+            <term>generic</term>
+            <listitem>
+              <para>
+                This is not a real menu, but is used as a fallback for all of the
+                other menus except for the pager and editor modes. If a key is
+                not defined in another menu, NeoMutt will look for a binding to
+                use in this menu. This allows you to bind a key to a certain
+                function in multiple menus instead of having multiple
+                <command>bind</command> statements to accomplish the same task.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>alias</term>
+            <listitem>
+              <para>
+                The alias menu is the list of your personal aliases as defined in
+                your <literal>.neomuttrc</literal>. It is the mapping from
+                a short alias name to the full email address(es) of the
+                recipient(s).
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>attach</term>
+            <listitem>
+              <para>
+                The attachment menu is used to access the attachments on received
+                messages.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>browser</term>
+            <listitem>
+              <para>
+                The browser is used for both browsing the local directory
+                structure, and for listing all of your incoming mailboxes.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>editor</term>
+            <listitem>
+              <para>
+                The editor is used to allow the user to enter a single line of
+                text, such as the <emphasis>To</emphasis> or
+                <emphasis>Subject</emphasis> prompts in the
+                <literal>compose</literal> menu.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>index</term>
+            <listitem>
+              <para>
+                The index is the list of messages contained in a mailbox.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>compose</term>
+            <listitem>
+              <para>
+                The compose menu is the screen used when sending a new message.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>pager</term>
+            <listitem>
+              <para>
+                The pager is the mode used to display message/attachment data,
+                and help listings.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>pgp</term>
+            <listitem>
+              <para>
+                The pgp menu is used to select the OpenPGP keys used to encrypt
+                outgoing messages.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>smime</term>
+            <listitem>
+              <para>
+                The smime menu is used to select the OpenSSL certificates used to
+                encrypt outgoing messages.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>postpone</term>
+            <listitem>
+              <para>
+                The postpone menu is similar to the index menu, except is used
+                when recalling a message the user was composing, but saved until
+                later.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>query</term>
+            <listitem>
+              <para>
+                The query menu is the browser for results returned by
+                <link linkend="query-command">$query_command</link>.
+              </para>
+            </listitem>
+          </varlistentry>
+          <varlistentry>
+            <term>mix</term>
+            <listitem>
+              <para>
+                The mixmaster screen is used to select remailer options for
+                outgoing messages (if NeoMutt is compiled with Mixmaster
+                support).
+              </para>
+            </listitem>
+          </varlistentry>
+        </variablelist>
+        <para>
+          <emphasis>key</emphasis> is the key (or key sequence) you wish to bind.
+          To specify a control character, use the sequence
+          <emphasis>\Cx</emphasis>, where <emphasis>x</emphasis> is the letter of
+          the control character (for example, to specify control-A use
+          <quote>\Ca</quote>). Note that the case of <emphasis>x</emphasis> as
+          well as <emphasis>\C</emphasis> is ignored, so that
+          <emphasis>\CA</emphasis>, <emphasis>\Ca</emphasis>,
+          <emphasis>\cA</emphasis> and <emphasis>\ca</emphasis> are all
+          equivalent. An alternative form is to specify the key as a three digit
+          octal number prefixed with a <quote>\</quote> (for example
+          <emphasis>\177</emphasis> is equivalent to <emphasis>\c?</emphasis>).
+          In addition, <emphasis>key</emphasis> may be a symbolic name as shown
+          in <xref linkend="tab-key-names" />.
+        </para>
+
+        <table id="tab-key-names">
+          <title>Symbolic key names</title>
+          <tgroup cols="2">
+            <thead>
+              <row>
+                <entry>Symbolic name</entry>
+                <entry>Meaning</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry>\t</entry>
+                <entry>tab</entry>
+              </row>
+              <row>
+                <entry>&lt;tab&gt;</entry>
+                <entry>tab</entry>
+              </row>
+              <row>
+                <entry>&lt;backtab&gt;</entry>
+                <entry>backtab / shift-tab</entry>
+              </row>
+              <row>
+                <entry>\r</entry>
+                <entry>carriage return</entry>
+              </row>
+              <row>
+                <entry>\n</entry>
+                <entry>newline</entry>
+              </row>
+              <row>
+                <entry>\e</entry>
+                <entry>escape/alt</entry>
+              </row>
+              <row>
+                <entry>&lt;esc&gt;</entry>
+                <entry>escape/alt</entry>
+              </row>
+              <row>
+                <entry>&lt;up&gt;</entry>
+                <entry>up arrow</entry>
+              </row>
+              <row>
+                <entry>&lt;down&gt;</entry>
+                <entry>down arrow</entry>
+              </row>
+              <row>
+                <entry>&lt;left&gt;</entry>
+                <entry>left arrow</entry>
+              </row>
+              <row>
+                <entry>&lt;right&gt;</entry>
+                <entry>right arrow</entry>
+              </row>
+              <row>
+                <entry>&lt;pageup&gt;</entry>
+                <entry>Page Up</entry>
+              </row>
+              <row>
+                <entry>&lt;pagedown&gt;</entry>
+                <entry>Page Down</entry>
+              </row>
+              <row>
+                <entry>&lt;backspace&gt;</entry>
+                <entry>Backspace</entry>
+              </row>
+              <row>
+                <entry>&lt;delete&gt;</entry>
+                <entry>Delete</entry>
+              </row>
+              <row>
+                <entry>&lt;insert&gt;</entry>
+                <entry>Insert</entry>
+              </row>
+              <row>
+                <entry>&lt;enter&gt;</entry>
+                <entry>Enter</entry>
+              </row>
+              <row>
+                <entry>&lt;return&gt;</entry>
+                <entry>Return</entry>
+              </row>
+              <row>
+                <entry>&lt;keypadenter&gt;</entry>
+                <entry>Enter key on numeric keypad</entry>
+              </row>
+              <row>
+                <entry>&lt;home&gt;</entry>
+                <entry>Home</entry>
+              </row>
+              <row>
+                <entry>&lt;end&gt;</entry>
+                <entry>End</entry>
+              </row>
+              <row>
+                <entry>&lt;space&gt;</entry>
+                <entry>Space bar</entry>
+              </row>
+              <row>
+                <entry>&lt;f1&gt;</entry>
+                <entry>function key 1</entry>
+              </row>
+              <row>
+                <entry>&lt;f10&gt;</entry>
+                <entry>function key 10</entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+        <para>
+          The <literal>&lt;what-key&gt;</literal> function can be used to explore
+          keycode and symbolic names for other keys on your keyboard. Executing
+          this function will display information about each key pressed, until
+          terminated by <literal>^G</literal>.
+        </para>
+        <para>
+          <emphasis>key</emphasis> does not need to be enclosed in quotes unless
+          it contains a space (<quote>&#160;</quote>) or semi-colon
+          (<quote>;</quote>).
+        </para>
+        <para>
+          <emphasis>function</emphasis> specifies which action to take when
+          <emphasis>key</emphasis> is pressed. For a complete list of functions,
+          see the <link linkend="functions">reference</link>. Note that the
+          <command>bind</command> expects <emphasis>function</emphasis> to be
+          specified without angle brackets.
+        </para>
+        <para>
+          The special function <literal>&lt;noop&gt;</literal> unbinds the
+          specified key sequence.  It is recommended to use
+          <link linkend="unbind"><literal>unbind</literal></link> instead.
+        </para>
+      </sect2>
+
+      <sect2 id="unbind">
+        <title>Unbinding a Key Sequence</title>
+        <para>
+          To remove a binding of a key or key sequence
+          <literal>unbind</literal> can be used.  Its syntax is:
+        </para>
+        <cmdsynopsis>
+          <command>unbind</command>
+          <group choice="req">
+            <arg choice="plain">
+              <replaceable class="parameter">*</replaceable>
+            </arg>
+            <arg choice="plain">
+              <arg choice="plain">
+                <replaceable class="parameter">map</replaceable>
+              </arg>
+              <arg choice="opt" rep="repeat">
+                <replaceable class="parameter">,map</replaceable>
+              </arg>
+            </arg>
+          </group>
+          <group choice="opt">
+            <arg choice="plain">
+              <replaceable class="parameter">key</replaceable>
+            </arg>
+          </group>
+        </cmdsynopsis>
+        <para>
+          <emphasis>map</emphasis> specifies from which menus the key sequence
+          should be removed.  Multiple maps may be specified by separating them
+          with commas (no additional whitespace is allowed).  If
+          <literal>*</literal> is given, then the key sequence is removed from
+          all menus.  Valid menu names and their description are listed
+          <link linkend="maps">in the <literal>bind</literal> section</link>.
+        </para>
+        <para>
+          <emphasis>key</emphasis> is the key or key sequence to be unbound.
+          It may be omitted in which case all keybindings in the given menus
+          are removed.  To prevent NeoMutt from becoming unusable some fallback
+          key bindings are added afterwards.  The fallback keybindings added
+          depend on the menu, they are listed in <xref linkend="tab-fallback-key-bindings" />.
+        </para>
+        <table id="tab-fallback-key-bindings">
+          <title>Fallback key bindings</title>
+          <tgroup cols="3">
+            <thead>
+              <row>
+                <entry>Menu</entry>
+                <entry>Key</entry>
+                <entry>Bound Function</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry>generic</entry>
+                <entry>&lt;enter&gt;</entry>
+                <entry><literal>&lt;select-entry&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>generic</entry>
+                <entry>&lt;return&gt;</entry>
+                <entry><literal>&lt;select-entry&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>generic</entry>
+                <entry>:</entry>
+                <entry><literal>&lt;enter-command&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>generic</entry>
+                <entry>?</entry>
+                <entry><literal>&lt;help&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>generic</entry>
+                <entry>q</entry>
+                <entry><literal>&lt;exit&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>alias</entry>
+                <entry>?</entry>
+                <entry><literal>&lt;help&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>alias</entry>
+                <entry>q</entry>
+                <entry><literal>&lt;exit&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>attach</entry>
+                <entry>?</entry>
+                <entry><literal>&lt;help&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>attach</entry>
+                <entry>q</entry>
+                <entry><literal>&lt;exit&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>browser</entry>
+                <entry>?</entry>
+                <entry><literal>&lt;help&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>browser</entry>
+                <entry>q</entry>
+                <entry><literal>&lt;exit&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>editor</entry>
+                <entry>&lt;backspace&gt;</entry>
+                <entry><literal>&lt;backspace&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>editor</entry>
+                <entry>\177</entry>
+                <entry><literal>&lt;backspace&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>index</entry>
+                <entry>&lt;enter&gt;</entry>
+                <entry><literal>&lt;display-message&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>index</entry>
+                <entry>&lt;return&gt;</entry>
+                <entry><literal>&lt;display-message&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>index</entry>
+                <entry>?</entry>
+                <entry><literal>&lt;help&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>index</entry>
+                <entry>q</entry>
+                <entry><literal>&lt;exit&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>compose</entry>
+                <entry>?</entry>
+                <entry><literal>&lt;help&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>compose</entry>
+                <entry>q</entry>
+                <entry><literal>&lt;exit&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>pager</entry>
+                <entry>?</entry>
+                <entry><literal>&lt;help&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>pager</entry>
+                <entry>q</entry>
+                <entry><literal>&lt;exit&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>pager</entry>
+                <entry>:</entry>
+                <entry><literal>&lt;enter-command&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>pgp</entry>
+                <entry>?</entry>
+                <entry><literal>&lt;help&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>pgp</entry>
+                <entry>q</entry>
+                <entry><literal>&lt;exit&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>smime</entry>
+                <entry>?</entry>
+                <entry><literal>&lt;help&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>smime</entry>
+                <entry>q</entry>
+                <entry><literal>&lt;exit&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>postpone</entry>
+                <entry>?</entry>
+                <entry><literal>&lt;help&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>postpone</entry>
+                <entry>q</entry>
+                <entry><literal>&lt;exit&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>query</entry>
+                <entry>?</entry>
+                <entry><literal>&lt;help&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>query</entry>
+                <entry>q</entry>
+                <entry><literal>&lt;exit&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>mix</entry>
+                <entry>?</entry>
+                <entry><literal>&lt;help&gt;</literal></entry>
+              </row>
+              <row>
+                <entry>mix</entry>
+                <entry>q</entry>
+                <entry><literal>&lt;exit&gt;</literal></entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+        <para>
+          A key binding can also be unbound by mapping it to the special
+          function <literal>&lt;noop&gt;</literal>.  It is, however,
+          recommended to use <literal>unbind</literal> instead.
+        </para>
+      </sect2>
 
       <sect2 id="crlf">
         <title>Enter versus Return</title>
@@ -4645,7 +4948,7 @@ bind index gg first-entry
           <replaceable class="parameter">-noregex</replaceable>
         </arg>
         <arg choice="plain">
-          <replaceable class="parameter">pattern</replaceable>
+          <replaceable class="parameter">regex</replaceable>
         </arg>
         <arg choice="plain">
           <replaceable class="parameter">command</replaceable>
@@ -4656,8 +4959,8 @@ bind index gg first-entry
         reading. The <command>folder-hook</command> command provides a method
         by which you can execute any configuration command.
         The <emphasis>command</emphasis> is executed before loading any mailboxes
-        matching <emphasis>pattern</emphasis>. The <emphasis>-noregex</emphasis>
-        switch controls whether <emphasis>pattern</emphasis> is matched using
+        matching <emphasis>regex</emphasis>. The <emphasis>-noregex</emphasis>
+        switch controls whether <emphasis>regex</emphasis> is matched using
         a simple string comparison or a full regex match.
         If a mailbox matches multiple <command>folder-hook</command>s, they are
         executed in the order given in the <literal>.neomuttrc</literal>.
@@ -4671,10 +4974,10 @@ bind index gg first-entry
       <note>
         <para>
           If you use the <quote>!</quote> shortcut for
-          <link linkend="spool-file">$spool_file</link> at the beginning of the
-          pattern, you must place it inside of double or single quotes in order
-          to distinguish it from the logical <emphasis>not</emphasis> operator
-          for the expression.
+          <link linkend="spool-file">$spool_file</link> at the beginning of
+          <emphasis>regex</emphasis>, you must place it inside of double or
+          single quotes in order to distinguish it from the logical
+          <emphasis>not</emphasis> operator for the expression.
         </para>
       </note>
       <note>
@@ -4687,7 +4990,7 @@ bind index gg first-entry
         <para>
           However, the sorting method is not restored to its previous value
           when reading a different mailbox. To specify
-          a <emphasis>default</emphasis> command, use the pattern
+          a <emphasis>default</emphasis> command, use the regex
           <quote>.</quote> before other <command>folder-hook</command>s
           adjusting a value on a per-folder basis because
           <command>folder-hook</command>s are evaluated in the order given in
@@ -5042,6 +5345,9 @@ folder-hook work "set sort=threads"
             <para>bold</para>
           </listitem>
           <listitem>
+            <para>italic</para>
+          </listitem>
+          <listitem>
             <para>reverse</para>
           </listitem>
           <listitem>
@@ -5054,24 +5360,8 @@ folder-hook work "set sort=threads"
         <para>
           If your terminal supports it, the special keyword
           <emphasis>default</emphasis> can be used as a transparent color. The
-          value <emphasis>brightdefault</emphasis> is also valid. If NeoMutt is
-          linked against the <emphasis>S-Lang</emphasis> library, you also need
-          to set the <literal>$COLORFGBG</literal> environment variable to the
-          default colors of your terminal for this to work; for example (for
-          Bourne-like shells):
+          value <emphasis>brightdefault</emphasis> is also valid.
         </para>
-<screen>
-set COLORFGBG="green;black"
-export COLORFGBG
-</screen>
-        <note>
-          <para>
-            The <emphasis>S-Lang</emphasis> library requires you to use the
-            <emphasis>lightgray</emphasis> and <emphasis>brown</emphasis>
-            keywords instead of <emphasis>white</emphasis> and
-            <emphasis>yellow</emphasis> when setting this variable.
-          </para>
-        </note>
       </sect2>
 
       <sect2 id="color-simple">
@@ -5181,53 +5471,6 @@ uncolor error
 uncolor prompt
 </screen>
         <para>
-          Each of these objects will colour a certain expando in the index.
-          See <link linkend="index-format">$index_format</link> for more details.
-        </para>
-        <table id="color-simple-index">
-          <title>Simple Index Colours</title>
-          <tgroup cols="2">
-            <thead>
-              <row>
-                <entry>Colour Name</entry>
-                <entry>Description</entry>
-              </row>
-            </thead>
-            <tbody>
-              <row>
-                <entry>index_collapsed</entry>
-                <entry>Number of messages in a collapsed thread, <literal>%M</literal></entry>
-              </row>
-              <row>
-                <entry>index_date</entry>
-                <entry>Date field, <literal>%d</literal> <literal>%D</literal> <literal>%{fmt}</literal> <literal>%[fmt]</literal> <literal>%(fmt)</literal></entry>
-              </row>
-              <row>
-                <entry>index_label</entry>
-                <entry>Message label, <literal>%y</literal> <literal>%Y</literal></entry>
-              </row>
-              <row>
-                <entry>index_number</entry>
-                <entry>Message number, <literal>%C</literal></entry>
-              </row>
-              <row>
-                <entry>index_size</entry>
-                <entry>Message size, <literal>%c</literal> <literal>%cr</literal> <literal>%l</literal></entry>
-              </row>
-              <row>
-                <entry>index_tags</entry>
-                <entry>Transformed message tags, <literal>%g</literal> <literal>%J</literal></entry>
-              </row>
-            </tbody>
-          </tgroup>
-        </table>
-<screen>
-color index_date green default
-</screen>
-<screen>
-uncolor index_date
-</screen>
-        <para>
           These are sidebar objects.
           See <link linkend="sidebar-intro">Sidebar Intro</link> for more details.
         </para>
@@ -5241,6 +5484,10 @@ uncolor index_date
               </row>
             </thead>
             <tbody>
+              <row>
+                <entry>sidebar_background</entry>
+                <entry>The entire sidebar panel</entry>
+              </row>
               <row>
                 <entry>sidebar_divider</entry>
                 <entry>The dividing line between the Sidebar and the Index/Pager panels</entry>
@@ -5469,22 +5716,52 @@ uncolor quoted2
               <row>
                 <entry>index_author</entry>
                 <entry>pattern</entry>
-                <entry>Author in the index, %A %a %F %L %n</entry>
+                <entry>Author in the index: <literal>%A</literal>, <literal>%a</literal>, <literal>%F</literal>, <literal>%L</literal>, <literal>%n</literal></entry>
+              </row>
+              <row>
+                <entry>index_collapsed</entry>
+                <entry>pattern</entry>
+                <entry>Number of messages in a collapsed thread: <literal>%M</literal></entry>
+              </row>
+              <row>
+                <entry>index_date</entry>
+                <entry>pattern</entry>
+                <entry>Date field: <literal>%d</literal>, <literal>%D</literal>, <literal>%{fmt}</literal>, <literal>%[fmt]</literal>, <literal>%(fmt)</literal></entry>
               </row>
               <row>
                 <entry>index_flags</entry>
                 <entry>pattern</entry>
-                <entry>Flags in the index, %S %Z</entry>
+                <entry>Flags in the index: <literal>%S</literal>, <literal>%Z</literal></entry>
+              </row>
+              <row>
+                <entry>index_label</entry>
+                <entry>pattern</entry>
+                <entry>Message label: <literal>%y</literal>, <literal>%Y</literal></entry>
+              </row>
+              <row>
+                <entry>index_number</entry>
+                <entry>pattern</entry>
+                <entry>Message number: <literal>%C</literal></entry>
+              </row>
+              <row>
+                <entry>index_size</entry>
+                <entry>pattern</entry>
+                <entry>Message size: <literal>%c</literal>, <literal>%cr</literal>, <literal>%l</literal></entry>
               </row>
               <row>
                 <entry>index_subject</entry>
                 <entry>pattern</entry>
-                <entry>Subject in the index, %s</entry>
+                <entry>Subject in the index: <literal>%s</literal></entry>
               </row>
               <row>
                 <entry>index_tag</entry>
                 <entry>pattern</entry>
-                <entry>Tags in the index, %G</entry>
+                <entry>Tags in the index: <literal>%G</literal></entry>
+              </row>
+              <row>
+                <entry>index_tags</entry>
+                <entry>pattern</entry>
+                <entry>Transformed message tags: <literal>%g</literal>, <literal>%J</literal></entry>
               </row>
               <row>
                 <entry>status</entry>
@@ -5630,10 +5907,10 @@ uncolor status *
         <cmdsynopsis>
           <command>ignore</command>
           <arg choice="plain">
-            <replaceable class="parameter">pattern</replaceable>
+            <replaceable class="parameter">string</replaceable>
           </arg>
           <arg choice="opt" rep="repeat">
-            <replaceable class="parameter">pattern</replaceable>
+            <replaceable class="parameter">string</replaceable>
           </arg>
           <command>unignore</command>
           <group choice="req">
@@ -5641,7 +5918,7 @@ uncolor status *
               <replaceable>*</replaceable>
             </arg>
             <arg choice="plain" rep="repeat">
-              <replaceable>pattern</replaceable>
+              <replaceable>string</replaceable>
             </arg>
           </group>
         </cmdsynopsis>
@@ -5654,13 +5931,13 @@ uncolor status *
         <para>
           You do not need to specify the full header field name. For example,
           <quote>ignore content-</quote> will ignore all header fields that
-          begin with the pattern <quote>content-</quote>.
+          begin with the string <quote>content-</quote>.
           <quote>ignore&#160;*</quote> will ignore all headers.
         </para>
         <para>
           To remove a previously added token from the list, use the
           <quote>unignore</quote> command. The <quote>unignore</quote> command
-          will make NeoMutt display headers with the given pattern. For
+          will make NeoMutt display headers matching the given string. For
           example, if you do <quote>ignore x-</quote> it is possible to
           <quote>unignore x-mailer</quote>.
         </para>
@@ -5795,10 +6072,10 @@ unignore posted-to:
       </para>
       <para>
         The <command>unalternates</command> command can be used to write
-        exceptions to <command>alternates</command> patterns. If an address
+        exceptions to <command>alternates</command> regex. If an address
         matches something in an <command>alternates</command> command, but you
         nonetheless do not think it is from you, you can list a more precise
-        pattern under an <command>unalternates</command> command.
+        regex under an <command>unalternates</command> command.
       </para>
       <para>
         To remove a regular expression from the <command>alternates</command>
@@ -5892,10 +6169,11 @@ unignore posted-to:
         </para>
       </note>
       <para>
-        More precisely, NeoMutt maintains lists of patterns for the addresses
-        of known and subscribed mailing lists. Every subscribed mailing list is
-        known. To mark a mailing list as known, use the <command>list</command>
-        command. To mark it as subscribed, use <command>subscribe</command>.
+        More precisely, NeoMutt maintains lists of regular expressions for the
+        addresses of known and subscribed mailing lists. Every subscribed
+        mailing list is known. To mark a mailing list as known, use the
+        <command>list</command> command. To mark it as subscribed, use
+        <command>subscribe</command>.
       </para>
       <para>
         You can use regular expressions with both commands. To mark all
@@ -5951,7 +6229,7 @@ unignore posted-to:
           <replaceable class="parameter">-noregex</replaceable>
         </arg>
         <arg choice="plain">
-          <replaceable class="parameter">pattern</replaceable>
+          <replaceable class="parameter">regex</replaceable>
         </arg>
         <arg choice="plain">
           <replaceable class="parameter">mailbox</replaceable>
@@ -5960,11 +6238,11 @@ unignore posted-to:
       <para>
         This command is used to move read messages from a specified mailbox to
         a different mailbox automatically when you quit or change folders.
-        <emphasis>pattern</emphasis> is used to specifying the mailbox to
+        <emphasis>regex</emphasis> is used to specifying the mailbox to
         treat as a <quote>spool</quote> mailbox and <emphasis>mailbox</emphasis>
         specifies where mail should be saved when read.
         The <emphasis>-noregex</emphasis> switch controls whether
-        <emphasis>pattern</emphasis> is matched using a simple string
+        <emphasis>regex</emphasis> is matched using a simple string
         comparison or a full regex match.
       </para>
       <para>
@@ -6170,6 +6448,10 @@ my_hdr Organization: A Really Big Company, Anytown, USA
         according to <link linkend="index-format">$index_format</link>.
       </para>
       <para>
+        If the pattern is a plain string, or a regex, it will be expanded to a
+        pattern using <link linkend="default-hook">$default_hook</link>.
+      </para>
+      <para>
         <command>fcc-hook</command> is used to save outgoing mail in a mailbox
         other than <link linkend="record">$record</link>. NeoMutt searches the
         initial list of message recipients for the first matching
@@ -6252,6 +6534,10 @@ save-hook aol\\.com$ +spam
         <emphasis>pattern</emphasis> matches.
       </para>
       <para>
+        If the pattern is a plain string, or a regex, it will be expanded to a
+        pattern using <link linkend="default-hook">$default_hook</link>.
+      </para>
+      <para>
         <command>reply-hook</command> is matched against the message you are
         <emphasis>replying to</emphasis>, instead of the message you are
         <emphasis>sending</emphasis>. <command>send-hook</command> is matched
@@ -6293,7 +6579,7 @@ save-hook aol\\.com$ +spam
       </para>
       <para>
         Another typical use for this command is to change the values of the
-        <link linkend="attribution">$attribution</link>,
+        <link linkend="attribution-intro">$attribution_intro</link>,
         <link linkend="attribution-locale">$attribution_locale</link>, and
         <link linkend="signature">$signature</link> variables in order to
         change the language of the attributions and signatures based upon the
@@ -6337,6 +6623,10 @@ save-hook aol\\.com$ +spam
         <emphasis>pattern</emphasis> matches the message to be displayed. When
         multiple matches occur, commands are executed in the order they are
         specified in the <literal>.neomuttrc</literal>.
+      </para>
+      <para>
+        If the pattern is a plain string, or a regex, it will be expanded to a
+        pattern using <link linkend="default-hook">$default_hook</link>.
       </para>
       <para>
         See <xref linkend="pattern-hook" /> for information on the exact format
@@ -6409,6 +6699,10 @@ message-hook '~f freshmeat-news' 'set pager="less \"+/^  subject: .*\""'
         This command is used to inject format strings dynamically into <link
         linkend="index-format">$index_format</link> based on pattern matching
         against the current message.
+      </para>
+      <para>
+        If the pattern is a plain string, or a regex, it will be expanded to a
+        pattern using <link linkend="default-hook">$default_hook</link>.
       </para>
       <para>
         The <link linkend="index-format">$index_format</link> expando
@@ -6584,7 +6878,7 @@ folder-hook . 'push "&lt;enter-command&gt;score ~= 10&lt;enter&gt;"'
       <cmdsynopsis>
         <command>spam</command>
         <arg choice="plain">
-          <replaceable class="parameter">pattern</replaceable>
+          <replaceable class="parameter">regex</replaceable>
         </arg>
         <arg choice="plain">
           <replaceable class="parameter">format</replaceable>
@@ -6595,13 +6889,13 @@ folder-hook . 'push "&lt;enter-command&gt;score ~= 10&lt;enter&gt;"'
             <replaceable class="parameter">*</replaceable>
           </arg>
           <arg choice="plain">
-            <replaceable class="parameter">pattern</replaceable>
+            <replaceable class="parameter">regex</replaceable>
           </arg>
         </group>
       </cmdsynopsis>
       <para>
         NeoMutt has generalized support for external spam-scoring filters. By
-        defining your spam patterns with the <command>spam</command> and
+        defining your spam regular expressions with the <command>spam</command> and
         <literal>nospam</literal> commands, you can <emphasis>limit</emphasis>,
         <emphasis>search</emphasis>, and <emphasis>sort</emphasis> your mail
         based on its spam attributes, as determined by the external filter. You
@@ -6622,16 +6916,16 @@ folder-hook . 'push "&lt;enter-command&gt;score ~= 10&lt;enter&gt;"'
         header cache files and turn the header cache back on.
       </para>
       <para>
-        Your first step is to define your external filter's spam patterns using
-        the <command>spam</command> command. <emphasis>pattern</emphasis>
+        Your first step is to define your external filter's spam headers using
+        the <command>spam</command> command. <emphasis>regex</emphasis>
         should be a regular expression that matches a header in a mail message.
         If any message in the mailbox matches this regular expression, it will
         receive a <quote>spam tag</quote> or <quote>spam attribute</quote>
-        (unless it also matches a <command>nospam</command> pattern – see
-        below.) The appearance of this attribute is entirely up to you, and is
-        governed by the <emphasis>format</emphasis> parameter.
+        (unless it also matches a <command>nospam</command> regular expression
+        – see below.) The appearance of this attribute is entirely up to you,
+        and is governed by the <emphasis>format</emphasis> parameter.
         <emphasis>format</emphasis> can be any static text, but it also can
-        include back-references from the <emphasis>pattern</emphasis>
+        include back-references from the <emphasis>regex</emphasis>
         expression. (A regular expression <quote>back-reference</quote> refers
         to a sub-expression contained within parentheses.)
         <literal>%1</literal> is replaced with the first back-reference in the
@@ -6646,9 +6940,9 @@ folder-hook . 'push "&lt;enter-command&gt;score ~= 10&lt;enter&gt;"'
       </para>
       <para>
         If you're using multiple spam filters, a message can have more than one
-        spam-related header. You can define <command>spam</command> patterns
+        spam-related header. You can define <command>spam</command> rules
         for each filter you use. If a message matches two or more of these
-        patterns, and the <link linkend="spam-separator">$spam_separator</link>
+        regular expressions, and the <link linkend="spam-separator">$spam_separator</link>
         variable is set to a string, then the message's spam tag will consist
         of all the <emphasis>format</emphasis> strings joined together, with
         the value of <link linkend="spam-separator">$spam_separator</link>
@@ -6679,7 +6973,7 @@ set spam_separator=", "
       </para>
       <para>
         If the <link linkend="spam-separator">$spam_separator</link> variable
-        is unset, then each spam pattern match supersedes the previous one.
+        is unset, then each spam rule match supersedes the previous one.
         Instead of getting joined <emphasis>format</emphasis> strings, you'll
         get only the last one to match.
       </para>
@@ -6705,7 +6999,7 @@ set spam_separator=", "
         will sort numerically first, and lexically only when two numbers are
         equal in value. (This is like UNIX's <literal>sort -n</literal>.)
         A message with no spam attributes at all – that is, one that didn't
-        match <emphasis>any</emphasis> of your <command>spam</command> patterns
+        match <emphasis>any</emphasis> of your <command>spam</command> rules
         – is sorted at lowest priority. Numbers are sorted next, beginning with
         0 and ranging upward. Finally, non-numeric strings are sorted, with
         <quote>a</quote> taking lower priority than <quote>z</quote>. Clearly,
@@ -6715,19 +7009,19 @@ set spam_separator=", "
       </para>
       <para>
         The <command>nospam</command> command can be used to write exceptions
-        to <command>spam</command> patterns. If a header pattern matches
+        to <command>spam</command> rules. If a header field matches
         something in a <command>spam</command> command, but you nonetheless do
-        not want it to receive a spam tag, you can list a more precise pattern
-        under a <command>nospam</command> command.
+        not want it to receive a spam tag, you can list a more precise regular
+        expression under a <command>nospam</command> command.
       </para>
       <para>
-        If the <emphasis>pattern</emphasis> given to <command>nospam</command>
-        is exactly the same as the <emphasis>pattern</emphasis> on an existing
-        <command>spam</command> list entry, the effect will be to remove the
-        entry from the spam list, instead of adding an exception. Likewise, if
-        the <emphasis>pattern</emphasis> for a <command>spam</command> command
-        matches an entry on the <command>nospam</command> list, that nospam
-        entry will be removed. If the <emphasis>pattern</emphasis> for
+        If the <emphasis>regex</emphasis> given to <command>nospam</command>
+        is exactly the same as the <emphasis>regex</emphasis> on an existing
+        <command>spam</command> rule entry, the effect will be to remove the
+        entry from the spam rules list, instead of adding an exception. Likewise, if
+        the <emphasis>regex</emphasis> for a <command>spam</command> command
+        matches an entry on the <command>nospam</command> rule list, that
+        nospam entry will be removed. If the <emphasis>regex</emphasis> for
         <command>nospam</command> is <quote>*</quote>,
         <emphasis>all entries on both lists</emphasis> will be removed. This
         might be the default action if you use <command>spam</command> and
@@ -6923,6 +7217,13 @@ set spam_separator=", "
           <arg choice="opt" rep="repeat">
             <replaceable class="parameter">variable</replaceable>
           </arg>
+          <command>set</command>
+          <arg choice="plain">
+            <replaceable class="parameter">variable</replaceable>
+          </arg>
+          <arg choice="plain">
+            <option>?</option>
+          </arg>
         </cmdsynopsis>
         <para>
           This command is used to set (and unset)
@@ -6973,10 +7274,14 @@ set spam_separator=", "
         <para>
           Using the <literal>&lt;enter-command&gt;</literal> function in the
           <emphasis>index</emphasis> menu, you can query the value of
-          a variable by prefixing the name of the variable with a question
+          a variable by suffixing the name of the variable with a question
           mark:
         </para>
-        <screen>set ?allow_8bit</screen>
+        <screen>set allow_8bit?</screen>
+        <para>
+          The old prefix query syntax (<literal><command>set</command>
+          ?allow_8bit</literal>) is also still supported.
+        </para>
         <para>
           The question mark is actually only required for boolean and
           quadoption variables.
@@ -7175,6 +7480,9 @@ mailboxes $my_mx +mailbox3
         <arg choice="plain">
           <replaceable class="parameter">filename</replaceable>
         </arg>
+        <arg choice="opt" rep="repeat">
+          <replaceable class="parameter">filename</replaceable>
+        </arg>
       </cmdsynopsis>
       <para>
         This command allows the inclusion of initialization commands from other
@@ -7186,6 +7494,25 @@ mailboxes $my_mx +mailbox3
         If the filename begins with a tilde (<quote>~</quote>), it will be
         expanded to the path of your home directory.
       </para>
+      <para>
+        If the filename is relative and the command <command>source</command>
+        is executed from the context of a configuration file, then the filename
+        is interpreted relative to the directory of that configuration file.
+        If the command is executed outside of a configuration file, e.g. from
+        the prompt, then the filename is interpreted relative to the current
+        working directory (see <link linkend="cd"><command>cd</command></link>
+        on how to change the current working directory at runtime).
+      </para>
+      <note>
+        <para>
+          A hook remembers the configuration file it was defined in and sets the
+          context to that file when executing its commands.  As a result
+          a <command>source</command> command inside a hook is executed in the
+          context of the configuration file the hook was defined in.  Thus
+          relative filenames are interpreted relative to the configuration file
+          the hook is defined in.
+        </para>
+      </note>
       <para>
         If the filename ends with a vertical bar (<quote>|</quote>), then
         <emphasis>filename</emphasis> is considered to be an executable program
@@ -7648,8 +7975,8 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
         convenience, we have included below a brief description of this syntax.
       </para>
       <para>
-        The search is case sensitive if the pattern contains at least one upper
-        case letter, and case insensitive otherwise.
+        The search is case sensitive if the regular expression contains at
+        least one upper case letter, and case insensitive otherwise.
       </para>
       <note>
         <para>
@@ -7677,6 +8004,22 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
         are regular expressions that match themselves. Any metacharacter with
         special meaning may be quoted by preceding it with a backslash.
       </para>
+      <para>
+        The following matches a literal dot <quote>.</quote> in an address:
+      </para>
+      <example id="ex-literal-dot-in-regex">
+        <title>Matching a literal dot</title>
+<screen>
+<emphasis role="comment"># no quotes</emphasis>
+alternates only\\.dot@example\\.org
+
+<emphasis role="comment"># single quotes</emphasis>
+lists 'only\.dot@example\.org'
+
+<emphasis role="comment"># Double quotes</emphasis>
+subscribe "only\\.dot@example\\.org"
+</screen>
+      </example>
       <para>
         The period <quote>.</quote> matches any single character. The caret
         <quote>^</quote> and the dollar sign <quote>$</quote> are
@@ -8084,14 +8427,14 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
                 <entry>~C <emphasis>EXPR</emphasis></entry>
                 <entry></entry>
                 <entry>
-                  messages either to: or cc: <emphasis>EXPR</emphasis>
+                  messages either to:, cc: or bcc: <emphasis>EXPR</emphasis>
                 </entry>
               </row>
               <row>
                 <entry>%C <emphasis>GROUP</emphasis></entry>
                 <entry></entry>
                 <entry>
-                  messages either to: or cc: to any member of
+                  messages either to:, cc: or bcc: to any member of
                   <emphasis>GROUP</emphasis>
                 </entry>
               </row>
@@ -8219,6 +8562,13 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
                 <entry></entry>
                 <entry>
                   messages which contain PGP key material
+                </entry>
+              </row>
+              <row>
+                <entry>~K <emphasis>EXPR</emphasis></entry>
+                <entry></entry>
+                <entry>
+                  messages blind carbon-copied to <emphasis>EXPR</emphasis>
                 </entry>
               </row>
               <row>
@@ -8588,6 +8938,22 @@ set index_format="%4C %Z %{%b %d} %-15.15L (%?l?%4l&amp;%4c?)%*  %s"
           in the regular expression, you will need to use two backslashes
           instead (<quote>\\</quote>).
         </para>
+      <example id="ex-literal-dot-in-pattern">
+        <title>Using <literal>\s</literal> and matching a literal dot in patterns</title>
+<screen>
+<emphasis role="comment"># no quotes</emphasis>
+save-hook ~h\ list-id:\\\\s*&lt;only\\\\.dot&gt;    '=archive'
+save-hook ~hlist-id:\\\\s*&lt;only\\\\.dot-here&gt; '=archive'
+
+<emphasis role="comment"># single quotes</emphasis>
+save-hook '~h list-id:\\s&lt;only\\.dot&gt;'        '=archive'
+save-hook ~h'list-id:\\s*&lt;only\\.dot-here&gt;'   '=archive'
+
+<emphasis role="comment"># Double quotes</emphasis>
+save-hook "~h list-id:\\\\s&lt;only\\\\.dot&gt;"    '=archive'
+save-hook ~h"list-id:\\\\s*&lt;only\\\\.dot&gt;"    '=archive'
+</screen>
+      </example>
         <para>
           You can force NeoMutt to treat
           <emphasis>EXPR</emphasis> as a simple substring instead of a regular
@@ -9317,7 +9683,7 @@ Limit to messages matching: ~d 19950120-19951031
 
 <screen>
 send-hook . 'unmy_hdr From:'
-send-hook ~C'^b@b\.b$' my_hdr from: c@c.c
+send-hook ~C'^b@b\\.b$' my_hdr from: c@c.c
 </screen>
 
       </example>
@@ -9358,7 +9724,7 @@ send-hook ~C'^b@b\.b$' my_hdr from: c@c.c
         </para>
 
 <screen>
-send-hook '~t ^user@work\.com$' 'my_hdr From: John Smith &lt;user@host&gt;'
+send-hook '~t ^user@work\\.com$' 'my_hdr From: John Smith &lt;user@host&gt;'
 </screen>
 
         <para>
@@ -9397,10 +9763,10 @@ folder-hook ^/home/user/Mail/bar "set sort=threads"
 folder-hook (^/home/user/Mail/bar) "set sort=threads"
 <emphasis role="comment"># This will expand to the default save folder for the alias "imap.example.com", which</emphasis>
 <emphasis role="comment"># is probably not what you want:</emphasis>
-folder-hook @imap.example.com "set sort=threads"
+folder-hook @imap\\.example\\.com "set sort=threads"
 <emphasis role="comment"># A workaround is to use parenthesis or a backslash:</emphasis>
-folder-hook (@imap.example.com) "set sort=threads"
-folder-hook '\@imap.example.com' "set sort=threads"
+folder-hook (@imap\\.example\\.com) "set sort=threads"
+folder-hook '\@imap\.example\.com' "set sort=threads"
 </screen>
 
         <para>
@@ -9772,7 +10138,7 @@ roessler@does-not-exist.org        Thomas Roessler mutt pgp
       <cmdsynopsis>
         <command>subjectrx</command>
         <arg choice="plain">
-          <replaceable class="parameter">pattern</replaceable>
+          <replaceable class="parameter">regex</replaceable>
         </arg>
         <arg choice="plain">
           <replaceable class="parameter">replacement</replaceable>
@@ -9783,13 +10149,13 @@ roessler@does-not-exist.org        Thomas Roessler mutt pgp
             <replaceable class="parameter">*</replaceable>
           </arg>
           <arg choice="plain">
-            <replaceable class="parameter">pattern</replaceable>
+            <replaceable class="parameter">regex</replaceable>
           </arg>
         </group>
       </cmdsynopsis>
       <para>
         <literal>subjectrx</literal> specifies a regular expression
-        <quote>pattern</quote> which, if detected in a message subject, causes
+        which, if detected in a message subject, causes
         the subject to be replaced with the <quote>replacement</quote> value.
         The replacement is subject to substitutions in the same way as for the
         <link linkend="spam">spam</link> command: <literal>%L</literal> for the
@@ -9805,7 +10171,7 @@ roessler@does-not-exist.org        Thomas Roessler mutt pgp
       </para>
       <para>
         <literal>unsubjectrx</literal> removes a given subjectrx from the
-        substitution list. If <literal>*</literal> is used as the pattern, all
+        substitution list. If <literal>*</literal> is used as the argument, all
         substitutions will be removed.
       </para>
       <example id="ex-subjectrx">
@@ -10321,11 +10687,12 @@ macro index ,a "&lt;save-message&gt;=archive&lt;enter&gt;&lt;enter-command&gt;ec
           When you select a message from the index and view it in the pager,
           NeoMutt decodes as much of a message as possible to a text
           representation. NeoMutt internally supports a number of MIME types,
-          including the <literal>text</literal> major type (with all minor
-          types), the <literal>message/rfc822</literal> (mail messages) type
-          and some <literal>multipart</literal> types. In addition, it
-          recognizes a variety of PGP MIME types, including PGP/MIME and
-          <literal>application/pgp</literal>.
+          including the <literal>text/plain</literal> type, the
+          <literal>message/rfc822</literal> (mail messages) type and some
+          <literal>multipart</literal> types. In addition, it recognizes
+          a variety of PGP MIME and S/MIME types, including PGP/MIME and
+          <literal>application/pgp</literal>, and
+          <literal>application/pkcs7-mime</literal>.
         </para>
         <para>
           NeoMutt will denote attachments with a couple lines describing them.
@@ -10811,7 +11178,7 @@ text/*; more
           Don't quote them with single or double quotes. NeoMutt does this for
           you, the right way, as should any other program which interprets
           mailcap. Don't put them into backtick expansions. Be highly careful
-          with evil statements, and avoid them if possible at all. Trying to
+          with eval statements, and avoid them if possible at all. Trying to
           fix broken behavior with quotes introduces new leaks – there is no
           alternative to correct quoting in the first place.
         </para>
@@ -11695,6 +12062,9 @@ set preferred_languages="fr,en,de"
         <arg choice="plain">
           <replaceable>mime-type</replaceable>
         </arg>
+        <arg choice="opt" rep="repeat">
+          <replaceable>mime-type</replaceable>
+        </arg>
         <command>unattachments</command>
         <group choice="req">
           <arg choice="plain">+</arg>
@@ -11704,6 +12074,9 @@ set preferred_languages="fr,en,de"
           <replaceable>disposition</replaceable>
         </arg>
         <arg choice="plain">
+          <replaceable>mime-type</replaceable>
+        </arg>
+        <arg choice="opt" rep="repeat">
           <replaceable>mime-type</replaceable>
         </arg>
         <command>attachments</command>
@@ -11750,6 +12123,13 @@ set preferred_languages="fr,en,de"
         actually evaluating a message.
       </para>
       <para>
+        Note that the first MIME part is treated slightly differently: It is
+        almost always the message text.  Thus, it is not counted as an
+        attachment if its disposition is <literal>inline</literal> and it is
+        not a <literal>multipart/*</literal> or <literal>message/*</literal>
+        MIME-type.
+      </para>
+      <para>
         Some examples might help to illustrate. The examples that are not
         commented out define the default configuration of the lists.
       </para>
@@ -11770,17 +12150,20 @@ set preferred_languages="fr,en,de"
 <emphasis role="comment">#</emphasis>
 <emphasis role="comment"># Remember: "unattachments" only undoes what "attachments" has done!</emphasis>
 <emphasis role="comment"># It does not trigger any matching on actual messages.</emphasis>
+<emphasis role="comment">#</emphasis>
 <emphasis role="comment"># Qualify any MIME part with an "attachment" disposition, EXCEPT for</emphasis>
-<emphasis role="comment"># text/x-vcard and application/pgp parts. (PGP parts are already known</emphasis>
+<emphasis role="comment"># text/vcard, text/x-vcard, application/pgp.*, application/pkcs7-.* and</emphasis>
+<emphasis role="comment"># application/x-pkcs7-.* parts. (PGP and S/MIME parts are already known</emphasis>
 <emphasis role="comment"># to NeoMutt, and can be searched for with ~g, ~G, and ~k.)</emphasis>
 <emphasis role="comment">#</emphasis>
-<emphasis role="comment"># I've added x-pkcs7 to this, since it functions (for S/MIME)</emphasis>
+<emphasis role="comment"># I've added pkcs7/x-pkcs7 to this, since it functions (for S/MIME)</emphasis>
 <emphasis role="comment"># analogously to PGP signature attachments. S/MIME isn't supported</emphasis>
 <emphasis role="comment"># in a stock NeoMutt build, but we can still treat it specially here.</emphasis>
 <emphasis role="comment">#</emphasis>
 attachments  +A */.*
-attachments  -A text/x-vcard application/pgp.*
-attachments  -A application/x-pkcs7-.*
+attachments  -A text/vcard text/x-vcard
+attachments  -A application/pgp.*
+attachments  -A application/pkcs7-.* application/x-pkcs7-.*
 <emphasis role="comment"># Discount all MIME parts with an "inline" disposition, unless they're</emphasis>
 <emphasis role="comment"># text/plain. (Why inline a text/plain part unless it's external to the</emphasis>
 <emphasis role="comment"># message flow?)</emphasis>
@@ -12090,11 +12473,47 @@ smtp://user@host:587/
         used by the server and convert paths accordingly.
       </para>
       <para>
-        When browsing folders on an IMAP server, you can toggle whether to look
-        at only the folders you are subscribed to, or all folders with the
-        <emphasis>toggle-subscribed</emphasis> command. See also the
+        The IMAP protocol has a subscription feature where the server manages
+        a list of of subscribed folders.  To add or remove a folder to the list
+        of subscribed folders use the commands:
+      </para>
+      <cmdsynopsis>
+        <command>subscribe-to</command>
+        <arg choice="plain">
+          <replaceable class="parameter">imap-folder-uri</replaceable>
+        </arg>
+        <command>unsubscribe-from</command>
+        <arg choice="plain">
+          <replaceable class="parameter">imap-folder-uri</replaceable>
+        </arg>
+      </cmdsynopsis>
+      <para>
+        <emphasis>imap-folder-uri</emphasis> must be an IMAP URI,
+        from which the server and the folder is derived, e.g.
+      </para>
+<screen>
+subscribe-to imaps://mail.example.org/inbox
+</screen>
+      <para>
+        Instead of the above commands you can also use the
+        <literal>&lt;subscribe&gt;</literal> and
+        <literal>&lt;unsubscribe&gt;</literal> functions of the browser
+        (default keys <literal>s</literal> and <literal>u</literal>) to
+        subscribe to or unsubscribe from a folder while browsing the folders on
+        the IMAP server.  The browser can be instructed to only display the
+        folders you are subscribed to with the
+        <literal>&lt;toggle-subscribed&gt;</literal> functions.  See also the
         <link linkend="imap-list-subscribed">$imap_list_subscribed</link>
         variable.
+      </para>
+      <para>
+        Because the list of subscribed folders is managed by the IMAP server,
+        NeoMutt can also ask the server for that list.  If
+        <link linkend="imap-check-subscribed">$imap_check_subscribed</link> is
+        set, NeoMutt will do that and add those folders to its mailboxes list
+        just as if you had used the <link linkend="mailboxes">mailboxes</link>
+        command on each of them, so that these folders get checked periodically
+        for new mail.
       </para>
       <para>
         Polling for new mail on an IMAP server can cause noticeable delays.
@@ -12430,10 +12849,9 @@ folder-hook imap://user@host2/ 'set folder=imap://host2/ ; set record=+INBOX/Sen
           tokyocabinet.
         </para>
          <para>
-          Take a look at the benchmark script provided in the following directory:
-          <ulink url="https://github.com/neomutt/neomutt/blob/main/contrib/hcache-bench">contrib/hcache-bench</ulink>
-          of the neomutt sources, there you can find a way of finding the
-          storage backend for your needs.
+          Take a look at the benchmark script provided in the following repository:
+           <ulink url="https://github.com/neomutt/contrib-hcache-benchmark">contrib-hcache-benchmark</ulink>.
+          There you can find a way of finding the storage backend for your needs.
         </para>
       </sect2>
 
@@ -12452,7 +12870,7 @@ folder-hook imap://user@host2/ 'set folder=imap://host2/ ; set record=+INBOX/Sen
         </para>
         <para>
           For configuration, the variable
-          <link linkend="message-cachedir">$message_cachedir</link> must point
+          <link linkend="message-cache-dir">$message_cache_dir</link> must point
           to a directory. There, NeoMutt will create a hierarchy of
           subdirectories named like the account and mailbox path the cache is
           for.
@@ -12464,7 +12882,7 @@ folder-hook imap://user@host2/ 'set folder=imap://host2/ ; set record=+INBOX/Sen
         <para>
           For using both, header and body caching,
           <link linkend="header-cache">$header_cache</link> and
-          <link linkend="message-cachedir">$message_cachedir</link> can be
+          <link linkend="message-cache-dir">$message_cache_dir</link> can be
           safely set to the same value.
         </para>
         <para>
@@ -12550,6 +12968,120 @@ folder-hook imap://user@host2/ 'set folder=imap://host2/ ; set record=+INBOX/Sen
         messages to other mixmaster remailers. For details on the other
         capabilities, please have a look at the mixmaster documentation.
       </para>
+    </sect1>
+
+    <sect1 id="account-cmd">
+      <title>Account Command Feature</title>
+      <subtitle>Populate account credentials via an external command</subtitle>
+
+      <sect2 id="account-cmd-support">
+        <title>Support</title>
+        <para><emphasis role="bold">Since:</emphasis> NeoMutt 2022-xx-yy</para>
+        <para><emphasis role="bold">Dependencies:</emphasis> None</para>
+      </sect2>
+
+      <sect2 id="account-cmd-intro">
+        <title>Introduction</title>
+        <para>
+          NeoMutt provides dedicated config variables to specify credentials
+          for network servers. These include <literal>imap_user</literal>,
+          <literal>imap_pass</literal>, <literal>smtp_user</literal>,
+          <literal>smtp_pass</literal>, etc.  There are a few downsides to this
+          approach. For one thing, their use encourages storing usernames and
+          passwords in plain text inside a NeoMutt config file. People have
+          come up with solutions to this, including using gpg-encrypted files
+          and populating <literal>my_</literal> variables via external scripts
+          through <literal>source "/path/to/script|"</literal>.
+          However, once the variables are set, the secrets can be inspected
+          with the <literal>set</literal> command.
+          Also, because these config variables are not account-specific, they
+          have been the cause of a proliferation of ways to mimic per-account
+          setups using a combination of convoluted hooks and macros to modify
+          them on on folder change or on a keypress.
+        </para>
+
+        <para>
+          The goal of this feature is to get rid of most <literal>_user</literal>
+          and <literal>_pass</literal> variables. To do so, we provide a way of
+          specifying an external command that NeoMutt will call to populate
+          account credentials for network servers such as IMAP, POP, or SMTP.
+          The external command is called with a number of arguments indicating
+          the known properties of the account such as the account type and
+          hostname; the external command provides NeoMutt with a list of
+          additional properties such as username and password.
+        </para>
+      </sect2>
+
+      <sect2 id="accound-cmd-usage">
+        <title>Usage</title>
+        <para>
+          The variable <literal>account_command</literal> configures an
+          external program to be used to gather account credentials.
+        </para>
+        <screen>set account_command = "/path/to/my/script.sh"</screen>
+        <para>
+          The program specified will be called by NeoMutt with a number of
+          key-value command line arguments.
+        </para>
+
+        <itemizedlist>
+          <listitem>
+            <para>
+              <literal>--hostname val</literal>: the network host name of the
+              service
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              <literal>--username val</literal>: the username for the account.
+              This might be specified in the URL itself, e.g.,
+              <literal>set folder="imaps://me@example.com@example.com"</literal> or
+              with a dedicated existing variable, e.g.
+              <literal>set imap_user=me@example.com</literal>.
+            </para>
+          </listitem>
+          <listitem>
+            <para>
+              <literal>--type val</literal>: the type of the account, one of
+              <literal>imap</literal>, <literal>pop</literal>,
+              <literal>smtp</literal>, <literal>nntp</literal>, with an optional
+              trailing <literal>s</literal> if SSL/TLS is required.
+            </para>
+          </listitem>
+        </itemizedlist>
+
+        <para>
+          The program specified will have to respond by printing to stdout a
+          number of <literal>key: value</literal> lines. NeoMutt currently
+          recognizes the following keys.
+        </para>
+
+        <itemizedlist>
+          <listitem><para>login</para></listitem>
+          <listitem><para>username</para></listitem>
+          <listitem><para>password</para></listitem>
+        </itemizedlist>
+
+        <para>
+          Because password can contain any characters, including spaces, we
+          expect lines to match the regex <literal>^([[:alpha:]]+): (.*)$</literal> exactly.
+        </para>
+      </sect2>
+
+      <sect2 id="account-cmd-known-bugs">
+        <title>Known Bugs</title>
+        <para>
+          None
+        </para>
+      </sect2>
+
+      <sect2 id="account-cmd-credits">
+        <title>Credits</title>
+        <para>
+          Pietro Cerutti
+        </para>
+      </sect2>
+
     </sect1>
 
     <sect1 id="attach-headers-color">
@@ -13071,7 +13603,7 @@ append-hook '\.gz$' "gzip --stdout '%t' &gt;&gt; '%f'"
           <title>Security</title>
           <para>
             Encrypted files are decrypted into temporary files which are stored
-            in the <link linkend="tmpdir">$tmpdir</link> directory. This could
+            in the <link linkend="tmp-dir">$tmp_dir</link> directory. This could
             be a security risk.
           </para>
         </sect3>
@@ -13128,7 +13660,7 @@ close-hook  '\.gpg$' "gpg --encrypt --recipient YourGpgUserIdOrKeyId &lt; '%t' &
           </listitem>
           <listitem>
             <para>
-              <link linkend="tmpdir">$tmpdir</link>
+              <link linkend="tmp-dir">$tmp_dir</link>
             </para>
           </listitem>
           <listitem>
@@ -14200,13 +14732,63 @@ ifndef symbol "config-command [args...]"  <emphasis role="comment"># If a symbol
 finish                                    <emphasis role="comment"># Finish reading the current file</emphasis>
 </screen>
 
-        <para>
-          Here a symbol can be a <link linkend="variables">$variable</link>,
-          environment variable,
-          <link linkend="functions">&lt;function&gt;</link>,
-          <link linkend="commands">command</link> or compile-time symbol, such
-          as <quote>imap</quote>.
-        </para>
+        <table id="ifdef-symbols">
+          <title>ifdef Symbols</title>
+          <tgroup cols="2">
+            <thead>
+              <row>
+                <entry>Example Symbol</entry>
+                <entry>Description</entry>
+              </row>
+            </thead>
+            <tbody>
+              <row>
+                <entry>
+                  <literal>sidebar_format</literal>
+                </entry>
+                <entry>Config variable</entry>
+              </row>
+              <row>
+                <entry>
+                  <literal>status-color</literal>,
+                  <literal>imap</literal>
+                </entry>
+                <entry>Compiled-in feature</entry>
+              </row>
+              <row>
+                <entry>
+                <literal>pgp-menu</literal>,
+                <literal>group-related</literal></entry>
+                <entry>Function</entry>
+              </row>
+              <row>
+                <entry>
+                <literal>index-format-hook</literal>,
+                <literal>tag-transforms</literal></entry>
+                <entry>Command</entry>
+              </row>
+              <row>
+                <entry>
+                  <literal>my_var</literal>
+                </entry>
+                <entry>My variable</entry>
+              </row>
+              <row>
+                <entry>
+                <literal>lmdb</literal>,
+                <literal>tokyocabinet</literal></entry>
+                <entry>Store (database)</entry>
+              </row>
+              <row>
+                <entry>
+                <literal>HOME</literal>,
+                <literal>COLUMNS</literal></entry>
+                <entry>Environment variable</entry>
+              </row>
+            </tbody>
+          </tgroup>
+        </table>
+
         <para>
           A list of compile-time symbols can be seen in the output of the
           command <screen>neomutt -v</screen> (in the
@@ -14350,69 +14932,67 @@ ifndef sidebar finish
         </para>
         <para>
           The index objects can be themed using the <literal>color</literal>
-          command. Some objects require a pattern.
+          command and an optional pattern. A missing pattern is equivalent to
+          a match-all <literal>.*</literal> pattern.
         </para>
 
 <screen>
-color index-object foreground background
-color index-object foreground background pattern
+color index-object foreground background [pattern]
 </screen>
 
         <table id="table-index-color-colors">
           <title>Index Colors</title>
-          <tgroup cols="3">
+          <tgroup cols="2">
             <thead>
               <row>
                 <entry>Object</entry>
-                <entry>Pattern</entry>
                 <entry>Highlights</entry>
               </row>
             </thead>
             <tbody>
               <row>
                 <entry><literal>index</literal></entry>
-                <entry>yes</entry>
                 <entry>Entire index line</entry>
               </row>
               <row>
                 <entry><literal>index_author</literal></entry>
-                <entry>yes</entry>
                 <entry>Author name, %A %a %F %L %n</entry>
               </row>
               <row>
                 <entry><literal>index_collapsed</literal></entry>
-                <entry>no</entry>
                 <entry>Number of messages in a collapsed thread, %M</entry>
               </row>
               <row>
                 <entry><literal>index_date</literal></entry>
-                <entry>no</entry>
                 <entry>Date field</entry>
               </row>
               <row>
                 <entry><literal>index_flags</literal></entry>
-                <entry>yes</entry>
                 <entry>Message flags, %S %Z</entry>
               </row>
               <row>
                 <entry><literal>index_label</literal></entry>
-                <entry>no</entry>
                 <entry>Message label, %y %Y</entry>
               </row>
               <row>
                 <entry><literal>index_number</literal></entry>
-                <entry>no</entry>
                 <entry>Message number, %C</entry>
               </row>
               <row>
                 <entry><literal>index_size</literal></entry>
-                <entry>no</entry>
                 <entry>Message size, %c %cr %l</entry>
               </row>
               <row>
                 <entry><literal>index_subject</literal></entry>
-                <entry>yes</entry>
                 <entry>Subject, %s</entry>
+              </row>
+              <row>
+                <entry><literal>index_tag</literal></entry>
+                <entry>Nessage tags, <literal>%G</literal></entry>
+              </row>
+              <row>
+                <entry><literal>index_tags</literal></entry>
+                <entry>Transformed message tags, <literal>%g</literal> <literal>%J</literal></entry>
               </row>
             </tbody>
           </tgroup>
@@ -14622,7 +15202,7 @@ set index_format='%4C %Z %{%b %d} %I (%?l?%4l&amp;%4c?) %s'
             </term>
             <listitem>
               <para>
-                <ulink url="http://fallabs.com/kyotocabinet/">Kyoto Cabinet libraries</ulink>
+                <ulink url="https://dbmx.net/kyotocabinet/">Kyoto Cabinet libraries</ulink>
               </para>
             </listitem>
           </varlistentry>
@@ -14670,7 +15250,7 @@ set index_format='%4C %Z %{%b %d} %I (%?l?%4l&amp;%4c?) %s'
           </listitem>
           <listitem>
             <para>
-              <ulink url="http://fallabs.com/kyotocabinet/">Kyoto Cabinet</ulink>
+              <ulink url="https://dbmx.net/kyotocabinet/">Kyoto Cabinet</ulink>
             </para>
           </listitem>
         </itemizedlist>
@@ -15253,6 +15833,22 @@ set new_mail_command = ""
           <literal>&lt;change-newsgroup&gt;</literal>
         </para>
         <para>
+          When browsing the list of newsgroups on the server the function
+          <literal>&lt;subscribe&gt;</literal> can be used to tell NeoMutt the
+          groups of interest to you.  This list is stored in the
+          <link linkend="newsrc">$newsrc</link> file, so NeoMutt remembers it
+          across invocations (see also
+          <link linkend="save-unsubscribed">$save_unsubscribed</link>).  With the
+          <literal>&lt;unsubscribe&gt;</literal> function a group can be deleted
+          from that list.  You can also specify the list of interesting groups
+          with the <link linkend="mailboxes">mailboxes</link> command in your
+          config file.
+        </para>
+        <para>
+          When checking for new messages, NeoMutt only polls the subscribed
+          newsgroups.
+        </para>
+        <para>
           The variable <link linkend="news-cache-dir">$news_cache_dir</link>
           can be used to point to a directory. NeoMutt will create a hierarchy
           of subdirectories named like the account and newsgroup the cache is
@@ -15277,7 +15873,7 @@ set new_mail_command = ""
             </thead>
             <tbody>
               <row>
-                <entry><literal>ask_follow_up</literal></entry>
+                <entry><literal>ask_followup_to</literal></entry>
                 <entry>boolean</entry>
                 <entry><literal>no</literal></entry>
               </row>
@@ -15518,7 +16114,7 @@ set new_mail_command = ""
 <emphasis role="comment"># --------------------------------------------------------------------------</emphasis>
 <emphasis role="comment"># VARIABLES – shown with their default values</emphasis>
 <emphasis role="comment"># --------------------------------------------------------------------------</emphasis>
-set ask_follow_up = no
+set ask_followup_to = no
 set ask_x_comment_to = no
 set catchup_newsgroup = ask-yes
 set followup_to_poster = ask-yes
@@ -15750,28 +16346,26 @@ bind index \CG get-message
       <sect2 id="custom-tags-colors">
         <title>Colors</title>
         <para>
-          Adds these to index-color feature:
+          Adds the objects, below, to index-color feature.
+          The objects can take an optional pattern.
         </para>
 
         <table id="table-custom-tags-colors">
           <title>Index Colors</title>
-          <tgroup cols="3">
+          <tgroup cols="2">
             <thead>
               <row>
                 <entry>Object</entry>
-                <entry>Pattern</entry>
                 <entry>Highlights</entry>
               </row>
             </thead>
             <tbody>
               <row>
                 <entry><literal>index_tag</literal></entry>
-                <entry>yes</entry>
                 <entry>an individual message tag, %G, uses tag name</entry>
               </row>
               <row>
                 <entry><literal>index_tags</literal></entry>
-                <entry>no</entry>
                 <entry>the transformed message tags, %g or %J</entry>
               </row>
             </tbody>
@@ -15835,10 +16429,8 @@ macro index,pager tt "&lt;modify-labels&gt;!todo\n" "Toggle the 'todo' tag"
 <emphasis role="comment"># --------------------------------------------------------------------------</emphasis>
 <emphasis role="comment"># These symbols are added to the index-color feature:</emphasis>
 <emphasis role="comment"># an individual message tag, %G, uses tag name</emphasis>
-<emphasis role="comment"># this symbol uses a pattern</emphasis>
 color index_tag red white "inbox"
 <emphasis role="comment"># the transformed message tags, %g</emphasis>
-<emphasis role="comment"># this symbol does not use a pattern</emphasis>
 color index_tags green default
 <emphasis role="comment"># --------------------------------------------------------------------------</emphasis>
 
@@ -16031,7 +16623,7 @@ virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
                 <row>
                   <entry>%N</entry>
                   <entry>
-                    N if mailbox has new mail, blank otherwise
+                    "N" if mailbox has new mail, " " (space) otherwise
                   </entry>
                 </row>
                 <row>
@@ -16082,6 +16674,26 @@ virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
             </thead>
             <tbody>
               <row>
+                <entry><literal>nm_config_file</literal></entry>
+                <entry>path</entry>
+                <entry><literal>auto</literal></entry>
+                <entry>
+                  Configuration file for the notmuch database. Either a path,
+                  <literal>auto</literal> for detecting a config. file, or
+                  empty for no configuration file. Only useful for notmuch
+                  0.32+.
+                </entry>
+              </row>
+              <row>
+                <entry><literal>nm_config_profile</literal></entry>
+                <entry>string</entry>
+                <entry>(empty)</entry>
+                <entry>
+                  Configuration profile for the notmuch database. Only useful
+                  for notmuch 0.32+.
+                </entry>
+              </row>
+              <row>
                 <entry><literal>nm_db_limit</literal></entry>
                 <entry>number</entry>
                 <entry><literal>0</literal></entry>
@@ -16129,12 +16741,6 @@ virtual-mailboxes "My INBOX" "notmuch://?query=tag:inbox"
                 <entry><literal>nm_unread_tag</literal></entry>
                 <entry>string</entry>
                 <entry><literal>unread</literal></entry>
-                <entry></entry>
-              </row>
-              <row>
-                <entry><literal>vfolder_format</literal></entry>
-                <entry>string</entry>
-                <entry><literal>%6n(%6N) %f</literal></entry>
                 <entry></entry>
               </row>
               <row>
@@ -16378,17 +16984,6 @@ set nm_record = no
 set nm_record_tags = ""
 <emphasis role="comment"># This variable specifies the notmuch tag used for unread messages.</emphasis>
 set nm_unread_tag = unread
-<emphasis role="comment"># This variable allows you to customize the file browser display for virtual</emphasis>
-<emphasis role="comment"># folders to your personal taste.</emphasis>
-<emphasis role="comment"># %C   current folder number</emphasis>
-<emphasis role="comment"># %f   folder name (description)</emphasis>
-<emphasis role="comment"># %m   number of messages in the mailbox *</emphasis>
-<emphasis role="comment"># %n   number of unread messages in the mailbox *</emphasis>
-<emphasis role="comment"># %N   N if mailbox has new mail, blank otherwise</emphasis>
-<emphasis role="comment"># %>X  right justify the rest of the string and pad with character ``X''</emphasis>
-<emphasis role="comment"># %|X  pad to the end of the line with character ``X''</emphasis>
-<emphasis role="comment"># %*X  soft-fill with character ``X'' as pad</emphasis>
-set vfolder_format = "%6n(%6N) %f"
 <emphasis role="comment"># When set, NeoMutt will use the first virtual mailbox (see virtual-mailboxes)</emphasis>
 <emphasis role="comment"># as a spool_file.</emphasis>
 set virtual_spool_file = no
@@ -17099,17 +17694,17 @@ set sort_browser="reverse-size"
 
       <sect2 id="sidebar-commands">
         <title>Commands</title>
-        <anchor id="sidebar-whitelist" />
-        <anchor id="unsidebar-whitelist" />
+        <anchor id="sidebar-pin" />
+        <anchor id="sidebar-unpin" />
         <cmdsynopsis>
-          <command>sidebar_whitelist</command>
+          <command>sidebar_pin</command>
           <arg choice="plain">
             <replaceable class="parameter">mailbox</replaceable>
           </arg>
           <arg choice="opt" rep="repeat">
             <replaceable class="parameter">mailbox</replaceable>
           </arg>
-          <command>unsidebar_whitelist</command>
+          <command>sidebar_unpin</command>
           <group choice="req">
             <arg choice="plain">
               <replaceable class="parameter">*</replaceable>
@@ -17126,9 +17721,9 @@ set sort_browser="reverse-size"
           is set and the mailbox does not contain new mail.
         </para>
         <para>
-          The <quote>unsidebar_whitelist</quote> command is used to remove
-          a mailbox from the list of whitelisted mailboxes. Use
-          <quote>unsidebar_whitelist&#160;*</quote> to remove all mailboxes.
+          The <quote>sidebar_unpin</quote> command is used to remove
+          a mailbox from the list of always displayed mailboxes. Use
+          <quote>sidebar_unpin&#160;*</quote> to remove all mailboxes.
         </para>
       </sect2>
 
@@ -17146,6 +17741,13 @@ set sort_browser="reverse-size"
               </row>
             </thead>
             <tbody>
+              <row>
+                <entry><literal>sidebar_background</literal></entry>
+                <entry>default</entry>
+                <entry>
+                  The entire sidebar panel
+                </entry>
+              </row>
               <row>
                 <entry><literal>sidebar_divider</literal></entry>
                 <entry>default</entry>
@@ -17297,12 +17899,12 @@ set sidebar_indent_string = '  '
 <emphasis role="comment"># Make the Sidebar only display mailboxes that contain new, or flagged,</emphasis>
 <emphasis role="comment"># mail.</emphasis>
 set sidebar_new_mail_only = no
-<emphasis role="comment"># Any mailboxes that are whitelisted will always be visible, even if the</emphasis>
+<emphasis role="comment"># Any mailboxes that are pinned will always be visible, even if the</emphasis>
 <emphasis role="comment"># sidebar_new_mail_only option is enabled.</emphasis>
 set sidebar_non_empty_mailbox_only = no
 <emphasis role="comment"># Only show mailboxes that contain some mail</emphasis>
-sidebar_whitelist '/home/user/mailbox1'
-sidebar_whitelist '/home/user/mailbox2'
+sidebar_pin '/home/user/mailbox1'
+sidebar_pin '/home/user/mailbox2'
 <emphasis role="comment"># When searching for mailboxes containing new mail, should the search wrap</emphasis>
 <emphasis role="comment"># around when it reaches the end of the list?</emphasis>
 set sidebar_next_new_wrap = no
@@ -17319,7 +17921,7 @@ set sidebar_format = '%B%?F? [%F]?%* %?N?%N/?%S'
 <emphasis role="comment"># Sort the mailboxes in the Sidebar using this method:</emphasis>
 <emphasis role="comment">#       count    – total number of messages</emphasis>
 <emphasis role="comment">#       flagged  – number of flagged messages</emphasis>
-<emphasis role="comment">#       new      – number of new messages</emphasis>
+<emphasis role="comment">#       unread   – number of unread messages</emphasis>
 <emphasis role="comment">#       path     – mailbox path</emphasis>
 <emphasis role="comment">#       unsorted – do not sort the mailboxes</emphasis>
 set sidebar_sort_method = 'unsorted'
@@ -17357,6 +17959,8 @@ color indicator cyan black
 color sidebar_indicator cyan black
 <emphasis role="comment"># Color of the highlighted, but not open, mailbox.</emphasis>
 color sidebar_highlight black color8
+<emphasis role="comment"># Color of the entire Sidebar panel</emphasis>
+color sidebar_background default black
 <emphasis role="comment"># Color of the divider separating the Sidebar from NeoMutt panels</emphasis>
 color sidebar_divider color8 black
 <emphasis role="comment"># Color to give mailboxes containing flagged mail</emphasis>
@@ -18561,7 +19165,7 @@ set use_threads=threads sort=last-date sort_aux=date
         digital signatures, etc. As long as being used, these files are visible
         by other users and maybe even readable in case of misconfiguration.
         Also, a different location for these files may be desired which can be
-        changed via the <link linkend="tmpdir">$tmpdir</link> variable.
+        changed via the <link linkend="tmp-dir">$tmp_dir</link> variable.
       </para>
     </sect1>
 
@@ -18571,18 +19175,8 @@ set use_threads=threads sort=last-date sort_aux=date
       <sect2 id="security-leaks-mid">
         <title>Message-Id: headers</title>
         <para>
-          Message-Id: headers contain a local part that is to be created in
-          a unique fashion. In order to do so, NeoMutt will <quote>leak</quote>
-          some information to the outside world when sending messages: the
-          generation of this header includes a step counter which is increased
-          (and rotated) with every message sent. Other parts include the date,
-          time, PID of NeoMutt, and <link linkend="hostname">$hostname</link>.
-          In a longer running NeoMutt session, others can
-          make assumptions about your mailing habits
-          depending on the number of messages sent. If this is not desired, the
-          header can be manually provided using
-          <link linkend="edit-headers">$edit_headers</link> (though not
-          recommended).
+          Since 2023-02-18 NeoMutt generates random Message-Id: headers, which
+          do not leak any information beyond their randomness.
         </para>
       </sect2>
 
@@ -19277,6 +19871,9 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
             <arg choice="plain">
               <replaceable>mime-type</replaceable>
             </arg>
+            <arg choice="opt" rep="repeat">
+              <replaceable>mime-type</replaceable>
+            </arg>
             <command>
               <link linkend="attachments">unattachments</link>
             </command>
@@ -19288,6 +19885,9 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
               <replaceable>disposition</replaceable>
             </arg>
             <arg choice="plain">
+              <replaceable>mime-type</replaceable>
+            </arg>
+            <arg choice="opt" rep="repeat">
               <replaceable>mime-type</replaceable>
             </arg>
             <command>
@@ -19356,6 +19956,27 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
             <arg choice="plain">
               <replaceable class="parameter">function</replaceable>
             </arg>
+            <command>
+              <link linkend="unbind">unbind</link>
+            </command>
+            <group choice="req">
+              <arg choice="plain">
+                <replaceable class="parameter">*</replaceable>
+              </arg>
+              <arg choice="plain">
+                <arg choice="plain">
+                  <replaceable class="parameter">map</replaceable>
+                </arg>
+                <arg choice="opt" rep="repeat">
+                  <replaceable class="parameter">,map</replaceable>
+                </arg>
+              </arg>
+            </group>
+            <group choice="opt">
+              <arg choice="plain">
+                <replaceable class="parameter">key</replaceable>
+              </arg>
+            </group>
           </cmdsynopsis>
         </listitem>
         <listitem>
@@ -19443,7 +20064,7 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
             <arg choice="plain">
               <replaceable class="parameter">background</replaceable>
             </arg>
-            <arg choice="plain">
+            <arg choice="opt">
               <replaceable class="parameter">pattern</replaceable>
             </arg>
             <command>
@@ -19552,11 +20173,11 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
             <group choice="req">
               <arg choice="plain" rep="repeat">
                 <option>-rx</option>
-                <replaceable class="parameter">expr</replaceable>
+                <replaceable class="parameter">regex</replaceable>
               </arg>
               <arg choice="plain" rep="repeat">
                 <option>-addr</option>
-                <replaceable class="parameter">expr</replaceable>
+                <replaceable class="parameter">address</replaceable>
               </arg>
             </group>
             <command>
@@ -19572,11 +20193,11 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
               </arg>
               <arg choice="plain" rep="repeat">
                 <option>-rx</option>
-                <replaceable class="parameter">expr</replaceable>
+                <replaceable class="parameter">regex</replaceable>
               </arg>
               <arg choice="plain" rep="repeat">
                 <option>-addr</option>
-                <replaceable class="parameter">expr</replaceable>
+                <replaceable class="parameter">address</replaceable>
               </arg>
             </group>
           </cmdsynopsis>
@@ -19636,10 +20257,10 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
               <link linkend="ignore">ignore</link>
             </command>
             <arg choice="plain">
-              <replaceable class="parameter">pattern</replaceable>
+              <replaceable class="parameter">string</replaceable>
             </arg>
             <arg choice="opt" rep="repeat">
-              <replaceable class="parameter">pattern</replaceable>
+              <replaceable class="parameter">string</replaceable>
             </arg>
             <command>
               <link linkend="ignore">unignore</link>
@@ -19649,7 +20270,7 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
                 <replaceable>*</replaceable>
               </arg>
               <arg choice="plain" rep="repeat">
-                <replaceable>pattern</replaceable>
+                <replaceable>string</replaceable>
               </arg>
             </group>
           </cmdsynopsis>
@@ -19821,6 +20442,9 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
             <command>
               <link linkend="mbox-hook">mbox-hook</link>
             </command>
+            <arg choice="opt">
+              <replaceable class="parameter">-noregex</replaceable>
+            </arg>
             <arg choice="plain">
               <replaceable class="parameter">regex</replaceable>
             </arg>
@@ -20139,7 +20763,7 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
         <listitem>
           <cmdsynopsis>
             <command>
-              <link linkend="sidebar-whitelist">sidebar_whitelist</link>
+              <link linkend="sidebar-pin">sidebar_pin</link>
             </command>
             <arg choice="plain">
               <replaceable class="parameter">mailbox</replaceable>
@@ -20148,7 +20772,7 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
               <replaceable class="parameter">mailbox</replaceable>
             </arg>
             <command>
-              <link linkend="sidebar-whitelist">unsidebar_whitelist</link>
+              <link linkend="sidebar-pin">sidebar_unpin</link>
             </command>
             <group choice="req">
               <arg choice="plain">
@@ -20176,7 +20800,7 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
               <link linkend="spam">spam</link>
             </command>
             <arg choice="plain">
-              <replaceable class="parameter">pattern</replaceable>
+              <replaceable class="parameter">regex</replaceable>
             </arg>
             <arg choice="plain">
               <replaceable class="parameter">format</replaceable>
@@ -20189,7 +20813,7 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
                 <replaceable class="parameter">*</replaceable>
               </arg>
               <arg choice="plain">
-                <replaceable class="parameter">pattern</replaceable>
+                <replaceable class="parameter">regex</replaceable>
               </arg>
             </group>
           </cmdsynopsis>
@@ -20200,7 +20824,7 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
               <link linkend="display-munging">subjectrx</link>
             </command>
             <arg choice="plain">
-              <replaceable class="parameter">pattern</replaceable>
+              <replaceable class="parameter">regex</replaceable>
             </arg>
             <arg choice="plain">
               <replaceable class="parameter">replacement</replaceable>
@@ -20213,9 +20837,25 @@ neomutt mailto:some@one.org?subject=test&amp;cc=other@one.org
                 <replaceable class="parameter">*</replaceable>
               </arg>
               <arg choice="plain">
-                <replaceable class="parameter">pattern</replaceable>
+                <replaceable class="parameter">regex</replaceable>
               </arg>
             </group>
+          </cmdsynopsis>
+        </listitem>
+        <listitem>
+          <cmdsynopsis>
+            <command>
+              <link linkend="imap">subscribe-to</link>
+            </command>
+            <arg choice="plain">
+              <replaceable class="parameter">imap-folder-uri</replaceable>
+            </arg>
+            <command>
+              <link linkend="imap">unsubscribe-from</link>
+            </command>
+            <arg choice="plain">
+              <replaceable class="parameter">imap-folder-uri</replaceable>
+            </arg>
           </cmdsynopsis>
         </listitem>
         <listitem>

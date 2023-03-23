@@ -26,14 +26,15 @@
  *
  * Match patterns to emails
  *
- * | File                 | Description                  |
- * | :------------------- | :--------------------------- |
- * | pattern/compile.c    | @subpage pattern_compile     |
- * | pattern/config.c     | @subpage pattern_config      |
- * | pattern/dlgpattern.c | @subpage pattern_dlg_pattern |
- * | pattern/exec.c       | @subpage pattern_exec        |
- * | pattern/flags.c      | @subpage pattern_flags       |
- * | pattern/pattern.c    | @subpage pattern_pattern     |
+ * | File                  | Description                  |
+ * | :-------------------- | :--------------------------- |
+ * | pattern/compile.c     | @subpage pattern_compile     |
+ * | pattern/config.c      | @subpage pattern_config      |
+ * | pattern/dlg_pattern.c | @subpage pattern_dlg_pattern |
+ * | pattern/exec.c        | @subpage pattern_exec        |
+ * | pattern/flags.c       | @subpage pattern_flags       |
+ * | pattern/functions.c   | @subpage pattern_functions   |
+ * | pattern/pattern.c     | @subpage pattern_pattern     |
  */
 
 #ifndef MUTT_PATTERN_LIB_H
@@ -77,8 +78,8 @@ struct Pattern
   bool dynamic      : 1;         ///< Evaluate date ranges at run time
   bool sendmode     : 1;         ///< Evaluate searches in send-mode
   bool is_multi     : 1;         ///< Multiple case (only for ~I pattern now)
-  int min;                       ///< Minimum for range checks
-  int max;                       ///< Maximum for range checks
+  long min;                      ///< Minimum for range checks
+  long max;                      ///< Maximum for range checks
   struct PatternList *child;     ///< Arguments to logical operation
   union {
     regex_t *regex;              ///< Compiled regex, for non-pattern matching
@@ -133,6 +134,7 @@ enum PatternType
   MUTT_PAT_CHILDREN,          ///< Pattern matches a child email
   MUTT_PAT_TO,                ///< Pattern matches 'To:' field
   MUTT_PAT_CC,                ///< Pattern matches 'Cc:' field
+  MUTT_PAT_BCC,               ///< Pattern matches 'Bcc:' field
   MUTT_PAT_COLLAPSED,         ///< Thread is collapsed
   MUTT_PAT_SUBJECT,           ///< Pattern matches 'Subject:' field
   MUTT_PAT_FROM,              ///< Pattern matches 'From:' field
@@ -184,8 +186,8 @@ void mutt_pattern_free(struct PatternList **pat);
 bool dlg_select_pattern(char *buf, size_t buflen);
 
 int mutt_which_case(const char *s);
-int mutt_is_list_recipient(bool all_addr, struct Envelope *env);
-int mutt_is_subscribed_list_recipient(bool all_addr, struct Envelope *env);
+bool mutt_is_list_recipient(bool all_addr, struct Envelope *env);
+bool mutt_is_subscribed_list_recipient(bool all_addr, struct Envelope *env);
 int mutt_pattern_func(struct MailboxView *mv, int op, char *prompt);
 int mutt_pattern_alias_func(char *prompt, struct AliasMenuData *mdata, struct Menu *menu);
 int mutt_search_command(struct Mailbox *m, struct Menu *menu, int cur, int op);

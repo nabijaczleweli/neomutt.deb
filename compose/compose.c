@@ -83,11 +83,11 @@
 #include "attach_data.h"
 #include "cbar.h"
 #include "functions.h"
+#include "globals.h" // IWYU pragma: keep
 #include "hook.h"
 #include "keymap.h"
 #include "mutt_logging.h"
 #include "opcodes.h"
-#include "options.h"
 #include "shared_data.h"
 
 /// Help Bar for the Compose dialog
@@ -129,7 +129,9 @@ static const struct Mapping ComposeNewsHelp[] = {
  */
 static int compose_config_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_CONFIG)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventConfig *ev_c = nc->event_data;
@@ -138,19 +140,7 @@ static int compose_config_observer(struct NotifyCallback *nc)
   if (!mutt_str_equal(ev_c->name, "status_on_top"))
     return 0;
 
-  struct MuttWindow *win_cbar = window_find_child(dlg, WT_STATUS_BAR);
-  if (!win_cbar)
-    return 0;
-
-  TAILQ_REMOVE(&dlg->children, win_cbar, entries);
-
-  const bool c_status_on_top = cs_subset_bool(ev_c->sub, "status_on_top");
-  if (c_status_on_top)
-    TAILQ_INSERT_HEAD(&dlg->children, win_cbar, entries);
-  else
-    TAILQ_INSERT_TAIL(&dlg->children, win_cbar, entries);
-
-  mutt_window_reflow(dlg);
+  window_status_on_top(dlg, NeoMutt->sub);
   mutt_debug(LL_DEBUG5, "config done, request WA_REFLOW\n");
   return 0;
 }
@@ -160,10 +150,10 @@ static int compose_config_observer(struct NotifyCallback *nc)
  */
 static int compose_email_observer(struct NotifyCallback *nc)
 {
-  if (!nc->global_data || !nc->event_data)
-    return -1;
   if (nc->event_type != NT_ENVELOPE)
     return 0;
+  if (!nc->global_data || !nc->event_data)
+    return -1;
 
   struct ComposeSharedData *shared = nc->global_data;
 
@@ -179,9 +169,10 @@ static int compose_email_observer(struct NotifyCallback *nc)
  */
 static int compose_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
-
   if (nc->event_subtype != NT_WINDOW_DELETE)
     return 0;
 
@@ -357,13 +348,13 @@ int mutt_compose_menu(struct Email *e, struct Buffer *fcc, uint8_t flags,
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(menu->type);
+    op = km_dokey(MENU_COMPOSE);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
     if (op == OP_NULL)
     {
-      km_error_key(menu->type);
+      km_error_key(MENU_COMPOSE);
       continue;
     }
     mutt_clear_error();
@@ -374,7 +365,7 @@ int mutt_compose_menu(struct Email *e, struct Buffer *fcc, uint8_t flags,
     if (rc == FR_UNKNOWN)
       rc = menu_function_dispatcher(menu->win, op);
     if (rc == FR_UNKNOWN)
-      rc = global_function_dispatcher(menu->win, op);
+      rc = global_function_dispatcher(NULL, op);
   } while (rc != FR_DONE);
   // ---------------------------------------------------------------------------
 

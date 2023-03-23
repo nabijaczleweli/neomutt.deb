@@ -49,14 +49,15 @@
  *
  * Libraries:
  * @ref lib_address, @ref lib_alias, @ref lib_attach, @ref lib_autocrypt,
- * @ref lib_bcache, @ref lib_browser, @ref lib_color, @ref lib_compmbox,
- * @ref lib_compose, @ref lib_compress, @ref lib_config, @ref lib_conn,
- * @ref lib_core, @ref lib_email, @ref lib_enter, @ref lib_envelope,
- * @ref lib_gui, @ref lib_hcache, @ref lib_helpbar, @ref lib_history,
- * @ref lib_imap, @ref lib_index, @ref lib_maildir, @ref lib_mbox,
- * @ref lib_menu, @ref lib_mixmaster, @ref lib_mutt, @ref lib_ncrypt,
- * @ref lib_nntp, @ref lib_notmuch, @ref lib_pager, @ref lib_pattern,
- * @ref lib_pop, @ref lib_progress, @ref lib_question, @ref lib_send,
+ * @ref lib_bcache, @ref lib_browser, @ref lib_color, @ref lib_complete,
+ * @ref lib_compmbox, @ref lib_compose, @ref lib_compress, @ref lib_config,
+ * @ref lib_conn, @ref lib_convert, @ref lib_core, @ref lib_email,
+ * @ref lib_enter, @ref lib_envelope, @ref lib_gui, @ref lib_hcache,
+ * @ref lib_helpbar, @ref lib_history, @ref lib_imap, @ref lib_index,
+ * @ref lib_maildir, @ref lib_mbox, @ref lib_menu, @ref lib_mixmaster,
+ * @ref lib_mutt, @ref lib_ncrypt, @ref lib_nntp, @ref lib_notmuch,
+ * @ref lib_pager, @ref lib_parse, @ref lib_pattern, @ref lib_pop,
+ * @ref lib_postpone, @ref lib_progress, @ref lib_question, @ref lib_send,
  * @ref lib_sidebar, @ref lib_store.
  *
  * ## Miscellaneous files
@@ -67,19 +68,17 @@
  * | :-------------- | :------------------------- |
  * | alternates.c    | @subpage neo_alternates    |
  * | commands.c      | @subpage neo_commands      |
- * | command_parse.c | @subpage neo_command_parse |
- * | complete.c      | @subpage neo_complete      |
  * | copy.c          | @subpage neo_copy          |
- * | dlg_postpone.c  | @subpage neo_dlg_postpone  |
  * | editmsg.c       | @subpage neo_editmsg       |
  * | enriched.c      | @subpage neo_enriched      |
+ * | external.c      | @subpage neo_external      |
  * | flags.c         | @subpage neo_flags         |
  * | functions.c     | @subpage neo_functions     |
+ * | globals.c       | @subpage neo_globals       |
  * | handler.c       | @subpage neo_handler       |
  * | hdrline.c       | @subpage neo_hdrline       |
  * | help.c          | @subpage neo_help          |
  * | hook.c          | @subpage neo_hook          |
- * | icommands.c     | @subpage neo_icommands     |
  * | init.c          | @subpage neo_init          |
  * | keymap.c        | @subpage neo_keymap        |
  * | mailcap.c       | @subpage neo_mailcap       |
@@ -89,9 +88,7 @@
  * | muttlib.c       | @subpage neo_muttlib       |
  * | mutt_account.c  | @subpage neo_mutt_account  |
  * | mutt_body.c     | @subpage neo_mutt_body     |
- * | mutt_commands.c | @subpage neo_mutt_commands |
  * | mutt_config.c   | @subpage neo_mutt_config   |
- * | mutt_globals.h  | @subpage neo_mutt_globals  |
  * | mutt_header.c   | @subpage neo_mutt_header   |
  * | mutt_history.c  | @subpage neo_mutt_history  |
  * | mutt_logging.c  | @subpage neo_mutt_logging  |
@@ -100,12 +97,10 @@
  * | mutt_signal.c   | @subpage neo_mutt_signal   |
  * | mutt_socket.c   | @subpage neo_mutt_socket   |
  * | mutt_thread.c   | @subpage neo_mutt_thread   |
- * | mx.c            | @subpage neo_mx            |
  * | mview.c         | @subpage neo_mview         |
+ * | mx.c            | @subpage neo_mx            |
  * | myvar.c         | @subpage neo_myvar         |
  * | opcodes.c       | @subpage neo_opcode        |
- * | options.h       | @subpage neo_options       |
- * | postpone.c      | @subpage neo_postpone      |
  * | recvcmd.c       | @subpage neo_recvcmd       |
  * | resize.c        | @subpage neo_resize        |
  * | rfc3676.c       | @subpage neo_rfc3676       |
@@ -137,12 +132,10 @@
  * Command line processing
  */
 
-#define MAIN_C 1
 #define GNULIB_defined_setlocale
 
 #include "config.h"
 #include <errno.h>
-#include <getopt.h>
 #include <limits.h>
 #include <locale.h>
 #include <pwd.h>
@@ -167,21 +160,21 @@
 #include "index/lib.h"
 #include "menu/lib.h"
 #include "ncrypt/lib.h"
+#include "postpone/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "alternates.h"
-#include "commands.h"
+#include "external.h"
+#include "globals.h" // IWYU pragma: keep
 #include "hook.h"
 #include "init.h"
 #include "keymap.h"
-#include "mutt_globals.h"
 #include "mutt_history.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "myvar.h"
-#include "options.h"
 #include "protos.h"
 #include "subjectrx.h"
 #include "version.h"
@@ -197,7 +190,6 @@
 #ifdef USE_NNTP
 #include "nntp/lib.h"
 #include "nntp/adata.h" // IWYU pragma: keep
-#include "nntp/mdata.h" // IWYU pragma: keep
 #endif
 #ifdef USE_AUTOCRYPT
 #include "autocrypt/lib.h"
@@ -205,6 +197,8 @@
 #if defined(USE_DEBUG_NOTIFY) || defined(HAVE_LIBUNWIND)
 #include "debug/lib.h"
 #endif
+
+bool StartupComplete = false; ///< When the config has been read
 
 // clang-format off
 typedef uint8_t CliFlags;         ///< Flags for command line options, e.g. #MUTT_CLI_IGNORE
@@ -503,9 +497,6 @@ main
   bool hide_sensitive = false;
   bool batch_mode = false;
   bool edit_infile = false;
-#ifdef USE_DEBUG_PARSE_TEST
-  bool test_config = false;
-#endif
   int double_dash = argc, nargc = 1;
   int rc = 1;
   bool repeat_error = false;
@@ -631,11 +622,6 @@ main
         case 's':
           subject = optarg;
           break;
-#ifdef USE_DEBUG_PARSE_TEST
-        case 'T':
-          test_config = true;
-          break;
-#endif
         case 'v':
           version++;
           break;
@@ -699,17 +685,6 @@ main
   if (!get_user_info(cs))
     goto main_exit;
 
-#ifdef USE_DEBUG_PARSE_TEST
-  if (test_config)
-  {
-    cs_str_initial_set(cs, "from", "rich@flatcap.org", NULL);
-    cs_str_reset(cs, "from", NULL);
-    myvar_set("my_var", "foo");
-    test_parse_set();
-    goto main_ok;
-  }
-#endif
-
   reset_tilde(cs);
 
   if (dfile)
@@ -731,11 +706,7 @@ main
   }
 
   mutt_log_prep();
-  if (dlevel)
-    mutt_log_start();
-
   MuttLogger = log_disp_queue;
-
   log_translation();
 
   if (!STAILQ_EMPTY(&cc_list) || !STAILQ_EMPTY(&bcc_list))
@@ -817,9 +788,11 @@ main
     if (!cli_nntp)
       cli_nntp = mutt_str_getenv("NNTPSERVER");
 
-    char buf[1024] = { 0 };
     if (!cli_nntp)
+    {
+      char buf[1024] = { 0 };
       cli_nntp = mutt_file_read_keyword(SYSCONFDIR "/nntpserver", buf, sizeof(buf));
+    }
 
     if (cli_nntp)
     {
@@ -859,6 +832,7 @@ main
     if (one_liner)
       cdflags |= CS_DUMP_SHOW_DOCS;
     dump_config(cs, cdflags, stdout);
+    dump_myvar(cdflags, stdout);
     goto main_ok; // TEST18: neomutt -D
   }
 
@@ -875,7 +849,10 @@ main
       {
         /* output in machine-readable form */
         mutt_addrlist_to_intl(al, NULL);
-        mutt_addrlist_write_file(al, stdout, 0, false);
+        struct Buffer *buf = mutt_buffer_pool_get();
+        mutt_addrlist_write(al, buf, false);
+        printf("%s\n", mutt_buffer_string(buf));
+        mutt_buffer_pool_release(&buf);
       }
       else
       {
@@ -941,6 +918,7 @@ main
   {
     goto main_ok; // TEST22: neomutt -B
   }
+  StartupComplete = true;
 
   notify_observer_add(NeoMutt->notify, NT_CONFIG, main_hist_observer, NULL);
   notify_observer_add(NeoMutt->notify, NT_CONFIG, main_log_observer, NULL);
@@ -1383,8 +1361,11 @@ main
 #ifdef USE_IMAP
     imap_logout_all();
 #endif
-#ifdef USE_SASL
+#ifdef USE_SASL_CYRUS
     mutt_sasl_done();
+#endif
+#ifdef USE_SASL_GNU
+    mutt_gsasl_done();
 #endif
 #ifdef USE_AUTOCRYPT
     mutt_autocrypt_cleanup();
@@ -1413,7 +1394,7 @@ main_exit:
   mutt_buffer_pool_free();
   mutt_envlist_free();
   mutt_browser_cleanup();
-  mutt_commands_cleanup();
+  commands_cleanup();
   menu_cleanup();
   crypt_cleanup();
   mutt_opts_free();

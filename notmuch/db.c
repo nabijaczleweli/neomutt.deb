@@ -77,6 +77,29 @@ const char *nm_db_get_filename(struct Mailbox *m)
 }
 
 /**
+ * get_nm_config_file - Gets the configuration file
+ * @retval ptr Config file path. Empty string if no config.
+ * @retval NULL Config file path set to `auto`.
+ */
+static const char *get_nm_config_file(void)
+{
+  const char *config_to_use = NULL;
+  const char *c_nm_config_file = cs_subset_path(NeoMutt->sub, "nm_config_file");
+
+  // Workaround the configuration system mapping "" to NULL.
+  if (c_nm_config_file == NULL)
+  {
+    config_to_use = "";
+  }
+  else if (!mutt_strn_equal(c_nm_config_file, "auto", 4))
+  {
+    config_to_use = c_nm_config_file;
+  }
+
+  return config_to_use;
+}
+
+/**
  * nm_db_do_open - Open a Notmuch database
  * @param filename Database filename
  * @param writable Read/write?
@@ -88,9 +111,7 @@ notmuch_database_t *nm_db_do_open(const char *filename, bool writable, bool verb
   notmuch_database_t *db = NULL;
   int ct = 0;
   notmuch_status_t st = NOTMUCH_STATUS_SUCCESS;
-#if LIBNOTMUCH_CHECK_VERSION(4, 2, 0)
   char *msg = NULL;
-#endif
 
   const short c_nm_open_timeout = cs_subset_number(NeoMutt->sub, "nm_open_timeout");
   mutt_debug(LL_DEBUG1, "nm: db open '%s' %s (timeout %d)\n", filename,
@@ -103,10 +124,18 @@ notmuch_database_t *nm_db_do_open(const char *filename, bool writable, bool verb
   {
 #if LIBNOTMUCH_CHECK_VERSION(5, 4, 0)
     // notmuch 0.32-0.32.2 didn't bump libnotmuch version to 5.4.
-    st = notmuch_database_open_with_config(filename, mode, NULL, NULL, &db, &msg);
-    if (st == NOTMUCH_STATUS_NO_CONFIG)
+    const char *config_file = get_nm_config_file();
+    const char *const c_nm_config_profile = cs_subset_string(NeoMutt->sub, "nm_config_profile");
+
+    st = notmuch_database_open_with_config(filename, mode, config_file,
+                                           c_nm_config_profile, &db, &msg);
+
+    // Attempt opening database without configuration file. Don't if the user specified no config.
+    if (st == NOTMUCH_STATUS_NO_CONFIG && !mutt_str_equal(config_file, ""))
     {
-      mutt_debug(LL_DEBUG1, "nm: Could not find a Notmuch configuration file\n");
+      mutt_debug(LL_DEBUG1, "nm: Could not find notmuch configuration file: %s\n", config_file);
+      mutt_debug(LL_DEBUG1, "nm: Attempting to open notmuch db without configuration file.\n");
+
       FREE(&msg);
 
       st = notmuch_database_open_with_config(filename, mode, "", NULL, &db, &msg);
@@ -139,14 +168,11 @@ notmuch_database_t *nm_db_do_open(const char *filename, bool writable, bool verb
   {
     if (!db)
     {
-#if LIBNOTMUCH_CHECK_VERSION(4, 2, 0)
       if (msg)
       {
         mutt_error(msg);
-        FREE(&msg);
       }
       else
-#endif
       {
         mutt_error(_("Can't open notmuch database: %s: %s"), filename,
                    st ? notmuch_status_to_string(st) : _("unknown reason"));
@@ -157,6 +183,9 @@ notmuch_database_t *nm_db_do_open(const char *filename, bool writable, bool verb
       mutt_clear_error();
     }
   }
+
+  FREE(&msg);
+
   return db;
 }
 
@@ -278,7 +307,7 @@ int nm_db_get_mtime(struct Mailbox *m, time_t *mtime)
     return -1;
 
   struct stat st = { 0 };
-  char path[PATH_MAX];
+  char path[PATH_MAX] = { 0 };
   const char *db_filename = nm_db_get_filename(m);
 
   mutt_debug(LL_DEBUG2, "nm: checking database mtime '%s'\n", db_filename);

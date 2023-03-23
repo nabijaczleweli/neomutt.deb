@@ -126,7 +126,7 @@ static int pop_read_header(struct PopAccountData *adata, struct Email *e)
 
   int index = 0;
   size_t length = 0;
-  char buf[1024];
+  char buf[1024] = { 0 };
 
   struct PopEmailData *edata = pop_edata_get(e);
 
@@ -301,7 +301,7 @@ static struct HeaderCache *pop_hcache_open(struct PopAccountData *adata, const c
     return mutt_hcache_open(c_header_cache, path, NULL);
 
   struct Url url = { 0 };
-  char p[1024];
+  char p[1024] = { 0 };
 
   mutt_account_tourl(&adata->conn->account, &url);
   url.path = HC_FNAME;
@@ -330,7 +330,7 @@ static int pop_fetch_headers(struct Mailbox *m)
   struct HeaderCache *hc = pop_hcache_open(adata, mailbox_path(m));
 #endif
 
-  adata->check_time = mutt_date_epoch();
+  adata->check_time = mutt_date_now();
   adata->clear_cache = false;
 
   for (int i = 0; i < m->msg_count; i++)
@@ -517,9 +517,9 @@ void pop_fetch_mail(void)
     return;
   }
 
-  char buf[1024];
-  char msgbuf[128];
-  int last = 0, msgs, bytes, rset = 0, ret;
+  char buf[1024] = { 0 };
+  char msgbuf[128] = { 0 };
+  int last = 0, msgs, bytes, rset = 0, rc;
   struct ConnAccount cac = { { 0 } };
 
   char *p = mutt_mem_calloc(strlen(c_pop_host) + 7, sizeof(char));
@@ -531,9 +531,9 @@ void pop_fetch_mail(void)
   }
   strcpy(p, c_pop_host);
 
-  ret = pop_parse_path(url, &cac);
+  rc = pop_parse_path(url, &cac);
   FREE(&url);
-  if (ret)
+  if (rc)
   {
     mutt_error(_("%s is an invalid POP path"), c_pop_host);
     return;
@@ -557,10 +557,10 @@ void pop_fetch_mail(void)
 
   /* find out how many messages are in the mailbox. */
   mutt_str_copy(buf, "STAT\r\n", sizeof(buf));
-  ret = pop_query(adata, buf, sizeof(buf));
-  if (ret == -1)
+  rc = pop_query(adata, buf, sizeof(buf));
+  if (rc == -1)
     goto fail;
-  if (ret == -2)
+  if (rc == -2)
   {
     mutt_error("%s", adata->err_msg);
     goto finish;
@@ -573,10 +573,10 @@ void pop_fetch_mail(void)
   if ((msgs > 0) && c_pop_last)
   {
     mutt_str_copy(buf, "LAST\r\n", sizeof(buf));
-    ret = pop_query(adata, buf, sizeof(buf));
-    if (ret == -1)
+    rc = pop_query(adata, buf, sizeof(buf));
+    if (rc == -1)
       goto fail;
-    if (ret == 0)
+    if (rc == 0)
       sscanf(buf, "+OK %d", &last);
   }
 
@@ -612,42 +612,42 @@ void pop_fetch_mail(void)
     if (msg)
     {
       snprintf(buf, sizeof(buf), "RETR %d\r\n", i);
-      ret = pop_fetch_data(adata, buf, NULL, fetch_message, msg->fp);
-      if (ret == -3)
+      rc = pop_fetch_data(adata, buf, NULL, fetch_message, msg->fp);
+      if (rc == -3)
         rset = 1;
 
-      if ((ret == 0) && (mx_msg_commit(m_spool, msg) != 0))
+      if ((rc == 0) && (mx_msg_commit(m_spool, msg) != 0))
       {
         rset = 1;
-        ret = -3;
+        rc = -3;
       }
 
       mx_msg_close(m_spool, &msg);
     }
     else
     {
-      ret = -3;
+      rc = -3;
     }
 
-    if ((ret == 0) && (delanswer == MUTT_YES))
+    if ((rc == 0) && (delanswer == MUTT_YES))
     {
       /* delete the message on the server */
       snprintf(buf, sizeof(buf), "DELE %d\r\n", i);
-      ret = pop_query(adata, buf, sizeof(buf));
+      rc = pop_query(adata, buf, sizeof(buf));
     }
 
-    if (ret == -1)
+    if (rc == -1)
     {
       m_spool->append = old_append;
       mx_mbox_close(m_spool);
       goto fail;
     }
-    if (ret == -2)
+    if (rc == -2)
     {
       mutt_error("%s", adata->err_msg);
       break;
     }
-    if (ret == -3)
+    if (rc == -3)
     {
       mutt_error(_("Error while writing mailbox"));
       break;
@@ -677,7 +677,6 @@ finish:
   if (pop_query(adata, buf, sizeof(buf)) == -1)
     goto fail;
   mutt_socket_close(conn);
-  FREE(&conn);
   pop_adata_free((void **) &adata);
   return;
 
@@ -699,10 +698,10 @@ static bool pop_ac_owns_path(struct Account *a, const char *path)
   struct PopAccountData *adata = a->adata;
   struct ConnAccount *cac = &adata->conn->account;
 
-  const bool ret = mutt_istr_equal(url->host, cac->host) &&
-                   mutt_istr_equal(url->user, cac->user);
+  const bool rc = mutt_istr_equal(url->host, cac->host) &&
+                  mutt_istr_equal(url->user, cac->user);
   url_free(&url);
-  return ret;
+  return rc;
 }
 
 /**
@@ -714,22 +713,21 @@ static bool pop_ac_add(struct Account *a, struct Mailbox *m)
     return true;
 
   struct ConnAccount cac = { { 0 } };
-  struct PopAccountData *adata = pop_adata_new();
-  a->adata = adata;
-  a->adata_free = pop_adata_free;
-
   if (pop_parse_path(mailbox_path(m), &cac))
   {
     mutt_error(_("%s is an invalid POP path"), mailbox_path(m));
     return false;
   }
 
+  struct PopAccountData *adata = pop_adata_new();
   adata->conn = mutt_conn_new(&cac);
   if (!adata->conn)
   {
     pop_adata_free((void **) &adata);
     return false;
   }
+  a->adata = adata;
+  a->adata_free = pop_adata_free;
 
   return true;
 }
@@ -744,7 +742,7 @@ static enum MxOpenReturns pop_mbox_open(struct Mailbox *m)
   if (!m->account)
     return MX_OPEN_ERROR;
 
-  char buf[PATH_MAX];
+  char buf[PATH_MAX] = { 0 };
   struct ConnAccount cac = { { 0 } };
   struct Url url = { 0 };
 
@@ -818,10 +816,13 @@ static enum MxOpenReturns pop_mbox_open(struct Mailbox *m)
  */
 static enum MxStatus pop_mbox_check(struct Mailbox *m)
 {
+  if (!m || !m->account)
+    return MX_STATUS_ERROR;
+
   struct PopAccountData *adata = pop_adata_get(m);
 
   const short c_pop_check_interval = cs_subset_number(NeoMutt->sub, "pop_check_interval");
-  if ((adata->check_time + c_pop_check_interval) > mutt_date_epoch())
+  if ((adata->check_time + c_pop_check_interval) > mutt_date_now())
     return MX_STATUS_OK;
 
   pop_logout(m);
@@ -858,7 +859,7 @@ static enum MxStatus pop_mbox_check(struct Mailbox *m)
 static enum MxStatus pop_mbox_sync(struct Mailbox *m)
 {
   int i, j, rc = 0;
-  char buf[1024];
+  char buf[1024] = { 0 };
   struct PopAccountData *adata = pop_adata_get(m);
 #ifdef USE_HCACHE
   struct HeaderCache *hc = NULL;
@@ -975,7 +976,7 @@ static enum MxStatus pop_mbox_close(struct Mailbox *m)
  */
 static bool pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
 {
-  char buf[1024];
+  char buf[1024] = { 0 };
   struct PopAccountData *adata = pop_adata_get(m);
   struct Email *e = m->emails[msgno];
   struct PopEmailData *edata = pop_edata_get(e);
@@ -989,7 +990,7 @@ static bool pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
     return true;
 
   /* see if we already have the message in our cache in
-   * case $message_cachedir is unset */
+   * case $message_cache_dir is unset */
   struct PopCache *cache = &adata->cache[e->index % POP_CACHE_LEN];
 
   if (cache->path)
@@ -1045,10 +1046,10 @@ static bool pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
 
     struct Progress *progress = progress_new(_("Fetching message..."), MUTT_PROGRESS_NET,
                                              e->body->length + e->body->offset - 1);
-    const int ret = pop_fetch_data(adata, buf, progress, fetch_message, msg->fp);
+    const int rc = pop_fetch_data(adata, buf, progress, fetch_message, msg->fp);
     progress_free(&progress);
 
-    if (ret == 0)
+    if (rc == 0)
       break;
 
     mutt_file_fclose(&msg->fp);
@@ -1059,13 +1060,13 @@ static bool pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
     if (!bcache)
       unlink(mutt_buffer_string(path));
 
-    if (ret == -2)
+    if (rc == -2)
     {
       mutt_error("%s", adata->err_msg);
       goto cleanup;
     }
 
-    if (ret == -3)
+    if (rc == -3)
     {
       mutt_error(_("Can't write message to temporary file"));
       goto cleanup;
