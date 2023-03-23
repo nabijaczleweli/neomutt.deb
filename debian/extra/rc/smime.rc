@@ -48,10 +48,9 @@
 
 # Path to a file or directory with trusted certificates
 # set smime_ca_location="~/.smime/ca-bundle.crt"
-
-# Path to where all known certificates go. (must exist!)
 set smime_ca_location=`find $HOME/.smime/ca-certificates.crt $HOME/.smime/ca-bundle.crt /etc/ssl/certs/ca-certificates.crt 2>/dev/null`
 
+# Path to where all known certificates go. (must exist!)
 set smime_certificates="~/.smime/certificates"
 
 # Path to where all private keys go. (must exist!)
