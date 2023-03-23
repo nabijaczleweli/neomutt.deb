@@ -36,17 +36,20 @@ Some changes to the official documentation for neomutt.rc.
  # imitate the old search-body function
  macro index \eb "<search>~b " "search in message bodies"
  
-@@ -23,7 +51,7 @@ macro index,pager,attach,compose \cb "\
+@@ -23,9 +51,9 @@ macro index,pager,attach,compose \cb "\
  "call urlview to extract URLs out of a message"
  
  # Show documentation when pressing F1
 -macro generic,pager <F1> "<shell-escape> less @docdir@/manual.txt<Enter>" "show NeoMutt documentation"
 +macro generic,pager <F1> "<shell-escape> zcat @docdir@/manual.txt.gz | sensible-pager<enter>" "show NeoMutt documentation"
+ # and also F2, as some terminals use F1
+-macro generic,pager <F2> "<shell-escape> less @docdir@/manual.txt<Enter>" "show NeoMutt documentation"
++macro generic,pager <F2> "<shell-escape> zcat @docdir@/manual.txt.gz | sensible-pager<enter>" "show NeoMutt documentation"
  
  # show the incoming mailboxes list (just like "neomutt -y") and back when pressing "y"
  macro index y "<change-folder>?" "show incoming mailboxes list"
-@@ -36,7 +64,7 @@ bind browser y exit
- # append-hook '\.gz$' "gzip --stdout              '%t' >> '%f'"
+@@ -40,7 +68,7 @@ bind browser y exit
+ bind editor <delete> delete-char
  
  # If NeoMutt is unable to determine your site's domain name correctly, you can
 -# set the default here.
@@ -54,7 +57,7 @@ Some changes to the official documentation for neomutt.rc.
  #
  # set hostname=cs.hmc.edu
  
-@@ -48,6 +76,13 @@ bind browser y exit
+@@ -52,6 +80,13 @@ bind editor <delete> delete-char
  # be undone with unmime_lookup.
  mime_lookup application/octet-stream
  
@@ -65,6 +68,6 @@ Some changes to the official documentation for neomutt.rc.
 +# Allow mutt to understand References, Cc and In-Reply-To as headers in mailto:
 +mailto_allow = cc in-reply-to references
 +
- ##
- ## *** DEFAULT SETTINGS FOR THE ATTACHMENTS PATCH ***
- ##
+ # Please see the manual (section "attachments")  for detailed
+ # documentation of the "attachments" command.
+ #
