@@ -1,3 +1,13 @@
+neomutt (20230322+dfsg-0.1) unstable; urgency=medium
+
+  * New upstream version 20230322+dfsg
+  * Refresh patches
+  * Vendor last upstream versions of gpg.rc & smime.rc into d/extra/rc/
+  * Apply d/p/misc/smime.rc, now removed, to d/extra/rc/smime.rc
+  * Clean up placement of smime_ca_location in smime.rc
+
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Thu, 23 Mar 2023 17:28:12 +0100
+
 neomutt (20220429+dfsg-0.1) unstable; urgency=medium
 
   * New upstream version 20220429+dfsg
