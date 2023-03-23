@@ -23,6 +23,7 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include <stdio.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
@@ -30,7 +31,8 @@
 
 static struct ConfigDef Vars[] = {
   // clang-format off
-  { "tmpdir", DT_PATH|DT_PATH_DIR|DT_NOT_EMPTY, IP TMPDIR, 0, NULL, },
+  { "tmp_dir", DT_PATH|DT_PATH_DIR|DT_NOT_EMPTY, IP TMPDIR, 0, NULL, },
+  { "tmpdir", DT_SYNONYM, IP "tmp_dir", IP "2023-01-25" },
   { NULL },
   // clang-format on
 };

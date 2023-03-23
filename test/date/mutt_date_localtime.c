@@ -24,6 +24,7 @@
 #include "config.h"
 #include "acutest.h"
 #include <stdlib.h>
+#include <time.h>
 #include "mutt/lib.h"
 
 void test_mutt_date_localtime(void)
@@ -60,7 +61,7 @@ void test_mutt_date_localtime(void)
 
   {
     TEST_CASE("Today");
-    struct tm tm = mutt_date_localtime(MUTT_DATE_NOW);
+    struct tm tm = mutt_date_localtime(mutt_date_now());
     TEST_CHECK(tm.tm_year >= 119);
   }
 }

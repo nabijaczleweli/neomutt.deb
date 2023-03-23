@@ -28,6 +28,7 @@
  */
 
 #include "config.h"
+#include <locale.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -41,16 +42,17 @@
 #include "mutt.h"
 #include "recvcmd.h"
 #include "attach/lib.h"
+#include "enter/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "copy.h"
 #include "format_flags.h"
+#include "globals.h" // IWYU pragma: keep
 #include "handler.h"
 #include "hdrline.h"
 #include "mutt_body.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "options.h"
 #include "protos.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
@@ -204,8 +206,8 @@ void mutt_attach_bounce(struct Mailbox *m, FILE *fp, struct AttachCtx *actx, str
   else
     mutt_buffer_strcpy(prompt, _("Bounce tagged messages to: "));
 
-  if (mutt_buffer_get_field(mutt_buffer_string(prompt), buf, MUTT_COMP_ALIAS,
-                            false, NULL, NULL, NULL) ||
+  if ((mutt_buffer_get_field(mutt_buffer_string(prompt), buf, MUTT_COMP_ALIAS,
+                             false, NULL, NULL, NULL) != 0) ||
       mutt_buffer_is_empty(buf))
   {
     goto done;
@@ -230,7 +232,7 @@ void mutt_attach_bounce(struct Mailbox *m, FILE *fp, struct AttachCtx *actx, str
 
   mutt_buffer_reset(buf);
   mutt_buffer_alloc(buf, 8192);
-  mutt_addrlist_write(&al, buf->data, buf->dsize, true);
+  mutt_addrlist_write(&al, buf, true);
 
 #define EXTRA_SPACE (15 + 7 + 2)
   /* See commands.c.  */
@@ -361,7 +363,7 @@ static struct AttachPtr *find_common_parent(struct AttachCtx *actx, short nattac
  * @note This and the calling procedure could be optimized quite a bit.
  *       For now, it's not worth the effort.
  */
-static int is_parent(short i, struct AttachCtx *actx, struct Body *cur)
+static int is_parent(short i, struct AttachCtx *actx, const struct Body *cur)
 {
   short level = actx->idx[i]->level;
 
@@ -429,9 +431,12 @@ static void include_header(bool quote, FILE *fp_in, struct Email *e, FILE *fp_ou
       mutt_str_copy(prefix2, prefix, sizeof(prefix2));
     else if (!c_text_flowed)
     {
+      const char *const c_attribution_locale = cs_subset_string(NeoMutt->sub, "attribution_locale");
       const char *const c_indent_string = cs_subset_string(NeoMutt->sub, "indent_string");
+      setlocale(LC_TIME, NONULL(c_attribution_locale));
       mutt_make_string(prefix2, sizeof(prefix2), 0, NONULL(c_indent_string),
                        NULL, -1, e, MUTT_FORMAT_NO_FLAGS, NULL);
+      setlocale(LC_TIME, "");
     }
     else
       mutt_str_copy(prefix2, ">", sizeof(prefix2));
@@ -483,7 +488,7 @@ static void attach_forward_bodies(FILE *fp, struct Email *e, struct AttachCtx *a
   bool mime_fwd_any = true;
   struct Email *e_parent = NULL;
   FILE *fp_parent = NULL;
-  char prefix[256];
+  char prefix[256] = { 0 };
   enum QuadOption ans = MUTT_NO;
   struct Buffer *tmpbody = NULL;
 
@@ -528,9 +533,12 @@ static void attach_forward_bodies(FILE *fp, struct Email *e, struct AttachCtx *a
       mutt_str_copy(prefix, ">", sizeof(prefix));
     else
     {
+      const char *const c_attribution_locale = cs_subset_string(NeoMutt->sub, "attribution_locale");
       const char *const c_indent_string = cs_subset_string(NeoMutt->sub, "indent_string");
+      setlocale(LC_TIME, NONULL(c_attribution_locale));
       mutt_make_string(prefix, sizeof(prefix), 0, NONULL(c_indent_string), NULL,
                        -1, e_parent, MUTT_FORMAT_NO_FLAGS, NULL);
+      setlocale(LC_TIME, "");
     }
   }
 
@@ -567,14 +575,14 @@ static void attach_forward_bodies(FILE *fp, struct Email *e, struct AttachCtx *a
 
   /* initialize a state structure */
 
-  struct State st = { 0 };
+  struct State state = { 0 };
   if (c_forward_quote)
-    st.prefix = prefix;
-  st.flags = MUTT_CHARCONV;
+    state.prefix = prefix;
+  state.flags = STATE_CHARCONV;
   const bool c_weed = cs_subset_bool(NeoMutt->sub, "weed");
   if (c_weed)
-    st.flags |= MUTT_WEED;
-  st.fp_out = fp_tmp;
+    state.flags |= STATE_WEED;
+  state.fp_out = fp_tmp;
 
   /* where do we append new MIME parts? */
   struct Body **last = &e_tmp->body;
@@ -585,9 +593,9 @@ static void attach_forward_bodies(FILE *fp, struct Email *e, struct AttachCtx *a
 
     if (!mime_fwd_all && mutt_can_decode(cur))
     {
-      st.fp_in = fp;
-      mutt_body_handler(cur, &st);
-      state_putc(&st, '\n');
+      state.fp_in = fp;
+      mutt_body_handler(cur, &state);
+      state_putc(&state, '\n');
     }
     else
     {
@@ -605,9 +613,9 @@ static void attach_forward_bodies(FILE *fp, struct Email *e, struct AttachCtx *a
       {
         if (actx->idx[i]->body->tagged && mutt_can_decode(actx->idx[i]->body))
         {
-          st.fp_in = actx->idx[i]->fp;
-          mutt_body_handler(actx->idx[i]->body, &st);
-          state_putc(&st, '\n');
+          state.fp_in = actx->idx[i]->fp;
+          mutt_body_handler(actx->idx[i]->body, &state);
+          state_putc(&state, '\n');
         }
       }
     }
@@ -912,7 +920,7 @@ static void attach_include_reply(FILE *fp, FILE *fp_tmp, struct Email *e)
   CopyMessageFlags cmflags = MUTT_CM_PREFIX | MUTT_CM_DECODE | MUTT_CM_CHARCONV;
   CopyHeaderFlags chflags = CH_DECODE;
 
-  mutt_make_attribution(e, fp_tmp, NeoMutt->sub);
+  mutt_make_attribution_intro(e, fp_tmp, NeoMutt->sub);
 
   const bool c_header = cs_subset_bool(NeoMutt->sub, "header");
   if (!c_header)
@@ -925,7 +933,7 @@ static void attach_include_reply(FILE *fp, FILE *fp_tmp, struct Email *e)
   }
 
   mutt_copy_message_fp(fp_tmp, fp, e, cmflags, chflags, 0);
-  mutt_make_post_indent(e, fp_tmp, NeoMutt->sub);
+  mutt_make_attribution_trailer(e, fp_tmp, NeoMutt->sub);
 }
 
 /**
@@ -951,7 +959,7 @@ void mutt_attach_reply(FILE *fp, struct Mailbox *m, struct Email *e,
   struct Buffer *tmpbody = NULL;
   struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
 
-  char prefix[128];
+  char prefix[128] = { 0 };
 
 #ifdef USE_NNTP
   if (flags & SEND_NEWS)
@@ -1024,11 +1032,11 @@ void mutt_attach_reply(FILE *fp, struct Mailbox *m, struct Email *e,
   }
   else
   {
-    mutt_make_attribution(e_parent, fp_tmp, NeoMutt->sub);
+    mutt_make_attribution_intro(e_parent, fp_tmp, NeoMutt->sub);
 
-    struct State st;
-    memset(&st, 0, sizeof(struct State));
-    st.fp_out = fp_tmp;
+    struct State state;
+    memset(&state, 0, sizeof(struct State));
+    state.fp_out = fp_tmp;
 
     const bool c_text_flowed = cs_subset_bool(NeoMutt->sub, "text_flowed");
     if (c_text_flowed)
@@ -1037,17 +1045,20 @@ void mutt_attach_reply(FILE *fp, struct Mailbox *m, struct Email *e,
     }
     else
     {
+      const char *const c_attribution_locale = cs_subset_string(NeoMutt->sub, "attribution_locale");
       const char *const c_indent_string = cs_subset_string(NeoMutt->sub, "indent_string");
+      setlocale(LC_TIME, NONULL(c_attribution_locale));
       mutt_make_string(prefix, sizeof(prefix), 0, NONULL(c_indent_string), m,
                        -1, e_parent, MUTT_FORMAT_NO_FLAGS, NULL);
+      setlocale(LC_TIME, "");
     }
 
-    st.prefix = prefix;
-    st.flags = MUTT_CHARCONV;
+    state.prefix = prefix;
+    state.flags = STATE_CHARCONV;
 
     const bool c_weed = cs_subset_bool(NeoMutt->sub, "weed");
     if (c_weed)
-      st.flags |= MUTT_WEED;
+      state.flags |= STATE_WEED;
 
     const bool c_header = cs_subset_bool(NeoMutt->sub, "header");
     if (c_header)
@@ -1057,9 +1068,9 @@ void mutt_attach_reply(FILE *fp, struct Mailbox *m, struct Email *e,
     {
       if (mutt_can_decode(e_cur))
       {
-        st.fp_in = fp;
-        mutt_body_handler(e_cur, &st);
-        state_putc(&st, '\n');
+        state.fp_in = fp;
+        mutt_body_handler(e_cur, &state);
+        state_putc(&state, '\n');
       }
       else
         mutt_body_copy(fp, &e_tmp->body, e_cur);
@@ -1070,14 +1081,14 @@ void mutt_attach_reply(FILE *fp, struct Mailbox *m, struct Email *e,
       {
         if (actx->idx[i]->body->tagged && mutt_can_decode(actx->idx[i]->body))
         {
-          st.fp_in = actx->idx[i]->fp;
-          mutt_body_handler(actx->idx[i]->body, &st);
-          state_putc(&st, '\n');
+          state.fp_in = actx->idx[i]->fp;
+          mutt_body_handler(actx->idx[i]->body, &state);
+          state_putc(&state, '\n');
         }
       }
     }
 
-    mutt_make_post_indent(e_parent, fp_tmp, NeoMutt->sub);
+    mutt_make_attribution_trailer(e_parent, fp_tmp, NeoMutt->sub);
 
     if (mime_reply_any && !e_cur && !copy_problematic_attachments(&e_tmp->body, actx, false))
     {

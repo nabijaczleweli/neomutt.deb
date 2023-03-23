@@ -39,14 +39,19 @@
 #include "gui/lib.h"
 #include "lib.h"
 #include "index/lib.h"
-#include "mutt_commands.h"
 
-struct ListHead SidebarWhitelist = STAILQ_HEAD_INITIALIZER(SidebarWhitelist); ///< List of mailboxes to always display in the sidebar
+struct ListHead SidebarPinned = STAILQ_HEAD_INITIALIZER(SidebarPinned); ///< List of mailboxes to always display in the sidebar
 
-static const struct Command sb_commands[] = {
+/**
+ * SbCommands - Sidebar Commands
+ */
+static const struct Command SbCommands[] = {
   // clang-format off
-  { "sidebar_whitelist",   sb_parse_whitelist,     0 },
-  { "unsidebar_whitelist", sb_parse_unwhitelist,   0 },
+  { "sidebar_pin",   sb_parse_sidebar_pin,     0 },
+  { "sidebar_unpin", sb_parse_sidebar_unpin,   0 },
+
+  { "sidebar_whitelist",   sb_parse_sidebar_pin,     0 },
+  { "unsidebar_whitelist", sb_parse_sidebar_unpin,   0 },
   // clang-format on
 };
 
@@ -117,7 +122,7 @@ void sb_add_mailbox(struct SidebarWindowData *wdata, struct Mailbox *m)
  * @param wdata Sidebar data
  * @param m     Mailbox to remove
  */
-void sb_remove_mailbox(struct SidebarWindowData *wdata, struct Mailbox *m)
+void sb_remove_mailbox(struct SidebarWindowData *wdata, const struct Mailbox *m)
 {
   struct SbEntry **sbep = NULL;
   ARRAY_FOREACH(sbep, &wdata->entries)
@@ -195,7 +200,7 @@ void sb_set_current_mailbox(struct SidebarWindowData *wdata, struct Mailbox *m)
  */
 void sb_init(void)
 {
-  COMMANDS_REGISTER(sb_commands);
+  commands_register(SbCommands, mutt_array_size(SbCommands));
 
   // Listen for dialog creation events
   notify_observer_add(AllDialogsWindow->notify, NT_WINDOW,
@@ -209,5 +214,5 @@ void sb_shutdown(void)
 {
   if (AllDialogsWindow)
     notify_observer_remove(AllDialogsWindow->notify, sb_insertion_window_observer, NULL);
-  mutt_list_free(&SidebarWhitelist);
+  mutt_list_free(&SidebarPinned);
 }

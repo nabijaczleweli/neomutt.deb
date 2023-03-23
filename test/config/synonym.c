@@ -27,9 +27,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "mutt/lib.h"
-#include "config/common.h"
 #include "config/lib.h"
 #include "core/lib.h"
+#include "common.h" // IWYU pragma: keep
 #include "test_common.h"
 
 // clang-format off
@@ -192,10 +192,10 @@ void test_config_synonym(void)
   struct ConfigSubset *sub = NeoMutt->sub;
   struct ConfigSet *cs = sub->cs;
 
-  if (!TEST_CHECK(cs_register_variables(cs, Vars, 0)))
+  if (!TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS)))
     return;
 
-  if (cs_register_variables(cs, Vars2, 0))
+  if (cs_register_variables(cs, Vars2, DT_NO_FLAGS))
   {
     TEST_MSG("Test should have failed\n");
     return;

@@ -38,7 +38,6 @@
 #include "auth.h"
 #include "adata.h"
 #include "mutt_logging.h"
-#include "mutt_socket.h"
 
 /**
  * imap_auth_oauth_xoauth2 - Authenticate an IMAP connection using OAUTHBEARER or XOAUTH2
@@ -47,8 +46,8 @@
  * @param xoauth2 Use xoauth2 token (if true) or oauthbearer token (if false)
  * @retval num ImapAuth::ImapAuthRes Result, e.g. IMAP_AUTH_SUCCESS
  */
-enum ImapAuthRes imap_auth_oauth_xoauth2(struct ImapAccountData *adata,
-                                         const char *method, bool xoauth2)
+static enum ImapAuthRes imap_auth_oauth_xoauth2(struct ImapAccountData *adata,
+                                                const char *method, bool xoauth2)
 {
   char *ibuf = NULL;
   char *oauthbearer = NULL;

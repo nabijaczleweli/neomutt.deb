@@ -50,7 +50,7 @@ static int pop_auth_validator(const struct ConfigSet *cs, const struct ConfigDef
   {
     if (pop_auth_is_valid(np->data))
       continue;
-#ifdef USE_SASL
+#ifdef USE_SASL_CYRUS
     if (sasl_auth_validator(np->data))
       continue;
 #endif
@@ -62,6 +62,9 @@ static int pop_auth_validator(const struct ConfigSet *cs, const struct ConfigDef
   return CSR_SUCCESS;
 }
 
+/**
+ * PopVars - Config definitions for the POP library
+ */
 static struct ConfigDef PopVars[] = {
   // clang-format off
   { "pop_auth_try_all", DT_BOOL, true, 0, NULL,
@@ -105,5 +108,5 @@ static struct ConfigDef PopVars[] = {
  */
 bool config_init_pop(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, PopVars, 0);
+  return cs_register_variables(cs, PopVars, DT_NO_FLAGS);
 }

@@ -58,9 +58,9 @@
 #include "gui/lib.h"
 #include "color/lib.h"
 #include "menu/lib.h"
+#include "globals.h"
 #include "keymap.h"
 #include "opcodes.h"
-#include "options.h"
 #include "ssl.h"
 
 /// Help Bar for the Certificate Verification dialog
@@ -81,17 +81,13 @@ static const struct Mapping VerifyHelp[] = {
  */
 static int menu_dialog_dokey(struct Menu *menu, int *id)
 {
-  struct KeyEvent ch = { OP_NULL, OP_NULL };
-
   // enum MuttCursorState cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
-  mutt_getch_timeout(5000);
-  ch = mutt_getch();
-  mutt_getch_timeout(-1);
+  struct KeyEvent ch = mutt_getch_timeout(5000);
   // mutt_curses_set_cursor(cursor);
 
-  if (ch.ch < OP_NULL)
+  if ((ch.op == OP_TIMEOUT) || (ch.op == OP_ABORT))
   {
-    *id = ch.ch;
+    *id = ch.op;
     return 0;
   }
 
@@ -104,9 +100,9 @@ static int menu_dialog_dokey(struct Menu *menu, int *id)
   }
 
   if (ch.op == OP_NULL)
-    mutt_unget_event(ch.ch, OP_NULL);
+    mutt_unget_ch(ch.ch);
   else
-    mutt_unget_event(0, ch.op);
+    mutt_unget_op(ch.op);
   return -1;
 }
 
@@ -137,7 +133,7 @@ static int menu_dialog_translate_op(int op)
 /**
  * cert_make_entry - Create a string to display in a Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  */
-void cert_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
+static void cert_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
 {
   struct CertMenuData *mdata = menu->mdata;
 
@@ -254,7 +250,11 @@ int dlg_verify_certificate(const char *title, struct CertArray *carr,
     // Try to catch dialog keys before ops
     if (menu_dialog_dokey(menu, &op) != 0)
     {
-      op = km_dokey(menu->type);
+      struct KeyEvent event = km_dokey_event(MENU_GENERIC);
+      if (event.ch == 'q')
+        op = OP_EXIT;
+      else
+        op = event.op;
     }
 
     if (op == OP_TIMEOUT)
@@ -306,7 +306,7 @@ int dlg_verify_certificate(const char *title, struct CertArray *carr,
         continue;
     }
 
-    menu_function_dispatcher(menu->win, op);
+    (void) menu_function_dispatcher(menu->win, op);
   } while (choice == 0);
   // ---------------------------------------------------------------------------
 

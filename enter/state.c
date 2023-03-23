@@ -27,14 +27,15 @@
  */
 
 #include "config.h"
+#include <string.h>
 #include "mutt/lib.h"
 #include "state.h"
 
 /**
- * mutt_enter_state_free - Free an EnterState
+ * enter_state_free - Free an EnterState
  * @param[out] ptr EnterState to free
  */
-void mutt_enter_state_free(struct EnterState **ptr)
+void enter_state_free(struct EnterState **ptr)
 {
   if (!ptr || !*ptr)
     return;
@@ -46,10 +47,35 @@ void mutt_enter_state_free(struct EnterState **ptr)
 }
 
 /**
- * mutt_enter_state_new - Create a new EnterState
+ * enter_state_resize - Make the buffer bigger
+ * @param es  State of the Enter buffer
+ * @param num Number of wide characters
+ */
+void enter_state_resize(struct EnterState *es, size_t num)
+{
+  if (!es)
+    return;
+
+  if (num <= es->wbuflen)
+    return;
+
+  num = ROUND_UP(num + 4, 128);
+  mutt_mem_realloc(&es->wbuf, num * sizeof(wchar_t));
+
+  memset(es->wbuf + es->wbuflen, 0, (num - es->wbuflen) * sizeof(wchar_t));
+
+  es->wbuflen = num;
+}
+
+/**
+ * enter_state_new - Create a new EnterState
  * @retval ptr New EnterState
  */
-struct EnterState *mutt_enter_state_new(void)
+struct EnterState *enter_state_new(void)
 {
-  return mutt_mem_calloc(1, sizeof(struct EnterState));
+  struct EnterState *es = mutt_mem_calloc(1, sizeof(struct EnterState));
+
+  enter_state_resize(es, 1);
+
+  return es;
 }

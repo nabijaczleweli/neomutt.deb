@@ -31,23 +31,22 @@
 #include "private.h"
 #include "mutt/lib.h"
 #include "core/lib.h"
-#include "mutt.h"
-#include "init.h"
+#include "parse/lib.h"
 #include "muttlib.h"
 
 /**
- * sb_parse_whitelist - Parse the 'sidebar_whitelist' command - Implements Command::parse() - @ingroup command_parse
+ * sb_parse_sidebar_pin - Parse the 'sidebar_pin' command - Implements Command::parse() - @ingroup command_parse
  */
-enum CommandResult sb_parse_whitelist(struct Buffer *buf, struct Buffer *s,
-                                      intptr_t data, struct Buffer *err)
+enum CommandResult sb_parse_sidebar_pin(struct Buffer *buf, struct Buffer *s,
+                                        intptr_t data, struct Buffer *err)
 {
   struct Buffer *path = mutt_buffer_pool_get();
 
   do
   {
-    mutt_extract_token(path, s, MUTT_TOKEN_BACKTICK_VARS);
+    parse_extract_token(path, s, TOKEN_BACKTICK_VARS);
     mutt_buffer_expand_path(path);
-    add_to_stailq(&SidebarWhitelist, mutt_buffer_string(path));
+    add_to_stailq(&SidebarPinned, mutt_buffer_string(path));
   } while (MoreArgs(s));
   mutt_buffer_pool_release(&path);
 
@@ -55,24 +54,24 @@ enum CommandResult sb_parse_whitelist(struct Buffer *buf, struct Buffer *s,
 }
 
 /**
- * sb_parse_unwhitelist - Parse the 'unsidebar_whitelist' command - Implements Command::parse() - @ingroup command_parse
+ * sb_parse_sidebar_unpin - Parse the 'sidebar_unpin' command - Implements Command::parse() - @ingroup command_parse
  */
-enum CommandResult sb_parse_unwhitelist(struct Buffer *buf, struct Buffer *s,
-                                        intptr_t data, struct Buffer *err)
+enum CommandResult sb_parse_sidebar_unpin(struct Buffer *buf, struct Buffer *s,
+                                          intptr_t data, struct Buffer *err)
 {
   struct Buffer *path = mutt_buffer_pool_get();
 
   do
   {
-    mutt_extract_token(path, s, MUTT_TOKEN_BACKTICK_VARS);
+    parse_extract_token(path, s, TOKEN_BACKTICK_VARS);
     /* Check for deletion of entire list */
     if (mutt_str_equal(mutt_buffer_string(path), "*"))
     {
-      mutt_list_free(&SidebarWhitelist);
+      mutt_list_free(&SidebarPinned);
       break;
     }
     mutt_buffer_expand_path(path);
-    remove_from_stailq(&SidebarWhitelist, mutt_buffer_string(path));
+    remove_from_stailq(&SidebarPinned, mutt_buffer_string(path));
   } while (MoreArgs(s));
   mutt_buffer_pool_release(&path);
 

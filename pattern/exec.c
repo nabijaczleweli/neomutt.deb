@@ -130,19 +130,19 @@ static bool msg_search(struct Pattern *pat, struct Email *e, struct Message *msg
   if (c_thorough_search)
   {
     /* decode the header / body */
-    struct State s = { 0 };
-    s.fp_in = msg->fp;
-    s.flags = MUTT_CHARCONV;
+    struct State state = { 0 };
+    state.fp_in = msg->fp;
+    state.flags = STATE_CHARCONV;
 #ifdef USE_FMEMOPEN
-    s.fp_out = open_memstream(&temp, &tempsize);
-    if (!s.fp_out)
+    state.fp_out = open_memstream(&temp, &tempsize);
+    if (!state.fp_out)
     {
       mutt_perror(_("Error opening 'memory stream'"));
       return false;
     }
 #else
-    s.fp_out = mutt_file_mkstemp();
-    if (!s.fp_out)
+    state.fp_out = mutt_file_mkstemp();
+    if (!state.fp_out)
     {
       mutt_perror(_("Can't create temporary file"));
       return false;
@@ -151,7 +151,7 @@ static bool msg_search(struct Pattern *pat, struct Email *e, struct Message *msg
 
     if (needs_head)
     {
-      mutt_copy_header(msg->fp, e, s.fp_out, CH_FROM | CH_DECODE, NULL, 0);
+      mutt_copy_header(msg->fp, e, state.fp_out, CH_FROM | CH_DECODE, NULL, 0);
     }
 
     if (needs_body)
@@ -161,9 +161,9 @@ static bool msg_search(struct Pattern *pat, struct Email *e, struct Message *msg
       if ((WithCrypto != 0) && (e->security & SEC_ENCRYPT) &&
           !crypt_valid_passphrase(e->security))
       {
-        if (s.fp_out)
+        if (state.fp_out)
         {
-          mutt_file_fclose(&s.fp_out);
+          mutt_file_fclose(&state.fp_out);
 #ifdef USE_FMEMOPEN
           FREE(&temp);
 #endif
@@ -175,11 +175,11 @@ static bool msg_search(struct Pattern *pat, struct Email *e, struct Message *msg
       {
         return false;
       }
-      mutt_body_handler(e->body, &s);
+      mutt_body_handler(e->body, &state);
     }
 
 #ifdef USE_FMEMOPEN
-    mutt_file_fclose(&s.fp_out);
+    mutt_file_fclose(&state.fp_out);
     len = tempsize;
 
     if (tempsize != 0)
@@ -202,7 +202,7 @@ static bool msg_search(struct Pattern *pat, struct Email *e, struct Message *msg
       }
     }
 #else
-    fp = s.fp_out;
+    fp = state.fp_out;
     fflush(fp);
     if (!mutt_file_seek(fp, 0, SEEK_SET) || fstat(fileno(fp), &st))
     {
@@ -385,7 +385,7 @@ static int match_addrlist(struct Pattern *pat, bool match_personal, int n, ...)
   va_list ap;
 
   va_start(ap, n);
-  for (; n; n--)
+  while (n-- > 0)
   {
     struct AddressList *al = va_arg(ap, struct AddressList *);
     struct Address *a = NULL;
@@ -432,7 +432,7 @@ static bool match_reference(struct Pattern *pat, struct ListHead *refs)
  *
  * Test the 'To' and 'Cc' fields of an Address using a test function (the predicate).
  */
-static int mutt_is_predicate_recipient(bool all_addr, struct Envelope *env, addr_predicate_t p)
+static bool mutt_is_predicate_recipient(bool all_addr, struct Envelope *env, addr_predicate_t p)
 {
   struct AddressList *als[] = { &env->to, &env->cc };
   for (size_t i = 0; i < mutt_array_size(als); ++i)
@@ -456,7 +456,7 @@ static int mutt_is_predicate_recipient(bool all_addr, struct Envelope *env, addr
  * - One Address is subscribed (all_addr is false)
  * - All the Addresses are subscribed (all_addr is true)
  */
-int mutt_is_subscribed_list_recipient(bool all_addr, struct Envelope *env)
+bool mutt_is_subscribed_list_recipient(bool all_addr, struct Envelope *env)
 {
   return mutt_is_predicate_recipient(all_addr, env, &mutt_is_subscribed_list);
 }
@@ -469,7 +469,7 @@ int mutt_is_subscribed_list_recipient(bool all_addr, struct Envelope *env)
  * - One Address is a mailing list (all_addr is false)
  * - All the Addresses are mailing lists (all_addr is true)
  */
-int mutt_is_list_recipient(bool all_addr, struct Envelope *env)
+bool mutt_is_list_recipient(bool all_addr, struct Envelope *env)
 {
   return mutt_is_predicate_recipient(all_addr, env, &mutt_is_mail_list);
 }
@@ -477,32 +477,31 @@ int mutt_is_list_recipient(bool all_addr, struct Envelope *env)
 /**
  * match_user - Matches the user's email Address
  * @param all_addr If true, ALL Addresses must refer to the user
- * @param al1     First AddressList
- * @param al2     Second AddressList
+ * @param n       number of AddressLists supplied
+ * @param ...     Variable number of AddressLists
  * @retval true
  * - One Address refers to the user (all_addr is false)
  * - All the Addresses refer to the user (all_addr is true)
  */
-static int match_user(int all_addr, struct AddressList *al1, struct AddressList *al2)
+static int match_user(bool all_addr, int n, ...)
 {
-  struct Address *a = NULL;
-  if (al1)
-  {
-    TAILQ_FOREACH(a, al1, entries)
-    {
-      if (all_addr ^ mutt_addr_is_user(a))
-        return !all_addr;
-    }
-  }
+  va_list ap;
 
-  if (al2)
+  va_start(ap, n);
+  while (n-- > 0)
   {
-    TAILQ_FOREACH(a, al2, entries)
+    struct AddressList *al = va_arg(ap, struct AddressList *);
+    struct Address *a = NULL;
+    TAILQ_FOREACH(a, al, entries)
     {
       if (all_addr ^ mutt_addr_is_user(a))
+      {
+        va_end(ap);
         return !all_addr;
+      }
     }
   }
+  va_end(ap);
   return all_addr;
 }
 
@@ -601,7 +600,7 @@ static bool match_content_type(const struct Pattern *pat, struct Body *b)
   if (!b)
     return false;
 
-  char buf[256];
+  char buf[256] = { 0 };
   snprintf(buf, sizeof(buf), "%s/%s", TYPE(b), b->subtype);
 
   if (patmatch(pat, buf))
@@ -661,7 +660,7 @@ static void set_pattern_cache_value(int *cache_entry, int value)
  * @retval 1 The cache value is set and has a true value
  * @retval 0 otherwise (even if unset!)
  */
-static int get_pattern_cache_value(int cache_entry)
+static bool get_pattern_cache_value(int cache_entry)
 {
   return cache_entry == 2;
 }
@@ -849,11 +848,11 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
     case MUTT_PAT_DATE:
       if (pat->dynamic)
         match_update_dynamic_date(pat);
-      return pat->pat_not ^ (e->date_sent >= pat->min && e->date_sent <= pat->max);
+      return pat->pat_not ^ ((e->date_sent >= pat->min) && (e->date_sent <= pat->max));
     case MUTT_PAT_DATE_RECEIVED:
       if (pat->dynamic)
         match_update_dynamic_date(pat);
-      return pat->pat_not ^ (e->received >= pat->min && e->received <= pat->max);
+      return pat->pat_not ^ ((e->received >= pat->min) && (e->received <= pat->max));
     case MUTT_PAT_BODY:
     case MUTT_PAT_HEADER:
     case MUTT_PAT_WHOLE_MSG:
@@ -905,6 +904,11 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
         return false;
       return pat->pat_not ^
              match_addrlist(pat, (flags & MUTT_MATCH_FULL_ADDRESS), 1, &e->env->cc);
+    case MUTT_PAT_BCC:
+      if (!e->env)
+        return false;
+      return pat->pat_not ^
+             match_addrlist(pat, (flags & MUTT_MATCH_FULL_ADDRESS), 1, &e->env->bcc);
     case MUTT_PAT_SUBJECT:
       if (!e->env)
         return false;
@@ -929,19 +933,19 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
       if (!e->env)
         return false;
       return pat->pat_not ^ match_addrlist(pat, (flags & MUTT_MATCH_FULL_ADDRESS),
-                                           4, &e->env->from, &e->env->sender,
-                                           &e->env->to, &e->env->cc);
+                                           5, &e->env->from, &e->env->sender,
+                                           &e->env->to, &e->env->cc, &e->env->bcc);
     case MUTT_PAT_RECIPIENT:
       if (!e->env)
         return false;
-      return pat->pat_not ^ match_addrlist(pat, (flags & MUTT_MATCH_FULL_ADDRESS),
-                                           2, &e->env->to, &e->env->cc);
+      return pat->pat_not ^ match_addrlist(pat, (flags & MUTT_MATCH_FULL_ADDRESS), 3,
+                                           &e->env->to, &e->env->cc, &e->env->bcc);
     case MUTT_PAT_LIST: /* known list, subscribed or not */
     {
       if (!e->env)
         return false;
 
-      int result;
+      bool result;
       if (cache)
       {
         int *cache_entry = pat->all_addr ? &cache->list_all : &cache->list_one;
@@ -961,7 +965,7 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
       if (!e->env)
         return false;
 
-      int result;
+      bool result;
       if (cache)
       {
         int *cache_entry = pat->all_addr ? &cache->sub_all : &cache->sub_one;
@@ -981,19 +985,22 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
       if (!e->env)
         return false;
 
-      int result;
+      bool result;
       if (cache)
       {
         int *cache_entry = pat->all_addr ? &cache->pers_recip_all : &cache->pers_recip_one;
         if (!is_pattern_cache_set(*cache_entry))
         {
           set_pattern_cache_value(cache_entry,
-                                  match_user(pat->all_addr, &e->env->to, &e->env->cc));
+                                  match_user(pat->all_addr, 3, &e->env->to,
+                                             &e->env->cc, &e->env->bcc));
         }
         result = get_pattern_cache_value(*cache_entry);
       }
       else
-        result = match_user(pat->all_addr, &e->env->to, &e->env->cc);
+      {
+        result = match_user(pat->all_addr, 3, &e->env->to, &e->env->cc, &e->env->bcc);
+      }
       return pat->pat_not ^ result;
     }
     case MUTT_PAT_PERSONAL_FROM:
@@ -1001,19 +1008,21 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
       if (!e->env)
         return false;
 
-      int result;
+      bool result;
       if (cache)
       {
         int *cache_entry = pat->all_addr ? &cache->pers_from_all : &cache->pers_from_one;
         if (!is_pattern_cache_set(*cache_entry))
         {
           set_pattern_cache_value(cache_entry,
-                                  match_user(pat->all_addr, &e->env->from, NULL));
+                                  match_user(pat->all_addr, 1, &e->env->from));
         }
         result = get_pattern_cache_value(*cache_entry);
       }
       else
-        result = match_user(pat->all_addr, &e->env->from, NULL);
+      {
+        result = match_user(pat->all_addr, 1, &e->env->from);
+      }
       return pat->pat_not ^ result;
     }
     case MUTT_PAT_COLLAPSED:
@@ -1052,7 +1061,7 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
       return pat->pat_not ^ (e->env->x_label && patmatch(pat, e->env->x_label));
     case MUTT_PAT_DRIVER_TAGS:
     {
-      char *tags = driver_tags_get(&e->tags);
+      char *tags = driver_tags_get_with_hidden(&e->tags);
       const bool rc = (pat->pat_not ^ (tags && patmatch(pat, tags)));
       FREE(&tags);
       return rc;

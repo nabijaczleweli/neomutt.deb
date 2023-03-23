@@ -28,7 +28,7 @@
 
 #include "config.h"
 #include <stddef.h>
-#include <inttypes.h> // IWYU pragma: keep
+#include <inttypes.h>
 #include <stdbool.h>
 #include <sys/stat.h>
 #include "mutt/lib.h"
@@ -41,15 +41,13 @@
 #include "lib.h"
 #include "attach/lib.h"
 #include "color/lib.h"
+#include "enter/lib.h"
 #include "index/lib.h"
 #include "menu/lib.h"
 #include "display.h"
 #include "opcodes.h"
 #include "private_data.h"
 #include "protos.h"
-#ifdef ENABLE_NLS
-#include <libintl.h>
-#endif
 
 static const char *Not_available_in_this_menu = N_("Not available in this menu");
 
@@ -587,7 +585,7 @@ static int op_pager_skip_quoted(struct IndexSharedData *shared,
   if (!priv->has_types)
     return FR_NO_ACTION;
 
-  const short c_skip_quoted_context = cs_subset_number(NeoMutt->sub, "pager_skip_quoted_context");
+  const short c_pager_skip_quoted_context = cs_subset_number(NeoMutt->sub, "pager_skip_quoted_context");
   int dretval = 0;
   int new_topline = priv->top_line;
   int num_quoted = 0;
@@ -611,7 +609,7 @@ static int op_pager_skip_quoted(struct IndexSharedData *shared,
   }
 
   /* Already in the body? Skip past previous "context" quoted lines */
-  if (c_skip_quoted_context > 0)
+  if (c_pager_skip_quoted_context > 0)
   {
     while (((new_topline < priv->lines_used) ||
             (0 == (dretval = display_line(
@@ -632,7 +630,7 @@ static int op_pager_skip_quoted(struct IndexSharedData *shared,
     }
   }
 
-  if (num_quoted <= c_skip_quoted_context)
+  if (num_quoted <= c_pager_skip_quoted_context)
   {
     num_quoted = 0;
 
@@ -671,7 +669,7 @@ static int op_pager_skip_quoted(struct IndexSharedData *shared,
       return FR_NO_ACTION;
     }
   }
-  priv->top_line = new_topline - MIN(c_skip_quoted_context, num_quoted);
+  priv->top_line = new_topline - MIN(c_pager_skip_quoted_context, num_quoted);
   notify_send(priv->notify, NT_PAGER, NT_PAGER_VIEW, priv);
   return FR_SUCCESS;
 }

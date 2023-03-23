@@ -20,8 +20,6 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* common SASL helper routines */
-
 #ifndef MUTT_CONN_SASL_H
 #define MUTT_CONN_SASL_H
 

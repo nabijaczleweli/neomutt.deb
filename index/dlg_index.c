@@ -70,17 +70,16 @@
 #include "pattern/lib.h"
 #include "format_flags.h"
 #include "functions.h"
+#include "globals.h" // IWYU pragma: keep
 #include "hdrline.h"
 #include "hook.h"
 #include "keymap.h"
-#include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
 #include "mutt_thread.h"
 #include "mview.h"
 #include "mx.h"
 #include "opcodes.h"
-#include "options.h"
 #include "private_data.h"
 #include "protos.h"
 #include "shared_data.h"
@@ -91,8 +90,7 @@
 #endif
 #ifdef USE_NNTP
 #include "nntp/lib.h"
-#include "nntp/adata.h" // IWYU pragma: keep
-#include "nntp/mdata.h" // IWYU pragma: keep
+#include "nntp/adata.h"
 #endif
 #ifdef USE_INOTIFY
 #include "monitor.h"
@@ -217,16 +215,34 @@ void collapse_all(struct MailboxView *mv, struct Menu *menu, int toggle)
 }
 
 /**
- * ci_next_undeleted - Find the next undeleted email
+ * uncollapse_thread - Open a collapsed thread
  * @param m     Mailbox
- * @param msgno Message number to start at
+ * @param index Message number
+ */
+static void uncollapse_thread(struct Mailbox *m, int index)
+{
+  struct Email *e = mutt_get_virt_email(m, index);
+  if (e && e->collapsed)
+  {
+    mutt_uncollapse_thread(e);
+    mutt_set_vnum(m);
+  }
+}
+
+/**
+ * ci_next_undeleted - Find the next undeleted email
+ * @param m          Mailbox
+ * @param msgno      Message number to start at
+ * @param uncollapse Open collapsed threads
  * @retval >=0 Message number of next undeleted email
  * @retval  -1 No more undeleted messages
  */
-int ci_next_undeleted(struct Mailbox *m, int msgno)
+int ci_next_undeleted(struct Mailbox *m, int msgno, bool uncollapse)
 {
   if (!m)
     return -1;
+
+  int index = -1;
 
   for (int i = msgno + 1; i < m->vcount; i++)
   {
@@ -234,22 +250,32 @@ int ci_next_undeleted(struct Mailbox *m, int msgno)
     if (!e)
       continue;
     if (!e->deleted)
-      return i;
+    {
+      index = i;
+      break;
+    }
   }
-  return -1;
+
+  if (uncollapse)
+    uncollapse_thread(m, index);
+
+  return index;
 }
 
 /**
  * ci_previous_undeleted - Find the previous undeleted email
- * @param m     Mailbox
- * @param msgno Message number to start at
+ * @param m          Mailbox
+ * @param msgno      Message number to start at
+ * @param uncollapse Open collapsed threads
  * @retval >=0 Message number of next undeleted email
  * @retval  -1 No more undeleted messages
  */
-int ci_previous_undeleted(struct Mailbox *m, int msgno)
+int ci_previous_undeleted(struct Mailbox *m, int msgno, bool uncollapse)
 {
   if (!m)
     return -1;
+
+  int index = -1;
 
   for (int i = msgno - 1; i >= 0; i--)
   {
@@ -257,9 +283,16 @@ int ci_previous_undeleted(struct Mailbox *m, int msgno)
     if (!e)
       continue;
     if (!e->deleted)
-      return i;
+    {
+      index = i;
+      break;
+    }
   }
-  return -1;
+
+  if (uncollapse)
+    uncollapse_thread(m, index);
+
+  return index;
 }
 
 /**
@@ -394,15 +427,13 @@ static void update_index_threaded(struct MailboxView *mv, enum MxStatus check, i
 
   if (lmt)
   {
-    /* Because threading changes the order in m->emails, we don't
-     * know which emails are new. Hence, we need to re-apply the limit to the
-     * whole set.
-     */
     for (int i = 0; i < m->msg_count; i++)
     {
       struct Email *e = m->emails[i];
-      if ((e->vnum != -1) || mutt_pattern_exec(SLIST_FIRST(mv->limit_pattern),
-                                               MUTT_MATCH_FULL_ADDRESS, m, e, NULL))
+
+      if ((e->limit_visited && e->visible) ||
+          mutt_pattern_exec(SLIST_FIRST(mv->limit_pattern),
+                            MUTT_MATCH_FULL_ADDRESS, m, e, NULL))
       {
         /* vnum will get properly set by mutt_set_vnum(), which
          * is called by mutt_sort_headers() just below. */
@@ -414,6 +445,9 @@ static void update_index_threaded(struct MailboxView *mv, enum MxStatus check, i
         e->vnum = -1;
         e->visible = false;
       }
+
+      // mark email as visited so we don't re-apply the pattern next time
+      e->limit_visited = true;
     }
     /* Need a second sort to set virtual numbers and redraw the tree */
     mutt_sort_headers(m, mv->threads, false, &mv->vsize);
@@ -463,7 +497,9 @@ static void update_index_unthreaded(struct MailboxView *mv, enum MxStatus check)
       struct Email *e = mv->mailbox->emails[i];
       if (!e)
         break;
-      if (mutt_pattern_exec(SLIST_FIRST(mv->limit_pattern),
+
+      if ((e->limit_visited && e->visible) ||
+          mutt_pattern_exec(SLIST_FIRST(mv->limit_pattern),
                             MUTT_MATCH_FULL_ADDRESS, mv->mailbox, e, NULL))
       {
         assert(mv->mailbox->vcount < mv->mailbox->msg_count);
@@ -478,6 +514,9 @@ static void update_index_unthreaded(struct MailboxView *mv, enum MxStatus check)
       {
         e->visible = false;
       }
+
+      // mark email as visited so we don't re-apply the pattern next time
+      e->limit_visited = true;
     }
   }
 
@@ -551,9 +590,10 @@ void mutt_update_index(struct Menu *menu, struct MailboxView *mv, enum MxStatus 
  */
 static int index_mailbox_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_MAILBOX) || !nc->global_data)
+  if (nc->event_type != NT_MAILBOX)
+    return 0;
+  if (!nc->global_data)
     return -1;
-
   if (nc->event_subtype != NT_MAILBOX_DELETE)
     return 0;
 
@@ -782,7 +822,7 @@ void index_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
   struct MuttThread *tmp = NULL;
 
   const enum UseThreads c_threads = mutt_thread_style();
-  if ((c_threads > UT_FLAT) && e->tree)
+  if ((c_threads > UT_FLAT) && e->tree && e->thread)
   {
     flags |= MUTT_FORMAT_TREE; /* display the thread tree */
     if (e->display_subject)
@@ -1136,7 +1176,7 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
               const char *const c_new_mail_command = cs_subset_string(shared->sub, "new_mail_command");
               if (c_new_mail_command)
               {
-                char cmd[1024];
+                char cmd[1024] = { 0 };
                 menu_status_line(cmd, sizeof(cmd), shared, NULL, sizeof(cmd),
                                  NONULL(c_new_mail_command));
                 if (mutt_system(cmd) != 0)
@@ -1182,7 +1222,7 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           const char *const c_new_mail_command = cs_subset_string(shared->sub, "new_mail_command");
           if (c_new_mail_command)
           {
-            char cmd[1024];
+            char cmd[1024] = { 0 };
             menu_status_line(cmd, sizeof(cmd), shared, priv->menu, sizeof(cmd),
                              NONULL(c_new_mail_command));
             if (mutt_system(cmd) != 0)
@@ -1307,7 +1347,7 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
     }
 #endif
     if (rc == FR_UNKNOWN)
-      rc = global_function_dispatcher(dlg, op);
+      rc = global_function_dispatcher(NULL, op);
 
     if (rc == FR_UNKNOWN)
       km_error_key(MENU_INDEX);

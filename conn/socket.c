@@ -30,6 +30,7 @@
 
 #include "config.h"
 #include <errno.h>
+#include <stdbool.h>
 #include <string.h>
 #include <time.h>
 #include "private.h"
@@ -82,8 +83,11 @@ int mutt_socket_open(struct Connection *conn)
 
   rc = conn->open(conn);
 
-  mutt_debug(LL_DEBUG2, "Connected to %s:%d on fd=%d\n", conn->account.host,
-             conn->account.port, conn->fd);
+  if (rc >= 0)
+  {
+    mutt_debug(LL_DEBUG2, "Connected to %s:%d on fd=%d\n", conn->account.host,
+               conn->account.port, conn->fd);
+  }
 
   return rc;
 }
@@ -315,11 +319,50 @@ void mutt_socket_empty(struct Connection *conn)
   if (!conn)
     return;
 
-  char buf[1024];
+  char buf[1024] = { 0 };
   int bytes;
 
   while ((bytes = mutt_socket_poll(conn, 0)) > 0)
   {
     mutt_socket_read(conn, buf, MIN(bytes, sizeof(buf)));
   }
+}
+
+/**
+ * mutt_socket_buffer_readln_d - Read a line from a socket into a Buffer
+ * @param buf  Buffer to store the line
+ * @param conn Connection to a server
+ * @param dbg  Debug level for logging
+ * @retval >0 Success, number of bytes read
+ * @retval -1 Error
+ */
+int mutt_socket_buffer_readln_d(struct Buffer *buf, struct Connection *conn, int dbg)
+{
+  char ch;
+  bool has_cr = false;
+
+  mutt_buffer_reset(buf);
+
+  while (true)
+  {
+    if (mutt_socket_readchar(conn, &ch) != 1)
+      return -1;
+
+    if (ch == '\n')
+      break;
+
+    if (has_cr)
+    {
+      mutt_buffer_addch(buf, '\r');
+      has_cr = false;
+    }
+
+    if (ch == '\r')
+      has_cr = true;
+    else
+      mutt_buffer_addch(buf, ch);
+  }
+
+  mutt_debug(dbg, "%d< %s\n", conn->fd, mutt_buffer_string(buf));
+  return 0;
 }

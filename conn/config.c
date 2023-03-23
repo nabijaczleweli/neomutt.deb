@@ -31,13 +31,19 @@
 #include <config/lib.h>
 #include <stdbool.h>
 
+/**
+ * ConnVars - Config definitions for the connection library
+ */
 static struct ConfigDef ConnVars[] = {
   // clang-format off
-  { "connect_timeout", DT_NUMBER, 30, 0, NULL,
-    "Timeout for making network connections (-1 to wait indefinitely)"
+  { "account_command", DT_STRING|DT_COMMAND, 0, 0, NULL,
+    "Shell command to retrieve account credentials"
   },
   { "preconnect", DT_STRING, 0, 0, NULL,
     "(socket) External command to run prior to opening a socket"
+  },
+  { "socket_timeout", DT_NUMBER, 30, 0, NULL,
+    "Timeout for socket connect/read/write operations (-1 to wait indefinitely)"
   },
   { "tunnel", DT_STRING|DT_COMMAND, 0, 0, NULL,
     "Shell command to establish a tunnel"
@@ -45,11 +51,16 @@ static struct ConfigDef ConnVars[] = {
   { "tunnel_is_secure", DT_BOOL, true, 0, NULL,
     "Assume a tunneled connection is secure"
   },
+
+  { "connect_timeout", DT_SYNONYM, IP "socket_timeout", IP "2023-02-15" },
   { NULL },
   // clang-format on
 };
 
 #if defined(USE_SSL)
+/**
+ * ConnVarsSsl - General SSL Config definitions for the conn library
+ */
 static struct ConfigDef ConnVarsSsl[] = {
   // clang-format off
   { "certificate_file", DT_PATH|DT_PATH_FILE, IP "~/.mutt_certificates", 0, NULL,
@@ -94,6 +105,9 @@ static struct ConfigDef ConnVarsSsl[] = {
 #endif
 
 #if defined(USE_SSL_GNUTLS)
+/**
+ * ConnVarsGnutls - GnuTLS Config definitions for the connection library
+ */
 static struct ConfigDef ConnVarsGnutls[] = {
   // clang-format off
   { "ssl_ca_certificates_file", DT_PATH|DT_PATH_FILE, 0, 0, NULL,
@@ -108,6 +122,9 @@ static struct ConfigDef ConnVarsGnutls[] = {
 #endif
 
 #if defined(USE_SSL_OPENSSL)
+/**
+ * ConnVarsOpenssl - OpenSSL Config definitions for the connection library
+ */
 static struct ConfigDef ConnVarsOpenssl[] = {
   // clang-format off
   { "entropy_file", DT_PATH|DT_PATH_FILE, 0, 0, NULL,
@@ -126,6 +143,9 @@ static struct ConfigDef ConnVarsOpenssl[] = {
 #endif
 
 #if defined(HAVE_SSL_PARTIAL_CHAIN)
+/**
+ * ConnVarsPartial - SSL partial chains Config definitions for the connection library
+ */
 static struct ConfigDef ConnVarsPartial[] = {
   // clang-format off
   { "ssl_verify_partial_chains", DT_BOOL, false, 0, NULL,
@@ -137,6 +157,9 @@ static struct ConfigDef ConnVarsPartial[] = {
 #endif
 
 #if defined(HAVE_GETADDRINFO)
+/**
+ * ConnVarsGetaddr - GetAddrInfo Config definitions for the connection library
+ */
 static struct ConfigDef ConnVarsGetaddr[] = {
   // clang-format off
   { "use_ipv6", DT_BOOL, true, 0, NULL,
@@ -152,26 +175,26 @@ static struct ConfigDef ConnVarsGetaddr[] = {
  */
 bool config_init_conn(struct ConfigSet *cs)
 {
-  bool rc = cs_register_variables(cs, ConnVars, 0);
+  bool rc = cs_register_variables(cs, ConnVars, DT_NO_FLAGS);
 
 #if defined(USE_SSL)
-  rc |= cs_register_variables(cs, ConnVarsSsl, 0);
+  rc |= cs_register_variables(cs, ConnVarsSsl, DT_NO_FLAGS);
 #endif
 
 #if defined(USE_SSL_GNUTLS)
-  rc |= cs_register_variables(cs, ConnVarsGnutls, 0);
+  rc |= cs_register_variables(cs, ConnVarsGnutls, DT_NO_FLAGS);
 #endif
 
 #if defined(USE_SSL_OPENSSL)
-  rc |= cs_register_variables(cs, ConnVarsOpenssl, 0);
+  rc |= cs_register_variables(cs, ConnVarsOpenssl, DT_NO_FLAGS);
 #endif
 
 #if defined(HAVE_SSL_PARTIAL_CHAIN)
-  rc |= cs_register_variables(cs, ConnVarsPartial, 0);
+  rc |= cs_register_variables(cs, ConnVarsPartial, DT_NO_FLAGS);
 #endif
 
 #if defined(HAVE_GETADDRINFO)
-  rc |= cs_register_variables(cs, ConnVarsGetaddr, 0);
+  rc |= cs_register_variables(cs, ConnVarsGetaddr, DT_NO_FLAGS);
 #endif
 
   return rc;

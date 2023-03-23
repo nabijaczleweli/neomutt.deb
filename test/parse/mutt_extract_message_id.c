@@ -24,8 +24,8 @@
 #include "config.h"
 #include "acutest.h"
 #include <search.h>
+#include <string.h>
 #include "mutt/lib.h"
-#include "address/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
@@ -51,7 +51,7 @@ struct TestData
 
 static struct ConfigDef Vars[] = {
   // clang-format off
-  { "assumed_charset", DT_STRING, 0, 0, NULL, },
+  { "assumed_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY, 0, 0, NULL, },
   { NULL },
   // clang-format on
 };
@@ -59,7 +59,7 @@ static struct ConfigDef Vars[] = {
 void test_mutt_extract_message_id(void)
 {
   NeoMutt = test_neomutt_create();
-  TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, 0));
+  TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, DT_NO_FLAGS));
 
   for (size_t i = 0; i < mutt_array_size(test); i++)
   {

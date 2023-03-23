@@ -118,6 +118,9 @@ static int compress_level_validator(const struct ConfigSet *cs, const struct Con
 }
 #endif
 
+/**
+ * HcacheVars - Config definitions for the Header Cache
+ */
 static struct ConfigDef HcacheVars[] = {
   // clang-format off
   { "header_cache", DT_PATH, 0, 0, NULL,
@@ -131,6 +134,9 @@ static struct ConfigDef HcacheVars[] = {
 };
 
 #if defined(USE_HCACHE_COMPRESSION)
+/**
+ * HcacheVarsComp - Config definitions for the Header Cache Compression
+ */
 static struct ConfigDef HcacheVarsComp[] = {
   // clang-format off
   // These two are not in alphabetical order because `level`s validator depends on `method`
@@ -146,15 +152,21 @@ static struct ConfigDef HcacheVarsComp[] = {
 #endif
 
 #if defined(HAVE_QDBM) || defined(HAVE_TC) || defined(HAVE_KC)
+/**
+ * HcacheVarsComp2 - Deprecated Config definitions for the Header Cache Compression
+ */
 static struct ConfigDef HcacheVarsComp2[] = {
   // clang-format off
-  { "header_cache_compress", DT_DEPRECATED|DT_BOOL, false, IP "2020-03-25" },
+  { "header_cache_compress", DT_DEPRECATED|DT_BOOL, 0, IP "2020-03-25" },
   { NULL },
   // clang-format on
 };
 #endif
 
 #if defined(HAVE_GDBM) || defined(HAVE_BDB)
+/**
+ * HcacheVarsPage - Deprecated Config definitions for the Header Cache
+ */
 static struct ConfigDef HcacheVarsPage[] = {
   // clang-format off
   { "header_cache_pagesize", DT_DEPRECATED|DT_LONG, 0, IP "2020-03-25" },
@@ -171,19 +183,19 @@ bool config_init_hcache(struct ConfigSet *cs)
   bool rc = false;
 
 #if defined(USE_HCACHE)
-  rc |= cs_register_variables(cs, HcacheVars, 0);
+  rc |= cs_register_variables(cs, HcacheVars, DT_NO_FLAGS);
 #endif
 
 #if defined(USE_HCACHE_COMPRESSION)
-  rc |= cs_register_variables(cs, HcacheVarsComp, 0);
+  rc |= cs_register_variables(cs, HcacheVarsComp, DT_NO_FLAGS);
 #endif
 
 #if defined(HAVE_QDBM) || defined(HAVE_TC) || defined(HAVE_KC)
-  rc |= cs_register_variables(cs, HcacheVarsComp2, 0);
+  rc |= cs_register_variables(cs, HcacheVarsComp2, DT_NO_FLAGS);
 #endif
 
 #if defined(HAVE_GDBM) || defined(HAVE_BDB)
-  rc |= cs_register_variables(cs, HcacheVarsPage, 0);
+  rc |= cs_register_variables(cs, HcacheVarsPage, DT_NO_FLAGS);
 #endif
 
   return rc;

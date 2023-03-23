@@ -36,8 +36,7 @@
 #include "email/lib.h"
 #include "gui/lib.h"
 #include "header.h"
-#include "mutt_globals.h"
-#include "options.h"
+#include "globals.h" // IWYU pragma: keep
 #ifdef USE_AUTOCRYPT
 #include "autocrypt/lib.h"
 #endif
@@ -573,8 +572,6 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
                              enum MuttWriteHeaderMode mode, bool privacy,
                              bool hide_protected_subject, struct ConfigSubset *sub)
 {
-  char buf[1024];
-
   if (((mode == MUTT_WRITE_HEADER_NORMAL) || (mode == MUTT_WRITE_HEADER_FCC) ||
        (mode == MUTT_WRITE_HEADER_POSTPONE)) &&
       !privacy)
@@ -589,22 +586,17 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
    * field if the user sets it with the 'my_hdr' command */
   if (!TAILQ_EMPTY(&env->from) && !privacy)
   {
-    buf[0] = '\0';
-    mutt_addrlist_write(&env->from, buf, sizeof(buf), false);
-    fprintf(fp, "From: %s\n", buf);
+    mutt_addrlist_write_file(&env->from, fp, "From");
   }
 
   if (!TAILQ_EMPTY(&env->sender) && !privacy)
   {
-    buf[0] = '\0';
-    mutt_addrlist_write(&env->sender, buf, sizeof(buf), false);
-    fprintf(fp, "Sender: %s\n", buf);
+    mutt_addrlist_write_file(&env->sender, fp, "Sender");
   }
 
   if (!TAILQ_EMPTY(&env->to))
   {
-    fputs("To: ", fp);
-    mutt_addrlist_write_file(&env->to, fp, 4, false);
+    mutt_addrlist_write_file(&env->to, fp, "To");
   }
   else if (mode == MUTT_WRITE_HEADER_EDITHDRS)
 #ifdef USE_NNTP
@@ -614,8 +606,7 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
 
   if (!TAILQ_EMPTY(&env->cc))
   {
-    fputs("Cc: ", fp);
-    mutt_addrlist_write_file(&env->cc, fp, 4, false);
+    mutt_addrlist_write_file(&env->cc, fp, "Cc");
   }
   else if (mode == MUTT_WRITE_HEADER_EDITHDRS)
 #ifdef USE_NNTP
@@ -631,8 +622,7 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
         (mode == MUTT_WRITE_HEADER_EDITHDRS) || (mode == MUTT_WRITE_HEADER_FCC) ||
         ((mode == MUTT_WRITE_HEADER_NORMAL) && c_write_bcc))
     {
-      fputs("Bcc: ", fp);
-      mutt_addrlist_write_file(&env->bcc, fp, 5, false);
+      mutt_addrlist_write_file(&env->bcc, fp, "Bcc");
     }
   }
   else if (mode == MUTT_WRITE_HEADER_EDITHDRS)
@@ -681,8 +671,7 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
 
   if (!TAILQ_EMPTY(&env->reply_to))
   {
-    fputs("Reply-To: ", fp);
-    mutt_addrlist_write_file(&env->reply_to, fp, 10, false);
+    mutt_addrlist_write_file(&env->reply_to, fp, "Reply-To");
   }
   else if (mode == MUTT_WRITE_HEADER_EDITHDRS)
     fputs("Reply-To:\n", fp);
@@ -693,8 +682,7 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
     if (!OptNewsSend)
 #endif
     {
-      fputs("Mail-Followup-To: ", fp);
-      mutt_addrlist_write_file(&env->mail_followup_to, fp, 18, false);
+      mutt_addrlist_write_file(&env->mail_followup_to, fp, "Mail-Followup-To");
     }
   }
 
@@ -900,12 +888,12 @@ int mutt_write_mime_header(struct Body *a, FILE *fp, struct ConfigSubset *sub)
     fprintf(fp, "Content-Transfer-Encoding: %s\n", ENCODING(a->encoding));
 
   const bool c_crypt_protected_headers_write = cs_subset_bool(sub, "crypt_protected_headers_write");
-  bool autocrypt = false;
+  bool c_autocrypt = false;
 #ifdef USE_AUTOCRYPT
-  autocrypt = cs_subset_bool(sub, "autocrypt");
+  c_autocrypt = cs_subset_bool(sub, "autocrypt");
 #endif
 
-  if ((c_crypt_protected_headers_write || autocrypt) && a->mime_headers)
+  if ((c_crypt_protected_headers_write || c_autocrypt) && a->mime_headers)
   {
     mutt_rfc822_write_header(fp, a->mime_headers, NULL, MUTT_WRITE_HEADER_MIME,
                              false, false, sub);

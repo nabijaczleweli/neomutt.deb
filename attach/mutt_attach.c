@@ -42,14 +42,16 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt_attach.h"
+#include "lib.h"
 #include "ncrypt/lib.h"
 #include "pager/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
+#include "cid.h"
 #include "copy.h"
+#include "globals.h" // IWYU pragma: keep
 #include "handler.h"
 #include "mailcap.h"
-#include "mutt_globals.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "protos.h"
@@ -66,7 +68,7 @@
  */
 int mutt_get_tmp_attachment(struct Body *a)
 {
-  char type[256];
+  char type[256] = { 0 };
 
   if (a->unlink)
     return 0;
@@ -112,7 +114,7 @@ int mutt_get_tmp_attachment(struct Body *a)
  */
 int mutt_compose_attachment(struct Body *a)
 {
-  char type[256];
+  char type[256] = { 0 };
   struct MailcapEntry *entry = mailcap_entry_new();
   bool unlink_newfile = false;
   int rc = 0;
@@ -245,8 +247,8 @@ bailout:
 /**
  * mutt_edit_attachment - Edit an attachment
  * @param a Email containing attachment
- * @retval 1 Editor found
- * @retval 0 Editor not found
+ * @retval true  Editor found
+ * @retval false Editor not found
  *
  * Currently, this only works for send mode, as it assumes that the
  * Body->filename actually contains the information.  I'm not sure
@@ -255,12 +257,12 @@ bailout:
  *
  * Returning 0 is useful to tell the calling menu to redraw
  */
-int mutt_edit_attachment(struct Body *a)
+bool mutt_edit_attachment(struct Body *a)
 {
-  char type[256];
+  char type[256] = { 0 };
   struct MailcapEntry *entry = mailcap_entry_new();
   bool unlink_newfile = false;
-  int rc = 0;
+  bool rc = false;
   struct Buffer *cmd = mutt_buffer_pool_get();
   struct Buffer *newfile = mutt_buffer_pool_get();
 
@@ -308,11 +310,10 @@ int mutt_edit_attachment(struct Body *a)
   else
   {
     mutt_error(_("No mailcap edit entry for %s"), type);
-    rc = 0;
     goto bailout;
   }
 
-  rc = 1;
+  rc = true;
 
 bailout:
 
@@ -418,8 +419,8 @@ int mutt_view_attachment(FILE *fp, struct Body *a, enum ViewAttachMode mode,
   bool use_mailcap = false;
   bool use_pipe = false;
   bool use_pager = true;
-  char type[256];
-  char desc[256];
+  char type[256] = { 0 };
+  char desc[256] = { 0 };
   char *fname = NULL;
   struct MailcapEntry *entry = NULL;
   int rc = -1;
@@ -442,7 +443,7 @@ int mutt_view_attachment(FILE *fp, struct Body *a, enum ViewAttachMode mode,
                  (mode == MUTT_VA_PAGER));
   snprintf(type, sizeof(type), "%s/%s", TYPE(a), a->subtype);
 
-  char columns[16];
+  char columns[16] = { 0 };
   snprintf(columns, sizeof(columns), "%d", win->state.cols);
   mutt_envlist_set("COLUMNS", columns, true);
 
@@ -486,6 +487,27 @@ int mutt_view_attachment(FILE *fp, struct Body *a, enum ViewAttachMode mode,
     has_tempfile = true;
 
     mutt_rfc3676_space_unstuff_attachment(a, mutt_buffer_string(tmpfile));
+
+    /* check for multipart/related and save attachments with a Content-ID */
+    if (mutt_str_equal(type, "text/html"))
+    {
+      struct Body *related_ancestor = NULL;
+      if (actx->body_idx && (WithCrypto != 0) && (e->security & SEC_ENCRYPT))
+        related_ancestor = attach_body_ancestor(actx->body_idx[0], a, "related");
+      else
+        related_ancestor = attach_body_ancestor(e->body, a, "related");
+      if (related_ancestor)
+      {
+        struct CidMapList cid_map_list = STAILQ_HEAD_INITIALIZER(cid_map_list);
+        mutt_debug(LL_DEBUG2, "viewing text/html attachment in multipart/related group\n");
+        /* save attachments and build cid_map_list Content-ID to filename mapping list */
+        cid_save_attachments(related_ancestor->parts, &cid_map_list);
+        /* replace Content-IDs with filenames */
+        cid_to_filename(tmpfile, &cid_map_list);
+        /* empty Content-ID to filename mapping list */
+        cid_map_list_clear(&cid_map_list);
+      }
+    }
 
     use_pipe = mailcap_expand_command(a, mutt_buffer_string(tmpfile), type, cmd);
     use_pager = entry->copiousoutput;
@@ -595,20 +617,20 @@ int mutt_view_attachment(FILE *fp, struct Body *a, enum ViewAttachMode mode,
          *
          * Don't use mutt_save_attachment() because we want to perform charset
          * conversion since this will be displayed by the internal pager.  */
-        struct State decode_state = { 0 };
+        struct State state = { 0 };
 
-        decode_state.fp_out = mutt_file_fopen(mutt_buffer_string(pagerfile), "w");
-        if (!decode_state.fp_out)
+        state.fp_out = mutt_file_fopen(mutt_buffer_string(pagerfile), "w");
+        if (!state.fp_out)
         {
           mutt_debug(LL_DEBUG1, "mutt_file_fopen(%s) errno=%d %s\n",
                      mutt_buffer_string(pagerfile), errno, strerror(errno));
           mutt_perror(mutt_buffer_string(pagerfile));
           goto return_error;
         }
-        decode_state.fp_in = fp;
-        decode_state.flags = MUTT_CHARCONV;
-        mutt_decode_attachment(a, &decode_state);
-        if (mutt_file_fclose(&decode_state.fp_out) == EOF)
+        state.fp_in = fp;
+        state.flags = STATE_CHARCONV;
+        mutt_decode_attachment(a, &state);
+        if (mutt_file_fclose(&state.fp_out) == EOF)
         {
           mutt_debug(LL_DEBUG1, "fclose(%s) errno=%d %s\n",
                      mutt_buffer_string(pagerfile), errno, strerror(errno));
@@ -629,7 +651,7 @@ int mutt_view_attachment(FILE *fp, struct Body *a, enum ViewAttachMode mode,
     {
       /* Use built-in handler */
       if (mutt_decode_save_attachment(fp, a, mutt_buffer_string(pagerfile),
-                                      MUTT_DISPLAY | MUTT_DISPLAY_ATTACH, MUTT_SAVE_NO_FLAGS))
+                                      STATE_DISPLAY | STATE_DISPLAY_ATTACH, MUTT_SAVE_NO_FLAGS))
       {
         goto return_error;
       }
@@ -745,10 +767,10 @@ int mutt_pipe_attachment(FILE *fp, struct Body *b, const char *path, char *outfi
   /* recv case */
   if (fp)
   {
-    struct State s = { 0 };
+    struct State state = { 0 };
 
     /* perform charset conversion on text attachments when piping */
-    s.flags = MUTT_CHARCONV;
+    state.flags = STATE_CHARCONV;
 
     if (is_flowed)
     {
@@ -760,9 +782,9 @@ int mutt_pipe_attachment(FILE *fp, struct Body *b, const char *path, char *outfi
       }
       unlink_unstuff = true;
 
-      s.fp_in = fp;
-      s.fp_out = fp_unstuff;
-      mutt_decode_attachment(b, &s);
+      state.fp_in = fp;
+      state.fp_out = fp_unstuff;
+      mutt_decode_attachment(b, &state);
       mutt_file_fclose(&fp_unstuff);
 
       mutt_rfc3676_space_unstuff_attachment(b, mutt_buffer_string(unstuff_tempfile));
@@ -778,9 +800,9 @@ int mutt_pipe_attachment(FILE *fp, struct Body *b, const char *path, char *outfi
     }
     else
     {
-      s.fp_in = fp;
-      s.fp_out = fp_filter;
-      mutt_decode_attachment(b, &s);
+      state.fp_in = fp;
+      state.fp_out = fp_filter;
+      mutt_decode_attachment(b, &state);
     }
   }
 
@@ -886,7 +908,7 @@ int mutt_save_attachment(FILE *fp, struct Body *m, const char *path,
     {
       /* message type attachments are written to mail folders. */
 
-      char buf[8192];
+      char buf[8192] = { 0 };
       struct Message *msg = NULL;
       CopyHeaderFlags chflags = CH_NO_FLAGS;
       int rc = -1;
@@ -933,22 +955,22 @@ int mutt_save_attachment(FILE *fp, struct Body *m, const char *path,
     {
       /* In recv mode, extract from folder and decode */
 
-      struct State s = { 0 };
+      struct State state = { 0 };
 
-      s.fp_out = save_attachment_open(path, opt);
-      if (!s.fp_out)
+      state.fp_out = save_attachment_open(path, opt);
+      if (!state.fp_out)
       {
         mutt_perror("fopen");
         return -1;
       }
-      if (!mutt_file_seek((s.fp_in = fp), m->offset, SEEK_SET))
+      if (!mutt_file_seek((state.fp_in = fp), m->offset, SEEK_SET))
       {
-        mutt_file_fclose(&s.fp_out);
+        mutt_file_fclose(&state.fp_out);
         return -1;
       }
-      mutt_decode_attachment(m, &s);
+      mutt_decode_attachment(m, &state);
 
-      if (mutt_file_fsync_close(&s.fp_out) != 0)
+      if (mutt_file_fsync_close(&state.fp_out) != 0)
       {
         mutt_perror("fclose");
         return -1;
@@ -1000,30 +1022,30 @@ int mutt_save_attachment(FILE *fp, struct Body *m, const char *path,
  * @param fp         File to read from (OPTIONAL)
  * @param m          Attachment
  * @param path       Path to save the Attachment to
- * @param displaying Flags, e.g. #MUTT_DISPLAY
+ * @param flags      Flags, e.g. #STATE_DISPLAY
  * @param opt        Save option, see #SaveAttach
  * @retval 0  Success
  * @retval -1 Error
  */
 int mutt_decode_save_attachment(FILE *fp, struct Body *m, const char *path,
-                                int displaying, enum SaveAttach opt)
+                                StateFlags flags, enum SaveAttach opt)
 {
-  struct State s = { 0 };
+  struct State state = { 0 };
   unsigned int saved_encoding = 0;
   struct Body *saved_parts = NULL;
   struct Email *e_saved = NULL;
   int rc = 0;
 
-  s.flags = displaying;
+  state.flags = flags;
 
   if (opt == MUTT_SAVE_APPEND)
-    s.fp_out = fopen(path, "a");
+    state.fp_out = fopen(path, "a");
   else if (opt == MUTT_SAVE_OVERWRITE)
-    s.fp_out = fopen(path, "w");
+    state.fp_out = fopen(path, "w");
   else
-    s.fp_out = mutt_file_fopen(path, "w");
+    state.fp_out = mutt_file_fopen(path, "w");
 
-  if (!s.fp_out)
+  if (!state.fp_out)
   {
     mutt_perror("fopen");
     return -1;
@@ -1033,20 +1055,20 @@ int mutt_decode_save_attachment(FILE *fp, struct Body *m, const char *path,
   {
     /* When called from the compose menu, the attachment isn't parsed,
      * so we need to do it here. */
-    s.fp_in = fopen(m->filename, "r");
-    if (!s.fp_in)
+    state.fp_in = fopen(m->filename, "r");
+    if (!state.fp_in)
     {
       mutt_perror("fopen");
-      mutt_file_fclose(&s.fp_out);
+      mutt_file_fclose(&state.fp_out);
       return -1;
     }
 
     struct stat st = { 0 };
-    if (fstat(fileno(s.fp_in), &st) == -1)
+    if (fstat(fileno(state.fp_in), &st) == -1)
     {
       mutt_perror("stat");
-      mutt_file_fclose(&s.fp_in);
-      mutt_file_fclose(&s.fp_out);
+      mutt_file_fclose(&state.fp_in);
+      mutt_file_fclose(&state.fp_out);
       return -1;
     }
 
@@ -1058,20 +1080,20 @@ int mutt_decode_save_attachment(FILE *fp, struct Body *m, const char *path,
     m->offset = 0;
     saved_parts = m->parts;
     e_saved = m->email;
-    mutt_parse_part(s.fp_in, m);
+    mutt_parse_part(state.fp_in, m);
 
     if (m->noconv || is_multipart(m))
-      s.flags |= MUTT_CHARCONV;
+      state.flags |= STATE_CHARCONV;
   }
   else
   {
-    s.fp_in = fp;
-    s.flags |= MUTT_CHARCONV;
+    state.fp_in = fp;
+    state.flags |= STATE_CHARCONV;
   }
 
-  mutt_body_handler(m, &s);
+  mutt_body_handler(m, &state);
 
-  if (mutt_file_fsync_close(&s.fp_out) != 0)
+  if (mutt_file_fsync_close(&state.fp_out) != 0)
   {
     mutt_perror("fclose");
     rc = -1;
@@ -1086,7 +1108,7 @@ int mutt_decode_save_attachment(FILE *fp, struct Body *m, const char *path,
       m->parts = saved_parts;
       m->email = e_saved;
     }
-    mutt_file_fclose(&s.fp_in);
+    mutt_file_fclose(&state.fp_in);
   }
 
   return rc;
@@ -1107,7 +1129,7 @@ int mutt_decode_save_attachment(FILE *fp, struct Body *m, const char *path,
  */
 int mutt_print_attachment(FILE *fp, struct Body *a)
 {
-  char type[256];
+  char type[256] = { 0 };
   pid_t pid;
   FILE *fp_in = NULL, *fp_out = NULL;
   bool unlink_newfile = false;
@@ -1208,7 +1230,7 @@ int mutt_print_attachment(FILE *fp, struct Body *a)
 
     mutt_buffer_mktemp(newfile);
     if (mutt_decode_save_attachment(fp, a, mutt_buffer_string(newfile),
-                                    MUTT_PRINTING, MUTT_SAVE_NO_FLAGS) == 0)
+                                    STATE_PRINTING, MUTT_SAVE_NO_FLAGS) == 0)
     {
       unlink_newfile = true;
       mutt_debug(LL_DEBUG2, "successfully decoded %s type attachment to %s\n",

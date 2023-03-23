@@ -47,8 +47,7 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
-#include "mutt_globals.h"
-#include "options.h"
+#include "globals.h"
 #ifdef HAVE_LIBIDN
 #include "address/lib.h"
 #endif
@@ -82,9 +81,9 @@ static int socket_connect(int fd, struct sockaddr *sa)
     return -1;
   }
 
-  const short c_connect_timeout = cs_subset_number(NeoMutt->sub, "connect_timeout");
-  if (c_connect_timeout > 0)
-    alarm(c_connect_timeout);
+  const short c_socket_timeout = cs_subset_number(NeoMutt->sub, "socket_timeout");
+  if (c_socket_timeout > 0)
+    alarm(c_socket_timeout);
 
   mutt_sig_allow_interrupt(true);
 
@@ -96,6 +95,19 @@ static int socket_connect(int fd, struct sockaddr *sa)
 
   save_errno = 0;
 
+  if (c_socket_timeout > 0)
+  {
+    const struct timeval tv = { c_socket_timeout, 0 };
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) < 0)
+    {
+      mutt_debug(LL_DEBUG2, "Cannot set socket receive timeout. errno: %d\n", errno);
+    }
+    if (setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv)) < 0)
+    {
+      mutt_debug(LL_DEBUG2, "Cannot set socket send timeout. errno: %d\n", errno);
+    }
+  }
+
   if (connect(fd, sa, sa_size) < 0)
   {
     save_errno = errno;
@@ -103,7 +115,7 @@ static int socket_connect(int fd, struct sockaddr *sa)
     SigInt = false; /* reset in case we caught SIGINTR while in connect() */
   }
 
-  if (c_connect_timeout > 0)
+  if (c_socket_timeout > 0)
     alarm(0);
   mutt_sig_allow_interrupt(false);
   sigprocmask(SIG_UNBLOCK, &set, NULL);
@@ -124,7 +136,7 @@ int raw_socket_open(struct Connection *conn)
   /* --- IPv4/6 --- */
 
   /* "65536\0" */
-  char port[6];
+  char port[6] = { 0 };
   struct addrinfo hints;
   struct addrinfo *res = NULL;
   struct addrinfo *cur = NULL;
@@ -339,9 +351,9 @@ int raw_socket_poll(struct Connection *conn, time_t wait_secs)
     FD_ZERO(&rfds);
     FD_SET(conn->fd, &rfds);
 
-    uint64_t pre_t = mutt_date_epoch_ms();
+    uint64_t pre_t = mutt_date_now_ms();
     const int rc = select(conn->fd + 1, &rfds, NULL, NULL, &tv);
-    uint64_t post_t = mutt_date_epoch_ms();
+    uint64_t post_t = mutt_date_now_ms();
 
     if ((rc > 0) || ((rc < 0) && (errno != EINTR)))
       return rc;

@@ -23,6 +23,7 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include <time.h>
 #include "mutt/lib.h"
 
 struct ParseImapTest
@@ -57,7 +58,7 @@ void test_mutt_date_parse_imap(void)
   {
     for (size_t i = 0; i < mutt_array_size(imap_tests); i++)
     {
-      TEST_CASE(imap_tests[i]);
+      TEST_CASE(imap_tests[i].str);
       time_t result = mutt_date_parse_imap(imap_tests[i].str);
       if (!TEST_CHECK(result == imap_tests[i].expected))
       {

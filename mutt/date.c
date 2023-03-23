@@ -124,11 +124,11 @@ static const struct Tz TimeZones[] = {
  * returns the seconds east of UTC given 'g' and its corresponding gmtime()
  * representation
  */
-static time_t compute_tz(time_t g, struct tm *utc)
+static int compute_tz(time_t g, struct tm *utc)
 {
   struct tm lt = mutt_date_localtime(g);
 
-  time_t t = (((lt.tm_hour - utc->tm_hour) * 60) + (lt.tm_min - utc->tm_min)) * 60;
+  int tz = (((lt.tm_hour - utc->tm_hour) * 60) + (lt.tm_min - utc->tm_min)) * 60;
 
   int yday = (lt.tm_yday - utc->tm_yday);
   if (yday != 0)
@@ -137,15 +137,15 @@ static time_t compute_tz(time_t g, struct tm *utc)
     if ((yday == -1) || /* UTC passed midnight before localtime */
         (yday > 1))     /* UTC passed new year before localtime */
     {
-      t -= (24 * 60 * 60);
+      tz -= (24 * 60 * 60);
     }
     else
     {
-      t += (24 * 60 * 60);
+      tz += (24 * 60 * 60);
     }
   }
 
-  return t;
+  return tz;
 }
 
 /**
@@ -203,14 +203,14 @@ static int is_leap_year_feb(struct tm *tm)
  * Returns the local timezone in seconds east of UTC for the time t,
  * or for the current time if t is zero.
  */
-time_t mutt_date_local_tz(time_t t)
+int mutt_date_local_tz(time_t t)
 {
   /* Check we haven't overflowed the time (on 32-bit arches) */
   if ((t == TIME_T_MAX) || (t == TIME_T_MIN))
     return 0;
 
   if (t == 0)
-    t = mutt_date_epoch();
+    t = mutt_date_now();
 
   struct tm tm = mutt_date_gmtime(t);
   return compute_tz(t, &tm);
@@ -252,14 +252,16 @@ time_t mutt_date_make_time(struct tm *t, bool local)
     return TIME_T_MAX;
 
   /* Compute the number of days since January 1 in the same year */
-  time_t g = AccumDaysPerMonth[t->tm_mon % mutt_array_size(Months)];
+  int yday = AccumDaysPerMonth[t->tm_mon % mutt_array_size(Months)];
 
   /* The leap years are 1972 and every 4. year until 2096,
    * but this algorithm will fail after year 2099 */
-  g += t->tm_mday;
+  yday += t->tm_mday;
   if ((t->tm_year % 4) || (t->tm_mon < 2))
-    g--;
-  t->tm_yday = g;
+    yday--;
+  t->tm_yday = yday;
+
+  time_t g = yday;
 
   /* Compute the number of days since January 1, 1970 */
   g += (t->tm_year - 70) * (time_t) 365;
@@ -381,9 +383,9 @@ void mutt_date_make_date(struct Buffer *buf, bool local)
     return;
 
   struct tm tm;
-  time_t tz = 0;
+  int tz = 0;
 
-  time_t t = mutt_date_epoch();
+  time_t t = mutt_date_now();
   if (local)
   {
     tm = mutt_date_localtime(t);
@@ -396,10 +398,9 @@ void mutt_date_make_date(struct Buffer *buf, bool local)
 
   tz /= 60;
 
-  mutt_buffer_add_printf(buf, "%s, %d %s %d %02d:%02d:%02d %+03d%02d",
-                         Weekdays[tm.tm_wday], tm.tm_mday, Months[tm.tm_mon],
-                         tm.tm_year + 1900, tm.tm_hour, tm.tm_min, tm.tm_sec,
-                         (int) tz / 60, (int) abs((int) tz) % 60);
+  mutt_buffer_add_printf(buf, "%s, %d %s %d %02d:%02d:%02d %+03d%02d", Weekdays[tm.tm_wday],
+                         tm.tm_mday, Months[tm.tm_mon], tm.tm_year + 1900,
+                         tm.tm_hour, tm.tm_min, tm.tm_sec, tz / 60, abs(tz) % 60);
 }
 
 /**
@@ -421,19 +422,19 @@ int mutt_date_check_month(const char *s)
 }
 
 /**
- * mutt_date_epoch - Return the number of seconds since the Unix epoch
+ * mutt_date_now - Return the number of seconds since the Unix epoch
  * @retval num Number of seconds since the Unix epoch, or 0 on failure
  */
-time_t mutt_date_epoch(void)
+time_t mutt_date_now(void)
 {
-  return mutt_date_epoch_ms() / 1000;
+  return mutt_date_now_ms() / 1000;
 }
 
 /**
- * mutt_date_epoch_ms - Return the number of milliseconds since the Unix epoch
+ * mutt_date_now_ms - Return the number of milliseconds since the Unix epoch
  * @retval ms The number of ms since the Unix epoch, or 0 on failure
  */
-uint64_t mutt_date_epoch_ms(void)
+uint64_t mutt_date_now_ms(void)
 {
   struct timeval tv = { 0, 0 };
   gettimeofday(&tv, NULL);
@@ -560,13 +561,13 @@ int mutt_date_make_imap(char *buf, size_t buflen, time_t timestamp)
     return -1;
 
   struct tm tm = mutt_date_localtime(timestamp);
-  time_t tz = mutt_date_local_tz(timestamp);
+  int tz = mutt_date_local_tz(timestamp);
 
   tz /= 60;
 
   return snprintf(buf, buflen, "%02d-%s-%d %02d:%02d:%02d %+03d%02d",
                   tm.tm_mday, Months[tm.tm_mon], tm.tm_year + 1900, tm.tm_hour,
-                  tm.tm_min, tm.tm_sec, (int) tz / 60, (int) abs((int) tz) % 60);
+                  tm.tm_min, tm.tm_sec, tz / 60, abs(tz) % 60);
 }
 
 /**
@@ -648,17 +649,20 @@ time_t mutt_date_add_timeout(time_t now, time_t timeout)
  * mutt_date_localtime - Converts calendar time to a broken-down time structure expressed in user timezone
  * @param  t  Time
  * @retval obj Broken-down time representation
- *
- * Uses current time if t is #MUTT_DATE_NOW
  */
 struct tm mutt_date_localtime(time_t t)
 {
   struct tm tm = { 0 };
 
-  if (t == MUTT_DATE_NOW)
-    t = mutt_date_epoch();
-
-  localtime_r(&t, &tm);
+  struct tm *ret = localtime_r(&t, &tm);
+  if (!ret)
+  {
+    mutt_debug(LL_DEBUG1, "Could not convert time_t via localtime_r() to struct tm: time_t = %jd\n",
+               (intmax_t) t);
+    struct tm default_tm = { 0 }; // 1970-01-01 00:00:00
+    mktime(&default_tm); // update derived fields making tm into a valid tm.
+    tm = default_tm;
+  }
   return tm;
 }
 
@@ -666,17 +670,20 @@ struct tm mutt_date_localtime(time_t t)
  * mutt_date_gmtime - Converts calendar time to a broken-down time structure expressed in UTC timezone
  * @param  t  Time
  * @retval obj Broken-down time representation
- *
- * Uses current time if t is #MUTT_DATE_NOW
  */
 struct tm mutt_date_gmtime(time_t t)
 {
   struct tm tm = { 0 };
 
-  if (t == MUTT_DATE_NOW)
-    t = mutt_date_epoch();
-
-  gmtime_r(&t, &tm);
+  struct tm *ret = gmtime_r(&t, &tm);
+  if (!ret)
+  {
+    mutt_debug(LL_DEBUG1, "Could not convert time_t via gmtime_r() to struct tm: time_t = %jd\n",
+               (intmax_t) t);
+    struct tm default_tm = { 0 }; // 1970-01-01 00:00:00
+    mktime(&default_tm); // update derived fields making tm into a valid tm.
+    tm = default_tm;
+  }
   return tm;
 }
 

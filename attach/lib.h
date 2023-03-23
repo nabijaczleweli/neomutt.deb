@@ -29,6 +29,7 @@
  * | :-------------------- | :--------------------------- |
  * | attach/attach.c       | @subpage attach_attach       |
  * | attach/attachments.c  | @subpage attach_attachments  |
+ * | attach/cid.c          | @subpage attach_cid          |
  * | attach/dlg_attach.c   | @subpage attach_dlg_attach   |
  * | attach/functions.c    | @subpage attach_functions    |
  * | attach/lib.c          | @subpage attach_lib          |
@@ -41,6 +42,8 @@
 #define MUTT_ATTACH_LIB_H
 
 #include <stdbool.h>
+#include <stdint.h>
+#include "core/lib.h"
 // IWYU pragma: begin_exports
 #include "attach.h"
 #include "attachments.h"
@@ -49,11 +52,17 @@
 // IWYU pragma: end_exports
 
 struct Body;
+struct Buffer;
 
-int  attach_body_count   (struct Body *body, bool recurse);
-bool attach_body_parent  (struct Body *start, struct Body *start_parent,
-                          struct Body *body, struct Body **body_parent);
-bool attach_body_previous(struct Body *start, struct Body *body,
-                          struct Body **previous);
+int          attach_body_count   (struct Body *body, bool recurse);
+bool         attach_body_parent  (struct Body *start, struct Body *start_parent,
+                                  struct Body *body, struct Body **body_parent);
+struct Body *attach_body_ancestor(struct Body *start, struct Body *body,
+                                  const char *subtype);
+bool         attach_body_previous(struct Body *start, struct Body *body,
+                                  struct Body **previous);
+
+enum CommandResult parse_attachments  (struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
+enum CommandResult parse_unattachments(struct Buffer *buf, struct Buffer *s, intptr_t data, struct Buffer *err);
 
 #endif /* MUTT_ATTACH_LIB_H */

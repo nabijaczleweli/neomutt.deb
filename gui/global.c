@@ -37,7 +37,7 @@
 #include "lib.h"
 #include "index/lib.h"
 #include "pager/lib.h"
-#include "commands.h"
+#include "external.h"
 #include "keymap.h"
 #include "mutt_mailbox.h"
 #include "muttlib.h"
@@ -70,6 +70,7 @@ static int op_redraw(int op)
 {
   clearok(stdscr, true);
   mutt_resize_screen();
+  window_invalidate_all();
   window_redraw(NULL);
   return FR_SUCCESS;
 }
@@ -92,7 +93,7 @@ static int op_shell_escape(int op)
  */
 static int op_show_log_messages(int op)
 {
-  char tempfile[PATH_MAX];
+  char tempfile[PATH_MAX] = { 0 };
   mutt_mktemp(tempfile, sizeof(tempfile));
 
   FILE *fp = mutt_file_fopen(tempfile, "a+");
@@ -157,6 +158,8 @@ struct GlobalFunction GlobalFunctions[] = {
 
 /**
  * global_function_dispatcher - Perform a Global function - Implements ::function_dispatcher_t - @ingroup dispatcher_api
+ *
+ * @note @a win is not used
  */
 int global_function_dispatcher(struct MuttWindow *win, int op)
 {

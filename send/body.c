@@ -34,7 +34,7 @@
 #include "body.h"
 #include "lib.h"
 #include "ncrypt/lib.h"
-#include "mutt_globals.h"
+#include "globals.h"
 #include "muttlib.h"
 
 /**
@@ -70,8 +70,8 @@ static void b64_flush(struct B64Context *bctx, FILE *fp_out)
 {
   /* for some reasons, mutt_b64_encode expects the
    * output buffer to be larger than 10B */
-  char encoded[11];
-  size_t ret;
+  char encoded[11] = { 0 };
+  size_t rc;
 
   if (bctx->size == 0)
     return;
@@ -82,11 +82,11 @@ static void b64_flush(struct B64Context *bctx, FILE *fp_out)
     bctx->linelen = 0;
   }
 
-  /* ret should always be equal to 4 here, because bctx->size
+  /* rc should always be equal to 4 here, because bctx->size
    * is a value between 1 and 3 (included), but let's not hardcode it
    * and prefer the return value of the function */
-  ret = mutt_b64_encode(bctx->buffer, bctx->size, encoded, sizeof(encoded));
-  for (size_t i = 0; i < ret; i++)
+  rc = mutt_b64_encode(bctx->buffer, bctx->size, encoded, sizeof(encoded));
+  for (size_t i = 0; i < rc; i++)
   {
     fputc(encoded[i], fp_out);
     bctx->linelen++;
@@ -326,7 +326,7 @@ int mutt_write_mime_body(struct Body *a, FILE *fp, struct ConfigSubset *sub)
       mutt_error(_("No boundary parameter found [report this error]"));
       return -1;
     }
-    char boundary[128];
+    char boundary[128] = { 0 };
     mutt_str_copy(boundary, p, sizeof(boundary));
 
     for (struct Body *t = a->parts; t; t = t->next)
@@ -360,7 +360,7 @@ int mutt_write_mime_body(struct Body *a, FILE *fp, struct ConfigSubset *sub)
 
   if ((a->type == TYPE_TEXT) && (!a->noconv))
   {
-    char send_charset[128];
+    char send_charset[128] = { 0 };
     fc = mutt_ch_fgetconv_open(fp_in, a->charset,
                                mutt_body_get_charset(a, send_charset, sizeof(send_charset)),
                                MUTT_ICONV_NO_FLAGS);

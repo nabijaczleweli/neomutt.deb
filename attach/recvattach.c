@@ -41,12 +41,13 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "recvattach.h"
+#include "enter/lib.h"
 #include "menu/lib.h"
 #include "ncrypt/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "attach.h"
-#include "commands.h"
+#include "external.h"
 #include "handler.h"
 #include "hook.h"
 #include "mailcap.h"
@@ -434,43 +435,7 @@ void mutt_save_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag,
     }
     if (!tag || top->tagged)
     {
-      if (!c_attach_split)
-      {
-        if (mutt_buffer_is_empty(buf))
-        {
-          enum SaveAttach opt = MUTT_SAVE_NO_FLAGS;
-
-          mutt_buffer_strcpy(buf, mutt_path_basename(NONULL(top->filename)));
-          prepend_savedir(buf);
-
-          if ((mutt_buffer_get_field(_("Save to file: "), buf, MUTT_COMP_FILE | MUTT_COMP_CLEAR,
-                                     false, NULL, NULL, NULL) != 0) ||
-              mutt_buffer_is_empty(buf))
-          {
-            goto cleanup;
-          }
-          mutt_buffer_expand_path(buf);
-          if (mutt_check_overwrite(top->filename, mutt_buffer_string(buf), tfile, &opt, NULL))
-            goto cleanup;
-          rc = save_attachment_flowed_helper(fp, top, mutt_buffer_string(tfile), opt, e);
-          if ((rc == 0) && c_attach_sep && (fp_out = fopen(mutt_buffer_string(tfile), "a")))
-          {
-            fprintf(fp_out, "%s", c_attach_sep);
-            mutt_file_fclose(&fp_out);
-          }
-        }
-        else
-        {
-          rc = save_attachment_flowed_helper(fp, top, mutt_buffer_string(tfile),
-                                             MUTT_SAVE_APPEND, e);
-          if ((rc == 0) && c_attach_sep && (fp_out = fopen(mutt_buffer_string(tfile), "a")))
-          {
-            fprintf(fp_out, "%s", c_attach_sep);
-            mutt_file_fclose(&fp_out);
-          }
-        }
-      }
-      else
+      if (c_attach_split)
       {
         if (tag && menu && top->aptr)
         {
@@ -491,6 +456,37 @@ void mutt_save_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag,
           // Save each file, prompting the user for the location each time.
           if (query_save_attachment(fp, top, e, &directory) == -1)
             break;
+        }
+      }
+      else
+      {
+        enum SaveAttach opt = MUTT_SAVE_NO_FLAGS;
+
+        if (mutt_buffer_is_empty(buf))
+        {
+          mutt_buffer_strcpy(buf, mutt_path_basename(NONULL(top->filename)));
+          prepend_savedir(buf);
+
+          if ((mutt_buffer_get_field(_("Save to file: "), buf, MUTT_COMP_FILE | MUTT_COMP_CLEAR,
+                                     false, NULL, NULL, NULL) != 0) ||
+              mutt_buffer_is_empty(buf))
+          {
+            goto cleanup;
+          }
+          mutt_buffer_expand_path(buf);
+          if (mutt_check_overwrite(top->filename, mutt_buffer_string(buf), tfile, &opt, NULL))
+            goto cleanup;
+        }
+        else
+        {
+          opt = MUTT_SAVE_APPEND;
+        }
+
+        rc = save_attachment_flowed_helper(fp, top, mutt_buffer_string(tfile), opt, e);
+        if ((rc == 0) && c_attach_sep && (fp_out = fopen(mutt_buffer_string(tfile), "a")))
+        {
+          fprintf(fp_out, "%s", c_attach_sep);
+          mutt_file_fclose(&fp_out);
         }
       }
     }
@@ -532,7 +528,7 @@ cleanup:
  */
 static void query_pipe_attachment(const char *command, FILE *fp, struct Body *body, bool filter)
 {
-  char tfile[PATH_MAX];
+  char tfile[PATH_MAX] = { 0 };
 
   if (filter)
   {
@@ -712,7 +708,7 @@ void mutt_pipe_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag,
 
   buf = mutt_buffer_pool_get();
   /* perform charset conversion on text attachments when piping */
-  state.flags = MUTT_CHARCONV;
+  state.flags = STATE_CHARCONV;
 
   if (mutt_buffer_get_field((filter ? _("Filter through: ") : _("Pipe to: ")), buf,
                             MUTT_COMP_FILE_SIMPLE, false, NULL, NULL, NULL) != 0)
@@ -752,7 +748,7 @@ cleanup:
  */
 static bool can_print(struct AttachCtx *actx, struct Body *top, bool tag)
 {
-  char type[256];
+  char type[256] = { 0 };
 
   for (int i = 0; !tag || (i < actx->idxlen); i++)
   {
@@ -793,7 +789,7 @@ static bool can_print(struct AttachCtx *actx, struct Body *top, bool tag)
 static void print_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag,
                                   struct Body *top, struct State *state)
 {
-  char type[256];
+  char type[256] = { 0 };
 
   for (int i = 0; !tag || (i < actx->idxlen); i++)
   {
@@ -822,7 +818,7 @@ static void print_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag,
 
           mutt_buffer_mktemp(newfile);
           if (mutt_decode_save_attachment(fp, top, mutt_buffer_string(newfile),
-                                          MUTT_PRINTING, MUTT_SAVE_NO_FLAGS) == 0)
+                                          STATE_PRINTING, MUTT_SAVE_NO_FLAGS) == 0)
           {
             if (!state->fp_out)
             {
@@ -861,7 +857,7 @@ static void print_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag,
  */
 void mutt_print_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag, struct Body *top)
 {
-  char prompt[128];
+  char prompt[128] = { 0 };
   struct State state = { 0 };
   int tagmsgcount = 0;
 
@@ -1065,16 +1061,15 @@ void mutt_generate_recvattach_list(struct AttachCtx *actx, struct Email *e,
   struct Body *new_body = NULL;
   FILE *fp_new = NULL;
   SecurityFlags type;
-  int need_secured, secured;
 
   for (m = parts; m; m = m->next)
   {
-    need_secured = 0;
-    secured = 0;
+    bool need_secured = false;
+    bool secured = false;
 
     if (((WithCrypto & APPLICATION_SMIME) != 0) && (type = mutt_is_application_smime(m)))
     {
-      need_secured = 1;
+      need_secured = true;
 
       if (type & SEC_ENCRYPT)
       {
@@ -1085,7 +1080,7 @@ void mutt_generate_recvattach_list(struct AttachCtx *actx, struct Email *e,
           crypt_smime_getkeys(e->env);
       }
 
-      secured = !crypt_smime_decrypt_mime(fp, &fp_new, m, &new_body);
+      secured = (crypt_smime_decrypt_mime(fp, &fp_new, m, &new_body) == 0);
       /* If the decrypt/verify-opaque doesn't generate mime output, an empty
        * text/plain type will still be returned by mutt_read_mime_header().
        * We can't distinguish an actual part from a failure, so only use a
@@ -1105,12 +1100,12 @@ void mutt_generate_recvattach_list(struct AttachCtx *actx, struct Email *e,
     if (((WithCrypto & APPLICATION_PGP) != 0) &&
         (mutt_is_multipart_encrypted(m) || mutt_is_malformed_multipart_pgp_encrypted(m)))
     {
-      need_secured = 1;
+      need_secured = true;
 
       if (!crypt_valid_passphrase(APPLICATION_PGP))
         goto decrypt_failed;
 
-      secured = !crypt_pgp_decrypt_mime(fp, &fp_new, m, &new_body);
+      secured = (crypt_pgp_decrypt_mime(fp, &fp_new, m, &new_body) == 0);
 
       if (secured)
         e->security |= PGP_ENCRYPT;

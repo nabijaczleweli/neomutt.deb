@@ -23,13 +23,14 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include <time.h>
 #include "mutt/lib.h"
 
 void test_mutt_date_add_timeout(void)
 {
   // time_t mutt_date_add_timeout(time_t now, long timeout);
 
-  time_t now = mutt_date_epoch();
+  time_t now = mutt_date_now();
 
   TEST_CHECK(mutt_date_add_timeout(now, -1000) == now);
   TEST_CHECK(mutt_date_add_timeout(now, -1) == now);

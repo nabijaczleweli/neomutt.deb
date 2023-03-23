@@ -78,13 +78,14 @@
  */
 
 #include "config.h"
-#include <stddef.h>
 #include "mutt/lib.h"
+#include "msgwin.h"
 #include "color/lib.h"
 #include "mutt_curses.h"
 #include "mutt_window.h"
 
-struct MuttWindow *MessageWindow = NULL; ///< Message Window, ":set", etc
+/// Message Window for messages, warnings, errors etc
+static struct MuttWindow *MessageWindow = NULL;
 
 /**
  * struct MsgWinPrivateData - Private data for the Message Window
@@ -113,7 +114,7 @@ static int msgwin_recalc(struct MuttWindow *win)
  */
 static int msgwin_repaint(struct MuttWindow *win)
 {
-  if (!mutt_window_is_visible(win) || window_is_focused(win)) // or someone else is using it
+  if (window_is_focused(win)) // someone else is using it
     return 0;
 
   struct MsgWinPrivateData *priv = win->wdata;
@@ -140,7 +141,9 @@ static int msgwin_repaint(struct MuttWindow *win)
  */
 static int msgwin_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct MuttWindow *win_msg = nc->global_data;
@@ -193,18 +196,16 @@ static struct MsgWinPrivateData *msgwin_wdata_new(void)
  */
 struct MuttWindow *msgwin_new(void)
 {
-  struct MuttWindow *win = mutt_window_new(WT_MESSAGE, MUTT_WIN_ORIENT_VERTICAL, MUTT_WIN_SIZE_FIXED,
-                                           MUTT_WIN_SIZE_UNLIMITED, 1);
+  MessageWindow = mutt_window_new(WT_MESSAGE, MUTT_WIN_ORIENT_VERTICAL,
+                                  MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED, 1);
+  MessageWindow->wdata = msgwin_wdata_new();
+  MessageWindow->wdata_free = msgwin_wdata_free;
+  MessageWindow->recalc = msgwin_recalc;
+  MessageWindow->repaint = msgwin_repaint;
 
-  win->wdata = msgwin_wdata_new();
-  win->wdata_free = msgwin_wdata_free;
-  win->recalc = msgwin_recalc;
-  win->repaint = msgwin_repaint;
+  notify_observer_add(MessageWindow->notify, NT_WINDOW, msgwin_window_observer, MessageWindow);
 
-  notify_observer_add(win->notify, NT_WINDOW, msgwin_window_observer, win);
-
-  MessageWindow = win;
-  return win;
+  return MessageWindow;
 }
 
 /**
@@ -289,6 +290,8 @@ void msgwin_set_height(short height)
   else if (height > 3)
     height = 3;
 
-  MessageWindow->req_rows = height;
-  mutt_window_reflow(MessageWindow->parent);
+  struct MuttWindow *win_cont = MessageWindow->parent;
+
+  win_cont->req_rows = height;
+  mutt_window_reflow(win_cont->parent);
 }

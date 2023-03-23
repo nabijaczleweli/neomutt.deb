@@ -31,6 +31,9 @@
 #include <config/lib.h>
 #include <stdbool.h>
 
+/**
+ * MenuVars - Config definitions for the Menu library
+ */
 static struct ConfigDef MenuVars[] = {
   // clang-format off
   { "menu_context", DT_NUMBER|DT_NOT_NEGATIVE, 0, 0, NULL,
@@ -51,5 +54,5 @@ static struct ConfigDef MenuVars[] = {
  */
 bool config_init_menu(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, MenuVars, 0);
+  return cs_register_variables(cs, MenuVars, DT_NO_FLAGS);
 }

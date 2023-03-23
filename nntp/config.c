@@ -31,6 +31,9 @@
 #include <config/lib.h>
 #include <stdbool.h>
 
+/**
+ * NntpVars - Config definitions for the NNTP library
+ */
 static struct ConfigDef NntpVars[] = {
   // clang-format off
   { "catchup_newsgroup", DT_QUAD, MUTT_ASKYES, 0, NULL,
@@ -38,9 +41,6 @@ static struct ConfigDef NntpVars[] = {
   },
   { "followup_to_poster", DT_QUAD, MUTT_ASKYES, 0, NULL,
     "(nntp) Reply to the poster if 'poster' is in the 'Followup-To' header"
-  },
-  { "group_index_format", DT_STRING|DT_NOT_EMPTY|R_INDEX|R_PAGER, IP "%4C %M%N %5s  %-45.45f %d", 0, NULL,
-    "(nntp) printf-like format string for the browser's display of newsgroups"
   },
   { "newsgroups_charset", DT_STRING, IP "utf-8", 0, charset_validator,
     "(nntp) Character set of newsgroups' descriptions"
@@ -57,7 +57,7 @@ static struct ConfigDef NntpVars[] = {
   { "nntp_authenticators", DT_STRING, 0, 0, NULL,
     "(nntp) Allowed authentication methods"
   },
-  { "nntp_context", DT_NUMBER|DT_NOT_NEGATIVE, 1000, 0, NULL,
+  { "nntp_context", DT_LONG|DT_NOT_NEGATIVE, 1000, 0, NULL,
     "(nntp) Maximum number of articles to list (0 for all articles)"
   },
   { "nntp_listgroup", DT_BOOL, true, 0, NULL,
@@ -84,9 +84,6 @@ static struct ConfigDef NntpVars[] = {
   { "show_new_news", DT_BOOL, true, 0, NULL,
     "(nntp) Check for new newsgroups when entering the browser"
   },
-  { "show_only_unread", DT_BOOL, false, 0, NULL,
-    "(nntp) Only show subscribed newsgroups with unread articles"
-  },
   { "x_comment_to", DT_BOOL, false, 0, NULL,
     "(nntp) Add 'X-Comment-To' header that contains article author"
   },
@@ -99,5 +96,5 @@ static struct ConfigDef NntpVars[] = {
  */
 bool config_init_nntp(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, NntpVars, 0);
+  return cs_register_variables(cs, NntpVars, DT_NO_FLAGS);
 }

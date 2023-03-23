@@ -28,7 +28,6 @@
 
 #include "config.h"
 #include <ctype.h>
-#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
@@ -49,6 +48,7 @@
 #include "memory.h"
 #include "message.h"
 #include "path.h"
+#include "pool.h"
 #include "string2.h"
 #ifdef USE_FLOCK
 #include <sys/file.h>
@@ -233,7 +233,7 @@ int mutt_file_copy_bytes(FILE *fp_in, FILE *fp_out, size_t size)
 
   while (size > 0)
   {
-    char buf[2048];
+    char buf[2048] = { 0 };
     size_t chunk = (size > sizeof(buf)) ? sizeof(buf) : size;
     chunk = fread(buf, 1, chunk, fp_in);
     if (chunk < 1)
@@ -263,7 +263,7 @@ int mutt_file_copy_stream(FILE *fp_in, FILE *fp_out)
 
   size_t total = 0;
   size_t l;
-  char buf[1024];
+  char buf[1024] = { 0 };
 
   while ((l = fread(buf, 1, sizeof(buf), fp_in)) > 0)
   {
@@ -464,8 +464,8 @@ int mutt_file_rmtree(const char *path)
   struct stat st = { 0 };
   int rc = 0;
 
-  DIR *dirp = opendir(path);
-  if (!dirp)
+  DIR *dir = mutt_file_opendir(path, MUTT_OPENDIR_NONE);
+  if (!dir)
   {
     mutt_debug(LL_DEBUG1, "error opening directory %s\n", path);
     return -1;
@@ -475,7 +475,7 @@ int mutt_file_rmtree(const char *path)
    * invokes recursively to an unknown depth. */
   struct Buffer cur = mutt_buffer_make(PATH_MAX);
 
-  while ((de = readdir(dirp)))
+  while ((de = readdir(dir)))
   {
     if ((strcmp(".", de->d_name) == 0) || (strcmp("..", de->d_name) == 0))
       continue;
@@ -494,12 +494,48 @@ int mutt_file_rmtree(const char *path)
     else
       rc |= unlink(mutt_buffer_string(&cur));
   }
-  closedir(dirp);
+  closedir(dir);
 
   rc |= rmdir(path);
 
   mutt_buffer_dealloc(&cur);
   return rc;
+}
+
+/**
+ * mutt_file_rotate - Rotate a set of numbered files
+ * @param path  Template filename
+ * @param count Maximum number of files
+ * @retval ptr Name of the 0'th file
+ *
+ * Given a template 'temp', rename files numbered 0 to (count-1).
+ *
+ * Rename:
+ * - ...
+ * - temp1 -> temp2
+ * - temp0 -> temp1
+ */
+const char *mutt_file_rotate(const char *path, int count)
+{
+  if (!path)
+    return NULL;
+
+  struct Buffer *old_file = mutt_buffer_pool_get();
+  struct Buffer *new_file = mutt_buffer_pool_get();
+
+  /* rotate the old debug logs */
+  for (count -= 2; count >= 0; count--)
+  {
+    mutt_buffer_printf(old_file, "%s%d", path, count);
+    mutt_buffer_printf(new_file, "%s%d", path, count + 1);
+    (void) rename(mutt_buffer_string(old_file), mutt_buffer_string(new_file));
+  }
+
+  path = mutt_buffer_strdup(old_file);
+  mutt_buffer_pool_release(&old_file);
+  mutt_buffer_pool_release(&new_file);
+
+  return path;
 }
 
 /**
@@ -566,6 +602,23 @@ cleanup:
   mutt_buffer_dealloc(&safe_dir);
 
   return fd;
+}
+
+/**
+ * mutt_file_opendir - Open a directory
+ * @param path Directory path
+ * @param mode See MuttOpenDirMode
+ * @retval ptr DIR handle
+ * @retval NULL Error, see errno
+ */
+DIR *mutt_file_opendir(const char *path, enum MuttOpenDirMode mode)
+{
+  if ((mode == MUTT_OPENDIR_CREATE) && (mutt_file_mkdir(path, S_IRWXU) == -1))
+  {
+    return NULL;
+  }
+  errno = 0;
+  return opendir(path);
 }
 
 /**
@@ -899,7 +952,7 @@ int mutt_file_mkdir(const char *path, mode_t mode)
   }
 
   errno = 0;
-  char tmp_path[PATH_MAX];
+  char tmp_path[PATH_MAX] = { 0 };
   const size_t len = strlen(path);
 
   if (len >= sizeof(tmp_path))
@@ -947,10 +1000,10 @@ int mutt_file_mkdir(const char *path, mode_t mode)
  */
 FILE *mutt_file_mkstemp_full(const char *file, int line, const char *func)
 {
-  char name[PATH_MAX];
+  char name[PATH_MAX] = { 0 };
 
-  const char *const c_tmpdir = cs_subset_path(NeoMutt->sub, "tmpdir");
-  int n = snprintf(name, sizeof(name), "%s/neomutt-XXXXXX", NONULL(c_tmpdir));
+  const char *const c_tmp_dir = cs_subset_path(NeoMutt->sub, "tmp_dir");
+  int n = snprintf(name, sizeof(name), "%s/neomutt-XXXXXX", NONULL(c_tmp_dir));
   if (n < 0)
     return NULL;
 
@@ -996,7 +1049,7 @@ time_t mutt_file_decrease_mtime(const char *fp, struct stat *st)
   }
 
   mtime = st->st_mtime;
-  if (mtime == mutt_date_epoch())
+  if (mtime == mutt_date_now())
   {
     mtime -= 1;
     utim.actime = mtime;
@@ -1657,7 +1710,7 @@ void mutt_file_resolve_symlink(struct Buffer *buf)
   int rc = lstat(mutt_buffer_string(buf), &st);
   if ((rc != -1) && S_ISLNK(st.st_mode))
   {
-    char path[PATH_MAX];
+    char path[PATH_MAX] = { 0 };
     if (realpath(mutt_buffer_string(buf), path))
     {
       mutt_buffer_strcpy(buf, path);

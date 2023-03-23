@@ -30,6 +30,7 @@
 #include "config.h"
 #include <ctype.h>
 #include <inttypes.h> // IWYU pragma: keep
+#include <locale.h>
 #include <stdbool.h>
 #include <string.h>
 #include "mutt/lib.h"
@@ -44,9 +45,9 @@
 #include "ncrypt/lib.h"
 #include "send/lib.h"
 #include "format_flags.h"
+#include "globals.h" // IWYU pragma: keep
 #include "handler.h"
 #include "hdrline.h"
-#include "mutt_globals.h"
 #include "mx.h"
 #ifdef USE_NOTMUCH
 #include "notmuch/lib.h"
@@ -107,7 +108,7 @@ int mutt_copy_hdr(FILE *fp_in, FILE *fp_out, LOFF_T off_start, LOFF_T off_end,
   bool from = false;
   bool this_is_from = false;
   bool ignore = false;
-  char buf[1024]; /* should be long enough to get most fields in one pass */
+  char buf[1024] = { 0 }; /* should be long enough to get most fields in one pass */
   char *nl = NULL;
   struct Headers headers = ARRAY_HEAD_INITIALIZER;
   int hdr_count;
@@ -306,12 +307,11 @@ int mutt_copy_hdr(FILE *fp_in, FILE *fp_out, LOFF_T off_start, LOFF_T off_end,
         struct ListNode *np = NULL;
         x = 0;
         int match = -1;
-        size_t match_len = 0, hdr_order_len;
+        size_t match_len = 0;
 
         STAILQ_FOREACH(np, &HeaderOrderList, entries)
         {
-          x++;
-          hdr_order_len = mutt_str_len(np->data);
+          size_t hdr_order_len = mutt_str_len(np->data);
           if (mutt_istrn_equal(buf, np->data, hdr_order_len))
           {
             if ((match == -1) || (hdr_order_len > match_len))
@@ -321,6 +321,7 @@ int mutt_copy_hdr(FILE *fp_in, FILE *fp_out, LOFF_T off_start, LOFF_T off_end,
             }
             mutt_debug(LL_DEBUG2, "Reorder: %s matches %s", np->data, buf);
           }
+          x++;
         }
         if (match != -1)
           x = match;
@@ -429,8 +430,8 @@ int mutt_copy_header(FILE *fp_in, struct Email *e, FILE *fp_out,
 
   if (chflags & CH_TXTPLAIN)
   {
-    char chsbuf[128];
-    char buf[128];
+    char chsbuf[128] = { 0 };
+    char buf[128] = { 0 };
     fputs("MIME-Version: 1.0\n", fp_out);
     fputs("Content-Transfer-Encoding: 8bit\n", fp_out);
     fputs("Content-Type: text/plain; charset=", fp_out);
@@ -498,7 +499,7 @@ int mutt_copy_header(FILE *fp_in, struct Email *e, FILE *fp_out,
     char *folder = nm_email_get_folder(e);
     if (folder && !(c_weed && mutt_matches_ignore("folder")))
     {
-      char buf[1024];
+      char buf[1024] = { 0 };
       mutt_str_copy(buf, folder, sizeof(buf));
       mutt_pretty_mailbox(buf, sizeof(buf));
 
@@ -517,7 +518,7 @@ int mutt_copy_header(FILE *fp_in, struct Email *e, FILE *fp_out,
   }
   FREE(&tags);
 
-  const char *const c_send_charset = cs_subset_string(NeoMutt->sub, "send_charset");
+  const struct Slist *const c_send_charset = cs_subset_slist(NeoMutt->sub, "send_charset");
   const short c_wrap = cs_subset_number(NeoMutt->sub, "wrap");
   if ((chflags & CH_UPDATE_LABEL) && e->env->x_label)
   {
@@ -641,7 +642,7 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
                          CopyMessageFlags cmflags, CopyHeaderFlags chflags, int wraplen)
 {
   struct Body *body = e->body;
-  char prefix[128];
+  char prefix[128] = { 0 };
   LOFF_T new_offset = -1;
   int rc = 0;
 
@@ -652,10 +653,13 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
       mutt_str_copy(prefix, ">", sizeof(prefix));
     else
     {
+      const char *const c_attribution_locale = cs_subset_string(NeoMutt->sub, "attribution_locale");
       const char *const c_indent_string = cs_subset_string(NeoMutt->sub, "indent_string");
       struct Mailbox *m_cur = get_current_mailbox();
+      setlocale(LC_TIME, NONULL(c_attribution_locale));
       mutt_make_string(prefix, sizeof(prefix), wraplen, NONULL(c_indent_string),
                        m_cur, -1, e, MUTT_FORMAT_NO_FLAGS, NULL);
+      setlocale(LC_TIME, "");
     }
   }
 
@@ -749,29 +753,29 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
   if (cmflags & MUTT_CM_DECODE)
   {
     /* now make a text/plain version of the message */
-    struct State s = { 0 };
-    s.fp_in = fp_in;
-    s.fp_out = fp_out;
+    struct State state = { 0 };
+    state.fp_in = fp_in;
+    state.fp_out = fp_out;
     if (cmflags & MUTT_CM_PREFIX)
-      s.prefix = prefix;
+      state.prefix = prefix;
     if (cmflags & MUTT_CM_DISPLAY)
     {
-      s.flags |= MUTT_DISPLAY;
-      s.wraplen = wraplen;
+      state.flags |= STATE_DISPLAY;
+      state.wraplen = wraplen;
     }
     if (cmflags & MUTT_CM_PRINTING)
-      s.flags |= MUTT_PRINTING;
+      state.flags |= STATE_PRINTING;
     if (cmflags & MUTT_CM_WEED)
-      s.flags |= MUTT_WEED;
+      state.flags |= STATE_WEED;
     if (cmflags & MUTT_CM_CHARCONV)
-      s.flags |= MUTT_CHARCONV;
+      state.flags |= STATE_CHARCONV;
     if (cmflags & MUTT_CM_REPLYING)
-      s.flags |= MUTT_REPLYING;
+      state.flags |= STATE_REPLYING;
 
     if ((WithCrypto != 0) && cmflags & MUTT_CM_VERIFY)
-      s.flags |= MUTT_VERIFY;
+      state.flags |= STATE_VERIFY;
 
-    rc = mutt_body_handler(body, &s);
+    rc = mutt_body_handler(body, &state);
   }
   else if ((WithCrypto != 0) && (cmflags & MUTT_CM_DECODE_CRYPT) && (e->security & SEC_ENCRYPT))
   {
@@ -897,7 +901,7 @@ int mutt_copy_message(FILE *fp_out, struct Email *e, struct Message *msg,
 static int append_message(struct Mailbox *dest, FILE *fp_in, struct Mailbox *src,
                           struct Email *e, CopyMessageFlags cmflags, CopyHeaderFlags chflags)
 {
-  char buf[256];
+  char buf[256] = { 0 };
   struct Message *msg = NULL;
   int rc;
 
@@ -1024,77 +1028,6 @@ static int copy_delete_attach(struct Body *b, FILE *fp_in, FILE *fp_out, const c
 }
 
 /**
- * format_address_header - Write address headers to a buffer
- * @param[out] h  Array of header strings
- * @param[in]  al AddressList
- *
- * This function is the equivalent of mutt_addrlist_write_file(), but writes to
- * a buffer instead of writing to a stream.  mutt_addrlist_write_file could be
- * re-used if we wouldn't store all the decoded headers in a huge array, first.
- *
- * TODO fix that.
- */
-static void format_address_header(char **h, struct AddressList *al)
-{
-  char buf[8192];
-  char cbuf[256];
-  char c2buf[256];
-  char *p = NULL;
-  size_t linelen, buflen, plen;
-
-  linelen = mutt_str_len(*h);
-  plen = linelen;
-  buflen = linelen + 3;
-
-  mutt_mem_realloc(h, buflen);
-  struct Address *first = TAILQ_FIRST(al);
-  struct Address *a = NULL;
-  TAILQ_FOREACH(a, al, entries)
-  {
-    *buf = '\0';
-    *cbuf = '\0';
-    *c2buf = '\0';
-    const size_t l = mutt_addr_write(buf, sizeof(buf), a, false);
-
-    if (a != first && (linelen + l > 74))
-    {
-      strcpy(cbuf, "\n\t");
-      linelen = l + 8;
-    }
-    else
-    {
-      if (a->mailbox)
-      {
-        strcpy(cbuf, " ");
-        linelen++;
-      }
-      linelen += l;
-    }
-    if (!a->group && TAILQ_NEXT(a, entries) && TAILQ_NEXT(a, entries)->mailbox)
-    {
-      linelen++;
-      buflen++;
-      strcpy(c2buf, ",");
-    }
-
-    const size_t cbuflen = mutt_str_len(cbuf);
-    const size_t c2buflen = mutt_str_len(c2buf);
-    buflen += l + cbuflen + c2buflen;
-    mutt_mem_realloc(h, buflen);
-    p = *h;
-    strcat(p + plen, cbuf);
-    plen += cbuflen;
-    strcat(p + plen, buf);
-    plen += l;
-    strcat(p + plen, c2buf);
-    plen += c2buflen;
-  }
-
-  /* Space for this was allocated in the beginning of this function. */
-  strcat(p + plen, "\n");
-}
-
-/**
  * address_header_decode - Parse an email's headers
  * @param[out] h Array of header strings
  * @retval 0 Success
@@ -1183,9 +1116,11 @@ static int address_header_decode(char **h)
     *h = mutt_str_dup(s);
   else
   {
-    *h = mutt_mem_calloc(1, l + 2);
-    mutt_str_copy(*h, s, l + 1);
-    format_address_header(h, &al);
+    struct Buffer buf = { 0 };
+    (*h)[l - 1] = '\0';
+    mutt_addrlist_write_wrap(&al, &buf, *h);
+    mutt_buffer_addch(&buf, '\n');
+    *h = buf.data;
   }
 
   mutt_addrlist_clear(&al);

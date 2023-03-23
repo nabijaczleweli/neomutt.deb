@@ -25,6 +25,7 @@
 #include "acutest.h"
 #include <string.h>
 #include "mutt/lib.h"
+#include "test_common.h"
 
 static const char clear[] = "Hello";
 static const char encoded[] = "SGVsbG8=";
@@ -68,5 +69,19 @@ void test_mutt_b64_decode(void)
       TEST_MSG("Expected: %zu", -1);
       TEST_MSG("Actual  : %zu", declen);
     }
+  }
+
+  {
+    char out1[32] = "JQ";
+    char out2[32] = { 0 };
+
+    /* Decoding a non-padded string should be ok */
+    int declen = mutt_b64_decode(out1, out2, sizeof(out2));
+    if (!TEST_CHECK(declen == 1))
+    {
+      TEST_MSG("Expected: %zu", 1);
+      TEST_MSG("Actual  : %zu", declen);
+    }
+    TEST_CHECK_STR_EQ("%", out2);
   }
 }

@@ -45,12 +45,12 @@
 #include "question/lib.h"
 #include "copy.h"
 #include "format_flags.h"
+#include "globals.h" // IWYU pragma: keep
 #include "hdrline.h"
 #include "hook.h"
 #include "keymap.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "options.h"
 #include "protos.h"
 #ifdef USE_AUTOCRYPT
 #include "autocrypt/lib.h"
@@ -181,7 +181,7 @@ static int email_to_file(struct Message *msg, struct Buffer *tempfile,
   mutt_parse_mime_message(e, msg->fp);
   mutt_message_hook(m, e, MUTT_MESSAGE_HOOK);
 
-  char columns[16];
+  char columns[16] = { 0 };
   // win_pager might not be visible and have a size yet, so use win_index
   snprintf(columns, sizeof(columns), "%d", wrap_len);
   mutt_envlist_set("COLUMNS", columns, true);
@@ -344,7 +344,7 @@ int external_pager(struct Mailbox *m, struct Email *e, const char *command)
   const bool c_prompt_after = cs_subset_bool(NeoMutt->sub, "prompt_after");
   if ((r != -1) && c_prompt_after)
   {
-    mutt_unget_event(mutt_any_key_to_continue(_("Command: ")), 0);
+    mutt_unget_ch(mutt_any_key_to_continue(_("Command: ")));
     rc = km_dokey(MENU_PAGER);
   }
   else

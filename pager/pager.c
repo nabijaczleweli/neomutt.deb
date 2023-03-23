@@ -122,9 +122,6 @@ static int config_pager_index_lines(struct MuttWindow *win)
  */
 static int pager_recalc(struct MuttWindow *win)
 {
-  if (!mutt_window_is_visible(win))
-    return 0;
-
   win->actions |= WA_REPAINT;
   mutt_debug(LL_DEBUG5, "recalc done, request WA_REPAINT\n");
   return 0;
@@ -243,7 +240,9 @@ static int pager_repaint(struct MuttWindow *win)
  */
 static int pager_color_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_COLOR) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_COLOR)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventColor *ev_c = nc->event_data;
@@ -286,7 +285,9 @@ static int pager_color_observer(struct NotifyCallback *nc)
  */
 static int pager_config_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_CONFIG)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventConfig *ev_c = nc->event_data;
@@ -306,20 +307,18 @@ static int pager_config_observer(struct NotifyCallback *nc)
  */
 static int pager_global_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_GLOBAL) || !nc->global_data)
+  if (nc->event_type != NT_GLOBAL)
+    return 0;
+  if (!nc->global_data)
     return -1;
   if (nc->event_subtype != NT_GLOBAL_COMMAND)
     return 0;
 
   struct MuttWindow *win_pager = nc->global_data;
-  if (!win_pager)
-    return 0;
 
   struct PagerPrivateData *priv = win_pager->wdata;
-  if (!priv)
-    return 0;
-
-  if ((priv->redraw & PAGER_REDRAW_FLOW) && (priv->pview->flags & MUTT_PAGER_RETWINCH))
+  const struct PagerView *pview = priv ? priv->pview : NULL;
+  if (priv && pview && (priv->redraw & PAGER_REDRAW_FLOW) && (pview->flags & MUTT_PAGER_RETWINCH))
   {
     priv->rc = OP_REFORMAT_WINCH;
   }
@@ -332,7 +331,9 @@ static int pager_global_observer(struct NotifyCallback *nc)
  */
 static int pager_index_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_INDEX) || !nc->global_data)
+  if (nc->event_type != NT_INDEX)
+    return 0;
+  if (!nc->global_data)
     return -1;
 
   struct MuttWindow *win_pager = nc->global_data;
@@ -373,7 +374,9 @@ static int pager_index_observer(struct NotifyCallback *nc)
  */
 static int pager_pager_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_PAGER) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_PAGER)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   mutt_debug(LL_DEBUG5, "pager done\n");
@@ -385,9 +388,10 @@ static int pager_pager_observer(struct NotifyCallback *nc)
  */
 static int pager_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
-
   if (nc->event_subtype != NT_WINDOW_DELETE)
     return 0;
 

@@ -30,10 +30,10 @@
  */
 
 #include "config.h"
+#include <arpa/inet.h>
 #include <ctype.h>
 #include <errno.h>
 #include <netdb.h>
-#include <netinet/in.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -52,11 +52,10 @@
 #include "question/lib.h"
 #include "adata.h"
 #include "edata.h"
+#include "globals.h" // IWYU pragma: keep
 #include "mdata.h"
 #include "msn.h"
 #include "mutt_account.h"
-#include "mutt_globals.h"
-#include "options.h"
 #ifdef USE_HCACHE
 #include "hcache/lib.h"
 #endif
@@ -74,7 +73,7 @@ int imap_adata_find(const char *path, struct ImapAccountData **adata,
 {
   struct ConnAccount cac = { { 0 } };
   struct ImapAccountData *tmp_adata = NULL;
-  char tmp[1024];
+  char tmp[1024] = { 0 };
 
   if (imap_parse_path(path, &cac, tmp, sizeof(tmp)) < 0)
     return -1;
@@ -162,7 +161,7 @@ void imap_get_parent_path(const char *path, char *buf, size_t buflen)
 {
   struct ImapAccountData *adata = NULL;
   struct ImapMboxData *mdata = NULL;
-  char mbox[1024];
+  char mbox[1024] = { 0 };
 
   if (imap_adata_find(path, &adata, &mdata) < 0)
   {
@@ -357,7 +356,7 @@ struct Email *imap_hcache_get(struct ImapMboxData *mdata, unsigned int uid)
   if (!mdata->hcache)
     return NULL;
 
-  char key[16];
+  char key[16] = { 0 };
 
   sprintf(key, "/%u", uid);
   struct HCacheEntry hce = mutt_hcache_fetch(mdata->hcache, key, mutt_str_len(key),
@@ -382,7 +381,7 @@ int imap_hcache_put(struct ImapMboxData *mdata, struct Email *e)
   if (!mdata->hcache)
     return -1;
 
-  char key[16];
+  char key[16] = { 0 };
 
   sprintf(key, "/%u", imap_edata_get(e)->uid);
   return mutt_hcache_store(mdata->hcache, key, mutt_str_len(key), e, mdata->uidvalidity);
@@ -400,7 +399,7 @@ int imap_hcache_del(struct ImapMboxData *mdata, unsigned int uid)
   if (!mdata->hcache)
     return -1;
 
-  char key[16];
+  char key[16] = { 0 };
 
   sprintf(key, "/%u", uid);
   return mutt_hcache_delete_record(mdata->hcache, key, mutt_str_len(key));
@@ -453,14 +452,7 @@ char *imap_hcache_get_uid_seqset(struct ImapMboxData *mdata)
   if (!mdata->hcache)
     return NULL;
 
-  char *seqset = NULL;
-  size_t dlen = 0;
-  char *hc_seqset = mutt_hcache_fetch_raw(mdata->hcache, "/UIDSEQSET", 10, &dlen);
-  if (hc_seqset)
-  {
-    seqset = mutt_strn_dup(hc_seqset, dlen);
-    mutt_hcache_free_raw(mdata->hcache, (void **) &hc_seqset);
-  }
+  char *seqset = mutt_hcache_fetch_str(mdata->hcache, "/UIDSEQSET", 10);
   mutt_debug(LL_DEBUG3, "Retrieved /UIDSEQSET %s\n", NONULL(seqset));
 
   return seqset;
@@ -595,8 +587,8 @@ void imap_pretty_mailbox(char *path, size_t pathlen, const char *folder)
   int tlen;
   int hlen = 0;
   bool home_match = false;
-  char target_mailbox[1024];
-  char home_mailbox[1024];
+  char target_mailbox[1024] = { 0 };
+  char home_mailbox[1024] = { 0 };
 
   if (imap_parse_path(path, &cac_target, target_mailbox, sizeof(target_mailbox)) < 0)
     return;
@@ -630,10 +622,10 @@ void imap_pretty_mailbox(char *path, size_t pathlen, const char *folder)
   {
     *path++ = '+';
     /* copy remaining path, skipping delimiter */
-    if (hlen == 0)
-      hlen = -1;
-    memcpy(path, target_mailbox + hlen + 1, tlen - hlen - 1);
-    path[tlen - hlen - 1] = '\0';
+    if (hlen != 0)
+      ++hlen;
+    memcpy(path, target_mailbox + hlen, tlen - hlen);
+    path[tlen - hlen] = '\0';
     return;
   }
 
@@ -944,7 +936,7 @@ void imap_unmunge_mbox_name(bool unicode, char *s)
  */
 void imap_keepalive(void)
 {
-  time_t now = mutt_date_epoch();
+  time_t now = mutt_date_now();
   struct Account *np = NULL;
   TAILQ_FOREACH(np, &NeoMutt->accounts, entries)
   {

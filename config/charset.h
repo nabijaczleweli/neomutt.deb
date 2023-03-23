@@ -25,13 +25,14 @@
 
 #include <stdint.h>
 
-#define DT_CHARSET_SINGLE    0x0800 ///< Flag for charset_validator to allow only one charset
-#define DT_CHARSET_STRICT    0x1000 ///< Flag for charset_validator to use strict char check
+#define DT_CHARSET_SINGLE  (1 << 11) ///< Flag for charset_validator to allow only one charset
+#define DT_CHARSET_STRICT  (1 << 12) ///< Flag for charset_validator to use strict char check
 
 struct Buffer;
 struct ConfigDef;
 struct ConfigSet;
 
 int charset_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef, intptr_t value, struct Buffer *err);
+int charset_slist_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef, intptr_t value, struct Buffer *err);
 
 #endif /* MUTT_CONFIG_CHARSET_H */

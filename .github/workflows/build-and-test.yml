@@ -20,18 +20,18 @@ jobs:
       matrix:
         cfg:
           - name: default
-            options:
+            options: --testing
           - name: disabled
-            options: --disable-idn --disable-nls --disable-pgp --disable-smime --ssl
+            options: --disable-idn --disable-nls --disable-pgp --disable-smime --ssl --gsasl --testing 
           - name: everything
-            options: --autocrypt --bdb --disable-idn --full-doc --gdbm --gnutls --gpgme --gss --idn2 --kyotocabinet --lmdb --lua --lz4 --notmuch --qdbm --sasl --tdb --tokyocabinet --with-lock=fcntl --zlib --zstd
+            options: --autocrypt --bdb --disable-idn --fmemopen --gdbm --gnutls --gpgme --gss --idn2 --kyotocabinet --lmdb --lua --lz4 --mixmaster --notmuch --pcre2 --qdbm --rocksdb --sasl --tdb --testing --tokyocabinet --with-lock=fcntl --zlib --zstd
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v3.4.0
 
     - name: Checkout Test Files
-      uses: actions/checkout@v3
+      uses: actions/checkout@v3.4.0
       with:
         repository: neomutt/neomutt-test-files
         path: test-files
@@ -42,16 +42,19 @@ jobs:
         ./setup.sh
 
     - name: Compilation Cache
-      uses: hendrikmuhs/ccache-action@v1.2
+      uses: hendrikmuhs/ccache-action@v1.2.8
 
     - name: Configure Neomutt
-      run: ./configure ${{ matrix.cfg.options }}
+      run: ./configure --full-doc ${{ matrix.cfg.options }}
 
     - name: Build Neomutt
-      run: make -j 2
+      run: make -j 2 neomutt
 
     - name: Neomutt Version
       run: ./neomutt -v
+
+    - name: Test Docs
+      run: make validate-docs
 
     - name: Build Tests
       run: make -j 2 test/neomutt-test

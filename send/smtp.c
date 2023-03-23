@@ -31,8 +31,8 @@
 /* This file contains code for direct SMTP delivery of email messages. */
 
 #include "config.h"
+#include <arpa/inet.h>
 #include <netdb.h>
-#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -47,13 +47,15 @@
 #include "lib.h"
 #include "progress/lib.h"
 #include "question/lib.h"
+#include "globals.h" // IWYU pragma: keep
 #include "mutt_account.h"
-#include "mutt_globals.h"
 #include "mutt_socket.h"
-#ifdef USE_SASL
+#ifdef USE_SASL_GNU
+#include <gsasl.h>
+#endif
+#ifdef USE_SASL_CYRUS
 #include <sasl/sasl.h>
 #include <sasl/saslutil.h>
-#include "options.h"
 #endif
 
 #define smtp_success(x) ((x) / 100 == 2)
@@ -136,7 +138,7 @@ static bool valid_smtp_code(char *buf, size_t buflen, int *n)
 static int smtp_get_resp(struct SmtpAccountData *adata)
 {
   int n;
-  char buf[1024];
+  char buf[1024] = { 0 };
 
   do
   {
@@ -198,7 +200,7 @@ static int smtp_rcpt_to(struct SmtpAccountData *adata, const struct AddressList 
     {
       continue;
     }
-    char buf[1024];
+    char buf[1024] = { 0 };
     if ((adata->capabilities & SMTP_CAP_DSN) && c_dsn_notify)
       snprintf(buf, sizeof(buf), "RCPT TO:<%s> NOTIFY=%s\r\n", a->mailbox, c_dsn_notify);
     else
@@ -222,7 +224,7 @@ static int smtp_rcpt_to(struct SmtpAccountData *adata, const struct AddressList 
  */
 static int smtp_data(struct SmtpAccountData *adata, const char *msgfile)
 {
-  char buf[1024];
+  char buf[1024] = { 0 };
   struct Progress *progress = NULL;
   int rc = SMTP_ERR_WRITE;
   int term = 0;
@@ -409,7 +411,7 @@ static int smtp_helo(struct SmtpAccountData *adata, bool esmtp)
 #endif
   }
 
-  char buf[1024];
+  char buf[1024] = { 0 };
   snprintf(buf, sizeof(buf), "%s %s\r\n", esmtp ? "EHLO" : "HELO", adata->fqdn);
   /* XXX there should probably be a wrapper in mutt_socket.c that
    * repeatedly calls adata->conn->write until all data is sent.  This
@@ -419,7 +421,183 @@ static int smtp_helo(struct SmtpAccountData *adata, bool esmtp)
   return smtp_get_resp(adata);
 }
 
-#ifdef USE_SASL
+#ifdef USE_SASL_GNU
+/**
+ * smtp_code - Extract an SMTP return code from a string
+ * @param[in]  str String to parse
+ * @param[in]  len Length of string
+ * @param[out] n   SMTP return code result
+ * @retval true Success
+ *
+ * Note: the 'len' parameter is actually the number of bytes, as
+ * returned by mutt_socket_readln().  If all callers are converted to
+ * mutt_socket_buffer_readln() we can pass in the actual len, or
+ * perhaps the buffer itself.
+ */
+static int smtp_code(const char *str, size_t len, int *n)
+{
+  char code[4];
+
+  if (len < 4)
+    return false;
+  code[0] = str[0];
+  code[1] = str[1];
+  code[2] = str[2];
+  code[3] = 0;
+
+  const char *end = mutt_str_atoi(code, n);
+  if (!end || (*end != '\0'))
+    return false;
+  return true;
+}
+
+/**
+ * smtp_get_auth_response - Get the SMTP authorisation response
+ * @param[in]  conn         Connection to a server
+ * @param[in]  input_buf    Temp buffer for strings returned by the server
+ * @param[out] smtp_rc      SMTP return code result
+ * @param[out] response_buf Text after the SMTP response code
+ * @retval  0 Success
+ * @retval -1 Error
+ *
+ * Did the SMTP authorisation succeed?
+ */
+static int smtp_get_auth_response(struct Connection *conn, struct Buffer *input_buf,
+                                  int *smtp_rc, struct Buffer *response_buf)
+{
+  mutt_buffer_reset(response_buf);
+  do
+  {
+    if (mutt_socket_buffer_readln(input_buf, conn) < 0)
+      return -1;
+    if (!smtp_code(mutt_buffer_string(input_buf),
+                   mutt_buffer_len(input_buf) + 1 /* number of bytes */, smtp_rc))
+    {
+      return -1;
+    }
+
+    if (*smtp_rc != SMTP_READY)
+      break;
+
+    const char *smtp_response = mutt_buffer_string(input_buf) + 3;
+    if (*smtp_response)
+    {
+      smtp_response++;
+      mutt_buffer_addstr(response_buf, smtp_response);
+    }
+  } while (mutt_buffer_string(input_buf)[3] == '-');
+
+  return 0;
+}
+
+/**
+ * smtp_auth_gsasl - Authenticate using SASL
+ * @param adata    SMTP Account data
+ * @param mechlist List of mechanisms to use
+ * @retval  0 Success
+ * @retval <0 Error, e.g. #SMTP_AUTH_FAIL
+ */
+static int smtp_auth_gsasl(struct SmtpAccountData *adata, const char *mechlist)
+{
+  Gsasl_session *gsasl_session = NULL;
+  struct Buffer *input_buf = NULL, *output_buf = NULL, *smtp_response_buf = NULL;
+  int rc = SMTP_AUTH_FAIL, gsasl_rc = GSASL_OK, smtp_rc;
+
+  const char *chosen_mech = mutt_gsasl_get_mech(mechlist, adata->auth_mechs);
+  if (!chosen_mech)
+  {
+    mutt_debug(LL_DEBUG2, "returned no usable mech\n");
+    return SMTP_AUTH_UNAVAIL;
+  }
+
+  mutt_debug(LL_DEBUG2, "using mech %s\n", chosen_mech);
+
+  if (mutt_gsasl_client_new(adata->conn, chosen_mech, &gsasl_session) < 0)
+  {
+    mutt_debug(LL_DEBUG1, "Error allocating GSASL connection.\n");
+    return SMTP_AUTH_UNAVAIL;
+  }
+
+  if (!OptNoCurses)
+    mutt_message(_("Authenticating (%s)..."), chosen_mech);
+
+  input_buf = mutt_buffer_pool_get();
+  output_buf = mutt_buffer_pool_get();
+  smtp_response_buf = mutt_buffer_pool_get();
+
+  mutt_buffer_printf(output_buf, "AUTH %s", chosen_mech);
+
+  /* Work around broken SMTP servers. See Debian #1010658.
+   * The msmtp source also forces IR for PLAIN because the author
+   * encountered difficulties with a server requiring it. */
+  if (mutt_str_equal(chosen_mech, "PLAIN"))
+  {
+    char *gsasl_step_output = NULL;
+    gsasl_rc = gsasl_step64(gsasl_session, "", &gsasl_step_output);
+    if (gsasl_rc != GSASL_NEEDS_MORE && gsasl_rc != GSASL_OK)
+    {
+      mutt_debug(LL_DEBUG1, "gsasl_step64() failed (%d): %s\n", gsasl_rc,
+                 gsasl_strerror(gsasl_rc));
+      goto fail;
+    }
+
+    mutt_buffer_addch(output_buf, ' ');
+    mutt_buffer_addstr(output_buf, gsasl_step_output);
+    gsasl_free(gsasl_step_output);
+  }
+
+  mutt_buffer_addstr(output_buf, "\r\n");
+
+  do
+  {
+    if (mutt_socket_send(adata->conn, mutt_buffer_string(output_buf)) < 0)
+      goto fail;
+
+    if (smtp_get_auth_response(adata->conn, input_buf, &smtp_rc, smtp_response_buf) < 0)
+      goto fail;
+
+    if (smtp_rc != SMTP_READY)
+      break;
+
+    char *gsasl_step_output = NULL;
+    gsasl_rc = gsasl_step64(gsasl_session, mutt_buffer_string(smtp_response_buf),
+                            &gsasl_step_output);
+    if ((gsasl_rc == GSASL_NEEDS_MORE) || (gsasl_rc == GSASL_OK))
+    {
+      mutt_buffer_strcpy(output_buf, gsasl_step_output);
+      mutt_buffer_addstr(output_buf, "\r\n");
+      gsasl_free(gsasl_step_output);
+    }
+    else
+    {
+      mutt_debug(LL_DEBUG1, "gsasl_step64() failed (%d): %s\n", gsasl_rc,
+                 gsasl_strerror(gsasl_rc));
+    }
+  } while ((gsasl_rc == GSASL_NEEDS_MORE) || (gsasl_rc == GSASL_OK));
+
+  if (smtp_rc == SMTP_READY)
+  {
+    mutt_socket_send(adata->conn, "*\r\n");
+    goto fail;
+  }
+
+  if (smtp_success(smtp_rc) && (gsasl_rc == GSASL_OK))
+    rc = SMTP_AUTH_SUCCESS;
+
+fail:
+  mutt_buffer_pool_release(&input_buf);
+  mutt_buffer_pool_release(&output_buf);
+  mutt_buffer_pool_release(&smtp_response_buf);
+  mutt_gsasl_client_finish(&gsasl_session);
+
+  if (rc == SMTP_AUTH_FAIL)
+    mutt_debug(LL_DEBUG2, "%s failed\n", chosen_mech);
+
+  return rc;
+}
+#endif
+
+#ifdef USE_SASL_CYRUS
 /**
  * smtp_auth_sasl - Authenticate using SASL
  * @param adata    SMTP Account data
@@ -602,7 +780,7 @@ static int smtp_auth_plain(struct SmtpAccountData *adata, const char *method)
 {
   (void) method; // This is PLAIN
 
-  char buf[1024];
+  char buf[1024] = { 0 };
 
   /* Get username and password. Bail out of any can't be retrieved. */
   if ((mutt_account_getuser(&adata->conn->account) < 0) ||
@@ -650,7 +828,7 @@ static int smtp_auth_login(struct SmtpAccountData *adata, const char *method)
   (void) method; // This is LOGIN
 
   char b64[1024] = { 0 };
-  char buf[1024] = { 0 };
+  char buf[1026] = { 0 };
 
   /* Get username and password. Bail out of any can't be retrieved. */
   if ((mutt_account_getuser(&adata->conn->account) < 0) ||
@@ -721,8 +899,11 @@ static const struct SmtpAuth SmtpAuthenticators[] = {
   { smtp_auth_xoauth2, "xoauth2" },
   { smtp_auth_plain, "plain" },
   { smtp_auth_login, "login" },
-#ifdef USE_SASL
+#ifdef USE_SASL_CYRUS
   { smtp_auth_sasl, NULL },
+#endif
+#ifdef USE_SASL_GNU
+  { smtp_auth_gsasl, NULL },
 #endif
   // clang-format on
 };
@@ -783,13 +964,23 @@ static int smtp_authenticate(struct SmtpAccountData *adata)
   else
   {
     /* Fall back to default: any authenticator */
+#if defined(USE_SASL_CYRUS)
     mutt_debug(LL_DEBUG2, "Falling back to smtp_auth_sasl, if using sasl.\n");
-
-#ifdef USE_SASL
     r = smtp_auth_sasl(adata, adata->auth_mechs);
+#elif defined(USE_SASL_GNU)
+    mutt_debug(LL_DEBUG2, "Falling back to smtp_auth_gsasl, if using gsasl.\n");
+    r = smtp_auth_gsasl(adata, adata->auth_mechs);
 #else
-    mutt_error(_("SMTP authentication requires SASL"));
-    r = SMTP_AUTH_UNAVAIL;
+    mutt_debug(LL_DEBUG2, "Falling back to using any authenticator available.\n");
+    /* Try all available authentication methods */
+    for (size_t i = 0; i < mutt_array_size(SmtpAuthenticators); i++)
+    {
+      const struct SmtpAuth *auth = &SmtpAuthenticators[i];
+      mutt_debug(LL_DEBUG2, "Trying method %s\n", auth->method ? auth->method : "<variable>");
+      r = auth->authenticate(adata, auth->method);
+      if (r == SMTP_AUTH_SUCCESS)
+        return r;
+    }
 #endif
   }
 
@@ -905,7 +1096,7 @@ int mutt_smtp_send(const struct AddressList *from, const struct AddressList *to,
   struct SmtpAccountData adata = { 0 };
   struct ConnAccount cac = { { 0 } };
   const char *envfrom = NULL;
-  char buf[1024];
+  char buf[1024] = { 0 };
   int rc = -1;
 
   adata.sub = sub;

@@ -58,20 +58,19 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
-#include "gui/lib.h"
 #include "mutt.h"
 #include "lib.h"
+#include "enter/lib.h"
 #include "hcache/lib.h"
 #include "index/lib.h"
 #include "maildir/lib.h"
 #include "progress/lib.h"
 #include "adata.h"
-#include "command_parse.h"
+#include "commands.h"
 #include "edata.h"
+#include "globals.h" // IWYU pragma: keep
 #include "maildir/edata.h"
 #include "mdata.h"
-#include "mutt_commands.h"
-#include "mutt_globals.h"
 #include "mutt_thread.h"
 #include "mx.h"
 #include "protos.h"
@@ -83,7 +82,10 @@
 
 struct stat;
 
-static const struct Command nm_commands[] = {
+/**
+ * NmCommands - Notmuch Commands
+ */
+static const struct Command NmCommands[] = {
   // clang-format off
   { "unvirtual-mailboxes", parse_unmailboxes, 0 },
   { "virtual-mailboxes",   parse_mailboxes,   MUTT_NAMED },
@@ -98,7 +100,7 @@ const int NmUrlProtocolLen = sizeof(NmUrlProtocol) - 1;
  */
 void nm_init(void)
 {
-  COMMANDS_REGISTER(nm_commands);
+  commands_register(NmCommands, mutt_array_size(NmCommands));
 }
 
 /**
@@ -367,7 +369,7 @@ static char *get_query_string(struct NmMboxData *mdata, bool window)
 
   if (window)
   {
-    char buf[1024];
+    char buf[1024] = { 0 };
     cs_subset_str_string_set(NeoMutt->sub, "nm_query_window_current_search",
                              mdata->db_query, NULL);
 
@@ -1027,6 +1029,7 @@ static bool read_threads_query(struct Mailbox *m, notmuch_query_t *q, bool dedup
  * @param db  Notmuch database
  * @param e Email
  * @retval ptr Handle to the Notmuch message
+ * @retval NULL Error occurred
  */
 static notmuch_message_t *get_nm_message(notmuch_database_t *db, struct Email *e)
 {
@@ -1072,7 +1075,7 @@ static bool nm_message_has_tag(notmuch_message_t *msg, char *tag)
 static void sync_email_path_with_nm(struct Email *e, notmuch_message_t *msg)
 {
   const char *new_file = get_message_last_filename(msg);
-  char old_file[PATH_MAX];
+  char old_file[PATH_MAX] = { 0 };
   email_get_fullpath(e, old_file, sizeof(old_file));
 
   if (!mutt_str_equal(old_file, new_file))
@@ -1194,9 +1197,9 @@ static int update_email_flags(struct Mailbox *m, struct Email *e, const char *ta
  */
 static int rename_maildir_filename(const char *old, char *buf, size_t buflen, struct Email *e)
 {
-  char filename[PATH_MAX];
-  char suffix[PATH_MAX];
-  char folder[PATH_MAX];
+  char filename[PATH_MAX] = { 0 };
+  char suffix[PATH_MAX] = { 0 };
+  char folder[PATH_MAX] = { 0 };
 
   mutt_str_copy(folder, old, sizeof(folder));
   char *p = strrchr(folder, '/');
@@ -1359,7 +1362,7 @@ static int rename_filename(struct Mailbox *m, const char *old_file,
            msg && ls && notmuch_filenames_valid(ls); notmuch_filenames_move_to_next(ls))
       {
         const char *path = notmuch_filenames_get(ls);
-        char newpath[PATH_MAX];
+        char newpath[PATH_MAX] = { 0 };
 
         if (strcmp(new_file, path) == 0)
           continue;
@@ -1522,7 +1525,7 @@ int nm_read_entire_thread(struct Mailbox *m, struct Email *e)
   notmuch_query_set_sort(q, NOTMUCH_SORT_NEWEST_FIRST);
 
   read_threads_query(m, q, true, 0);
-  m->mtime.tv_sec = mutt_date_epoch();
+  m->mtime.tv_sec = mutt_date_now();
   m->mtime.tv_nsec = 0;
   rc = 0;
 
@@ -1572,9 +1575,9 @@ char *nm_url_from_query(struct Mailbox *m, char *buf, size_t buflen)
     using_default_data = true;
   }
 
-  enum NmQueryType c_nm_query_type = nm_string_to_query_type(
+  enum NmQueryType query_type = nm_string_to_query_type(
       cs_subset_string(NeoMutt->sub, "nm_query_type"));
-  mdata->query_type = nm_parse_type_from_query(buf, c_nm_query_type);
+  mdata->query_type = nm_parse_type_from_query(buf, query_type);
 
   const short c_nm_db_limit = cs_subset_number(NeoMutt->sub, "nm_db_limit");
   if (get_limit(mdata) == c_nm_db_limit)
@@ -1736,7 +1739,7 @@ bool nm_message_is_still_queried(struct Mailbox *m, struct Email *e)
 int nm_update_filename(struct Mailbox *m, const char *old_file,
                        const char *new_file, struct Email *e)
 {
-  char buf[PATH_MAX];
+  char buf[PATH_MAX] = { 0 };
   struct NmMboxData *mdata = nm_mdata_get(m);
   if (!mdata || !new_file)
     return -1;
@@ -1750,7 +1753,7 @@ int nm_update_filename(struct Mailbox *m, const char *old_file,
   int rc = rename_filename(m, old_file, new_file, e);
 
   nm_db_release(m);
-  m->mtime.tv_sec = mutt_date_epoch();
+  m->mtime.tv_sec = mutt_date_now();
   m->mtime.tv_nsec = 0;
   return rc;
 }
@@ -1947,7 +1950,7 @@ done:
  *
  * If tag_list is NULL, just count the tags.
  */
-int nm_get_all_tags(struct Mailbox *m, char **tag_list, int *tag_count)
+int nm_get_all_tags(struct Mailbox *m, const char **tag_list, int *tag_count)
 {
   struct NmMboxData *mdata = nm_mdata_get(m);
   if (!mdata)
@@ -2049,7 +2052,7 @@ static enum MxOpenReturns nm_mbox_open(struct Mailbox *m)
 
   nm_db_release(m);
 
-  m->mtime.tv_sec = mutt_date_epoch();
+  m->mtime.tv_sec = mutt_date_now();
   m->mtime.tv_nsec = 0;
 
   mdata->oldmsgcount = 0;
@@ -2134,7 +2137,7 @@ static enum MxStatus nm_mbox_check(struct Mailbox *m)
     /* Check to see if the message has moved to a different subdirectory.
      * If so, update the associated filename.  */
     const char *new_file = get_message_last_filename(msg);
-    char old_file[PATH_MAX];
+    char old_file[PATH_MAX] = { 0 };
     email_get_fullpath(e, old_file, sizeof(old_file));
 
     if (!mutt_str_equal(old_file, new_file))
@@ -2181,7 +2184,7 @@ done:
 
   nm_db_release(m);
 
-  m->mtime.tv_sec = mutt_date_epoch();
+  m->mtime.tv_sec = mutt_date_now();
   m->mtime.tv_nsec = 0;
 
   mutt_debug(LL_DEBUG1, "nm: ... check done [count=%d, new_flags=%d, occult=%d]\n",
@@ -2215,7 +2218,7 @@ static enum MxStatus nm_mbox_sync(struct Mailbox *m)
   if (m->verbose)
   {
     /* all is in this function so we don't use data->progress here */
-    char msg[PATH_MAX];
+    char msg[PATH_MAX] = { 0 };
     snprintf(msg, sizeof(msg), _("Writing %s..."), mailbox_path(m));
     progress = progress_new(msg, MUTT_PROGRESS_WRITE, m->msg_count);
   }
@@ -2309,7 +2312,7 @@ static enum MxStatus nm_mbox_sync(struct Mailbox *m)
 
   if (changed)
   {
-    m->mtime.tv_sec = mutt_date_epoch();
+    m->mtime.tv_sec = mutt_date_now();
     m->mtime.tv_nsec = 0;
   }
 
@@ -2340,7 +2343,7 @@ static bool nm_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
   if (!e)
     return false;
 
-  char path[PATH_MAX];
+  char path[PATH_MAX] = { 0 };
   char *folder = nm_email_get_folder(e);
 
   snprintf(path, sizeof(path), "%s/%s", folder, e->path);
@@ -2419,7 +2422,7 @@ done:
   nm_db_release(m);
   if (e->changed)
   {
-    m->mtime.tv_sec = mutt_date_epoch();
+    m->mtime.tv_sec = mutt_date_now();
     m->mtime.tv_nsec = 0;
   }
   mutt_debug(LL_DEBUG1, "nm: tags modify done [rc=%d]\n", rc);

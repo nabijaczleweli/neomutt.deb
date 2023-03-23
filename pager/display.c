@@ -28,7 +28,6 @@
 
 #include "config.h"
 #include <errno.h>
-#include <inttypes.h> // IWYU pragma: keep
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -42,7 +41,6 @@
 #include "display.h"
 #include "lib.h"
 #include "color/lib.h"
-#include "protos.h"
 
 /**
  * check_sig - Check for an email signature
@@ -216,6 +214,13 @@ static void resolve_color(struct MuttWindow *win, struct Line *lines, int line_n
     else
       color.attrs |= A_UNDERLINE;
   }
+  else if (special & A_ITALIC)
+  {
+    if (simple_color_is_set(MT_COLOR_ITALIC) && !search)
+      color = *simple_color_get(MT_COLOR_ITALIC);
+    else
+      color.attrs |= A_ITALIC;
+  }
   else if (ansi->attr_color)
   {
     color = *ansi->attr_color;
@@ -301,7 +306,7 @@ static int check_protected_header_marker(const char *p)
  * Checks if line matches the `$quote_regex` and doesn't match `$smileys`.
  * This is used by the pager for calling qstyle_classify.
  */
-int mutt_is_quote_line(char *line, regmatch_t *pmatch)
+bool mutt_is_quote_line(char *line, regmatch_t *pmatch)
 {
   bool is_quote = false;
   const struct Regex *c_smileys = cs_subset_regex(NeoMutt->sub, "smileys");
@@ -835,8 +840,8 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
 
     if (CharsetIsUtf8)
     {
-      /* zero width space, zero width no-break space */
-      if ((wc == 0x200B) || (wc == 0xFEFF))
+      /* zero width space, zero with non-joiner, zero width no-break space */
+      if ((wc == 0x200B) || (wc == 0x200C) || (wc == 0xFEFF))
       {
         mutt_debug(LL_DEBUG3, "skip zero-width character U+%04X\n", (unsigned short) wc);
         continue;

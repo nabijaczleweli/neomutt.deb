@@ -24,6 +24,9 @@
 #ifndef MUTT_COLOR_COLOR_H
 #define MUTT_COLOR_COLOR_H
 
+#include "config.h"
+#include <stdbool.h>
+
 /**
  * enum ColorId - List of all colored objects
  *
@@ -47,6 +50,7 @@ enum ColorId
   MT_COLOR_HDRDEFAULT,               ///< Header default colour
   MT_COLOR_HEADER,                   ///< Message headers (takes a pattern)
   MT_COLOR_INDICATOR,                ///< Selected item in list
+  MT_COLOR_ITALIC,                   ///< Italic text
   MT_COLOR_MARKERS,                  ///< Pager: markers, line continuation
   MT_COLOR_MESSAGE,                  ///< Informational message
   MT_COLOR_MESSAGE_LOG,              ///< Menu showing log messages
@@ -57,6 +61,7 @@ enum ColorId
   MT_COLOR_QUOTED,                   ///< Pager: quoted text
   MT_COLOR_SEARCH,                   ///< Pager: search matches
 #ifdef USE_SIDEBAR
+  MT_COLOR_SIDEBAR_BACKGROUND,       ///< Background colour for the Sidebar
   MT_COLOR_SIDEBAR_DIVIDER,          ///< Line dividing sidebar from the index/pager
   MT_COLOR_SIDEBAR_FLAGGED,          ///< Mailbox with flagged messages
   MT_COLOR_SIDEBAR_HIGHLIGHT,        ///< Select cursor
@@ -72,23 +77,21 @@ enum ColorId
   MT_COLOR_TREE,                     ///< Index: tree-drawing characters
   MT_COLOR_UNDERLINE,                ///< Underlined text
   MT_COLOR_WARNING,                  ///< Warning messages
-  /* please no non-MT_COLOR_INDEX objects after this point */
-  MT_COLOR_INDEX,                    ///< Index: default colour (takes a pattern)
-  MT_COLOR_INDEX_AUTHOR,             ///< Index: author field (takes a pattern)
-  MT_COLOR_INDEX_FLAGS,              ///< Index: flags field (takes a pattern)
-  MT_COLOR_INDEX_SUBJECT,            ///< Index: subject field (takes a pattern)
-  MT_COLOR_INDEX_TAG,                ///< Index: tag field (%g, takes a pattern)
-  /* below here - only index coloring stuff that doesn't have a pattern */
+  // Index colours which all take a pattern
+  MT_COLOR_INDEX,                    ///< Index: default colour
+  MT_COLOR_INDEX_AUTHOR,             ///< Index: author field
   MT_COLOR_INDEX_COLLAPSED,          ///< Index: number of messages in collapsed thread
   MT_COLOR_INDEX_DATE,               ///< Index: date field
+  MT_COLOR_INDEX_FLAGS,              ///< Index: flags field
   MT_COLOR_INDEX_LABEL,              ///< Index: label field
   MT_COLOR_INDEX_NUMBER,             ///< Index: index number
   MT_COLOR_INDEX_SIZE,               ///< Index: size field
+  MT_COLOR_INDEX_SUBJECT,            ///< Index: subject field
+  MT_COLOR_INDEX_TAG,                ///< Index: tag field (%G)
   MT_COLOR_INDEX_TAGS,               ///< Index: tags field (%g, %J)
   MT_COLOR_MAX,
 };
 
-#include "config.h"
 #include <stdint.h>
 #include "mutt/lib.h"
 
@@ -101,6 +104,7 @@ extern const struct Mapping ComposeColorFields[];
 
 void mutt_colors_init(void);
 void mutt_colors_cleanup(void);
+bool mutt_color_has_pattern(enum ColorId cid);
 
 void colors_clear(void);
 

@@ -94,8 +94,17 @@ static int nm_query_window_timebase_validator(const struct ConfigSet *cs,
   return CSR_SUCCESS;
 }
 
+/**
+ * NotmuchVars - Config definitions for the Notmuch library
+ */
 static struct ConfigDef NotmuchVars[] = {
   // clang-format off
+  { "nm_config_file", DT_PATH|DT_PATH_FILE, IP "auto", 0, NULL,
+    "(notmuch) Configuration file for notmuch. Use 'auto' to detect configuration."
+  },
+  { "nm_config_profile", DT_STRING, 0, 0, NULL,
+    "(notmuch) Configuration profile for notmuch."
+  },
   { "nm_db_limit", DT_NUMBER|DT_NOT_NEGATIVE, 0, 0, NULL,
     "(notmuch) Default limit for Notmuch queries"
   },
@@ -141,12 +150,11 @@ static struct ConfigDef NotmuchVars[] = {
   { "nm_unread_tag", DT_STRING, IP "unread", 0, NULL,
     "(notmuch) Tag to use for unread messages"
   },
-  { "vfolder_format", DT_STRING|DT_NOT_EMPTY|R_INDEX, IP "%2C %?n?%4n/&     ?%4m %f", 0, NULL,
-    "(notmuch) printf-like format string for the browser's display of virtual folders"
-  },
   { "virtual_spool_file", DT_BOOL, false, 0, NULL,
     "(notmuch) Use the first virtual mailbox as a spool file"
   },
+
+  { "vfolder_format",    DT_DEPRECATED|DT_STRING, 0, IP "2018-11-01" },
 
   { "nm_default_uri",    DT_SYNONYM, IP "nm_default_url",     IP "2021-02-11" },
   { "virtual_spoolfile", DT_SYNONYM, IP "virtual_spool_file", IP "2021-02-11" },
@@ -162,7 +170,7 @@ bool config_init_notmuch(struct ConfigSet *cs)
   bool rc = false;
 
 #if defined(USE_NOTMUCH)
-  rc |= cs_register_variables(cs, NotmuchVars, 0);
+  rc |= cs_register_variables(cs, NotmuchVars, DT_NO_FLAGS);
 #endif
 
   return rc;

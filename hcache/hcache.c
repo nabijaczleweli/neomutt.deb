@@ -90,7 +90,7 @@ static void *dump(struct HeaderCache *hc, const struct Email *e, int *off, uint3
   *off = 0;
   unsigned char *d = mutt_mem_malloc(4096);
 
-  d = serial_dump_uint32_t((uidvalidity != 0) ? uidvalidity : mutt_date_epoch(), d, off);
+  d = serial_dump_uint32_t((uidvalidity != 0) ? uidvalidity : mutt_date_now(), d, off);
   d = serial_dump_int(hc->crc, d, off);
 
   assert((size_t) *off == header_size());
@@ -327,6 +327,47 @@ static char *get_foldername(const char *folder)
 }
 
 /**
+ * fetch_raw - Fetch a message's header from the cache
+ * @param[in]  hc     Pointer to the struct HeaderCache structure got by mutt_hcache_open()
+ * @param[in]  key    Message identification string
+ * @param[in]  keylen Length of the string pointed to by key
+ * @param[out] dlen   Length of the fetched data
+ * @retval ptr  Success, the data if found
+ * @retval NULL Otherwise
+ *
+ * @note This function does not perform any check on the validity of the data found.
+ * @note The returned data must be free with free_raw().
+ */
+static void *fetch_raw(struct HeaderCache *hc, const char *key, size_t keylen, size_t *dlen)
+{
+  const char *const c_header_cache_backend = cs_subset_string(NeoMutt->sub, "header_cache_backend");
+  const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
+
+  if (!hc || !ops)
+    return NULL;
+
+  struct Buffer path = mutt_buffer_make(1024);
+  keylen = mutt_buffer_printf(&path, "%s%.*s", hc->folder, (int) keylen, key);
+  void *blob = ops->fetch(hc->ctx, mutt_buffer_string(&path), keylen, dlen);
+  mutt_buffer_dealloc(&path);
+  return blob;
+}
+
+/**
+ * free_raw - Multiplexor for StoreOps::free
+ */
+static void free_raw(struct HeaderCache *hc, void **data)
+{
+  const char *const c_header_cache_backend = cs_subset_string(NeoMutt->sub, "header_cache_backend");
+  const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
+
+  if (!hc || !ops || !data || !*data)
+    return;
+
+  ops->free(hc->ctx, data);
+}
+
+/**
  * mutt_hcache_open - Multiplexor for StoreOps::open
  */
 struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcache_namer_t namer)
@@ -375,11 +416,12 @@ struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcach
     hcachever = digest.intval;
   }
 
+  const struct ComprOps *cops = NULL;
 #ifdef USE_HCACHE_COMPRESSION
   const char *const c_header_cache_compress_method = cs_subset_string(NeoMutt->sub, "header_cache_compress_method");
   if (c_header_cache_compress_method)
   {
-    const struct ComprOps *cops = compress_get_ops(c_header_cache_compress_method);
+    cops = compress_get_ops(c_header_cache_compress_method);
 
     const short c_header_cache_compress_level = cs_subset_number(NeoMutt->sub, "header_cache_compress_level");
     hc->cctx = cops->open(c_header_cache_compress_level);
@@ -399,6 +441,11 @@ struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcach
 
   if (!path || (path[0] == '\0'))
   {
+    if (cops)
+    {
+      cops->close(&hc->cctx);
+    }
+
     FREE(&hc->folder);
     FREE(&hc);
     return NULL;
@@ -416,6 +463,10 @@ struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcach
       hc->ctx = ops->open(mutt_buffer_string(hcpath));
       if (!hc->ctx)
       {
+        if (cops)
+        {
+          cops->close(&hc->cctx);
+        }
         FREE(&hc->folder);
         FREE(&hc);
       }
@@ -460,7 +511,7 @@ struct HCacheEntry mutt_hcache_fetch(struct HeaderCache *hc, const char *key,
   struct HCacheEntry entry = { 0 };
 
   size_t dlen;
-  void *data = mutt_hcache_fetch_raw(hc, rk->key, rk->len, &dlen);
+  void *data = fetch_raw(hc, rk->key, rk->len, &dlen);
   void *to_free = data;
   if (!data)
   {
@@ -469,6 +520,10 @@ struct HCacheEntry mutt_hcache_fetch(struct HeaderCache *hc, const char *key,
 
   /* restore uidvalidity and crc */
   size_t hlen = header_size();
+  if (hlen > dlen)
+  {
+    goto end;
+  }
   int off = 0;
   serial_restore_uint32_t(&entry.uidvalidity, data, &off);
   serial_restore_int(&entry.crc, data, &off);
@@ -496,50 +551,57 @@ struct HCacheEntry mutt_hcache_fetch(struct HeaderCache *hc, const char *key,
   entry.email = restore(data);
 
 end:
-  mutt_hcache_free_raw(hc, &to_free);
+  free_raw(hc, &to_free);
   return entry;
 }
 
 /**
- * mutt_hcache_fetch_raw - Fetch a message's header from the cache
+ * mutt_hcache_fetch_obj_ - Fetch a message's header from the cache into a destination object
  * @param[in]  hc     Pointer to the struct HeaderCache structure got by mutt_hcache_open()
  * @param[in]  key    Message identification string
  * @param[in]  keylen Length of the string pointed to by key
- * @param[out] dlen   Length of the fetched data
- * @retval ptr  Success, the data if found
- * @retval NULL Otherwise
- *
- * @note This function does not perform any check on the validity of the data found.
- * @note The returned data must be free with mutt_hcache_free_raw().
+ * @param[out] dst    Pointer to the destination object
+ * @param[in]  dstlen Size of the destination object
+ * @retval true Success, the data was found and the length matches
+ * @retval false Otherwise
  */
-void *mutt_hcache_fetch_raw(struct HeaderCache *hc, const char *key,
-                            size_t keylen, size_t *dlen)
+bool mutt_hcache_fetch_obj_(struct HeaderCache *hc, const char *key,
+                            size_t keylen, void *dst, size_t dstlen)
 {
-  const char *const c_header_cache_backend = cs_subset_string(NeoMutt->sub, "header_cache_backend");
-  const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
-
-  if (!hc || !ops)
-    return NULL;
-
-  struct Buffer path = mutt_buffer_make(1024);
-  keylen = mutt_buffer_printf(&path, "%s%.*s", hc->folder, (int) keylen, key);
-  void *blob = ops->fetch(hc->ctx, mutt_buffer_string(&path), keylen, dlen);
-  mutt_buffer_dealloc(&path);
-  return blob;
+  bool rc = true;
+  size_t srclen = 0;
+  void *src = fetch_raw(hc, key, keylen, &srclen);
+  if (src && srclen == dstlen)
+  {
+    memcpy(dst, src, dstlen);
+  }
+  else
+  {
+    rc = false;
+  }
+  free_raw(hc, &src);
+  return rc;
 }
 
 /**
- * mutt_hcache_free_raw - Multiplexor for StoreOps::free
+ * mutt_hcache_fetch_str - Fetch a string from the cache
+ * @param[in]  hc     Pointer to the struct HeaderCache structure got by mutt_hcache_open()
+ * @param[in]  key    Message identification string
+ * @param[in]  keylen Length of the string pointed to by key
+ * @retval ptr  Success, the data if found
+ * @retval NULL Otherwise
  */
-void mutt_hcache_free_raw(struct HeaderCache *hc, void **data)
+char *mutt_hcache_fetch_str(struct HeaderCache *hc, const char *key, size_t keylen)
 {
-  const char *const c_header_cache_backend = cs_subset_string(NeoMutt->sub, "header_cache_backend");
-  const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
-
-  if (!hc || !ops || !data || !*data)
-    return;
-
-  ops->free(hc->ctx, data);
+  char *res = NULL;
+  size_t dlen = 0;
+  void *data = fetch_raw(hc, key, keylen, &dlen);
+  if (data)
+  {
+    res = mutt_strn_dup(data, dlen);
+    free_raw(hc, &data);
+  }
+  return res;
 }
 
 /**

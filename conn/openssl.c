@@ -56,7 +56,7 @@
 #include "mutt_logging.h"
 #include "ssl.h"
 #ifdef HAVE_RAND_EGD
-#include "mutt_globals.h"
+#include "globals.h"
 #endif
 
 /* LibreSSL defines OPENSSL_VERSION_NUMBER but sets it to 0x20000000L.
@@ -112,9 +112,9 @@ struct SslSockData
  * Previously the code used this form:
  *     SSL_CTX_load_verify_locations (ssldata->ctx, `$certificate_file`, NULL);
  */
-static int ssl_load_certificates(SSL_CTX *ctx)
+static bool ssl_load_certificates(SSL_CTX *ctx)
 {
-  int rc = 1;
+  bool rc = true;
 
   mutt_debug(LL_DEBUG2, "loading trusted certificates\n");
   X509_STORE *store = SSL_CTX_get_cert_store(ctx);
@@ -135,7 +135,7 @@ static int ssl_load_certificates(SSL_CTX *ctx)
     if ((X509_cmp_current_time(X509_get0_notBefore(cert)) >= 0) ||
         (X509_cmp_current_time(X509_get0_notAfter(cert)) <= 0))
     {
-      char buf[256];
+      char buf[256] = { 0 };
       mutt_debug(LL_DEBUG2, "filtering expired cert: %s\n",
                  X509_NAME_oneline(X509_get_subject_name(cert), buf, sizeof(buf)));
     }
@@ -146,7 +146,7 @@ static int ssl_load_certificates(SSL_CTX *ctx)
   }
   /* PEM_read_X509 sets the error NO_START_LINE on eof */
   if (ERR_GET_REASON(ERR_peek_last_error()) != PEM_R_NO_START_LINE)
-    rc = 0;
+    rc = false;
   ERR_clear_error();
 
   X509_free(cert);
@@ -158,12 +158,12 @@ static int ssl_load_certificates(SSL_CTX *ctx)
 /**
  * ssl_set_verify_partial - Allow verification using partial chains (with no root)
  * @param ctx SSL context
- * @retval  0 Success
- * @retval -1 Error
+ * @retval true  Success
+ * @retval false Error
  */
-static int ssl_set_verify_partial(SSL_CTX *ctx)
+static bool ssl_set_verify_partial(SSL_CTX *ctx)
 {
-  int rc = 0;
+  bool rc = true;
 #ifdef HAVE_SSL_PARTIAL_CHAIN
   X509_VERIFY_PARAM *param = NULL;
 
@@ -177,14 +177,14 @@ static int ssl_set_verify_partial(SSL_CTX *ctx)
       if (SSL_CTX_set1_param(ctx, param) == 0)
       {
         mutt_debug(LL_DEBUG2, "SSL_CTX_set1_param() failed\n");
-        rc = -1;
+        rc = false;
       }
       X509_VERIFY_PARAM_free(param);
     }
     else
     {
       mutt_debug(LL_DEBUG2, "X509_VERIFY_PARAM_new() failed\n");
-      rc = -1;
+      rc = false;
     }
   }
 #endif
@@ -393,7 +393,7 @@ static void x509_fingerprint(char *s, int l, X509 *cert, const EVP_MD *(*hashfun
   {
     for (unsigned int i = 0; i < n; i++)
     {
-      char ch[8];
+      char ch[8] = { 0 };
       snprintf(ch, sizeof(ch), "%02X%s", md[i], ((i % 2) ? " " : ""));
       mutt_str_cat(s, l, ch);
     }
@@ -890,7 +890,7 @@ static void add_cert(const char *title, X509 *cert, bool issuer, struct CertArra
  */
 static bool interactive_check_cert(X509 *cert, int idx, size_t len, SSL *ssl, bool allow_always)
 {
-  char buf[256];
+  char buf[256] = { 0 };
   struct CertArray carr = ARRAY_HEAD_INITIALIZER;
 
   add_cert(_("This certificate belongs to:"), cert, false, &carr);
@@ -928,7 +928,7 @@ static bool interactive_check_cert(X509 *cert, int idx, size_t len, SSL *ssl, bo
     allow_skip = true;
 #endif
 
-  char title[256];
+  char title[256] = { 0 };
   snprintf(title, sizeof(title),
            _("SSL Certificate check (certificate %zu of %zu in chain)"), len - idx, len);
 
@@ -994,7 +994,7 @@ static bool interactive_check_cert(X509 *cert, int idx, size_t len, SSL *ssl, bo
  */
 static int ssl_verify_callback(int preverify_ok, X509_STORE_CTX *ctx)
 {
-  char buf[256];
+  char buf[256] = { 0 };
 
   SSL *ssl = X509_STORE_CTX_get_ex_data(ctx, SSL_get_ex_data_X509_STORE_CTX_idx());
   if (!ssl)
@@ -1263,7 +1263,7 @@ static int ssl_setup(struct Connection *conn)
     SSL_CTX_set_cipher_list(sockdata(conn)->sctx, c_ssl_ciphers);
   }
 
-  if (ssl_set_verify_partial(sockdata(conn)->sctx))
+  if (!ssl_set_verify_partial(sockdata(conn)->sctx))
   {
     mutt_error(_("Warning: error enabling ssl_verify_partial_chains"));
   }

@@ -45,6 +45,9 @@ const struct Mapping SortKeyMethods[] = {
   // clang-format on
 };
 
+/**
+ * NcryptVars - Config definitions for the encryption library
+ */
 static struct ConfigDef NcryptVars[] = {
   // clang-format off
   { "crypt_confirm_hook", DT_BOOL, true, 0, NULL,
@@ -139,14 +142,17 @@ static struct ConfigDef NcryptVars[] = {
   { "pgp_verify_sig",         DT_SYNONYM, IP "crypt_verify_sig",   IP "2002-01-24" },
   { "smime_self_encrypt_as",  DT_SYNONYM, IP "smime_default_key",  IP "2018-01-11" },
 
-  { "pgp_encrypt_self",   DT_DEPRECATED|DT_QUAD, MUTT_NO, IP "2019-09-09" },
-  { "smime_encrypt_self", DT_DEPRECATED|DT_QUAD, MUTT_NO, IP "2019-09-09" },
+  { "pgp_encrypt_self",   DT_DEPRECATED|DT_QUAD, 0, IP "2019-09-09" },
+  { "smime_encrypt_self", DT_DEPRECATED|DT_QUAD, 0, IP "2019-09-09" },
 
   { NULL },
   // clang-format on
 };
 
 #if defined(CRYPT_BACKEND_GPGME)
+/**
+ * NcryptVarsGpgme - GPGME Config definitions for the encryption library
+ */
 static struct ConfigDef NcryptVarsGpgme[] = {
   // clang-format off
   { "crypt_use_gpgme", DT_BOOL, true, 0, NULL,
@@ -161,6 +167,9 @@ static struct ConfigDef NcryptVarsGpgme[] = {
 #endif
 
 #if defined(CRYPT_BACKEND_CLASSIC_PGP)
+/**
+ * NcryptVarsPgp - PGP Config definitions for the encryption library
+ */
 static struct ConfigDef NcryptVarsPgp[] = {
   // clang-format off
   { "pgp_check_exit", DT_BOOL, true, 0, NULL,
@@ -228,6 +237,9 @@ static struct ConfigDef NcryptVarsPgp[] = {
 #endif
 
 #if defined(CRYPT_BACKEND_CLASSIC_SMIME)
+/**
+ * NcryptVarsSmime - SMIME Config definitions for the encryption library
+ */
 static struct ConfigDef NcryptVarsSmime[] = {
   // clang-format off
   { "smime_ask_cert_label", DT_BOOL, true, 0, NULL,
@@ -291,18 +303,18 @@ static struct ConfigDef NcryptVarsSmime[] = {
  */
 bool config_init_ncrypt(struct ConfigSet *cs)
 {
-  bool rc = cs_register_variables(cs, NcryptVars, 0);
+  bool rc = cs_register_variables(cs, NcryptVars, DT_NO_FLAGS);
 
 #if defined(CRYPT_BACKEND_GPGME)
-  rc |= cs_register_variables(cs, NcryptVarsGpgme, 0);
+  rc |= cs_register_variables(cs, NcryptVarsGpgme, DT_NO_FLAGS);
 #endif
 
 #if defined(CRYPT_BACKEND_CLASSIC_PGP)
-  rc |= cs_register_variables(cs, NcryptVarsPgp, 0);
+  rc |= cs_register_variables(cs, NcryptVarsPgp, DT_NO_FLAGS);
 #endif
 
 #if defined(CRYPT_BACKEND_CLASSIC_SMIME)
-  rc |= cs_register_variables(cs, NcryptVarsSmime, 0);
+  rc |= cs_register_variables(cs, NcryptVarsSmime, DT_NO_FLAGS);
 #endif
 
   return rc;

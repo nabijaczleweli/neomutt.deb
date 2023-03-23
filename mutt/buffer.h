@@ -37,8 +37,6 @@ struct Buffer
   size_t dsize; ///< Length of data
 };
 
-#define MoreArgs(buf) (*(buf)->dptr && (*(buf)->dptr != ';') && (*(buf)->dptr != '#'))
-
 void           mutt_buffer_alloc        (struct Buffer *buf, size_t size);
 void           mutt_buffer_dealloc      (struct Buffer *buf);
 void           mutt_buffer_fix_dptr     (struct Buffer *buf);
@@ -55,6 +53,9 @@ size_t         mutt_buffer_addch        (struct Buffer *buf, char c);
 size_t         mutt_buffer_addstr       (struct Buffer *buf, const char *s);
 size_t         mutt_buffer_addstr_n     (struct Buffer *buf, const char *s, size_t len);
 int            mutt_buffer_add_printf   (struct Buffer *buf, const char *fmt, ...);
+
+// Functions that INSERT into a Buffer
+size_t         mutt_buffer_insert       (struct Buffer *buf, size_t offset, const char *s);
 
 // Functions that OVERWRITE a Buffer
 size_t         mutt_buffer_concat_path  (struct Buffer *buf, const char *dir, const char *fname);

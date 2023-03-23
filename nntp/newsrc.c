@@ -161,6 +161,9 @@ void nntp_group_unread_stat(struct NntpMboxData *mdata)
  */
 int nntp_newsrc_parse(struct NntpAccountData *adata)
 {
+  if (!adata)
+    return -1;
+
   char *line = NULL;
   struct stat st = { 0 };
 
@@ -389,7 +392,7 @@ void nntp_newsrc_gen_entries(struct Mailbox *m)
 static int update_file(char *filename, char *buf)
 {
   FILE *fp = NULL;
-  char tmpfile[PATH_MAX];
+  char tmpfile[PATH_MAX] = { 0 };
   int rc = -1;
 
   while (true)
@@ -475,11 +478,11 @@ int nntp_newsrc_update(struct NntpAccountData *adata)
       if (j)
         buf[off++] = ',';
       if (mdata->newsrc_ent[j].first == mdata->newsrc_ent[j].last)
-        snprintf(buf + off, buflen - off, "%u", mdata->newsrc_ent[j].first);
+        snprintf(buf + off, buflen - off, ANUM, mdata->newsrc_ent[j].first);
       else if (mdata->newsrc_ent[j].first < mdata->newsrc_ent[j].last)
       {
-        snprintf(buf + off, buflen - off, "%u-%u", mdata->newsrc_ent[j].first,
-                 mdata->newsrc_ent[j].last);
+        snprintf(buf + off, buflen - off, ANUM "-" ANUM,
+                 mdata->newsrc_ent[j].first, mdata->newsrc_ent[j].last);
       }
       off += strlen(buf + off);
     }
@@ -518,7 +521,7 @@ int nntp_newsrc_update(struct NntpAccountData *adata)
 static void cache_expand(char *dst, size_t dstlen, struct ConnAccount *cac, const char *src)
 {
   char *c = NULL;
-  char file[PATH_MAX];
+  char file[PATH_MAX] = { 0 };
 
   /* server subdirectory */
   if (cac)
@@ -614,9 +617,9 @@ int nntp_add_group(char *line, void *data)
  */
 static int active_get_cache(struct NntpAccountData *adata)
 {
-  char buf[8192];
-  char file[4096];
-  time_t t;
+  char buf[8192] = { 0 };
+  char file[4096] = { 0 };
+  time_t t = 0;
 
   cache_expand(file, sizeof(file), &adata->conn->account, ".active");
   mutt_debug(LL_DEBUG1, "Parsing %s\n", file);
@@ -668,13 +671,13 @@ int nntp_active_save_cache(struct NntpAccountData *adata)
       buflen *= 2;
       mutt_mem_realloc(&buf, buflen);
     }
-    snprintf(buf + off, buflen - off, "%s %u %u %c%s%s\n", mdata->group,
+    snprintf(buf + off, buflen - off, "%s " ANUM " " ANUM " %c%s%s\n", mdata->group,
              mdata->last_message, mdata->first_message, mdata->allowed ? 'y' : 'n',
              mdata->desc ? " " : "", mdata->desc ? mdata->desc : "");
     off += strlen(buf + off);
   }
 
-  char file[PATH_MAX];
+  char file[PATH_MAX] = { 0 };
   cache_expand(file, sizeof(file), &adata->conn->account, ".active");
   mutt_debug(LL_DEBUG1, "Updating %s\n", file);
   int rc = update_file(file, buf);
@@ -708,7 +711,7 @@ static void nntp_hcache_namer(const char *path, struct Buffer *dest)
 struct HeaderCache *nntp_hcache_open(struct NntpMboxData *mdata)
 {
   struct Url url = { 0 };
-  char file[PATH_MAX];
+  char file[PATH_MAX] = { 0 };
 
   const bool c_save_unsubscribed = cs_subset_bool(NeoMutt->sub, "save_unsubscribed");
   if (!mdata->adata || !mdata->adata->cacheable || !mdata->adata->conn || !mdata->group ||
@@ -734,16 +737,15 @@ void nntp_hcache_update(struct NntpMboxData *mdata, struct HeaderCache *hc)
   if (!hc)
     return;
 
-  char buf[32];
+  char buf[32] = { 0 };
   bool old = false;
   anum_t first = 0, last = 0;
 
   /* fetch previous values of first and last */
-  size_t dlen = 0;
-  void *hdata = mutt_hcache_fetch_raw(hc, "index", 5, &dlen);
+  char *hdata = mutt_hcache_fetch_str(hc, "index", 5);
   if (hdata)
   {
-    mutt_debug(LL_DEBUG2, "mutt_hcache_fetch index: %s\n", (char *) hdata);
+    mutt_debug(LL_DEBUG2, "mutt_hcache_fetch index: %s\n", hdata);
     if (sscanf(hdata, ANUM " " ANUM, &first, &last) == 2)
     {
       old = true;
@@ -755,18 +757,18 @@ void nntp_hcache_update(struct NntpMboxData *mdata, struct HeaderCache *hc)
         if ((current >= mdata->first_message) && (current <= mdata->last_message))
           continue;
 
-        snprintf(buf, sizeof(buf), "%u", current);
+        snprintf(buf, sizeof(buf), ANUM, current);
         mutt_debug(LL_DEBUG2, "mutt_hcache_delete_record %s\n", buf);
         mutt_hcache_delete_record(hc, buf, strlen(buf));
       }
     }
-    mutt_hcache_free_raw(hc, &hdata);
+    FREE(&hdata);
   }
 
   /* store current values of first and last */
   if (!old || (mdata->first_message != first) || (mdata->last_message != last))
   {
-    snprintf(buf, sizeof(buf), "%u %u", mdata->first_message, mdata->last_message);
+    snprintf(buf, sizeof(buf), ANUM " " ANUM, mdata->first_message, mdata->last_message);
     mutt_debug(LL_DEBUG2, "mutt_hcache_store index: %s\n", buf);
     mutt_hcache_store_raw(hc, "index", 5, buf, strlen(buf) + 1);
   }
@@ -842,23 +844,23 @@ void nntp_delete_group_cache(struct NntpMboxData *mdata)
  */
 void nntp_clear_cache(struct NntpAccountData *adata)
 {
-  char file[PATH_MAX];
+  char file[PATH_MAX] = { 0 };
   char *fp = NULL;
-  struct dirent *entry = NULL;
-  DIR *dp = NULL;
+  struct dirent *de = NULL;
+  DIR *dir = NULL;
 
   if (!adata || !adata->cacheable)
     return;
 
   cache_expand(file, sizeof(file), &adata->conn->account, NULL);
-  dp = opendir(file);
-  if (dp)
+  dir = mutt_file_opendir(file, MUTT_OPENDIR_NONE);
+  if (dir)
   {
     mutt_strn_cat(file, sizeof(file), "/", 1);
     fp = file + strlen(file);
-    while ((entry = readdir(dp)))
+    while ((de = readdir(dir)))
     {
-      char *group = entry->d_name;
+      char *group = de->d_name;
       struct stat st = { 0 };
       struct NntpMboxData *mdata = NULL;
       struct NntpMboxData tmp_mdata;
@@ -902,7 +904,7 @@ void nntp_clear_cache(struct NntpAccountData *adata)
         mutt_debug(LL_DEBUG2, "%s\n", file);
       }
     }
-    closedir(dp);
+    closedir(dir);
   }
 }
 
@@ -1014,7 +1016,7 @@ static const char *nntp_get_field(enum ConnAccountField field, void *gf_data)
  */
 struct NntpAccountData *nntp_select_server(struct Mailbox *m, const char *server, bool leave_lock)
 {
-  char file[PATH_MAX];
+  char file[PATH_MAX] = { 0 };
   int rc;
   struct ConnAccount cac = { { 0 } };
   struct NntpAccountData *adata = NULL;
@@ -1145,16 +1147,15 @@ struct NntpAccountData *nntp_select_server(struct Mailbox *m, const char *server
   /* check cache files */
   if ((rc >= 0) && adata->cacheable)
   {
-    struct dirent *entry = NULL;
-    DIR *dp = opendir(file);
+    struct dirent *de = NULL;
+    DIR *dir = mutt_file_opendir(file, MUTT_OPENDIR_NONE);
 
-    if (dp)
+    if (dir)
     {
-      while ((entry = readdir(dp)))
+      while ((de = readdir(dir)))
       {
         struct HeaderCache *hc = NULL;
-        void *hdata = NULL;
-        char *group = entry->d_name;
+        char *group = de->d_name;
 
         char *p = group + strlen(group) - 7;
         if ((strlen(group) < 8) || (strcmp(p, ".hcache") != 0))
@@ -1169,8 +1170,7 @@ struct NntpAccountData *nntp_select_server(struct Mailbox *m, const char *server
           continue;
 
         /* fetch previous values of first and last */
-        size_t dlen = 0;
-        hdata = mutt_hcache_fetch_raw(hc, "index", 5, &dlen);
+        char *hdata = mutt_hcache_fetch_str(hc, "index", 5);
         if (hdata)
         {
           anum_t first, last;
@@ -1185,14 +1185,14 @@ struct NntpAccountData *nntp_select_server(struct Mailbox *m, const char *server
             if ((last >= mdata->first_message) && (last <= mdata->last_message))
             {
               mdata->last_cached = last;
-              mutt_debug(LL_DEBUG2, "%s last_cached=%u\n", mdata->group, last);
+              mutt_debug(LL_DEBUG2, "%s last_cached=" ANUM "\n", mdata->group, last);
             }
           }
-          mutt_hcache_free_raw(hc, &hdata);
+          FREE(&hdata);
         }
         mutt_hcache_close(hc);
       }
-      closedir(dp);
+      closedir(dir);
     }
   }
 #endif

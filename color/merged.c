@@ -71,7 +71,7 @@ void merged_colors_clear(void)
  * @param attrs Attributes, e.g. A_UNDERLINE
  * @retval ptr Matching Merged colour
  */
-struct AttrColor *merged_colors_find(int fg, int bg, int attrs)
+static struct AttrColor *merged_colors_find(int fg, int bg, int attrs)
 {
   struct AttrColor *ac = NULL;
   TAILQ_FOREACH(ac, &MergedColors, entries)
@@ -108,9 +108,9 @@ struct AttrColor *merged_colors_find(int fg, int bg, int attrs)
  */
 struct AttrColor *merged_color_overlay(struct AttrColor *base, struct AttrColor *over)
 {
-  if (!over || (!over->curses_color && (over->attrs == 0)))
+  if (!attr_color_is_set(over))
     return base;
-  if (!base || (!base->curses_color && (base->attrs == 0)))
+  if (!attr_color_is_set(base))
     return over;
 
   struct CursesColor *cc_base = base->curses_color;

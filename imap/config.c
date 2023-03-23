@@ -32,8 +32,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "mutt/lib.h"
-#include "conn/lib.h"
 #include "auth.h"
+#ifdef USE_SASL_CYRUS
+#include "conn/lib.h"
+#endif
 
 /**
  * imap_auth_validator - Validate the "imap_authenticators" config variable - Implements ConfigDef::validator() - @ingroup cfg_def_validator
@@ -50,7 +52,7 @@ static int imap_auth_validator(const struct ConfigSet *cs, const struct ConfigDe
   {
     if (imap_auth_is_valid(np->data))
       continue;
-#ifdef USE_SASL
+#ifdef USE_SASL_CYRUS
     if (sasl_auth_validator(np->data))
       continue;
 #endif
@@ -62,6 +64,9 @@ static int imap_auth_validator(const struct ConfigSet *cs, const struct ConfigDe
   return CSR_SUCCESS;
 }
 
+/**
+ * ImapVars - Config definitions for the IMAP library
+ */
 static struct ConfigDef ImapVars[] = {
   // clang-format off
   { "imap_check_subscribed", DT_BOOL, false, 0, NULL,
@@ -131,6 +136,9 @@ static struct ConfigDef ImapVars[] = {
 };
 
 #if defined(USE_ZLIB)
+/**
+ * ImapVarsZlib - Config definitions for IMAP compression
+ */
 static struct ConfigDef ImapVarsZlib[] = {
   // clang-format off
   { "imap_deflate", DT_BOOL, true, 0, NULL,
@@ -146,10 +154,10 @@ static struct ConfigDef ImapVarsZlib[] = {
  */
 bool config_init_imap(struct ConfigSet *cs)
 {
-  bool rc = cs_register_variables(cs, ImapVars, 0);
+  bool rc = cs_register_variables(cs, ImapVars, DT_NO_FLAGS);
 
 #if defined(USE_ZLIB)
-  rc |= cs_register_variables(cs, ImapVarsZlib, 0);
+  rc |= cs_register_variables(cs, ImapVarsZlib, DT_NO_FLAGS);
 #endif
 
   return rc;

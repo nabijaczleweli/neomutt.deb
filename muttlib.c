@@ -50,12 +50,13 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "muttlib.h"
+#include "enter/lib.h"
 #include "ncrypt/lib.h"
+#include "parse/lib.h"
 #include "question/lib.h"
 #include "format_flags.h"
+#include "globals.h" // IWYU pragma: keep
 #include "hook.h"
-#include "init.h"
-#include "mutt_globals.h"
 #include "mx.h"
 #include "protos.h"
 #ifdef USE_IMAP
@@ -91,8 +92,8 @@ void mutt_adv_mktemp(struct Buffer *buf)
     struct Buffer *prefix = mutt_buffer_pool_get();
     mutt_buffer_strcpy(prefix, buf->data);
     mutt_file_sanitize_filename(prefix->data, true);
-    const char *const c_tmpdir = cs_subset_path(NeoMutt->sub, "tmpdir");
-    mutt_buffer_printf(buf, "%s/%s", NONULL(c_tmpdir), mutt_buffer_string(prefix));
+    const char *const c_tmp_dir = cs_subset_path(NeoMutt->sub, "tmp_dir");
+    mutt_buffer_printf(buf, "%s/%s", NONULL(c_tmp_dir), mutt_buffer_string(prefix));
 
     struct stat st = { 0 };
     if ((lstat(mutt_buffer_string(buf), &st) == -1) && (errno == ENOENT))
@@ -466,8 +467,8 @@ bool mutt_is_text_part(struct Body *b)
 void mutt_buffer_mktemp_full(struct Buffer *buf, const char *prefix,
                              const char *suffix, const char *src, int line)
 {
-  const char *const c_tmpdir = cs_subset_path(NeoMutt->sub, "tmpdir");
-  mutt_buffer_printf(buf, "%s/%s-%s-%d-%d-%" PRIu64 "%s%s", NONULL(c_tmpdir),
+  const char *const c_tmp_dir = cs_subset_path(NeoMutt->sub, "tmp_dir");
+  mutt_buffer_printf(buf, "%s/%s-%s-%d-%d-%" PRIu64 "%s%s", NONULL(c_tmp_dir),
                      NONULL(prefix), NONULL(ShortHostname), (int) getuid(),
                      (int) getpid(), mutt_rand64(), suffix ? "." : "", NONULL(suffix));
 
@@ -494,10 +495,11 @@ void mutt_buffer_mktemp_full(struct Buffer *buf, const char *prefix,
 void mutt_mktemp_full(char *buf, size_t buflen, const char *prefix,
                       const char *suffix, const char *src, int line)
 {
-  const char *const c_tmpdir = cs_subset_path(NeoMutt->sub, "tmpdir");
-  size_t n = snprintf(buf, buflen, "%s/%s-%s-%d-%d-%" PRIu64 "%s%s", NONULL(c_tmpdir),
-                      NONULL(prefix), NONULL(ShortHostname), (int) getuid(),
-                      (int) getpid(), mutt_rand64(), suffix ? "." : "", NONULL(suffix));
+  const char *const c_tmp_dir = cs_subset_path(NeoMutt->sub, "tmp_dir");
+  size_t n = snprintf(buf, buflen, "%s/%s-%s-%d-%d-%" PRIu64 "%s%s",
+                      NONULL(c_tmp_dir), NONULL(prefix), NONULL(ShortHostname),
+                      (int) getuid(), (int) getpid(), mutt_rand64(),
+                      suffix ? "." : "", NONULL(suffix));
   if (n >= buflen)
   {
     mutt_debug(LL_DEBUG1, "%s:%d: ERROR: insufficient buffer space to hold temporary filename! buflen=%zu but need %zu\n",
@@ -526,7 +528,7 @@ void mutt_pretty_mailbox(char *buf, size_t buflen)
   char *p = buf, *q = buf;
   size_t len;
   enum UrlScheme scheme;
-  char tmp[PATH_MAX];
+  char tmp[PATH_MAX] = { 0 };
 
   scheme = url_check_scheme(buf);
 
@@ -784,7 +786,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
   FILE *fp_filter = NULL;
   char *recycler = NULL;
 
-  char src2[256];
+  char src2[1024];
   mutt_str_copy(src2, src, mutt_str_len(src) + 1);
   src = src2;
 
@@ -816,7 +818,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
     /* n-off is the number of backslashes. */
     if ((off > 0) && (((n - off) % 2) == 0))
     {
-      char srccopy[1024];
+      char srccopy[1024] = { 0 };
       int i = 0;
 
       mutt_debug(LL_DEBUG3, "fmtpipe = %s\n", src);
@@ -840,7 +842,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
         mutt_debug(LL_DEBUG3, "fmtpipe +++: %s\n", srcbuf.dptr);
         if (word.data)
           *word.data = '\0';
-        mutt_extract_token(&word, &srcbuf, MUTT_TOKEN_NO_FLAGS);
+        parse_extract_token(&word, &srcbuf, TOKEN_NO_FLAGS);
         mutt_debug(LL_DEBUG3, "fmtpipe %2d: %s\n", i++, word.data);
         mutt_buffer_addch(&cmd, '\'');
         mutt_expando_format(tmp, sizeof(tmp), 0, cols, word.data, callback,
@@ -1354,7 +1356,7 @@ FILE *mutt_open_read(const char *path, pid_t *thepid)
  */
 int mutt_save_confirm(const char *s, struct stat *st)
 {
-  int ret = 0;
+  int rc = 0;
 
   enum MailboxType type = mx_path_probe(s);
 
@@ -1375,9 +1377,9 @@ int mutt_save_confirm(const char *s, struct stat *st)
       mutt_buffer_printf(tmp, _("Append messages to %s?"), s);
       enum QuadOption ans = mutt_yesorno(mutt_buffer_string(tmp), MUTT_YES);
       if (ans == MUTT_NO)
-        ret = 1;
+        rc = 1;
       else if (ans == MUTT_ABORT)
-        ret = -1;
+        rc = -1;
       mutt_buffer_pool_release(&tmp);
     }
   }
@@ -1413,14 +1415,14 @@ int mutt_save_confirm(const char *s, struct stat *st)
         mutt_buffer_printf(tmp, _("Create %s?"), s);
         enum QuadOption ans = mutt_yesorno(mutt_buffer_string(tmp), MUTT_YES);
         if (ans == MUTT_NO)
-          ret = 1;
+          rc = 1;
         else if (ans == MUTT_ABORT)
-          ret = -1;
+          rc = -1;
         mutt_buffer_pool_release(&tmp);
       }
 
       /* user confirmed with MUTT_YES or set `$confirm_create` */
-      if (ret == 0)
+      if (rc == 0)
       {
         /* create dir recursively */
         char *tmp_path = mutt_path_dirname(s);
@@ -1442,7 +1444,7 @@ int mutt_save_confirm(const char *s, struct stat *st)
   }
 
   msgwin_clear_text();
-  return ret;
+  return rc;
 }
 
 /**

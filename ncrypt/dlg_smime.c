@@ -55,19 +55,19 @@
  */
 
 #include "config.h"
+#include <stdbool.h>
 #include <stdio.h>
 #include "private.h"
 #include "mutt/lib.h"
-#include "config/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
 #include "menu/lib.h"
-#include "question/lib.h"
 #include "keymap.h"
 #include "mutt_logging.h"
 #include "opcodes.h"
 #include "smime.h"
+#include "smime_functions.h"
 
 /// Help Bar for the Smime key selection dialog
 static const struct Mapping SmimeHelp[] = {
@@ -197,9 +197,6 @@ struct SmimeKey *dlg_select_smime_key(struct SmimeKey *keys, const char *query)
   int table_size = 0;
   int table_index = 0;
   struct SmimeKey *key = NULL;
-  struct SmimeKey *selected_key = NULL;
-  char buf[1024];
-  const char *s = "";
 
   for (table_index = 0, key = keys; key; key = key->next)
   {
@@ -221,7 +218,10 @@ struct SmimeKey *dlg_select_smime_key(struct SmimeKey *keys, const char *query)
   menu->mdata_free = smime_key_table_free;
   /* sorting keys might be done later - TODO */
 
-  char title[256];
+  struct SmimeData sd = { false, menu, table, NULL };
+  dlg->wdata = &sd;
+
+  char title[256] = { 0 };
   struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
   snprintf(title, sizeof(title), _("S/MIME certificates matching \"%s\""), query);
   sbar_set_title(sbar, title);
@@ -231,72 +231,30 @@ struct SmimeKey *dlg_select_smime_key(struct SmimeKey *keys, const char *query)
   // ---------------------------------------------------------------------------
   // Event Loop
   int op = OP_NULL;
-  int rc;
   do
   {
-    rc = FR_UNKNOWN;
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(menu->type);
+    op = km_dokey(MENU_SMIME);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
     if (op == OP_NULL)
     {
-      km_error_key(menu->type);
+      km_error_key(MENU_SMIME);
       continue;
     }
     mutt_clear_error();
 
-    switch (op)
-    {
-      case OP_GENERIC_SELECT_ENTRY:
-      {
-        const int index = menu_get_index(menu);
-        struct SmimeKey *cur_key = table[index];
-        if (cur_key->trust != 't')
-        {
-          switch (cur_key->trust)
-          {
-            case 'e':
-            case 'i':
-            case 'r':
-              s = _("ID is expired/disabled/revoked. Do you really want to use the key?");
-              break;
-            case 'u':
-              s = _("ID has undefined validity. Do you really want to use the key?");
-              break;
-            case 'v':
-              s = _("ID is not trusted. Do you really want to use the key?");
-              break;
-          }
-
-          snprintf(buf, sizeof(buf), "%s", s);
-
-          if (mutt_yesorno(buf, MUTT_NO) != MUTT_YES)
-          {
-            mutt_clear_error();
-            continue;
-          }
-        }
-
-        selected_key = cur_key;
-        rc = FR_DONE;
-        break;
-      }
-
-      case OP_EXIT:
-        rc = FR_DONE;
-        break;
-    }
+    int rc = smime_function_dispatcher(dlg, op);
 
     if (rc == FR_UNKNOWN)
       rc = menu_function_dispatcher(menu->win, op);
     if (rc == FR_UNKNOWN)
-      rc = global_function_dispatcher(menu->win, op);
-  } while (rc != FR_DONE);
+      rc = global_function_dispatcher(NULL, op);
+  } while (!sd.done);
 
   simple_dialog_free(&dlg);
-  return selected_key;
+  return sd.key;
 }

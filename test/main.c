@@ -101,6 +101,7 @@
   NEOMUTT_TEST_ITEM(test_mutt_buffer_dealloc)                                  \
   NEOMUTT_TEST_ITEM(test_mutt_buffer_fix_dptr)                                 \
   NEOMUTT_TEST_ITEM(test_mutt_buffer_init)                                     \
+  NEOMUTT_TEST_ITEM(test_mutt_buffer_insert)                                   \
   NEOMUTT_TEST_ITEM(test_mutt_buffer_is_empty)                                 \
   NEOMUTT_TEST_ITEM(test_mutt_buffer_len)                                      \
   NEOMUTT_TEST_ITEM(test_mutt_buffer_make)                                     \
@@ -158,11 +159,17 @@
   NEOMUTT_TEST_ITEM(test_config_synonym)                                       \
   NEOMUTT_TEST_ITEM(test_config_variable)                                      \
                                                                                \
+  /* convert */                                                                \
+  NEOMUTT_TEST_ITEM(test_mutt_convert_file_to)                                 \
+  NEOMUTT_TEST_ITEM(test_mutt_convert_file_from_to)                            \
+  NEOMUTT_TEST_ITEM(test_mutt_update_content_info)                             \
+  NEOMUTT_TEST_ITEM(test_mutt_get_content_info)                                \
+                                                                               \
   /* date */                                                                   \
   NEOMUTT_TEST_ITEM(test_mutt_date_add_timeout)                                \
   NEOMUTT_TEST_ITEM(test_mutt_date_check_month)                                \
-  NEOMUTT_TEST_ITEM(test_mutt_date_epoch)                                      \
-  NEOMUTT_TEST_ITEM(test_mutt_date_epoch_ms)                                   \
+  NEOMUTT_TEST_ITEM(test_mutt_date_now)                                        \
+  NEOMUTT_TEST_ITEM(test_mutt_date_now_ms)                                     \
   NEOMUTT_TEST_ITEM(test_mutt_date_gmtime)                                     \
   NEOMUTT_TEST_ITEM(test_mutt_date_local_tz)                                   \
   NEOMUTT_TEST_ITEM(test_mutt_date_localtime)                                  \
@@ -190,6 +197,24 @@
   NEOMUTT_TEST_ITEM(test_email_header_update)                                  \
   NEOMUTT_TEST_ITEM(test_email_header_set)                                     \
   NEOMUTT_TEST_ITEM(test_email_header_free)                                    \
+                                                                               \
+  /* enter */                                                                  \
+  NEOMUTT_TEST_ITEM(test_editor_backspace)                                     \
+  NEOMUTT_TEST_ITEM(test_editor_backward_char)                                 \
+  NEOMUTT_TEST_ITEM(test_editor_backward_word)                                 \
+  NEOMUTT_TEST_ITEM(test_editor_bol)                                           \
+  NEOMUTT_TEST_ITEM(test_editor_case_word)                                     \
+  NEOMUTT_TEST_ITEM(test_editor_delete_char)                                   \
+  NEOMUTT_TEST_ITEM(test_editor_eol)                                           \
+  NEOMUTT_TEST_ITEM(test_editor_forward_char)                                  \
+  NEOMUTT_TEST_ITEM(test_editor_forward_word)                                  \
+  NEOMUTT_TEST_ITEM(test_editor_kill_eol)                                      \
+  NEOMUTT_TEST_ITEM(test_editor_kill_eow)                                      \
+  NEOMUTT_TEST_ITEM(test_editor_kill_line)                                     \
+  NEOMUTT_TEST_ITEM(test_editor_kill_whole_line)                               \
+  NEOMUTT_TEST_ITEM(test_editor_kill_word)                                     \
+  NEOMUTT_TEST_ITEM(test_editor_state)                                         \
+  NEOMUTT_TEST_ITEM(test_editor_transpose_chars)                               \
                                                                                \
   /* envelope */                                                               \
   NEOMUTT_TEST_ITEM(test_mutt_env_cmp_strict)                                  \
@@ -423,6 +448,9 @@
   NEOMUTT_TEST_ITEM(test_mutt_rfc822_parse_message)                            \
   NEOMUTT_TEST_ITEM(test_mutt_rfc822_read_header)                              \
   NEOMUTT_TEST_ITEM(test_mutt_rfc822_read_line)                                \
+  NEOMUTT_TEST_ITEM(test_parse_extract_token)                                  \
+  NEOMUTT_TEST_ITEM(test_parse_rc)                                             \
+  NEOMUTT_TEST_ITEM(test_parse_set)                                            \
                                                                                \
   /* path */                                                                   \
   NEOMUTT_TEST_ITEM(test_mutt_path_abbr_folder)                                \

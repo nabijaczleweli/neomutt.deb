@@ -36,8 +36,9 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "connaccount.h"
-#include "mutt_globals.h"
-#include "options.h"
+#include "enter/lib.h"
+#include "accountcmd.h"
+#include "globals.h"
 
 /**
  * mutt_account_getuser - Retrieve username into ConnAccount, if necessary
@@ -54,19 +55,31 @@ int mutt_account_getuser(struct ConnAccount *cac)
 
   const char *user = cac->get_field(MUTT_CA_USER, cac->gf_data);
   if (user)
+  {
     mutt_str_copy(cac->user, user, sizeof(cac->user));
+  }
+  else if (mutt_account_call_external_cmd(cac) != MUTT_ACCT_NO_FLAGS)
+  {
+    /* The external command might interact with the screen */
+    if (!OptNoCurses)
+      mutt_need_hard_redraw();
+    return 0;
+  }
   else if (OptNoCurses)
+  {
     return -1;
+  }
   else
   {
     /* prompt (defaults to unix username), copy into cac->user */
-    char prompt[256];
+    char prompt[256] = { 0 };
     /* L10N: Example: Username at myhost.com */
     snprintf(prompt, sizeof(prompt), _("Username at %s: "), cac->host);
     mutt_str_copy(cac->user, Username, sizeof(cac->user));
 
     struct Buffer *buf = mutt_buffer_pool_get();
-    const int rc = mutt_get_field_unbuffered(prompt, buf, MUTT_COMP_NO_FLAGS);
+    const int rc = mutt_buffer_get_field(prompt, buf, MUTT_COMP_UNBUFFERED,
+                                         false, NULL, NULL, NULL);
     mutt_str_copy(cac->user, mutt_buffer_string(buf), sizeof(cac->user));
     mutt_buffer_pool_release(&buf);
     if (rc != 0)
@@ -122,18 +135,30 @@ int mutt_account_getpass(struct ConnAccount *cac)
 
   const char *pass = cac->get_field(MUTT_CA_PASS, cac->gf_data);
   if (pass)
+  {
     mutt_str_copy(cac->pass, pass, sizeof(cac->pass));
+  }
+  else if (mutt_account_call_external_cmd(cac) != MUTT_ACCT_NO_FLAGS)
+  {
+    /* The external command might interact with the screen */
+    if (!OptNoCurses)
+      mutt_need_hard_redraw();
+    return 0;
+  }
   else if (OptNoCurses)
+  {
     return -1;
+  }
   else
   {
-    char prompt[256];
+    char prompt[256] = { 0 };
     snprintf(prompt, sizeof(prompt), _("Password for %s@%s: "),
              (cac->flags & MUTT_ACCT_LOGIN) ? cac->login : cac->user, cac->host);
     cac->pass[0] = '\0';
 
     struct Buffer *buf = mutt_buffer_pool_get();
-    const int rc = mutt_get_field_unbuffered(prompt, buf, MUTT_COMP_PASS);
+    const int rc = mutt_buffer_get_field(prompt, buf, MUTT_COMP_PASS | MUTT_COMP_UNBUFFERED,
+                                         false, NULL, NULL, NULL);
     mutt_str_copy(cac->pass, mutt_buffer_string(buf), sizeof(cac->pass));
     mutt_buffer_pool_release(&buf);
     if (rc != 0)
@@ -203,10 +228,6 @@ char *mutt_account_getoauthbearer(struct ConnAccount *cac, bool xoauth2)
   if (!OptNoCurses)
     mutt_need_hard_redraw();
 
-  /* The refresh cmd in some cases will invoke gpg to decrypt a token */
-  if (!OptNoCurses)
-    mutt_need_hard_redraw();
-
   if (!token || (*token == '\0'))
   {
     mutt_error(_("Command returned empty string"));
@@ -223,7 +244,7 @@ char *mutt_account_getoauthbearer(struct ConnAccount *cac, bool xoauth2)
 
   /* 4500 is chosen to allow for both a token that is 4096-long plus a
    * username that can be up to 320-long. */
-  char oauthbearer[4500];
+  char oauthbearer[4500] = { 0 };
   int oalen = 0;
   if (xoauth2)
   {

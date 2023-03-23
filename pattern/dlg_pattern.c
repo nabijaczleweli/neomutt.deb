@@ -79,21 +79,11 @@
 #include "lib.h"
 #include "menu/lib.h"
 #include "format_flags.h"
+#include "functions.h"
 #include "keymap.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
 #include "opcodes.h"
-
-/**
- * struct PatternEntry - A line in the Pattern Completion menu
- */
-struct PatternEntry
-{
-  int num;          ///< Index number
-  const char *tag;  ///< Copied to buffer if selected
-  const char *expr; ///< Displayed in the menu
-  const char *desc; ///< Description of pattern
-};
 
 /// Help Bar for the Pattern selection dialog
 static const struct Mapping PatternHelp[] = {
@@ -131,7 +121,7 @@ static const char *pattern_format_str(char *buf, size_t buflen, size_t col, int 
       break;
     case 'n':
     {
-      char tmp[32];
+      char tmp[32] = { 0 };
       snprintf(tmp, sizeof(tmp), "%%%sd", prec);
       snprintf(buf, buflen, tmp, entry->num);
       break;
@@ -289,7 +279,9 @@ static struct Menu *create_pattern_menu(struct MuttWindow *dlg)
  */
 static int pattern_config_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_CONFIG)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventConfig *ev_c = nc->event_data;
@@ -313,9 +305,10 @@ static int pattern_config_observer(struct NotifyCallback *nc)
  */
 static int pattern_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
-
   if (nc->event_subtype != NT_WINDOW_DELETE)
     return 0;
 
@@ -344,58 +337,46 @@ bool dlg_select_pattern(char *buf, size_t buflen)
   struct MuttWindow *dlg = simple_dialog_new(MENU_GENERIC, WT_DLG_PATTERN, PatternHelp);
   struct Menu *menu = create_pattern_menu(dlg);
 
-  struct MuttWindow *win_menu = menu->win;
+  struct PatternData pd = { false, false, buf, buflen, menu };
+  dlg->wdata = &pd;
 
   // NT_COLOR is handled by the SimpleDialog
   notify_observer_add(NeoMutt->notify, NT_CONFIG, pattern_config_observer, menu);
-  notify_observer_add(win_menu->notify, NT_WINDOW, pattern_window_observer, win_menu);
+  notify_observer_add(menu->win->notify, NT_WINDOW, pattern_window_observer, menu->win);
 
   // ---------------------------------------------------------------------------
   // Event Loop
   int op = OP_NULL;
-  bool result = false;
-  int rc;
   do
   {
-    rc = FR_UNKNOWN;
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(menu->type);
+    struct KeyEvent event = km_dokey_event(MENU_GENERIC);
+    if (event.ch == 'q')
+      op = OP_EXIT;
+    else
+      op = event.op;
+
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
     if (op == OP_NULL)
     {
-      km_error_key(menu->type);
+      km_error_key(MENU_GENERIC);
       continue;
     }
     mutt_clear_error();
 
-    switch (op)
-    {
-      case OP_GENERIC_SELECT_ENTRY:
-      {
-        const int index = menu_get_index(menu);
-        struct PatternEntry *entry = ((struct PatternEntry *) menu->mdata) + index;
-        mutt_str_copy(buf, entry->tag, buflen);
-        result = true;
-        rc = FR_DONE;
-        break;
-      }
-
-      case OP_EXIT:
-        rc = FR_DONE;
-        break;
-    }
+    int rc = pattern_function_dispatcher(dlg, op);
 
     if (rc == FR_UNKNOWN)
       rc = menu_function_dispatcher(menu->win, op);
     if (rc == FR_UNKNOWN)
-      rc = global_function_dispatcher(menu->win, op);
-  } while (rc != FR_DONE);
+      rc = global_function_dispatcher(NULL, op);
+  } while (!pd.done);
   // ---------------------------------------------------------------------------
 
   simple_dialog_free(&dlg);
-  return result;
+  return pd.selection;
 }

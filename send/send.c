@@ -49,21 +49,24 @@
 #include "attach/lib.h"
 #include "browser/lib.h"
 #include "compose/lib.h"
+#include "enter/lib.h"
 #include "ncrypt/lib.h"
+#include "pager/lib.h"
+#include "parse/lib.h"
 #include "pattern/lib.h"
+#include "postpone/lib.h"
 #include "question/lib.h"
 #include "copy.h"
 #include "format_flags.h"
+#include "globals.h"
 #include "handler.h"
 #include "hdrline.h"
 #include "hook.h"
 #include "maillist.h"
 #include "mutt_body.h"
-#include "mutt_globals.h"
 #include "mutt_header.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "options.h"
 #include "protos.h"
 #include "rfc3676.h"
 #include "sort.h"
@@ -184,7 +187,7 @@ int mutt_edit_address(struct AddressList *al, const char *field, bool expand_ali
   {
     mutt_addrlist_to_local(al);
     mutt_buffer_reset(buf);
-    mutt_addrlist_write(al, buf->data, buf->dsize, false);
+    mutt_addrlist_write(al, buf, false);
     if (mutt_buffer_get_field(field, buf, MUTT_COMP_ALIAS, false, NULL, NULL, NULL) != 0)
     {
       rc = -1;
@@ -241,9 +244,9 @@ static int edit_envelope(struct Envelope *en, SendFlags flags, struct ConfigSubs
     else
       mutt_buffer_reset(buf);
 
-    const bool c_ask_follow_up = cs_subset_bool(sub, "ask_follow_up");
-    if (c_ask_follow_up && (mutt_buffer_get_field("Followup-To: ", buf, MUTT_COMP_NO_FLAGS,
-                                                  false, NULL, NULL, NULL) != 0))
+    const bool c_ask_followup_to = cs_subset_bool(sub, "ask_followup_to");
+    if (c_ask_followup_to && (mutt_buffer_get_field("Followup-To: ", buf, MUTT_COMP_NO_FLAGS,
+                                                    false, NULL, NULL, NULL) != 0))
     {
       goto done;
     }
@@ -451,7 +454,7 @@ void mutt_forward_intro(struct Email *e, FILE *fp, struct ConfigSubset *sub)
 
   const char *const c_attribution_locale = cs_subset_string(sub, "attribution_locale");
 
-  char buf[1024];
+  char buf[1024] = { 0 };
   setlocale(LC_TIME, NONULL(c_attribution_locale));
   mutt_make_string(buf, sizeof(buf), 0, c_forward_attribution_intro, NULL, -1,
                    e, MUTT_FORMAT_NO_FLAGS, NULL);
@@ -474,7 +477,7 @@ void mutt_forward_trailer(struct Email *e, FILE *fp, struct ConfigSubset *sub)
 
   const char *const c_attribution_locale = cs_subset_string(sub, "attribution_locale");
 
-  char buf[1024];
+  char buf[1024] = { 0 };
   setlocale(LC_TIME, NONULL(c_attribution_locale));
   mutt_make_string(buf, sizeof(buf), 0, c_forward_attribution_trailer, NULL, -1,
                    e, MUTT_FORMAT_NO_FLAGS, NULL);
@@ -622,26 +625,48 @@ cleanup:
 }
 
 /**
- * mutt_make_attribution - Add "on DATE, PERSON wrote" header
+ * format_attribution - Format an attribution prefix/suffix
+ * @param s      String to format
  * @param e      Email
  * @param fp_out File to write to
  * @param sub    Config Subset
  */
-void mutt_make_attribution(struct Email *e, FILE *fp_out, struct ConfigSubset *sub)
+static void format_attribution(const char *s, struct Email *e, FILE *fp_out,
+                               struct ConfigSubset *sub)
 {
-  const char *const c_attribution = cs_subset_string(sub, "attribution");
-  if (!c_attribution || !fp_out)
+  if (!s || !fp_out)
     return;
 
   const char *const c_attribution_locale = cs_subset_string(sub, "attribution_locale");
 
-  char buf[1024];
+  char buf[1024] = { 0 };
   setlocale(LC_TIME, NONULL(c_attribution_locale));
-  mutt_make_string(buf, sizeof(buf), 0, c_attribution, NULL, -1, e,
-                   MUTT_FORMAT_NO_FLAGS, NULL);
+  mutt_make_string(buf, sizeof(buf), 0, s, NULL, -1, e, MUTT_FORMAT_NO_FLAGS, NULL);
   setlocale(LC_TIME, "");
   fputs(buf, fp_out);
   fputc('\n', fp_out);
+}
+
+/**
+ * mutt_make_attribution_intro - Add "on DATE, PERSON wrote" header
+ * @param e      Email
+ * @param fp_out File to write to
+ * @param sub    Config Subset
+ */
+void mutt_make_attribution_intro(struct Email *e, FILE *fp_out, struct ConfigSubset *sub)
+{
+  format_attribution(cs_subset_string(sub, "attribution_intro"), e, fp_out, sub);
+}
+
+/**
+ * mutt_make_attribution_trailer - Add suffix to replied email text
+ * @param e      Email
+ * @param fp_out File to write to
+ * @param sub    Config Subset
+ */
+void mutt_make_attribution_trailer(struct Email *e, FILE *fp_out, struct ConfigSubset *sub)
+{
+  format_attribution(cs_subset_string(sub, "attribution_trailer"), e, fp_out, sub);
 }
 
 /**
@@ -721,30 +746,11 @@ static void mutt_make_greeting(struct Email *e, FILE *fp_out, struct ConfigSubse
   if (!c_greeting || !fp_out)
     return;
 
-  char buf[1024];
+  char buf[1024] = { 0 };
 
   mutt_expando_format(buf, sizeof(buf), 0, 0, c_greeting, greeting_format_str,
-                      (intptr_t) e, MUTT_TOKEN_NO_FLAGS);
+                      (intptr_t) e, TOKEN_NO_FLAGS);
 
-  fputs(buf, fp_out);
-  fputc('\n', fp_out);
-}
-
-/**
- * mutt_make_post_indent - Add suffix to replied email text
- * @param e      Email
- * @param fp_out File to write to
- * @param sub    Config Subset
- */
-void mutt_make_post_indent(struct Email *e, FILE *fp_out, struct ConfigSubset *sub)
-{
-  const char *const c_post_indent_string = cs_subset_string(sub, "post_indent_string");
-  if (!c_post_indent_string || !fp_out)
-    return;
-
-  char buf[256];
-  mutt_make_string(buf, sizeof(buf), 0, c_post_indent_string, NULL, -1, e,
-                   MUTT_FORMAT_NO_FLAGS, NULL);
   fputs(buf, fp_out);
   fputc('\n', fp_out);
 }
@@ -779,7 +785,7 @@ static int include_reply(struct Mailbox *m, struct Email *e, FILE *fp_out,
   mutt_parse_mime_message(e, msg->fp);
   mutt_message_hook(m, e, MUTT_MESSAGE_HOOK);
 
-  mutt_make_attribution(e, fp_out, sub);
+  mutt_make_attribution_intro(e, fp_out, sub);
 
   const bool c_header = cs_subset_bool(sub, "header");
   if (!c_header)
@@ -795,7 +801,7 @@ static int include_reply(struct Mailbox *m, struct Email *e, FILE *fp_out,
   mutt_copy_message(fp_out, e, msg, cmflags, chflags, 0);
   mx_msg_close(m, &msg);
 
-  mutt_make_post_indent(e, fp_out, sub);
+  mutt_make_attribution_trailer(e, fp_out, sub);
 
   return 0;
 }
@@ -874,7 +880,7 @@ static int default_to(struct AddressList *to, struct Envelope *env,
     }
     else if (!(from_is_reply_to && !multiple_reply_to) && (c_reply_to != MUTT_YES))
     {
-      char prompt[256];
+      char prompt[256] = { 0 };
       /* There are quite a few mailing lists which set the Reply-To:
        * header field to the list address, which makes it quite impossible
        * to send a message to only the sender of the message.  This
@@ -927,7 +933,7 @@ int mutt_fetch_recips(struct Envelope *out, struct Envelope *in,
 
   if ((flags & (SEND_LIST_REPLY | SEND_GROUP_REPLY | SEND_GROUP_CHAT_REPLY)) && followup_to)
   {
-    char prompt[256];
+    char prompt[256] = { 0 };
     snprintf(prompt, sizeof(prompt), _("Follow-up to %s%s?"), followup_to->mailbox,
              TAILQ_NEXT(TAILQ_FIRST(&in->mail_followup_to), entries) ? ",..." : "");
 
@@ -1044,7 +1050,7 @@ void mutt_make_forward_subject(struct Envelope *env, struct Email *e, struct Con
 
   const char *const c_forward_format = cs_subset_string(sub, "forward_format");
 
-  char buf[256];
+  char buf[256] = { 0 };
   /* set the default subject for the message. */
   mutt_make_string(buf, sizeof(buf), 0, NONULL(c_forward_format), NULL, -1, e,
                    MUTT_FORMAT_NO_FLAGS, NULL);
@@ -1578,7 +1584,7 @@ void mutt_encode_descriptions(struct Body *b, bool recurse, struct ConfigSubset 
   {
     if (t->description)
     {
-      const char *const c_send_charset = cs_subset_string(sub, "send_charset");
+      const struct Slist *const c_send_charset = cs_subset_slist(sub, "send_charset");
       rfc2047_encode(&t->description, NULL, sizeof("Content-Description:"), c_send_charset);
     }
     if (recurse && t->parts)
@@ -1862,7 +1868,7 @@ full_fcc:
     /* update received time so that when storing to a mbox-style folder
      * the From_ line contains the current time instead of when the
      * message was first postponed.  */
-    e->received = mutt_date_epoch();
+    e->received = mutt_date_now();
     rc = mutt_write_multiple_fcc(mutt_buffer_string(fcc), e, NULL, false, NULL,
                                  finalpath, sub);
     while (rc && !(flags & SEND_BATCH))
@@ -2274,7 +2280,7 @@ int mutt_send_message(SendFlags flags, struct Email *e_templ, const char *tempfi
       }
       else
       {
-        char buf[1024];
+        char buf[1024] = { 0 };
         mutt_mktemp(buf, sizeof(buf));
         fp_tmp = mutt_file_fopen(buf, "w+");
         e_templ->body->filename = mutt_str_dup(buf);
@@ -2887,8 +2893,11 @@ int mutt_send_message(SendFlags flags, struct Email *e_templ, const char *tempfi
       else if ((e_templ->security & SEC_SIGN) && (e_templ->body->type == TYPE_MULTIPART))
       {
         mutt_body_free(&e_templ->body->parts->next); /* destroy sig */
-        if (mutt_istr_equal(e_templ->body->subtype, "mixed"))
+        if (mutt_istr_equal(e_templ->body->subtype, "mixed") ||
+            mutt_istr_equal(e_templ->body->subtype, "signed"))
+        {
           e_templ->body = mutt_remove_multipart(e_templ->body);
+        }
       }
 
       FREE(&pgpkeylist);
@@ -2973,15 +2982,15 @@ cleanup:
 /**
  * send_simple_email - Compose an email given a few basic ingredients
  * @param m Mailbox
+ * @param el List of source Emails
  * @param mailto mailto address to parse (can include fields such as subject)
- * @param to Recipient address, if not overridden by mailto
  * @param subj Subject, if not overridden by mailto
  * @param body text/plain body
  * @retval true Success
  * @retval false Failure
  */
-static bool send_simple_email(struct Mailbox *m, const char *mailto,
-                              const char *to, const char *subj, const char *body)
+static bool send_simple_email(struct Mailbox *m, struct EmailList *el,
+                              const char *mailto, const char *subj, const char *body)
 {
   struct Email *e = email_new();
 
@@ -2992,7 +3001,7 @@ static bool send_simple_email(struct Mailbox *m, const char *mailto,
   {
     e->env->subject = mutt_str_dup(subj);
   }
-  if (TAILQ_EMPTY(&e->env->to) && !mutt_addrlist_parse(&e->env->to, to))
+  if (TAILQ_EMPTY(&e->env->to) && !mutt_addrlist_parse(&e->env->to, NULL))
   {
     mutt_warning(_("No recipient specified"));
   }
@@ -3018,7 +3027,7 @@ static bool send_simple_email(struct Mailbox *m, const char *mailto,
   e->body->filename = mutt_str_dup(tempfile);
   e->body->unlink = true;
 
-  const int rc = mutt_send_message(SEND_DRAFT_FILE, e, NULL, m, NULL, NeoMutt->sub);
+  const int rc = mutt_send_message(SEND_DRAFT_FILE, e, NULL, m, el, NeoMutt->sub);
   return rc >= 0;
 }
 
@@ -3029,7 +3038,7 @@ static bool send_simple_email(struct Mailbox *m, const char *mailto,
  * @retval true Success
  * @retval false Failure
  */
-bool mutt_send_list_subscribe(struct Mailbox *m, const struct Email *e)
+bool mutt_send_list_subscribe(struct Mailbox *m, struct Email *e)
 {
   if (!e || !e->env)
   {
@@ -3043,7 +3052,12 @@ bool mutt_send_list_subscribe(struct Mailbox *m, const struct Email *e)
     return false;
   }
 
-  return send_simple_email(m, mailto, NULL, "Subscribe", "subscribe");
+  struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
+  emaillist_add_email(&el, e);
+  bool rc = send_simple_email(m, &el, mailto, "Subscribe", "subscribe");
+  emaillist_clear(&el);
+
+  return rc;
 }
 
 /**
@@ -3053,7 +3067,7 @@ bool mutt_send_list_subscribe(struct Mailbox *m, const struct Email *e)
  * @retval true Success
  * @retval false Failure
  */
-bool mutt_send_list_unsubscribe(struct Mailbox *m, const struct Email *e)
+bool mutt_send_list_unsubscribe(struct Mailbox *m, struct Email *e)
 {
   if (!e || !e->env)
   {
@@ -3067,5 +3081,10 @@ bool mutt_send_list_unsubscribe(struct Mailbox *m, const struct Email *e)
     return false;
   }
 
-  return send_simple_email(m, mailto, NULL, "Unsubscribe", "unsubscribe");
+  struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
+  emaillist_add_email(&el, e);
+  bool rc = send_simple_email(m, &el, mailto, "Unsubscribe", "unsubscribe");
+  emaillist_clear(&el);
+
+  return rc;
 }

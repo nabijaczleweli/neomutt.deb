@@ -95,14 +95,14 @@ static bool parse_query_string(struct UrlQueryList *list, char *src)
  */
 static enum UrlScheme get_scheme(const char *src, const regmatch_t *match)
 {
-  enum UrlScheme ret = U_UNKNOWN;
+  enum UrlScheme rc = U_UNKNOWN;
   if (src && match)
   {
-    ret = mutt_map_get_value_n(src, mutt_regmatch_len(&match[PREX_URL_MATCH_SCHEME]), UrlMap);
-    if (ret == -1)
-      ret = U_UNKNOWN;
+    rc = mutt_map_get_value_n(src, mutt_regmatch_len(&match[PREX_URL_MATCH_SCHEME]), UrlMap);
+    if (rc == -1)
+      rc = U_UNKNOWN;
   }
-  return ret;
+  return rc;
 }
 
 /**
@@ -366,7 +366,7 @@ int url_tobuffer(struct Url *url, struct Buffer *buf, uint8_t flags)
 
     if (url->user && (url->user[0] || !(flags & U_PATH)))
     {
-      char str[256];
+      char str[256] = { 0 };
       url_pct_encode(str, sizeof(str), url->user);
       mutt_buffer_add_printf(buf, "%s@", str);
     }
@@ -389,7 +389,7 @@ int url_tobuffer(struct Url *url, struct Buffer *buf, uint8_t flags)
   {
     mutt_buffer_addstr(buf, "?");
 
-    char str[256];
+    char str[256] = { 0 };
     struct UrlQuery *np = NULL;
     STAILQ_FOREACH(np, &url->query_strings, entries)
     {

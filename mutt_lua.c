@@ -45,10 +45,8 @@
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
-#include "mutt.h"
 #include "mutt_lua.h"
-#include "init.h"
-#include "mutt_commands.h"
+#include "parse/lib.h"
 #include "muttlib.h"
 #include "myvar.h"
 
@@ -112,7 +110,7 @@ static int lua_mutt_call(lua_State *l)
     return -1;
   }
 
-  cmd = mutt_command_get(lua_tostring(l, 1));
+  cmd = command_get(lua_tostring(l, 1));
   if (!cmd)
   {
     luaL_error(l, "Error command %s not found.", lua_tostring(l, 1));
@@ -317,7 +315,7 @@ static int lua_mutt_enter(lua_State *l)
   char *buf = mutt_str_dup(lua_tostring(l, -1));
   int rc = 0;
 
-  if (mutt_parse_rc_line(buf, err))
+  if (parse_rc_line(buf, err))
   {
     luaL_error(l, "NeoMutt error: %s", mutt_buffer_string(err));
     rc = -1;
@@ -366,13 +364,12 @@ static int lua_mutt_error(lua_State *l)
 
 /**
  * lua_expose_command - Expose a NeoMutt command to the Lua interpreter
- * @param p   Lua state
+ * @param l   Lua state
  * @param cmd NeoMutt Command
  */
-static void lua_expose_command(void *p, const struct Command *cmd)
+static void lua_expose_command(lua_State *l, const struct Command *cmd)
 {
-  lua_State *l = (lua_State *) p;
-  char buf[1024];
+  char buf[1024] = { 0 };
   snprintf(buf, sizeof(buf), "mutt.command.%s = function (...); mutt.call('%s', ...); end",
            cmd->name, cmd->name);
   (void) luaL_dostring(l, buf);
@@ -430,7 +427,12 @@ static void luaopen_mutt(lua_State *l)
 {
   luaL_requiref(l, "mutt", luaopen_mutt_decl, 1);
   (void) luaL_dostring(l, "mutt.command = {}");
-  mutt_commands_apply((void *) l, &lua_expose_command);
+
+  struct Command *c = NULL;
+  for (size_t i = 0, size = commands_array(&c); i < size; i++)
+  {
+    lua_expose_command(l, c);
+  }
 }
 
 /**
@@ -468,7 +470,7 @@ static bool lua_init(lua_State **l)
  */
 void mutt_lua_init(void)
 {
-  COMMANDS_REGISTER(LuaCommands);
+  commands_register(LuaCommands, mutt_array_size(LuaCommands));
 }
 
 /**
@@ -503,9 +505,9 @@ enum CommandResult mutt_lua_source_file(struct Buffer *buf, struct Buffer *s,
 
   lua_init(&LuaState);
 
-  char path[PATH_MAX];
+  char path[PATH_MAX] = { 0 };
 
-  if (mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS) != 0)
+  if (parse_extract_token(buf, s, TOKEN_NO_FLAGS) != 0)
   {
     mutt_buffer_printf(err, _("source: error at %s"), s->dptr);
     return MUTT_CMD_ERROR;

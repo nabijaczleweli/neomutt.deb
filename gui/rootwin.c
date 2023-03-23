@@ -97,6 +97,7 @@
 #include "core/lib.h"
 #include "helpbar/lib.h"
 #include "dialog.h"
+#include "msgcont.h"
 #include "msgwin.h"
 #include "mutt_window.h"
 
@@ -109,7 +110,9 @@ struct MuttWindow *RootWindow = NULL; ///< Parent of all Windows
  */
 static int rootwin_config_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_CONFIG)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventConfig *ev_c = nc->event_data;
@@ -149,9 +152,10 @@ static int rootwin_config_observer(struct NotifyCallback *nc)
  */
 static int rootwin_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
-
   if (nc->event_subtype != NT_WINDOW_DELETE)
     return 0;
 
@@ -190,7 +194,6 @@ void rootwin_new(void)
 
   struct MuttWindow *win_helpbar = helpbar_new();
   struct MuttWindow *win_alldlgs = alldialogs_new();
-  struct MuttWindow *win_msg = msgwin_new();
 
   const bool c_status_on_top = cs_subset_bool(NeoMutt->sub, "status_on_top");
   if (c_status_on_top)
@@ -204,7 +207,10 @@ void rootwin_new(void)
     mutt_window_add_child(win_root, win_alldlgs);
   }
 
-  mutt_window_add_child(win_root, win_msg);
+  struct MuttWindow *win_cont = msgcont_new();
+  struct MuttWindow *win_msg = msgwin_new();
+  mutt_window_add_child(win_cont, win_msg);
+  mutt_window_add_child(win_root, win_cont);
 
   notify_observer_add(NeoMutt->notify, NT_CONFIG, rootwin_config_observer, win_root);
   notify_observer_add(win_root->notify, NT_WINDOW, rootwin_window_observer, win_root);

@@ -175,7 +175,7 @@ const char *mutt_str_sysexit(int err_num)
 }
 
 /**
- * mutt_str_sep - Find first occurance of any of delim characters in *stringp
+ * mutt_str_sep - Find first occurrence of any of delim characters in *stringp
  * @param stringp Pointer to string to search for delim, updated with position of after delim if found else NULL
  * @param delim   String with characters to search for in *stringp
  * @retval ptr Input value of *stringp
@@ -391,6 +391,29 @@ char *mutt_str_lower(char *str)
   while (*p)
   {
     *p = tolower((unsigned char) *p);
+    p++;
+  }
+
+  return str;
+}
+
+/**
+ * mutt_str_upper - Convert all characters in the string to uppercase
+ * @param str String to uppercase
+ * @retval ptr Uppercase string
+ *
+ * The string is transformed in place.
+ */
+char *mutt_str_upper(char *str)
+{
+  if (!str)
+    return NULL;
+
+  char *p = str;
+
+  while (*p)
+  {
+    *p = toupper((unsigned char) *p);
     p++;
   }
 
@@ -667,7 +690,7 @@ char *mutt_str_skip_email_wsp(const char *s)
 /**
  * mutt_str_is_email_wsp - Is this a whitespace character (for an email header)
  * @param c Character to test
- * @retval true It is whitespcae
+ * @retval true It is whitespace
  */
 bool mutt_str_is_email_wsp(char c)
 {

@@ -77,10 +77,10 @@
 #include "color/lib.h"
 #include "menu/lib.h"
 #include "alternates.h"
+#include "globals.h" // IWYU pragma: keep
 #include "mutt_thread.h"
 #include "muttlib.h"
 #include "mview.h"
-#include "options.h"
 #include "private_data.h"
 #include "score.h"
 #include "shared_data.h"
@@ -227,7 +227,9 @@ static int config_reply_regex(struct Mailbox *m)
  */
 static int index_altern_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_ALTERN) || !nc->global_data)
+  if (nc->event_type != NT_ALTERN)
+    return 0;
+  if (!nc->global_data)
     return -1;
 
   struct MuttWindow *win = nc->global_data;
@@ -244,7 +246,9 @@ static int index_altern_observer(struct NotifyCallback *nc)
  */
 static int index_attach_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_ATTACH) || !nc->global_data)
+  if (nc->event_type != NT_ATTACH)
+    return 0;
+  if (!nc->global_data)
     return -1;
 
   struct MuttWindow *win = nc->global_data;
@@ -261,7 +265,9 @@ static int index_attach_observer(struct NotifyCallback *nc)
  */
 static int index_color_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_COLOR) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_COLOR)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventColor *ev_c = nc->event_data;
@@ -269,19 +275,17 @@ static int index_color_observer(struct NotifyCallback *nc)
   const int cid = ev_c->cid;
 
   // MT_COLOR_MAX is sent on `uncolor *`
-  bool simple = (cid == MT_COLOR_INDEX_COLLAPSED) ||
-                (cid == MT_COLOR_INDEX_DATE) || (cid == MT_COLOR_INDEX_LABEL) ||
-                (cid == MT_COLOR_INDEX_NUMBER) || (cid == MT_COLOR_INDEX_SIZE) ||
-                (cid == MT_COLOR_INDEX_TAGS) || (cid == MT_COLOR_MAX);
-
-  bool lists = (cid == MT_COLOR_INDEX) || (cid == MT_COLOR_INDEX_AUTHOR) ||
-               (cid == MT_COLOR_INDEX_FLAGS) || (cid == MT_COLOR_INDEX_SUBJECT) ||
-               (cid == MT_COLOR_INDEX_TAG) || (cid == MT_COLOR_TREE) ||
-               (cid == MT_COLOR_NORMAL) || (cid == MT_COLOR_MAX);
-
-  // The changes aren't relevant to the index menu
-  if (!simple && !lists)
+  if (!((cid == MT_COLOR_INDEX) || (cid == MT_COLOR_INDEX_AUTHOR) ||
+        (cid == MT_COLOR_INDEX_COLLAPSED) || (cid == MT_COLOR_INDEX_DATE) ||
+        (cid == MT_COLOR_INDEX_FLAGS) || (cid == MT_COLOR_INDEX_LABEL) ||
+        (cid == MT_COLOR_INDEX_NUMBER) || (cid == MT_COLOR_INDEX_SIZE) ||
+        (cid == MT_COLOR_INDEX_SUBJECT) || (cid == MT_COLOR_INDEX_TAG) ||
+        (cid == MT_COLOR_INDEX_TAGS) || (cid == MT_COLOR_MAX) ||
+        (cid == MT_COLOR_NORMAL) || (cid == MT_COLOR_TREE)))
+  {
+    // The changes aren't relevant to the index menu
     return 0;
+  }
 
   struct MuttWindow *win = nc->global_data;
   struct MuttWindow *dlg = dialog_find(win);
@@ -291,17 +295,13 @@ static int index_color_observer(struct NotifyCallback *nc)
   if (!m)
     return 0;
 
-  // Colour added/deleted from a list
-  if (lists)
+  // Force re-caching of index colours
+  for (int i = 0; i < m->msg_count; i++)
   {
-    // Force re-caching of index colours
-    for (int i = 0; i < m->msg_count; i++)
-    {
-      struct Email *e = m->emails[i];
-      if (!e)
-        break;
-      e->attr_color = NULL;
-    }
+    struct Email *e = m->emails[i];
+    if (!e)
+      break;
+    e->attr_color = NULL;
   }
 
   struct MuttWindow *panel_index = window_find_child(dlg, WT_INDEX);
@@ -319,7 +319,9 @@ static int index_color_observer(struct NotifyCallback *nc)
  */
 static int index_config_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_CONFIG)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventConfig *ev_c = nc->event_data;
@@ -364,7 +366,9 @@ static int index_config_observer(struct NotifyCallback *nc)
  */
 static int index_global_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_GLOBAL) || !nc->global_data)
+  if (nc->event_type != NT_GLOBAL)
+    return 0;
+  if (!nc->global_data)
     return -1;
   if (nc->event_subtype != NT_GLOBAL_COMMAND)
     return 0;
@@ -410,7 +414,9 @@ static int index_index_observer(struct NotifyCallback *nc)
  */
 static int index_menu_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_MENU) || !nc->global_data)
+  if (nc->event_type != NT_MENU)
+    return 0;
+  if (!nc->global_data)
     return -1;
 
   struct MuttWindow *win = nc->global_data;
@@ -430,7 +436,9 @@ static int index_menu_observer(struct NotifyCallback *nc)
  */
 static int index_score_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_SCORE) || !nc->global_data)
+  if (nc->event_type != NT_SCORE)
+    return 0;
+  if (!nc->global_data)
     return -1;
 
   struct MuttWindow *win = nc->global_data;
@@ -460,7 +468,9 @@ static int index_score_observer(struct NotifyCallback *nc)
  */
 static int index_subjrx_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_SUBJRX) || !nc->global_data)
+  if (nc->event_type != NT_SUBJRX)
+    return 0;
+  if (!nc->global_data)
     return -1;
 
   struct MuttWindow *win = nc->global_data;
@@ -477,18 +487,23 @@ static int index_subjrx_observer(struct NotifyCallback *nc)
  */
 static int index_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
-  if (nc->event_subtype != NT_WINDOW_DELETE)
-    return 0;
-
   struct MuttWindow *win = nc->global_data;
+  struct Menu *menu = win->wdata;
+  if (nc->event_subtype != NT_WINDOW_DELETE)
+  {
+    menu_queue_redraw(menu, MENU_REDRAW_FULL | MENU_REDRAW_INDEX);
+    return 0;
+  }
+
   struct EventWindow *ev_w = nc->event_data;
   if (ev_w->win != win)
     return 0;
 
-  struct Menu *menu = win->wdata;
   struct IndexPrivateData *priv = menu->mdata;
 
   notify_observer_remove(NeoMutt->notify, index_altern_observer, win);
@@ -539,9 +554,9 @@ static int index_repaint(struct MuttWindow *win)
       menu->top = menu->max - menu->page_len;
     else
       menu->top = index - indicator;
-    menu_adjust(menu);
-    menu->redraw = MENU_REDRAW_INDEX;
   }
+  menu_adjust(menu);
+  menu->redraw = MENU_REDRAW_INDEX;
 
   struct IndexPrivateData *priv = menu->mdata;
   struct IndexSharedData *shared = priv->shared;
@@ -570,7 +585,7 @@ static int index_repaint(struct MuttWindow *win)
  */
 struct MuttWindow *index_window_new(struct IndexPrivateData *priv)
 {
-  struct MuttWindow *win = menu_new_window(MENU_INDEX, NeoMutt->sub);
+  struct MuttWindow *win = menu_window_new(MENU_INDEX, NeoMutt->sub);
   win->recalc = index_recalc;
   win->repaint = index_repaint;
 

@@ -35,7 +35,7 @@
 
 #include "config.h"
 #include <fcntl.h>
-#include <inttypes.h> // IWYU pragma: keep
+#include <inttypes.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -52,7 +52,7 @@
 #include "lib.h"
 #include "progress/lib.h"
 #include "copy.h"
-#include "mutt_globals.h"
+#include "globals.h" // IWYU pragma: keep
 #include "mutt_header.h"
 #include "mutt_thread.h"
 #include "muttlib.h"
@@ -92,23 +92,6 @@ static struct MboxAccountData *mbox_adata_new(void)
 }
 
 /**
- * mbox_adata_get - Get the private data associated with a Mailbox
- * @param m Mailbox
- * @retval ptr Private data
- */
-static struct MboxAccountData *mbox_adata_get(struct Mailbox *m)
-{
-  if (!m)
-    return NULL;
-  if ((m->type != MUTT_MBOX) && (m->type != MUTT_MMDF))
-    return NULL;
-  struct Account *a = m->account;
-  if (!a)
-    return NULL;
-  return a->adata;
-}
-
-/**
  * init_mailbox - Add Mbox data to the Mailbox
  * @param m Mailbox
  * @retval  0 Success
@@ -126,6 +109,18 @@ static int init_mailbox(struct Mailbox *m)
   m->account->adata = mbox_adata_new();
   m->account->adata_free = mbox_adata_free;
   return 0;
+}
+
+/**
+ * mbox_adata_get - Get the private data associated with a Mailbox
+ * @param m Mailbox
+ * @retval ptr Private data
+ */
+static struct MboxAccountData *mbox_adata_get(struct Mailbox *m)
+{
+  if (init_mailbox(m) == -1)
+    return NULL;
+  return m->account->adata;
 }
 
 /**
@@ -187,11 +182,11 @@ static enum MxOpenReturns mmdf_parse_mailbox(struct Mailbox *m)
   if (!adata)
     return MX_OPEN_ERROR;
 
-  char buf[8192];
-  char return_path[1024];
+  char buf[8192] = { 0 };
+  char return_path[1024] = { 0 };
   int count = 0;
   int lines;
-  time_t t;
+  time_t t = 0;
   LOFF_T loc, tmploc;
   struct Email *e = NULL;
   struct stat st = { 0 };
@@ -211,7 +206,7 @@ static enum MxOpenReturns mmdf_parse_mailbox(struct Mailbox *m)
 
   if (m->verbose)
   {
-    char msg[PATH_MAX];
+    char msg[PATH_MAX] = { 0 };
     snprintf(msg, sizeof(msg), _("Reading %s..."), mailbox_path(m));
     progress = progress_new(msg, MUTT_PROGRESS_READ, 0);
   }
@@ -259,7 +254,9 @@ static enum MxOpenReturns mmdf_parse_mailbox(struct Mailbox *m)
         }
       }
       else
+      {
         e->received = t - mutt_date_local_tz(t);
+      }
 
       e->env = mutt_rfc822_read_header(adata->fp, e, false, false);
 
@@ -355,7 +352,7 @@ static enum MxOpenReturns mbox_parse_mailbox(struct Mailbox *m)
   struct stat st = { 0 };
   char buf[8192], return_path[256];
   struct Email *e_cur = NULL;
-  time_t t;
+  time_t t = 0;
   int count = 0, lines = 0;
   LOFF_T loc;
   struct Progress *progress = NULL;
@@ -377,7 +374,7 @@ static enum MxOpenReturns mbox_parse_mailbox(struct Mailbox *m)
 
   if (m->verbose)
   {
-    char msg[PATH_MAX];
+    char msg[PATH_MAX] = { 0 };
     snprintf(msg, sizeof(msg), _("Reading %s..."), mailbox_path(m));
     progress = progress_new(msg, MUTT_PROGRESS_READ, 0);
   }
@@ -1081,7 +1078,7 @@ static enum MxStatus mbox_mbox_check(struct Mailbox *m)
        * message(s) were appended to this file.  My heuristic is that we should
        * see the message separator at *exactly* what used to be the end of the
        * folder.  */
-      char buf[1024];
+      char buf[1024] = { 0 };
       if (!mutt_file_seek(adata->fp, m->size, SEEK_SET))
       {
         goto error;
@@ -1163,7 +1160,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
     return MX_STATUS_ERROR;
 
   struct Buffer *tempfile = NULL;
-  char buf[32];
+  char buf[32] = { 0 };
   int j;
   bool unlink_tempfile = false;
   bool need_sort = false; /* flag to resort mailbox if new mail arrives */
@@ -1271,7 +1268,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
 
   if (m->verbose)
   {
-    char msg[PATH_MAX];
+    char msg[PATH_MAX] = { 0 };
     snprintf(msg, sizeof(msg), _("Writing %s..."), mailbox_path(m));
     progress = progress_new(msg, MUTT_PROGRESS_WRITE, m->msg_count);
   }
@@ -1420,9 +1417,9 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
 
     struct Buffer *savefile = mutt_buffer_pool_get();
 
-    const char *const c_tmpdir = cs_subset_path(NeoMutt->sub, "tmpdir");
-    mutt_buffer_printf(savefile, "%s/neomutt.%s-%s-%u", NONULL(c_tmpdir), NONULL(Username),
-                       NONULL(ShortHostname), (unsigned int) getpid());
+    const char *const c_tmp_dir = cs_subset_path(NeoMutt->sub, "tmp_dir");
+    mutt_buffer_printf(savefile, "%s/neomutt.%s-%s-%u", NONULL(c_tmp_dir),
+                       NONULL(Username), NONULL(ShortHostname), (unsigned int) getpid());
     rename(mutt_buffer_string(tempfile), mutt_buffer_string(savefile));
     mutt_sig_unblock();
     mx_fastclose_mailbox(m, false);
@@ -1672,7 +1669,7 @@ enum MailboxType mbox_path_probe(const char *path, const struct stat *st)
   }
 
   enum MailboxType type = MUTT_UNKNOWN;
-  char tmp[256];
+  char tmp[256] = { 0 };
   if (fgets(tmp, sizeof(tmp), fp))
   {
     if (mutt_str_startswith(tmp, "From "))
@@ -1820,13 +1817,18 @@ static enum MxStatus mbox_mbox_check_stats(struct Mailbox *m, uint8_t flags)
   if (m->newly_created && ((st.st_ctime != st.st_mtime) || (st.st_ctime != st.st_atime)))
     m->newly_created = false;
 
-  const bool force = flags & (MUTT_MAILBOX_CHECK_FORCE | MUTT_MAILBOX_CHECK_FORCE_STATS);
-  if (force && mutt_file_stat_timespec_compare(&st, MUTT_STAT_MTIME, &m->stats_last_checked) > 0)
+  if (flags & (MUTT_MAILBOX_CHECK_FORCE | MUTT_MAILBOX_CHECK_FORCE_STATS))
   {
-    bool old_peek = m->peekonly;
-    mx_mbox_open(m, MUTT_QUIET | MUTT_NOSORT | MUTT_PEEK);
-    mx_mbox_close(m);
-    m->peekonly = old_peek;
+    struct MboxAccountData *adata = mbox_adata_get(m);
+    if (adata && mutt_file_stat_timespec_compare(&st, MUTT_STAT_MTIME,
+                                                 &adata->stats_last_checked) > 0)
+    {
+      bool old_peek = m->peekonly;
+      mx_mbox_open(m, MUTT_QUIET | MUTT_NOSORT | MUTT_PEEK);
+      mx_mbox_close(m);
+      m->peekonly = old_peek;
+      adata->stats_last_checked.tv_sec = mutt_date_now();
+    }
   }
 
   if (m->has_new || m->msg_new)

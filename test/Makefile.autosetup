@@ -68,6 +68,7 @@ BUFFER_OBJS	= test/buffer/mutt_buffer_add_printf.o \
 		  test/buffer/mutt_buffer_dealloc.o \
 		  test/buffer/mutt_buffer_fix_dptr.o \
 		  test/buffer/mutt_buffer_init.o \
+		  test/buffer/mutt_buffer_insert.o \
 		  test/buffer/mutt_buffer_is_empty.o \
 		  test/buffer/mutt_buffer_len.o \
 		  test/buffer/mutt_buffer_make.o \
@@ -134,10 +135,15 @@ CONFIG_OBJS	= test/config/account.o \
 		  test/config/synonym.o \
 		  test/config/variable.o
 
+CONVERT_OBJS	= test/convert/mutt_update_content_info.o \
+		  test/convert/mutt_get_content_info.o \
+		  test/convert/mutt_convert_file_to.o \
+		  test/convert/mutt_convert_file_from_to.o
+
 DATE_OBJS	= test/date/mutt_date_add_timeout.o \
 		  test/date/mutt_date_check_month.o \
-		  test/date/mutt_date_epoch.o \
-		  test/date/mutt_date_epoch_ms.o \
+		  test/date/mutt_date_now.o \
+		  test/date/mutt_date_now_ms.o \
 		  test/date/mutt_date_gmtime.o \
 		  test/date/mutt_date_local_tz.o \
 		  test/date/mutt_date_localtime.o \
@@ -165,6 +171,23 @@ EMAIL_OBJS	= test/email/common.o \
 		  test/email/emaillist_clear.o \
 		  test/email/mutt_autocrypthdr_free.o \
 		  test/email/mutt_autocrypthdr_new.o
+
+ENTER_OBJS	= test/enter/editor_backspace.o \
+		  test/enter/editor_backward_char.o \
+		  test/enter/editor_backward_word.o \
+		  test/enter/editor_bol.o \
+		  test/enter/editor_case_word.o \
+		  test/enter/editor_delete_char.o \
+		  test/enter/editor_eol.o \
+		  test/enter/editor_forward_char.o \
+		  test/enter/editor_forward_word.o \
+		  test/enter/editor_kill_eol.o \
+		  test/enter/editor_kill_eow.o \
+		  test/enter/editor_kill_line.o \
+		  test/enter/editor_kill_whole_line.o \
+		  test/enter/editor_kill_word.o \
+		  test/enter/editor_transpose_chars.o \
+		  test/enter/state.o
 
 ENVELOPE_OBJS	= test/envelope/mutt_env_cmp_strict.o \
 		  test/envelope/mutt_env_free.o \
@@ -371,7 +394,8 @@ PARAMETER_OBJS	= test/parameter/mutt_param_cmp_strict.o \
 		  test/parameter/mutt_param_new.o \
 		  test/parameter/mutt_param_set.o
 
-PARSE_OBJS	= test/parse/mutt_auto_subscribe.o \
+PARSE_OBJS	= test/parse/common.o \
+		  test/parse/mutt_auto_subscribe.o \
 		  test/parse/mutt_check_encoding.o \
 		  test/parse/mutt_check_mime_type.o \
 		  test/parse/mutt_extract_message_id.o \
@@ -385,7 +409,10 @@ PARSE_OBJS	= test/parse/mutt_auto_subscribe.o \
 		  test/parse/mutt_rfc822_parse_line.o \
 		  test/parse/mutt_rfc822_parse_message.o \
 		  test/parse/mutt_rfc822_read_header.o \
-		  test/parse/mutt_rfc822_read_line.o
+		  test/parse/mutt_rfc822_read_line.o \
+		  test/parse/parse_extract_token.o \
+		  test/parse/parse_rc.o \
+		  test/parse/parse_set.o
 
 PATH_OBJS	= test/path/mutt_path_abbr_folder.o \
 		  test/path/mutt_path_basename.o \
@@ -405,9 +432,8 @@ PATH_OBJS	= test/path/mutt_path_abbr_folder.o \
 
 PATTERN_OBJS	= pattern/pattern.o \
 		  test/pattern/comp.o \
-		  test/pattern/leak.o \
 		  test/pattern/dummy.o \
-		  test/pattern/extract.o
+		  test/pattern/leak.o
 
 POOL_OBJS	= test/pool/mutt_buffer_pool_free.o \
 		  test/pool/mutt_buffer_pool_get.o \
@@ -557,8 +583,9 @@ URL_OBJS	= test/url/url_check_scheme.o \
 BUILD_DIRS	= $(PWD)/test/account $(PWD)/test/address $(PWD)/test/array \
 		  $(PWD)/test/atoi $(PWD)/test/attach $(PWD)/test/base64 \
 		  $(PWD)/test/body $(PWD)/test/buffer $(PWD)/test/charset \
-		  $(PWD)/test/compress $(PWD)/test/config $(PWD)/test/date \
-		  $(PWD)/test/email $(PWD)/test/envelope $(PWD)/test/envlist \
+		  $(PWD)/test/compress $(PWD)/test/config $(PWD)/test/convert \
+		  $(PWD)/test/core $(PWD)/test/date $(PWD)/test/email \
+		  $(PWD)/test/enter $(PWD)/test/envelope $(PWD)/test/envlist \
 		  $(PWD)/test/file $(PWD)/test/filter $(PWD)/test/from \
 		  $(PWD)/test/group $(PWD)/test/gui $(PWD)/test/hash \
 		  $(PWD)/test/history $(PWD)/test/idna $(PWD)/test/list \
@@ -584,8 +611,10 @@ TEST_OBJS	= test/main.o test/common.o \
 		  $(CHARSET_OBJS) \
 		  $(COMPRESS_OBJS) \
 		  $(CONFIG_OBJS) \
+		  $(CONVERT_OBJS) \
 		  $(DATE_OBJS) \
 		  $(EMAIL_OBJS) \
+		  $(ENTER_OBJS) \
 		  $(ENVELOPE_OBJS) \
 		  $(ENVLIST_OBJS) \
 		  $(FILE_OBJS) \
@@ -623,6 +652,7 @@ TEST_OBJS	= test/main.o test/common.o \
 		  $(TAGS_OBJS) \
 		  $(THREAD_OBJS) \
 		  $(URL_OBJS)
+ALLOBJS+=   $(TEST_OBJS)
 
 CFLAGS	+= -I$(SRCDIR)/test
 

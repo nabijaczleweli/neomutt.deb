@@ -49,42 +49,34 @@ void sb_win_remove_observers(struct MuttWindow *win);
 static bool calc_divider(struct SidebarWindowData *wdata)
 {
   enum DivType type = SB_DIV_USER;
+  bool changed = false;
   const char *const c_sidebar_divider_char = cs_subset_string(NeoMutt->sub, "sidebar_divider_char");
 
   // Calculate the width of the delimiter in screen cells
   int width = mutt_strwidth(c_sidebar_divider_char);
+  if (width < 1)
+  {
+    type = SB_DIV_ASCII;
+    goto done;
+  }
 
   const bool c_ascii_chars = cs_subset_bool(NeoMutt->sub, "ascii_chars");
-  if (c_ascii_chars)
+  if (c_ascii_chars || !CharsetIsUtf8)
   {
-    if (width < 1) // empty or bad
+    const size_t len = mutt_str_len(c_sidebar_divider_char);
+    for (size_t i = 0; i < len; i++)
     {
-      type = SB_DIV_ASCII;
-      width = 1;
-    }
-    else
-    {
-      for (size_t i = 0; i < width; i++)
+      if (c_sidebar_divider_char[i] & ~0x7F) // high-bit is set
       {
-        if (c_sidebar_divider_char[i] & ~0x7F) // high-bit is set
-        {
-          type = SB_DIV_ASCII;
-          width = 1;
-          break;
-        }
+        type = SB_DIV_ASCII;
+        width = 1;
+        break;
       }
     }
   }
-  else
-  {
-    if (width < 1) // empty or bad
-    {
-      type = SB_DIV_UTF8;
-      width = 1;
-    }
-  }
 
-  const bool changed = (width != wdata->divider_width);
+done:
+  changed = (width != wdata->divider_width);
 
   wdata->divider_type = type;
   wdata->divider_width = width;
@@ -178,7 +170,9 @@ static void sb_init_data(struct MuttWindow *win)
  */
 static int sb_account_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_ACCOUNT) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_ACCOUNT)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
   if (nc->event_subtype == NT_ACCOUNT_DELETE)
     return 0;
@@ -203,7 +197,9 @@ static int sb_account_observer(struct NotifyCallback *nc)
  */
 static int sb_color_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_COLOR) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_COLOR)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventColor *ev_c = nc->event_data;
@@ -215,6 +211,7 @@ static int sb_color_observer(struct NotifyCallback *nc)
   {
     case MT_COLOR_INDICATOR:
     case MT_COLOR_NORMAL:
+    case MT_COLOR_SIDEBAR_BACKGROUND:
     case MT_COLOR_SIDEBAR_DIVIDER:
     case MT_COLOR_SIDEBAR_FLAGGED:
     case MT_COLOR_SIDEBAR_HIGHLIGHT:
@@ -239,12 +236,14 @@ static int sb_color_observer(struct NotifyCallback *nc)
  */
 static int sb_command_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_COMMAND) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_COMMAND)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct Command *cmd = nc->event_data;
 
-  if ((cmd->parse != sb_parse_whitelist) && (cmd->parse != sb_parse_unwhitelist))
+  if ((cmd->parse != sb_parse_sidebar_pin) && (cmd->parse != sb_parse_sidebar_unpin))
     return 0;
 
   struct MuttWindow *win = nc->global_data;
@@ -258,7 +257,9 @@ static int sb_command_observer(struct NotifyCallback *nc)
  */
 static int sb_config_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_CONFIG) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_CONFIG)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct EventConfig *ev_c = nc->event_data;
@@ -324,11 +325,9 @@ static int sb_config_observer(struct NotifyCallback *nc)
       mutt_str_equal(ev_c->name, "sidebar_divider_char"))
   {
     struct SidebarWindowData *wdata = sb_wdata_get(win);
-    if (calc_divider(wdata))
-    {
-      window_reflow(win->parent);
-      mutt_debug(LL_DEBUG5, "config done, request WA_REFLOW\n");
-    }
+    calc_divider(wdata);
+    win->actions |= WA_RECALC;
+    mutt_debug(LL_DEBUG5, "config done, request WA_RECALC\n");
     return 0;
   }
 
@@ -343,9 +342,10 @@ static int sb_config_observer(struct NotifyCallback *nc)
  */
 static int sb_index_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_INDEX) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_INDEX)
     return 0;
-
+  if (!nc->global_data || !nc->event_data)
+    return 0;
   if (!(nc->event_subtype & NT_INDEX_MAILBOX))
     return 0;
 
@@ -366,7 +366,9 @@ static int sb_index_observer(struct NotifyCallback *nc)
  */
 static int sb_mailbox_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_MAILBOX) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_MAILBOX)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct MuttWindow *win = nc->global_data;
@@ -393,7 +395,9 @@ static int sb_mailbox_observer(struct NotifyCallback *nc)
  */
 static int sb_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
 
   struct MuttWindow *win = nc->global_data;
@@ -459,9 +463,10 @@ void sb_win_remove_observers(struct MuttWindow *win)
  */
 int sb_insertion_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->event_data)
     return -1;
-
   if (nc->event_subtype != NT_WINDOW_DIALOG)
     return 0;
 

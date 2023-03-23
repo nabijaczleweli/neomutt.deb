@@ -33,7 +33,7 @@
 
 #include "config.h"
 #include <assert.h>
-#include <inttypes.h> // IWYU pragma: keep
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -51,15 +51,14 @@
 #include "menu/lib.h"
 #include "display.h"
 #include "functions.h"
+#include "globals.h" // IWYU pragma: keep
 #include "hook.h"
 #include "keymap.h"
-#include "mutt_globals.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
 #include "mview.h"
 #include "mx.h"
 #include "opcodes.h"
-#include "options.h"
 #include "private_data.h"
 #include "protos.h"
 #include "status.h"
@@ -191,7 +190,7 @@ static const struct Mapping *pager_resolve_help_mapping(enum PagerMode mode, enu
  */
 static bool check_read_delay(uint64_t *timestamp)
 {
-  if ((*timestamp != 0) && (mutt_date_epoch_ms() > *timestamp))
+  if ((*timestamp != 0) && (mutt_date_now_ms() > *timestamp))
   {
     *timestamp = 0;
     return true;
@@ -318,7 +317,7 @@ int mutt_pager(struct PagerView *pview)
     }
     else
     {
-      priv->delay_read_timestamp = mutt_date_epoch_ms() + (1000 * c_pager_read_delay);
+      priv->delay_read_timestamp = mutt_date_now_ms() + (1000 * c_pager_read_delay);
     }
   }
   //---------- setup help menu ------------------------------------------------
@@ -384,11 +383,6 @@ int mutt_pager(struct PagerView *pview)
   priv->loop = PAGER_LOOP_CONTINUE;
   do
   {
-    if (check_read_delay(&priv->delay_read_timestamp))
-    {
-      mutt_set_flag(shared->mailbox, shared->email, MUTT_READ, true);
-    }
-
     pager_queue_redraw(priv, PAGER_REDRAW_PAGER);
     notify_send(priv->notify, NT_PAGER, NT_PAGER_VIEW, priv);
     window_redraw(NULL);
@@ -462,7 +456,7 @@ int mutt_pager(struct PagerView *pview)
         const char *const c_new_mail_command = cs_subset_string(NeoMutt->sub, "new_mail_command");
         if (c_new_mail_command)
         {
-          char cmd[1024];
+          char cmd[1024] = { 0 };
           menu_status_line(cmd, sizeof(cmd), shared, NULL, sizeof(cmd),
                            NONULL(c_new_mail_command));
           if (mutt_system(cmd) != 0)
@@ -522,6 +516,16 @@ int mutt_pager(struct PagerView *pview)
     // Some OP codes are not handled by pager, they cause pager to quit returning
     // OP code to index. Index handles the operation and then restarts pager
     op = km_dokey(MENU_PAGER);
+
+    // km_dokey() can block, so recheck the timer.
+    // Note: This check must occur before handling the operations of the index
+    // as those can change the currently selected message/entry yielding to
+    // marking the wrong message as read.
+    if (check_read_delay(&priv->delay_read_timestamp))
+    {
+      mutt_set_flag(shared->mailbox, shared->email, MUTT_READ, true);
+    }
+
     if (SigWinch)
       priv->pager_redraw = true;
 
@@ -545,14 +549,17 @@ int mutt_pager(struct PagerView *pview)
 
     int rc = pager_function_dispatcher(priv->pview->win_pager, op);
 
-    if ((rc == FR_UNKNOWN) && priv->pview->win_index)
-      rc = index_function_dispatcher(priv->pview->win_index, op);
+    if (pview->mode == PAGER_MODE_EMAIL)
+    {
+      if ((rc == FR_UNKNOWN) && priv->pview->win_index)
+        rc = index_function_dispatcher(priv->pview->win_index, op);
 #ifdef USE_SIDEBAR
-    if (rc == FR_UNKNOWN)
-      rc = sb_function_dispatcher(win_sidebar, op);
+      if (rc == FR_UNKNOWN)
+        rc = sb_function_dispatcher(win_sidebar, op);
 #endif
+    }
     if (rc == FR_UNKNOWN)
-      rc = global_function_dispatcher(dlg, op);
+      rc = global_function_dispatcher(NULL, op);
 
     if ((rc == FR_UNKNOWN) &&
         ((pview->mode == PAGER_MODE_ATTACH) || (pview->mode == PAGER_MODE_ATTACH_E)))
@@ -561,16 +568,16 @@ int mutt_pager(struct PagerView *pview)
       priv->rc = op;
       break;
     }
+
+    if ((pview->mode != PAGER_MODE_EMAIL) && (rc == FR_UNKNOWN))
+      mutt_flushinp();
+
   } while (priv->loop == PAGER_LOOP_CONTINUE);
 
   //-------------------------------------------------------------------------
   // END OF ACT 3: Read user input loop - while (op != OP_ABORT)
   //-------------------------------------------------------------------------
 
-  if (check_read_delay(&priv->delay_read_timestamp))
-  {
-    mutt_set_flag(shared->mailbox, shared->email, MUTT_READ, true);
-  }
   mutt_file_fclose(&priv->fp);
   if (pview->mode == PAGER_MODE_EMAIL)
   {

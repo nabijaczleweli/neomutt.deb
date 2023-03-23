@@ -72,7 +72,7 @@ struct ImapMboxData *imap_mdata_get(struct Mailbox *m)
  */
 struct ImapMboxData *imap_mdata_new(struct ImapAccountData *adata, const char *name)
 {
-  char buf[1024];
+  char buf[1024] = { 0 };
   struct ImapMboxData *mdata = mutt_mem_calloc(1, sizeof(struct ImapMboxData));
 
   mdata->real_name = mutt_str_dup(name);
@@ -93,21 +93,13 @@ struct ImapMboxData *imap_mdata_new(struct ImapAccountData *adata, const char *n
   imap_hcache_open(adata, mdata);
   if (mdata->hcache)
   {
-    size_t dlen = 0;
-    void *uidvalidity = mutt_hcache_fetch_raw(mdata->hcache, "/UIDVALIDITY", 12, &dlen);
-    void *uidnext = mutt_hcache_fetch_raw(mdata->hcache, "/UIDNEXT", 8, &dlen);
-    unsigned long long *modseq = mutt_hcache_fetch_raw(mdata->hcache, "/MODSEQ", 7, &dlen);
-    if (uidvalidity)
+    if (mutt_hcache_fetch_obj(mdata->hcache, "/UIDVALIDITY", 12, &mdata->uidvalidity))
     {
-      mdata->uidvalidity = *(uint32_t *) uidvalidity;
-      mdata->uid_next = uidnext ? *(unsigned int *) uidnext : 0;
-      mdata->modseq = modseq ? *modseq : 0;
+      mutt_hcache_fetch_obj(mdata->hcache, "/UIDNEXT", 8, &mdata->uid_next);
+      mutt_hcache_fetch_obj(mdata->hcache, "/MODSEQ", 7, &mdata->modseq);
       mutt_debug(LL_DEBUG3, "hcache uidvalidity %u, uidnext %u, modseq %llu\n",
                  mdata->uidvalidity, mdata->uid_next, mdata->modseq);
     }
-    mutt_hcache_free_raw(mdata->hcache, &uidvalidity);
-    mutt_hcache_free_raw(mdata->hcache, &uidnext);
-    mutt_hcache_free_raw(mdata->hcache, (void **) &modseq);
     imap_hcache_close(mdata);
   }
 #endif

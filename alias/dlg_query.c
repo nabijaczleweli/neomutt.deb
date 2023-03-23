@@ -82,6 +82,7 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "lib.h"
+#include "enter/lib.h"
 #include "menu/lib.h"
 #include "send/lib.h"
 #include "alias.h"
@@ -151,15 +152,19 @@ static const char *query_format_str(char *buf, size_t buflen, size_t col, int co
 {
   struct AliasView *av = (struct AliasView *) data;
   struct Alias *alias = av->alias;
-  char fmt[128];
+  char fmt[128] = { 0 };
   char tmp[256] = { 0 };
   bool optional = (flags & MUTT_FORMAT_OPTIONAL);
 
   switch (op)
   {
     case 'a':
+    {
+      struct Buffer *tmpbuf = mutt_buffer_pool_get();
       tmp[0] = '<';
-      mutt_addrlist_write(&alias->addr, tmp + 1, sizeof(tmp) - 1, true);
+      mutt_addrlist_write(&alias->addr, tmpbuf, true);
+      mutt_str_copy(tmp + 1, mutt_buffer_string(tmpbuf), sizeof(tmp) - 1);
+      mutt_buffer_pool_release(&tmpbuf);
       const size_t len = strlen(tmp);
       if (len < (sizeof(tmp) - 1))
       {
@@ -168,6 +173,7 @@ static const char *query_format_str(char *buf, size_t buflen, size_t col, int co
       }
       mutt_format_s(buf, buflen, prec, tmp);
       break;
+    }
     case 'c':
       snprintf(fmt, sizeof(fmt), "%%%sd", prec);
       snprintf(buf, buflen, fmt, av->num + 1);
@@ -217,9 +223,9 @@ static void query_make_entry(struct Menu *menu, char *buf, size_t buflen, int li
   const struct AliasViewArray *ava = &mdata->ava;
   struct AliasView *av = ARRAY_GET(ava, line);
 
-  const char *const query_format = cs_subset_string(mdata->sub, "query_format");
+  const char *const c_query_format = cs_subset_string(mdata->sub, "query_format");
 
-  mutt_expando_format(buf, buflen, 0, menu->win->state.cols, NONULL(query_format),
+  mutt_expando_format(buf, buflen, 0, menu->win->state.cols, NONULL(c_query_format),
                       query_format_str, (intptr_t) av, MUTT_FORMAT_ARROWCURSOR);
 }
 
@@ -257,8 +263,8 @@ int query_run(const char *s, bool verbose, struct AliasList *al, const struct Co
   char *p = NULL;
   struct Buffer *cmd = mutt_buffer_pool_get();
 
-  const char *const query_command = cs_subset_string(sub, "query_command");
-  mutt_buffer_file_expand_fmt_quote(cmd, query_command, s);
+  const char *const c_query_command = cs_subset_string(sub, "query_command");
+  mutt_buffer_file_expand_fmt_quote(cmd, c_query_command, s);
 
   pid_t pid = filter_create(mutt_buffer_string(cmd), NULL, &fp, NULL);
   if (pid < 0)
@@ -316,9 +322,10 @@ int query_run(const char *s, bool verbose, struct AliasList *al, const struct Co
  */
 static int query_window_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_WINDOW) || !nc->global_data || !nc->event_data)
+  if (nc->event_type != NT_WINDOW)
+    return 0;
+  if (!nc->global_data || !nc->event_data)
     return -1;
-
   if (nc->event_subtype != NT_WINDOW_DELETE)
     return 0;
 
@@ -361,7 +368,7 @@ static struct MuttWindow *query_dialog_new(struct AliasMenuData *mdata, const ch
   // Override the Simple Dialog's recalc()
   win_menu->recalc = alias_recalc;
 
-  char title[256];
+  char title[256] = { 0 };
   snprintf(title, sizeof(title), "%s: %s", mdata->title, query);
   struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
   sbar_set_title(sbar, title);
@@ -406,13 +413,13 @@ static bool dlg_select_query(struct Buffer *buf, struct AliasMenuData *mdata)
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(menu->type);
+    op = km_dokey(MENU_QUERY);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
     if (op == OP_NULL)
     {
-      km_error_key(menu->type);
+      km_error_key(MENU_QUERY);
       continue;
     }
     mutt_clear_error();
@@ -421,7 +428,7 @@ static bool dlg_select_query(struct Buffer *buf, struct AliasMenuData *mdata)
     if (rc == FR_UNKNOWN)
       rc = menu_function_dispatcher(win_menu, op);
     if (rc == FR_UNKNOWN)
-      rc = global_function_dispatcher(win_menu, op);
+      rc = global_function_dispatcher(NULL, op);
   } while ((rc != FR_DONE) && (rc != FR_CONTINUE));
   // ---------------------------------------------------------------------------
 
@@ -441,8 +448,8 @@ int query_complete(struct Buffer *buf, struct ConfigSubset *sub)
   struct AliasMenuData mdata = { ARRAY_HEAD_INITIALIZER, NULL, sub };
 
   struct AliasList al = TAILQ_HEAD_INITIALIZER(al);
-  const char *const query_command = cs_subset_string(sub, "query_command");
-  if (!query_command)
+  const char *const c_query_command = cs_subset_string(sub, "query_command");
+  if (!c_query_command)
   {
     mutt_warning(_("Query command not defined"));
     goto done;
@@ -462,7 +469,7 @@ int query_complete(struct Buffer *buf, struct ConfigSubset *sub)
     {
       mutt_addrlist_to_local(&addr);
       mutt_buffer_reset(buf);
-      mutt_addrlist_write(&addr, buf->data, buf->dsize, false);
+      mutt_addrlist_write(&addr, buf, false);
       mutt_addrlist_clear(&addr);
       mutt_clear_error();
     }
@@ -481,36 +488,25 @@ int query_complete(struct Buffer *buf, struct ConfigSubset *sub)
 
   mutt_buffer_reset(buf);
   mutt_buffer_alloc(buf, 8192);
-  size_t curpos = 0;
-
+  bool first = true;
   struct AliasView *avp = NULL;
   ARRAY_FOREACH(avp, &mdata.ava)
   {
     if (!avp->is_tagged)
       continue;
 
-    if (curpos == 0)
+    if (!first)
     {
-      struct AddressList al_copy = TAILQ_HEAD_INITIALIZER(al_copy);
-      if (alias_to_addrlist(&al_copy, avp->alias))
-      {
-        mutt_addrlist_to_local(&al_copy);
-        mutt_addrlist_write(&al_copy, buf->data, buf->dsize, false);
-        curpos = mutt_buffer_len(buf);
-        mutt_addrlist_clear(&al_copy);
-      }
+      mutt_buffer_addstr(buf, ", ");
     }
-    else if ((curpos + 2) < buf->dsize)
+
+    first = false;
+    struct AddressList al_copy = TAILQ_HEAD_INITIALIZER(al_copy);
+    if (alias_to_addrlist(&al_copy, avp->alias))
     {
-      struct AddressList al_copy = TAILQ_HEAD_INITIALIZER(al_copy);
-      if (alias_to_addrlist(&al_copy, avp->alias))
-      {
-        mutt_addrlist_to_local(&al_copy);
-        mutt_buffer_addstr(buf, ", ");
-        mutt_addrlist_write(&al_copy, buf->data + curpos + 2, buf->dsize - curpos - 2, false);
-        curpos = mutt_buffer_len(buf);
-        mutt_addrlist_clear(&al_copy);
-      }
+      mutt_addrlist_to_local(&al_copy);
+      mutt_addrlist_write(&al_copy, buf, false);
+      mutt_addrlist_clear(&al_copy);
     }
   }
 
@@ -529,8 +525,8 @@ done:
  */
 void query_index(struct Mailbox *m, struct ConfigSubset *sub)
 {
-  const char *const query_command = cs_subset_string(sub, "query_command");
-  if (!query_command)
+  const char *const c_query_command = cs_subset_string(sub, "query_command");
+  if (!c_query_command)
   {
     mutt_warning(_("Query command not defined"));
     return;

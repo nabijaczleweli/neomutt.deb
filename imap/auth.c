@@ -61,8 +61,10 @@ static const struct ImapAuth ImapAuthenticators[] = {
   { imap_auth_oauth, "oauthbearer" },
   { imap_auth_xoauth2, "xoauth2" },
   { imap_auth_plain, "plain" },
-#ifdef USE_SASL
+#if defined(USE_SASL_CYRUS)
   { imap_auth_sasl, NULL },
+#elif defined(USE_SASL_GNU)
+  { imap_auth_gsasl, NULL },
 #else
   { imap_auth_anon, "anonymous" },
 #endif
@@ -70,7 +72,7 @@ static const struct ImapAuth ImapAuthenticators[] = {
   { imap_auth_gss, "gssapi" },
 #endif
 /* SASL includes CRAM-MD5 (and GSSAPI, but that's not enabled by default) */
-#ifndef USE_SASL
+#ifndef HAVE_SASL
   { imap_auth_cram_md5, "cram-md5" },
 #endif
   { imap_auth_login, "login" },

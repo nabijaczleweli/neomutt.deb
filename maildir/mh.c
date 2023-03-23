@@ -53,9 +53,9 @@
 #include "copy.h"
 #include "edata.h"
 #include "errno.h"
+#include "globals.h" // IWYU pragma: keep
 #include "mdata.h"
 #include "mdemail.h"
-#include "mutt_globals.h"
 #include "mx.h"
 #include "sequence.h"
 #ifdef USE_INOTIFY
@@ -78,7 +78,7 @@ struct Progress;
 bool mh_mkstemp(struct Mailbox *m, FILE **fp, char **tgt)
 {
   int fd;
-  char path[PATH_MAX];
+  char path[PATH_MAX] = { 0 };
 
   mode_t omask = umask(mh_umask(m));
   while (true)
@@ -125,7 +125,7 @@ bool mh_mkstemp(struct Mailbox *m, FILE **fp, char **tgt)
  */
 static int mh_already_notified(struct Mailbox *m, int msgno)
 {
-  char path[PATH_MAX];
+  char path[PATH_MAX] = { 0 };
   struct stat st = { 0 };
 
   if ((snprintf(path, sizeof(path), "%s/%d", mailbox_path(m), msgno) < sizeof(path)) &&
@@ -146,7 +146,7 @@ static int mh_already_notified(struct Mailbox *m, int msgno)
  * digits.  Deleted message get moved to a filename with a comma before
  * it.
  */
-bool mh_valid_message(const char *s)
+static bool mh_valid_message(const char *s)
 {
   for (; *s; s++)
   {
@@ -168,10 +168,10 @@ int mh_check_empty(const char *path)
   struct dirent *de = NULL;
   int rc = 1; /* assume empty until we find a message */
 
-  DIR *dp = opendir(path);
-  if (!dp)
+  DIR *dir = mutt_file_opendir(path, MUTT_OPENDIR_NONE);
+  if (!dir)
     return -1;
-  while ((de = readdir(dp)))
+  while ((de = readdir(dir)))
   {
     if (mh_valid_message(de->d_name))
     {
@@ -179,7 +179,7 @@ int mh_check_empty(const char *path)
       break;
     }
   }
-  closedir(dp);
+  closedir(dir);
 
   return rc;
 }
@@ -190,7 +190,7 @@ int mh_check_empty(const char *path)
 static enum MxStatus mh_mbox_check_stats(struct Mailbox *m, uint8_t flags)
 {
   struct MhSequences mhs = { 0 };
-  DIR *dirp = NULL;
+  DIR *dir = NULL;
   struct dirent *de = NULL;
 
   /* when $mail_check_recent is set and the .mh_sequences file hasn't changed
@@ -236,17 +236,17 @@ static enum MxStatus mh_mbox_check_stats(struct Mailbox *m, uint8_t flags)
 
   mh_seq_free(&mhs);
 
-  dirp = opendir(mailbox_path(m));
-  if (dirp)
+  dir = mutt_file_opendir(mailbox_path(m), MUTT_OPENDIR_NONE);
+  if (dir)
   {
-    while ((de = readdir(dirp)))
+    while ((de = readdir(dir)))
     {
       if (*de->d_name == '.')
         continue;
       if (mh_valid_message(de->d_name))
         m->msg_count++;
     }
-    closedir(dirp);
+    closedir(dir);
   }
 
   return rc;
@@ -257,7 +257,7 @@ static enum MxStatus mh_mbox_check_stats(struct Mailbox *m, uint8_t flags)
  * @param mda Maildir array to update
  * @param mhs Sequences
  */
-void mh_update_maildir(struct MdEmailArray *mda, struct MhSequences *mhs)
+static void mh_update_maildir(struct MdEmailArray *mda, struct MhSequences *mhs)
 {
   struct MdEmail *md = NULL;
   struct MdEmail **mdp = NULL;
@@ -290,13 +290,13 @@ void mh_update_maildir(struct MdEmailArray *mda, struct MhSequences *mhs)
  * @retval  0 Success
  * @retval -1 Failure
  */
-int mh_commit_msg(struct Mailbox *m, struct Message *msg, struct Email *e, bool updseq)
+static int mh_commit_msg(struct Mailbox *m, struct Message *msg, struct Email *e, bool updseq)
 {
   struct dirent *de = NULL;
   char *cp = NULL, *dep = NULL;
   unsigned int n, hi = 0;
-  char path[PATH_MAX];
-  char tmp[16];
+  char path[PATH_MAX] = { 0 };
+  char tmp[16] = { 0 };
 
   if (mutt_file_fsync_close(&msg->fp))
   {
@@ -304,15 +304,15 @@ int mh_commit_msg(struct Mailbox *m, struct Message *msg, struct Email *e, bool 
     return -1;
   }
 
-  DIR *dirp = opendir(mailbox_path(m));
-  if (!dirp)
+  DIR *dir = mutt_file_opendir(mailbox_path(m), MUTT_OPENDIR_NONE);
+  if (!dir)
   {
     mutt_perror(mailbox_path(m));
     return -1;
   }
 
   /* figure out what the next message number is */
-  while ((de = readdir(dirp)))
+  while ((de = readdir(dir)))
   {
     dep = de->d_name;
     if (*dep == ',')
@@ -332,7 +332,7 @@ int mh_commit_msg(struct Mailbox *m, struct Message *msg, struct Email *e, bool 
         hi = n;
     }
   }
-  closedir(dirp);
+  closedir(dir);
 
   /* Now try to rename the file to the proper name.
    * Note: We may have to try multiple times, until we find a free slot.  */
@@ -370,7 +370,7 @@ int mh_commit_msg(struct Mailbox *m, struct Message *msg, struct Email *e, bool 
  * @retval  0 Success
  * @retval -1 Error
  */
-int mh_rewrite_message(struct Mailbox *m, int msgno)
+static int mh_rewrite_message(struct Mailbox *m, int msgno)
 {
   if (!m || !m->emails || (msgno >= m->msg_count))
     return -1;
@@ -393,8 +393,8 @@ int mh_rewrite_message(struct Mailbox *m, int msgno)
   int rc = mutt_copy_message(dest->fp, e, src, MUTT_CM_UPDATE, CH_UPDATE | CH_UPDATE_LEN, 0);
   if (rc == 0)
   {
-    char oldpath[PATH_MAX];
-    char partpath[PATH_MAX];
+    char oldpath[PATH_MAX] = { 0 };
+    char partpath[PATH_MAX] = { 0 };
     snprintf(oldpath, sizeof(oldpath), "%s/%s", mailbox_path(m), e->path);
     mutt_str_copy(partpath, e->path, sizeof(partpath));
 
@@ -420,7 +420,7 @@ int mh_rewrite_message(struct Mailbox *m, int msgno)
      * lose flag modifications.  */
     if (rc == 0)
     {
-      char newpath[PATH_MAX];
+      char newpath[PATH_MAX] = { 0 };
       snprintf(newpath, sizeof(newpath), "%s/%s", mailbox_path(m), e->path);
       rc = mutt_file_safe_rename(newpath, oldpath);
       if (rc == 0)
@@ -448,7 +448,7 @@ int mh_rewrite_message(struct Mailbox *m, int msgno)
  * @retval  0 Success
  * @retval -1 Error
  */
-int mh_sync_message(struct Mailbox *m, int msgno)
+static int mh_sync_message(struct Mailbox *m, int msgno)
 {
   if (!m || !m->emails)
     return -1;
@@ -474,9 +474,9 @@ int mh_sync_message(struct Mailbox *m, int msgno)
  * mh_update_mtime - Update our record of the Maildir modification time
  * @param m Mailbox
  */
-void mh_update_mtime(struct Mailbox *m)
+static void mh_update_mtime(struct Mailbox *m)
 {
-  char buf[PATH_MAX];
+  char buf[PATH_MAX] = { 0 };
   struct stat st = { 0 };
   struct MaildirMboxData *mdata = maildir_mdata_get(m);
 
@@ -499,7 +499,7 @@ void mh_update_mtime(struct Mailbox *m)
  * @retval -1 Error
  * @retval -2 Aborted
  */
-int mh_parse_dir(struct Mailbox *m, struct MdEmailArray *mda, struct Progress *progress)
+static int mh_parse_dir(struct Mailbox *m, struct MdEmailArray *mda, struct Progress *progress)
 {
   struct dirent *de = NULL;
   int rc = 0;
@@ -509,14 +509,14 @@ int mh_parse_dir(struct Mailbox *m, struct MdEmailArray *mda, struct Progress *p
   struct Buffer *buf = mutt_buffer_pool_get();
   mutt_buffer_strcpy(buf, mailbox_path(m));
 
-  DIR *dirp = opendir(mutt_buffer_string(buf));
-  if (!dirp)
+  DIR *dir = mutt_file_opendir(mutt_buffer_string(buf), MUTT_OPENDIR_NONE);
+  if (!dir)
   {
     rc = -1;
     goto cleanup;
   }
 
-  while (((de = readdir(dirp))) && !SigInt)
+  while (((de = readdir(dir))) && !SigInt)
   {
     if (!mh_valid_message(de->d_name))
       continue;
@@ -538,7 +538,7 @@ int mh_parse_dir(struct Mailbox *m, struct MdEmailArray *mda, struct Progress *p
     ARRAY_ADD(mda, entry);
   }
 
-  closedir(dirp);
+  closedir(dir);
 
   if (SigInt)
   {
@@ -555,7 +555,7 @@ cleanup:
 /**
  * mh_cmp_path - Compare two Maildirs by path - Implements ::sort_t - @ingroup sort_api
  */
-int mh_cmp_path(const void *a, const void *b)
+static int mh_cmp_path(const void *a, const void *b)
 {
   struct MdEmail const *const *pa = (struct MdEmail const *const *) a;
   struct MdEmail const *const *pb = (struct MdEmail const *const *) b;
@@ -571,7 +571,7 @@ int mh_cmp_path(const void *a, const void *b)
  * This may also be used to fill out a fake header structure generated by lazy
  * maildir parsing.
  */
-struct Email *mh_parse_message(const char *fname, struct Email *e)
+static struct Email *mh_parse_message(const char *fname, struct Email *e)
 {
   FILE *fp = fopen(fname, "r");
   if (!fp)
@@ -594,7 +594,7 @@ struct Email *mh_parse_message(const char *fname, struct Email *e)
   }
   e->env = mutt_rfc822_read_header(fp, e, false, false);
 
-  if (!e->received)
+  if (e->received != 0)
     e->received = e->date_sent;
 
   /* always update the length since we have fresh information available. */
@@ -611,9 +611,10 @@ struct Email *mh_parse_message(const char *fname, struct Email *e)
  * @param[out] mda Maildir array to parse
  * @param[in]  progress Progress bar
  */
-void mh_delayed_parsing(struct Mailbox *m, struct MdEmailArray *mda, struct Progress *progress)
+static void mh_delayed_parsing(struct Mailbox *m, struct MdEmailArray *mda,
+                               struct Progress *progress)
 {
-  char fn[PATH_MAX];
+  char fn[PATH_MAX] = { 0 };
 
 #ifdef USE_HCACHE
   const char *const c_header_cache = cs_subset_path(NeoMutt->sub, "header_cache");
@@ -699,7 +700,7 @@ static bool mh_read_dir(struct Mailbox *m)
 
   if (m->verbose)
   {
-    char msg[PATH_MAX];
+    char msg[PATH_MAX] = { 0 };
     snprintf(msg, sizeof(msg), _("Scanning %s..."), mailbox_path(m));
     progress = progress_new(msg, MUTT_PROGRESS_READ, 0);
   }
@@ -722,7 +723,7 @@ static bool mh_read_dir(struct Mailbox *m)
 
   if (m->verbose)
   {
-    char msg[PATH_MAX];
+    char msg[PATH_MAX] = { 0 };
     snprintf(msg, sizeof(msg), _("Reading %s..."), mailbox_path(m));
     progress = progress_new(msg, MUTT_PROGRESS_READ, ARRAY_SIZE(&mda));
   }
@@ -764,7 +765,7 @@ int mh_sync_mailbox_message(struct Mailbox *m, int msgno, struct HeaderCache *hc
 
   if (e->deleted)
   {
-    char path[PATH_MAX];
+    char path[PATH_MAX] = { 0 };
     snprintf(path, sizeof(path), "%s/%s", mailbox_path(m), e->path);
     const bool c_mh_purge = cs_subset_bool(NeoMutt->sub, "mh_purge");
     if (c_mh_purge)
@@ -784,7 +785,7 @@ int mh_sync_mailbox_message(struct Mailbox *m, int msgno, struct HeaderCache *hc
       /* MH just moves files out of the way when you delete them */
       if (*e->path != ',')
       {
-        char tmp[PATH_MAX];
+        char tmp[PATH_MAX] = { 0 };
         snprintf(tmp, sizeof(tmp), "%s/,%s", mailbox_path(m), e->path);
         unlink(tmp);
         if (rename(path, tmp) != 0)
@@ -815,7 +816,7 @@ int mh_sync_mailbox_message(struct Mailbox *m, int msgno, struct HeaderCache *hc
 /**
  * mh_msg_save_hcache - Save message to the header cache - Implements MxOps::msg_save_hcache() - @ingroup mx_msg_save_hcache
  */
-int mh_msg_save_hcache(struct Mailbox *m, struct Email *e)
+static int mh_msg_save_hcache(struct Mailbox *m, struct Email *e)
 {
   int rc = 0;
 #ifdef USE_HCACHE
@@ -830,7 +831,7 @@ int mh_msg_save_hcache(struct Mailbox *m, struct Email *e)
 /**
  * mh_ac_owns_path - Check whether an Account own a Mailbox path - Implements MxOps::ac_owns_path() - @ingroup mx_ac_owns_path
  */
-bool mh_ac_owns_path(struct Account *a, const char *path)
+static bool mh_ac_owns_path(struct Account *a, const char *path)
 {
   return true;
 }
@@ -838,7 +839,7 @@ bool mh_ac_owns_path(struct Account *a, const char *path)
 /**
  * mh_ac_add - Add a Mailbox to an Account - Implements MxOps::ac_add() - @ingroup mx_ac_add
  */
-bool mh_ac_add(struct Account *a, struct Mailbox *m)
+static bool mh_ac_add(struct Account *a, struct Mailbox *m)
 {
   return true;
 }
@@ -865,7 +866,7 @@ static bool mh_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
     return false;
   }
 
-  char tmp[PATH_MAX];
+  char tmp[PATH_MAX] = { 0 };
   snprintf(tmp, sizeof(tmp), "%s/.mh_sequences", mailbox_path(m));
   const int i = creat(tmp, S_IRWXU);
   if (i == -1)
@@ -889,9 +890,9 @@ static bool mh_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
  *
  * Don't change this code unless you _really_ understand what happens.
  */
-enum MxStatus mh_mbox_check(struct Mailbox *m)
+static enum MxStatus mh_mbox_check(struct Mailbox *m)
 {
-  char buf[PATH_MAX];
+  char buf[PATH_MAX] = { 0 };
   struct stat st = { 0 };
   struct stat st_cur = { 0 };
   bool modified = false, occult = false, flags_changed = false;
@@ -1034,7 +1035,7 @@ enum MxStatus mh_mbox_check(struct Mailbox *m)
  *
  * @note The flag retvals come from a call to a backend sync function
  */
-enum MxStatus mh_mbox_sync(struct Mailbox *m)
+static enum MxStatus mh_mbox_sync(struct Mailbox *m)
 {
   enum MxStatus check = mh_mbox_check(m);
   if (check == MX_STATUS_ERROR)
@@ -1050,7 +1051,7 @@ enum MxStatus mh_mbox_sync(struct Mailbox *m)
   struct Progress *progress = NULL;
   if (m->verbose)
   {
-    char msg[PATH_MAX];
+    char msg[PATH_MAX] = { 0 };
     snprintf(msg, sizeof(msg), _("Writing %s..."), mailbox_path(m));
     progress = progress_new(msg, MUTT_PROGRESS_WRITE, m->msg_count);
   }
@@ -1108,7 +1109,7 @@ err:
  * mh_mbox_close - Close a Mailbox - Implements MxOps::mbox_close() - @ingroup mx_mbox_close
  * @retval MX_STATUS_OK Always
  */
-enum MxStatus mh_mbox_close(struct Mailbox *m)
+static enum MxStatus mh_mbox_close(struct Mailbox *m)
 {
   return MX_STATUS_OK;
 }
@@ -1125,7 +1126,7 @@ static bool mh_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
   if (!e)
     return false;
 
-  char path[PATH_MAX];
+  char path[PATH_MAX] = { 0 };
 
   snprintf(path, sizeof(path), "%s/%s", mailbox_path(m), e->path);
 
@@ -1163,7 +1164,7 @@ static int mh_msg_commit(struct Mailbox *m, struct Message *msg)
  *
  * @note May also return EOF Failure, see errno
  */
-int mh_msg_close(struct Mailbox *m, struct Message *msg)
+static int mh_msg_close(struct Mailbox *m, struct Message *msg)
 {
   return mutt_file_fclose(&msg->fp);
 }
@@ -1171,7 +1172,7 @@ int mh_msg_close(struct Mailbox *m, struct Message *msg)
 /**
  * mh_path_canon - Canonicalise a Mailbox path - Implements MxOps::path_canon() - @ingroup mx_path_canon
  */
-int mh_path_canon(char *buf, size_t buflen)
+static int mh_path_canon(char *buf, size_t buflen)
 {
   mutt_path_canon(buf, buflen, HomeDir, true);
   return 0;
@@ -1180,7 +1181,7 @@ int mh_path_canon(char *buf, size_t buflen)
 /**
  * mh_path_parent - Find the parent of a Mailbox path - Implements MxOps::path_parent() - @ingroup mx_path_parent
  */
-int mh_path_parent(char *buf, size_t buflen)
+static int mh_path_parent(char *buf, size_t buflen)
 {
   if (mutt_path_parent(buf))
     return 0;
@@ -1197,7 +1198,7 @@ int mh_path_parent(char *buf, size_t buflen)
 /**
  * mh_path_pretty - Abbreviate a Mailbox path - Implements MxOps::path_pretty() - @ingroup mx_path_pretty
  */
-int mh_path_pretty(char *buf, size_t buflen, const char *folder)
+static int mh_path_pretty(char *buf, size_t buflen, const char *folder)
 {
   if (mutt_path_abbr_folder(buf, folder))
     return 0;
@@ -1216,7 +1217,7 @@ static enum MailboxType mh_path_probe(const char *path, const struct stat *st)
   if (!st || !S_ISDIR(st->st_mode))
     return MUTT_UNKNOWN;
 
-  char tmp[PATH_MAX];
+  char tmp[PATH_MAX] = { 0 };
 
   snprintf(tmp, sizeof(tmp), "%s/.mh_sequences", path);
   if (access(tmp, F_OK) == 0)

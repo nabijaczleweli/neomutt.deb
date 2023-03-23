@@ -28,6 +28,7 @@
 
 #include "config.h"
 #include "core/lib.h"
+#include "conn/lib.h"
 #include "adata.h"
 
 /**
@@ -44,6 +45,14 @@ void pop_adata_free(void **ptr)
 
   struct PopAccountData *adata = *ptr;
   FREE(&adata->auth_list.data);
+
+  if (adata->conn)
+  {
+    if (adata->conn->close)
+      adata->conn->close(adata->conn);
+    FREE(&adata->conn);
+  }
+
   FREE(ptr);
 }
 

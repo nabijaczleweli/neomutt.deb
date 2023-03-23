@@ -23,10 +23,12 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include <stddef.h>
+#include <stdbool.h>
 #include "mutt/lib.h"
-#include "config/common.h"
 #include "config/lib.h"
 #include "core/lib.h"
+#include "common.h" // IWYU pragma: keep
 
 // clang-format off
 static struct Mapping MboxTypeMap[] = {
@@ -105,7 +107,7 @@ static struct ConfigSet *create_sample_data(void)
   cs_register_type(cs, &CstSort);
   cs_register_type(cs, &CstString);
 
-  if (!cs_register_variables(cs, Vars, 0))
+  if (!cs_register_variables(cs, Vars, DT_NO_FLAGS))
     return NULL;
 
   return cs;

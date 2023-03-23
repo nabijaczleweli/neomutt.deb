@@ -27,9 +27,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "mutt/lib.h"
-#include "config/common.h"
 #include "config/lib.h"
 #include "core/lib.h"
+#include "common.h" // IWYU pragma: keep
 #include "test_common.h"
 
 // clang-format off
@@ -768,7 +768,7 @@ void test_config_string(void)
   struct ConfigSet *cs = sub->cs;
 
   dont_fail = true;
-  if (!TEST_CHECK(cs_register_variables(cs, Vars, 0)))
+  if (!TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS)))
     return;
   dont_fail = false;
 

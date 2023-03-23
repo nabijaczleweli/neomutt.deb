@@ -28,16 +28,23 @@
 
 #include "config.h"
 #include <stddef.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include "mutt/lib.h"
 #include "core/lib.h"
-#include "gui/lib.h" // IWYU pragma: keep
-#include "mutt.h"
+#include "gui/lib.h"
 #include "lib.h"
-#include "init.h"
-#include "options.h"
+#include "pager/lib.h"
+#include "parse/lib.h"
+#include "globals.h"
+#ifdef USE_DEBUG_COLOR
+#include <stdio.h>
+#include "mutt.h"
+#include "muttlib.h"
+#include "pager/private_data.h"
+#endif
 
 /**
  * ColorFields - Mapping of colour names to their IDs
@@ -63,6 +70,7 @@ const struct Mapping ColorFields[] = {
   { "index_tag",         MT_COLOR_INDEX_TAG },
   { "index_tags",        MT_COLOR_INDEX_TAGS },
   { "indicator",         MT_COLOR_INDICATOR },
+  { "italic",            MT_COLOR_ITALIC },
   { "markers",           MT_COLOR_MARKERS },
   { "message",           MT_COLOR_MESSAGE },
   { "normal",            MT_COLOR_NORMAL },
@@ -72,6 +80,7 @@ const struct Mapping ColorFields[] = {
   { "quoted",            MT_COLOR_QUOTED },
   { "search",            MT_COLOR_SEARCH },
 #ifdef USE_SIDEBAR
+  { "sidebar_background", MT_COLOR_SIDEBAR_BACKGROUND },
   { "sidebar_divider",   MT_COLOR_SIDEBAR_DIVIDER },
   { "sidebar_flagged",   MT_COLOR_SIDEBAR_FLAGGED },
   { "sidebar_highlight", MT_COLOR_SIDEBAR_HIGHLIGHT },
@@ -221,10 +230,12 @@ static enum CommandResult parse_attr_spec(struct Buffer *buf, struct Buffer *s,
     return MUTT_CMD_WARNING;
   }
 
-  mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+  parse_extract_token(buf, s, TOKEN_NO_FLAGS);
 
   if (mutt_istr_equal("bold", buf->data))
     *attrs |= A_BOLD;
+  else if (mutt_istr_equal("italic", buf->data))
+    *attrs |= A_ITALIC;
   else if (mutt_istr_equal("none", buf->data))
     *attrs = A_NORMAL; // Use '=' to clear other bits
   else if (mutt_istr_equal("normal", buf->data))
@@ -261,12 +272,17 @@ static enum CommandResult parse_color_pair(struct Buffer *buf, struct Buffer *s,
       return MUTT_CMD_WARNING;
     }
 
-    mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+    parse_extract_token(buf, s, TOKEN_NO_FLAGS);
 
     if (mutt_istr_equal("bold", buf->data))
     {
       *attrs |= A_BOLD;
       color_debug(LL_DEBUG5, "bold\n");
+    }
+    else if (mutt_istr_equal("italic", buf->data))
+    {
+      *attrs |= A_ITALIC;
+      color_debug(LL_DEBUG5, "italic\n");
     }
     else if (mutt_istr_equal("none", buf->data))
     {
@@ -308,7 +324,7 @@ static enum CommandResult parse_color_pair(struct Buffer *buf, struct Buffer *s,
     return MUTT_CMD_WARNING;
   }
 
-  mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+  parse_extract_token(buf, s, TOKEN_NO_FLAGS);
 
   return parse_color_name(buf->data, bg, attrs, false, err);
 }
@@ -380,7 +396,7 @@ static enum CommandResult parse_object(struct Buffer *buf, struct Buffer *s,
       return MUTT_CMD_WARNING;
     }
 
-    mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+    parse_extract_token(buf, s, TOKEN_NO_FLAGS);
 
     rc = mutt_map_get_value(buf->data, ComposeColorFields);
     if (rc == -1)
@@ -423,7 +439,7 @@ static enum CommandResult parse_object(struct Buffer *buf, struct Buffer *s,
 static enum CommandResult parse_uncolor(struct Buffer *buf, struct Buffer *s,
                                         struct Buffer *err, bool uncolor)
 {
-  mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+  parse_extract_token(buf, s, TOKEN_NO_FLAGS);
 
   if (mutt_str_equal(buf->data, "*"))
   {
@@ -457,20 +473,11 @@ static enum CommandResult parse_uncolor(struct Buffer *buf, struct Buffer *s,
     return MUTT_CMD_SUCCESS;
   }
 
-  if ((cid != MT_COLOR_ATTACH_HEADERS) && (cid != MT_COLOR_BODY) &&
-      (cid != MT_COLOR_HEADER) && (cid != MT_COLOR_INDEX) && (cid != MT_COLOR_INDEX_AUTHOR) &&
-      (cid != MT_COLOR_INDEX_FLAGS) && (cid != MT_COLOR_INDEX_SUBJECT) &&
-      (cid != MT_COLOR_INDEX_TAG) && (cid != MT_COLOR_STATUS))
+  if (!mutt_color_has_pattern(cid))
   {
     color_debug(LL_DEBUG5, "simple\n");
     simple_color_reset(cid);
     return MUTT_CMD_SUCCESS;
-  }
-
-  if (!MoreArgs(s))
-  {
-    mutt_buffer_printf(err, _("%s: too few arguments"), uncolor ? "uncolor" : "unmono");
-    return MUTT_CMD_WARNING;
   }
 
   if (OptNoCurses)
@@ -479,16 +486,24 @@ static enum CommandResult parse_uncolor(struct Buffer *buf, struct Buffer *s,
     {
       color_debug(LL_DEBUG5, "do nothing\n");
       /* just eat the command, but don't do anything real about it */
-      mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+      parse_extract_token(buf, s, TOKEN_NO_FLAGS);
     } while (MoreArgs(s));
 
     return MUTT_CMD_SUCCESS;
   }
 
   bool changes = false;
+  if (!MoreArgs(s))
+  {
+    if (regex_colors_parse_uncolor(cid, NULL, uncolor))
+      return MUTT_CMD_SUCCESS;
+    else
+      return MUTT_CMD_ERROR;
+  }
+
   do
   {
-    mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+    parse_extract_token(buf, s, TOKEN_NO_FLAGS);
     if (mutt_str_equal("*", buf->data))
     {
       if (regex_colors_parse_uncolor(cid, NULL, uncolor))
@@ -506,6 +521,191 @@ static enum CommandResult parse_uncolor(struct Buffer *buf, struct Buffer *s,
 
   return MUTT_CMD_SUCCESS;
 }
+
+#ifdef USE_DEBUG_COLOR
+/**
+ * color_dump - Parse 'color' command to display colours - Implements ICommand::parse()
+ */
+static enum CommandResult color_dump(struct Buffer *buf, struct Buffer *s,
+                                     intptr_t data, struct Buffer *err)
+{
+  if (MoreArgs(s))
+    return MUTT_CMD_ERROR;
+
+  FILE *fp_out = NULL;
+  char tempfile[PATH_MAX] = { 0 };
+  struct Buffer filebuf = mutt_buffer_make(4096);
+  char color_fg[32] = { 0 };
+  char color_bg[32] = { 0 };
+
+  mutt_mktemp(tempfile, sizeof(tempfile));
+  fp_out = mutt_file_fopen(tempfile, "w");
+  if (!fp_out)
+  {
+    // L10N: '%s' is the file name of the temporary file
+    mutt_buffer_printf(err, _("Could not create temporary file %s"), tempfile);
+    mutt_buffer_dealloc(&filebuf);
+    return MUTT_CMD_ERROR;
+  }
+
+  mutt_buffer_addstr(&filebuf, "# All Colours\n\n");
+  mutt_buffer_addstr(&filebuf, "# Simple Colours\n");
+  for (enum ColorId cid = MT_COLOR_NONE + 1; cid < MT_COLOR_MAX; cid++)
+  {
+    struct AttrColor *ac = simple_color_get(cid);
+    if (!ac)
+      continue;
+
+    struct CursesColor *cc = ac->curses_color;
+    if (!cc)
+      continue;
+
+    const char *name = mutt_map_get_name(cid, ColorFields);
+    if (!name)
+      continue;
+
+    const char *swatch = color_debug_log_color_attrs(cc->fg, cc->bg, ac->attrs);
+    mutt_buffer_add_printf(&filebuf, "color %-18s %-30s %-8s %-8s # %s\n", name,
+                           color_debug_log_attrs_list(ac->attrs),
+                           color_debug_log_name(color_fg, sizeof(color_fg), cc->fg),
+                           color_debug_log_name(color_bg, sizeof(color_bg), cc->bg), swatch);
+  }
+
+  if (NumQuotedColors > 0)
+  {
+    mutt_buffer_addstr(&filebuf, "\n# Quoted Colours\n");
+    for (int i = 0; i < NumQuotedColors; i++)
+    {
+      struct AttrColor *ac = quoted_colors_get(i);
+      if (!ac)
+        continue;
+
+      struct CursesColor *cc = ac->curses_color;
+      if (!cc)
+        continue;
+
+      const char *swatch = color_debug_log_color_attrs(cc->fg, cc->bg, ac->attrs);
+      mutt_buffer_add_printf(&filebuf, "color quoted%d %-30s %-8s %-8s # %s\n",
+                             i, color_debug_log_attrs_list(ac->attrs),
+                             color_debug_log_name(color_fg, sizeof(color_fg), cc->fg),
+                             color_debug_log_name(color_bg, sizeof(color_bg), cc->bg),
+                             swatch);
+    }
+  }
+
+  int rl_count = 0;
+  for (enum ColorId id = MT_COLOR_NONE; id != MT_COLOR_MAX; ++id)
+  {
+    if (!mutt_color_has_pattern(id))
+    {
+      continue;
+    }
+
+    struct RegexColorList *rcl = regex_colors_get_list(id);
+    if (!STAILQ_EMPTY(rcl))
+      rl_count++;
+  }
+
+  if (rl_count > 0)
+  {
+    for (enum ColorId id = MT_COLOR_NONE; id != MT_COLOR_MAX; ++id)
+    {
+      if (!mutt_color_has_pattern(id))
+      {
+        continue;
+      }
+
+      struct RegexColorList *rcl = regex_colors_get_list(id);
+      if (STAILQ_EMPTY(rcl))
+        continue;
+
+      const char *name = mutt_map_get_name(id, ColorFields);
+      if (!name)
+        continue;
+
+      mutt_buffer_add_printf(&filebuf, "\n# Regex Colour %s\n", name);
+
+      struct RegexColor *rc = NULL;
+      STAILQ_FOREACH(rc, rcl, entries)
+      {
+        struct AttrColor *ac = &rc->attr_color;
+        struct CursesColor *cc = ac->curses_color;
+        if (!cc)
+          continue;
+
+        const char *swatch = color_debug_log_color_attrs(cc->fg, cc->bg, ac->attrs);
+        mutt_buffer_add_printf(&filebuf, "color %-14s %-30s %-8s %-8s %-30s # %s\n",
+                               name, color_debug_log_attrs_list(ac->attrs),
+                               color_debug_log_name(color_fg, sizeof(color_fg), cc->fg),
+                               color_debug_log_name(color_bg, sizeof(color_bg), cc->bg),
+                               rc->pattern, swatch);
+      }
+    }
+  }
+
+#ifdef USE_DEBUG_COLOR
+  if (!TAILQ_EMPTY(&MergedColors))
+  {
+    mutt_buffer_addstr(&filebuf, "\n# Merged Colours\n");
+    struct AttrColor *ac = NULL;
+    TAILQ_FOREACH(ac, &MergedColors, entries)
+    {
+      struct CursesColor *cc = ac->curses_color;
+      if (!cc)
+        continue;
+
+      const char *swatch = color_debug_log_color_attrs(cc->fg, cc->bg, ac->attrs);
+      mutt_buffer_add_printf(&filebuf, "# %-30s %-8s %-8s # %s\n",
+                             color_debug_log_attrs_list(ac->attrs),
+                             color_debug_log_name(color_fg, sizeof(color_fg), cc->fg),
+                             color_debug_log_name(color_bg, sizeof(color_bg), cc->bg),
+                             swatch);
+    }
+  }
+
+  struct MuttWindow *win = window_get_focus();
+  if (win && (win->type == WT_CUSTOM) && win->parent && (win->parent->type == WT_PAGER))
+  {
+    struct PagerPrivateData *priv = win->parent->wdata;
+    if (priv && !TAILQ_EMPTY(&priv->ansi_list))
+    {
+      mutt_buffer_addstr(&filebuf, "\n# Ansi Colours\n");
+      struct AttrColor *ac = NULL;
+      TAILQ_FOREACH(ac, &priv->ansi_list, entries)
+      {
+        struct CursesColor *cc = ac->curses_color;
+        if (!cc)
+          continue;
+
+        const char *swatch = color_debug_log_color_attrs(cc->fg, cc->bg, ac->attrs);
+        mutt_buffer_add_printf(&filebuf, "# %-30s %-8s %-8s # %s\n",
+                               color_debug_log_attrs_list(ac->attrs),
+                               color_debug_log_name(color_fg, sizeof(color_fg), cc->fg),
+                               color_debug_log_name(color_bg, sizeof(color_bg), cc->bg),
+                               swatch);
+      }
+    }
+  }
+#endif
+
+  fputs(filebuf.data, fp_out);
+
+  mutt_file_fclose(&fp_out);
+  mutt_buffer_dealloc(&filebuf);
+
+  struct PagerData pdata = { 0 };
+  struct PagerView pview = { &pdata };
+
+  pdata.fname = tempfile;
+
+  pview.banner = "color";
+  pview.flags = MUTT_SHOWCOLOR;
+  pview.mode = PAGER_MODE_OTHER;
+
+  mutt_do_pager(&pview, NULL);
+  return MUTT_CMD_SUCCESS;
+}
+#endif
 
 /**
  * parse_color - Parse a 'color' command
@@ -532,11 +732,16 @@ static enum CommandResult parse_color(struct Buffer *buf, struct Buffer *s,
 
   if (!MoreArgs(s))
   {
+#ifdef USE_DEBUG_COLOR
+    if (StartupComplete)
+      return color_dump(buf, s, 0, err);
+#endif
+
     mutt_buffer_printf(err, _("%s: too few arguments"), "color");
     return MUTT_CMD_WARNING;
   }
 
-  mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+  parse_extract_token(buf, s, TOKEN_NO_FLAGS);
   color_debug(LL_DEBUG5, "color: %s\n", mutt_buffer_string(buf));
 
   rc = parse_object(buf, s, &cid, &q_level, err);
@@ -549,19 +754,17 @@ static enum CommandResult parse_color(struct Buffer *buf, struct Buffer *s,
 
   /* extract a regular expression if needed */
 
-  if ((cid == MT_COLOR_ATTACH_HEADERS) || (cid == MT_COLOR_BODY) ||
-      (cid == MT_COLOR_HEADER) || (cid == MT_COLOR_INDEX) ||
-      (cid == MT_COLOR_INDEX_AUTHOR) || (cid == MT_COLOR_INDEX_FLAGS) ||
-      (cid == MT_COLOR_INDEX_SUBJECT) || (cid == MT_COLOR_INDEX_TAG))
+  if (mutt_color_has_pattern(cid) && cid != MT_COLOR_STATUS)
   {
     color_debug(LL_DEBUG5, "regex needed\n");
-    if (!MoreArgs(s))
+    if (MoreArgs(s))
     {
-      mutt_buffer_printf(err, _("%s: too few arguments"), color ? "color" : "mono");
-      return MUTT_CMD_WARNING;
+      parse_extract_token(buf, s, TOKEN_NO_FLAGS);
     }
-
-    mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+    else
+    {
+      mutt_buffer_strcpy(buf, ".*");
+    }
   }
 
   if (MoreArgs(s) && (cid != MT_COLOR_STATUS))
@@ -577,7 +780,6 @@ static enum CommandResult parse_color(struct Buffer *buf, struct Buffer *s,
     return MUTT_CMD_SUCCESS;
   }
 
-#ifdef NCURSES_VERSION
   /* The case of the tree object is special, because a non-default fg color of
    * the tree element may be combined dynamically with the default bg color of
    * an index line, not necessarily defined in a rc file.  */
@@ -588,18 +790,17 @@ static enum CommandResult parse_color(struct Buffer *buf, struct Buffer *s,
     mutt_buffer_strcpy(err, _("default colors not supported"));
     return MUTT_CMD_ERROR;
   }
-#endif
 
   if (regex_colors_parse_color_list(cid, buf->data, fg, bg, attrs, &rc, err))
   {
     color_debug(LL_DEBUG5, "regex_colors_parse_color_list done\n");
-    return MUTT_CMD_SUCCESS;
+    return rc;
     // do nothing
   }
   else if (quoted_colors_parse_color(cid, fg, bg, attrs, q_level, &rc, err))
   {
     color_debug(LL_DEBUG5, "quoted_colors_parse_color done\n");
-    return MUTT_CMD_SUCCESS;
+    return rc;
     // do nothing
   }
   else if ((cid == MT_COLOR_STATUS) && MoreArgs(s))
@@ -609,12 +810,12 @@ static enum CommandResult parse_color(struct Buffer *buf, struct Buffer *s,
      * 0 arguments: sets the default status color (handled below by else part)
      * 1 argument : colorize pattern on match
      * 2 arguments: colorize nth submatch of pattern */
-    mutt_extract_token(buf, s, MUTT_TOKEN_NO_FLAGS);
+    parse_extract_token(buf, s, TOKEN_NO_FLAGS);
 
     if (MoreArgs(s))
     {
       struct Buffer tmp = mutt_buffer_make(0);
-      mutt_extract_token(&tmp, s, MUTT_TOKEN_NO_FLAGS);
+      parse_extract_token(&tmp, s, TOKEN_NO_FLAGS);
       if (!mutt_str_atoui_full(tmp.data, &match))
       {
         mutt_buffer_printf(err, _("%s: invalid number: %s"),

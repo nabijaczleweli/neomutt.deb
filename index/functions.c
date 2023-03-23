@@ -42,6 +42,7 @@
 #include "lib.h"
 #include "attach/lib.h"
 #include "browser/lib.h"
+#include "enter/lib.h"
 #include "menu/lib.h"
 #include "ncrypt/lib.h"
 #include "pager/lib.h"
@@ -49,7 +50,8 @@
 #include "progress/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
-#include "commands.h"
+#include "external.h"
+#include "globals.h" // IWYU pragma: keep
 #include "hook.h"
 #include "keymap.h"
 #include "mutt_header.h"
@@ -59,7 +61,6 @@
 #include "mview.h"
 #include "mx.h"
 #include "opcodes.h"
-#include "options.h"
 #include "private_data.h"
 #include "protos.h"
 #include "shared_data.h"
@@ -75,7 +76,7 @@
 #endif
 #ifdef USE_NNTP
 #include "nntp/lib.h"
-#include "nntp/mdata.h" // IWYU pragma: keep
+#include "nntp/mdata.h"
 #endif
 #ifdef USE_POP
 #include "pop/lib.h"
@@ -99,14 +100,15 @@ enum ResolveMethod
 
 /**
  * resolve_email - Pick the next Email to advance the cursor to
- * @param menu   Menu
+ * @param priv   Private Index data
  * @param shared Shared Index data
  * @param rm     How to advance the cursor, e.g. #RESOLVE_NEXT_EMAIL
  * @retval true Resolve succeeded
  */
-static bool resolve_email(struct Menu *menu, struct IndexSharedData *shared, enum ResolveMethod rm)
+static bool resolve_email(struct IndexPrivateData *priv,
+                          struct IndexSharedData *shared, enum ResolveMethod rm)
 {
-  if (!menu || !shared || !shared->mailbox || !shared->email)
+  if (!priv || !priv->menu || !shared || !shared->mailbox || !shared->email)
     return false;
 
   const bool c_resolve = cs_subset_bool(shared->sub, "resolve");
@@ -117,12 +119,15 @@ static bool resolve_email(struct Menu *menu, struct IndexSharedData *shared, enu
   switch (rm)
   {
     case RESOLVE_NEXT_EMAIL:
-      index = menu_get_index(menu) + 1;
+      index = menu_get_index(priv->menu) + 1;
       break;
 
     case RESOLVE_NEXT_UNDELETED:
-      index = ci_next_undeleted(shared->mailbox, menu_get_index(menu));
+    {
+      const bool uncollapse = mutt_using_threads() && !window_is_focused(priv->win_index);
+      index = ci_next_undeleted(shared->mailbox, menu_get_index(priv->menu), uncollapse);
       break;
+    }
 
     case RESOLVE_NEXT_THREAD:
       index = mutt_next_thread(shared->email);
@@ -140,7 +145,7 @@ static bool resolve_email(struct Menu *menu, struct IndexSharedData *shared, enu
     return false;
   }
 
-  menu_set_index(menu, index);
+  menu_set_index(priv->menu, index);
   return true;
 }
 
@@ -160,7 +165,10 @@ bool index_next_undeleted(struct MuttWindow *win_index)
   if (!shared)
     return false;
 
-  int index = ci_next_undeleted(shared->mailbox, menu_get_index(menu));
+  struct IndexPrivateData *priv = win_index->parent->wdata;
+  const bool uncollapse = mutt_using_threads() && !window_is_focused(priv->win_index);
+
+  int index = ci_next_undeleted(shared->mailbox, menu_get_index(menu), uncollapse);
   if ((index < 0) || (index >= shared->mailbox->vcount))
   {
     // Selection failed
@@ -295,8 +303,7 @@ static int op_delete(struct IndexSharedData *shared, struct IndexPrivateData *pr
   }
   else
   {
-    if (!resolve_email(priv->menu, shared, RESOLVE_NEXT_UNDELETED))
-      menu_queue_redraw(priv->menu, MENU_REDRAW_CURRENT);
+    resolve_email(priv, shared, RESOLVE_NEXT_UNDELETED);
   }
 
   return FR_SUCCESS;
@@ -337,7 +344,7 @@ static int op_delete_thread(struct IndexSharedData *shared,
   if (c_delete_untag)
     mutt_thread_set_flag(shared->mailbox, shared->email, MUTT_TAG, false, subthread);
 
-  resolve_email(priv->menu, shared, RESOLVE_NEXT_UNDELETED);
+  resolve_email(priv, shared, RESOLVE_NEXT_UNDELETED);
   menu_queue_redraw(priv->menu, MENU_REDRAW_INDEX);
   return FR_SUCCESS;
 }
@@ -445,7 +452,7 @@ static int op_edit_label(struct IndexSharedData *shared, struct IndexPrivateData
     mutt_message(ngettext("%d label changed", "%d labels changed", num_changed), num_changed);
 
     if (!priv->tag)
-      resolve_email(priv->menu, shared, RESOLVE_NEXT_UNDELETED);
+      resolve_email(priv, shared, RESOLVE_NEXT_UNDELETED);
     return FR_SUCCESS;
   }
 
@@ -578,8 +585,7 @@ static int op_flag_message(struct IndexSharedData *shared,
       return FR_NO_ACTION;
     mutt_set_flag(m, shared->email, MUTT_FLAG, !shared->email->flagged);
 
-    if (!resolve_email(priv->menu, shared, RESOLVE_NEXT_UNDELETED))
-      menu_queue_redraw(priv->menu, MENU_REDRAW_CURRENT);
+    resolve_email(priv, shared, RESOLVE_NEXT_UNDELETED);
   }
 
   return FR_SUCCESS;
@@ -663,7 +669,7 @@ static int op_jump(struct IndexSharedData *shared, struct IndexPrivateData *priv
   const int digit = op - OP_JUMP;
   if (digit > 0 && digit < 10)
   {
-    mutt_unget_event('0' + digit, 0);
+    mutt_unget_ch('0' + digit);
   }
 
   int msg_num = 0;
@@ -700,7 +706,6 @@ static int op_jump(struct IndexSharedData *shared, struct IndexPrivateData *priv
   }
 
   mutt_buffer_pool_release(&buf);
-  menu_queue_redraw(priv->menu, MENU_REDRAW_FULL);
   return rc;
 }
 
@@ -1182,8 +1187,7 @@ static int op_main_modify_tags(struct IndexSharedData *shared,
       m->changed = true;
     }
 
-    if (!resolve_email(priv->menu, shared, RESOLVE_NEXT_UNDELETED))
-      menu_queue_redraw(priv->menu, MENU_REDRAW_CURRENT);
+    resolve_email(priv, shared, RESOLVE_NEXT_UNDELETED);
   }
   rc = FR_SUCCESS;
 
@@ -1315,7 +1319,6 @@ static int op_main_next_new(struct IndexSharedData *shared,
     mutt_message(_("Search wrapped to bottom"));
   }
 
-  menu_queue_redraw(priv->menu, MENU_REDRAW_MOTION);
   return FR_SUCCESS;
 }
 
@@ -1363,8 +1366,6 @@ static int op_main_next_thread(struct IndexSharedData *shared,
 
     notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, NULL);
   }
-  else
-    menu_queue_redraw(priv->menu, MENU_REDRAW_MOTION);
 
   return FR_SUCCESS;
 }
@@ -1382,17 +1383,22 @@ static int op_main_next_undeleted(struct IndexSharedData *shared,
     mutt_message(_("You are on the last message"));
     return FR_ERROR;
   }
-  index = ci_next_undeleted(shared->mailbox, index);
+
+  const bool uncollapse = mutt_using_threads() && !window_is_focused(priv->win_index);
+
+  index = ci_next_undeleted(shared->mailbox, index, uncollapse);
   if (index != -1)
+  {
     menu_set_index(priv->menu, index);
+    if (uncollapse)
+      menu_queue_redraw(priv->menu, MENU_REDRAW_INDEX);
+  }
 
   if (index == -1)
   {
     notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, NULL);
     mutt_error(_("No undeleted messages"));
   }
-  else
-    menu_queue_redraw(priv->menu, MENU_REDRAW_MOTION);
 
   return FR_SUCCESS;
 }
@@ -1433,17 +1439,22 @@ static int op_main_prev_undeleted(struct IndexSharedData *shared,
     mutt_message(_("You are on the first message"));
     return FR_ERROR;
   }
-  index = ci_previous_undeleted(shared->mailbox, index);
+
+  const bool uncollapse = mutt_using_threads() && !window_is_focused(priv->win_index);
+
+  index = ci_previous_undeleted(shared->mailbox, index, uncollapse);
   if (index != -1)
+  {
     menu_set_index(priv->menu, index);
+    if (uncollapse)
+      menu_queue_redraw(priv->menu, MENU_REDRAW_INDEX);
+  }
 
   if (index == -1)
   {
     mutt_error(_("No undeleted messages"));
     notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, NULL);
   }
-  else
-    menu_queue_redraw(priv->menu, MENU_REDRAW_MOTION);
 
   return FR_SUCCESS;
 }
@@ -1503,7 +1514,7 @@ static int op_main_read_thread(struct IndexSharedData *shared,
   {
     const enum ResolveMethod rm = (op == OP_MAIN_READ_THREAD) ? RESOLVE_NEXT_THREAD :
                                                                 RESOLVE_NEXT_SUBTHREAD;
-    resolve_email(priv->menu, shared, rm);
+    resolve_email(priv, shared, rm);
     menu_queue_redraw(priv->menu, MENU_REDRAW_INDEX);
   }
 
@@ -1524,7 +1535,6 @@ static int op_main_root_message(struct IndexSharedData *shared,
   if (index != -1)
     menu_set_index(priv->menu, index);
 
-  menu_queue_redraw(priv->menu, MENU_REDRAW_MOTION);
   return FR_SUCCESS;
 }
 
@@ -1548,9 +1558,9 @@ static int op_main_set_flag(struct IndexSharedData *shared,
     {
       menu_queue_redraw(priv->menu, MENU_REDRAW_INDEX);
     }
-    else if (!resolve_email(priv->menu, shared, RESOLVE_NEXT_UNDELETED))
+    else
     {
-      menu_queue_redraw(priv->menu, MENU_REDRAW_CURRENT);
+      resolve_email(priv, shared, RESOLVE_NEXT_UNDELETED);
     }
   }
   emaillist_clear(&el);
@@ -1600,9 +1610,9 @@ static int op_main_sync_folder(struct IndexSharedData *shared,
     if (!shared->email)
       return FR_NO_ACTION;
     if (shared->email->deleted)
-      newidx = ci_next_undeleted(shared->mailbox, index);
+      newidx = ci_next_undeleted(shared->mailbox, index, false);
     if (newidx < 0)
-      newidx = ci_previous_undeleted(shared->mailbox, index);
+      newidx = ci_previous_undeleted(shared->mailbox, index, false);
     if (newidx >= 0)
       e = mutt_get_virt_email(shared->mailbox, newidx);
   }
@@ -1717,12 +1727,12 @@ static int op_mark_msg(struct IndexSharedData *shared, struct IndexPrivateData *
         !mutt_buffer_is_empty(buf))
     {
       const char *const c_mark_macro_prefix = cs_subset_string(shared->sub, "mark_macro_prefix");
-      char str[256];
+      char str[256] = { 0 };
       snprintf(str, sizeof(str), "%s%s", c_mark_macro_prefix, mutt_buffer_string(buf));
 
       struct Buffer *msg_id = mutt_buffer_pool_get();
       mutt_file_sanitize_regex(msg_id, shared->email->env->message_id);
-      char macro[256];
+      char macro[256] = { 0 };
       snprintf(macro, sizeof(macro), "<search>~i '%s'\n", mutt_buffer_string(msg_id));
       mutt_buffer_pool_release(&msg_id);
 
@@ -1763,8 +1773,6 @@ static int op_next_entry(struct IndexSharedData *shared, struct IndexPrivateData
     return FR_ERROR;
   }
   menu_set_index(priv->menu, index);
-
-  menu_queue_redraw(priv->menu, MENU_REDRAW_MOTION);
   return FR_SUCCESS;
 }
 
@@ -1804,8 +1812,6 @@ static int op_prev_entry(struct IndexSharedData *shared, struct IndexPrivateData
     return FR_ERROR;
   }
   menu_set_index(priv->menu, index - 1);
-
-  menu_queue_redraw(priv->menu, MENU_REDRAW_MOTION);
   return FR_SUCCESS;
 }
 
@@ -1976,9 +1982,9 @@ static int op_save(struct IndexSharedData *shared, struct IndexPrivateData *priv
     {
       menu_queue_redraw(priv->menu, MENU_REDRAW_INDEX);
     }
-    else if (!resolve_email(priv->menu, shared, RESOLVE_NEXT_UNDELETED))
+    else
     {
-      menu_queue_redraw(priv->menu, MENU_REDRAW_CURRENT);
+      resolve_email(priv, shared, RESOLVE_NEXT_UNDELETED);
     }
   }
   emaillist_clear(&el);
@@ -2055,9 +2061,7 @@ static int op_tag(struct IndexSharedData *shared, struct IndexPrivateData *priv,
 
   mutt_set_flag(shared->mailbox, shared->email, MUTT_TAG, !shared->email->tagged);
 
-  if (!resolve_email(priv->menu, shared, RESOLVE_NEXT_EMAIL))
-    menu_queue_redraw(priv->menu, MENU_REDRAW_CURRENT);
-
+  resolve_email(priv, shared, RESOLVE_NEXT_EMAIL);
   return FR_SUCCESS;
 }
 
@@ -2079,7 +2083,7 @@ static int op_tag_thread(struct IndexSharedData *shared, struct IndexPrivateData
   {
     const enum ResolveMethod rm = (op == OP_TAG_THREAD) ? RESOLVE_NEXT_THREAD :
                                                           RESOLVE_NEXT_SUBTHREAD;
-    resolve_email(priv->menu, shared, rm);
+    resolve_email(priv, shared, rm);
     menu_queue_redraw(priv->menu, MENU_REDRAW_INDEX);
   }
 
@@ -2122,8 +2126,7 @@ static int op_toggle_new(struct IndexSharedData *shared, struct IndexPrivateData
     else
       mutt_set_flag(m, shared->email, MUTT_READ, true);
 
-    if (!resolve_email(priv->menu, shared, RESOLVE_NEXT_UNDELETED))
-      menu_queue_redraw(priv->menu, MENU_REDRAW_CURRENT);
+    resolve_email(priv, shared, RESOLVE_NEXT_UNDELETED);
   }
 
   return FR_SUCCESS;
@@ -2161,8 +2164,7 @@ static int op_undelete(struct IndexSharedData *shared, struct IndexPrivateData *
   }
   else
   {
-    if (!resolve_email(priv->menu, shared, RESOLVE_NEXT_EMAIL))
-      menu_queue_redraw(priv->menu, MENU_REDRAW_CURRENT);
+    resolve_email(priv, shared, RESOLVE_NEXT_EMAIL);
   }
 
   return FR_SUCCESS;
@@ -2196,7 +2198,7 @@ static int op_undelete_thread(struct IndexSharedData *shared,
   {
     const enum ResolveMethod rm = (op == OP_UNDELETE_THREAD) ? RESOLVE_NEXT_THREAD :
                                                                RESOLVE_NEXT_SUBTHREAD;
-    resolve_email(priv->menu, shared, rm);
+    resolve_email(priv, shared, rm);
     menu_queue_redraw(priv->menu, MENU_REDRAW_INDEX);
   }
 
@@ -2607,7 +2609,6 @@ static int op_post(struct IndexSharedData *shared, struct IndexPrivateData *priv
 static int op_main_entire_thread(struct IndexSharedData *shared,
                                  struct IndexPrivateData *priv, int op)
 {
-  char buf[PATH_MAX] = { 0 };
   if (shared->mailbox->type != MUTT_NOTMUCH)
   {
     if (((shared->mailbox->type != MUTT_MH) && (shared->mailbox->type != MUTT_MAILDIR)) ||
@@ -2616,6 +2617,7 @@ static int op_main_entire_thread(struct IndexSharedData *shared,
       mutt_message(_("No virtual folder and no Message-Id, aborting"));
       return FR_ERROR;
     } // no virtual folder, but we have message-id, reconstruct thread on-the-fly
+    char buf[PATH_MAX] = { 0 };
     strncpy(buf, "id:", sizeof(buf));
     int msg_id_offset = 0;
     if ((shared->email->env->message_id)[0] == '<')
@@ -2779,7 +2781,7 @@ static int op_main_fetch_mail(struct IndexSharedData *shared,
  * @param checks Checks to perform, see #CheckFlags
  * @retval true The checks pass successfully
  */
-bool prereq(struct MailboxView *mv, struct Menu *menu, CheckFlags checks)
+static bool prereq(struct MailboxView *mv, struct Menu *menu, CheckFlags checks)
 {
   bool result = true;
 

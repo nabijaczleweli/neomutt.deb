@@ -24,12 +24,22 @@
 #include "config.h"
 #include "acutest.h"
 #include <locale.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
-#include <sys/types.h>
-#include <unistd.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
+
+struct MuttWindow;
+struct PagerView;
+
+bool StartupComplete = true;
+
+char *HomeDir = NULL;
+int SigInt = 0;
+int SigWinch = 0;
 
 #define TEST_DIR "NEOMUTT_TEST_DIR"
 
@@ -151,4 +161,14 @@ struct Mailbox *get_current_mailbox(void)
 struct Menu *get_current_menu(void)
 {
   return NULL;
+}
+
+void mutt_mktemp_full(char *buf, size_t buflen, const char *prefix,
+                      const char *suffix, const char *src, int line)
+{
+}
+
+int mutt_do_pager(struct PagerView *pview, struct Email *e)
+{
+  return 0;
 }

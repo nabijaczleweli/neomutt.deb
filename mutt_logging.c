@@ -40,9 +40,8 @@
 #include "gui/lib.h"
 #include "mutt_logging.h"
 #include "color/lib.h"
-#include "mutt_globals.h"
+#include "globals.h"
 #include "muttlib.h"
-#include "options.h"
 
 uint64_t LastError = 0; ///< Time of the last error message (in milliseconds since the Unix epoch)
 
@@ -59,52 +58,13 @@ const int NumOfLogs = 5;  ///< How many log files to rotate
 static void error_pause(void)
 {
   const short c_sleep_time = cs_subset_number(NeoMutt->sub, "sleep_time");
-  const uint64_t elapsed = mutt_date_epoch_ms() - LastError;
+  const uint64_t elapsed = mutt_date_now_ms() - LastError;
   const uint64_t sleep = c_sleep_time * S_TO_MS;
   if ((LastError == 0) || (elapsed >= sleep))
     return;
 
   mutt_refresh();
   mutt_date_sleep_ms(sleep - elapsed);
-}
-
-/**
- * rotate_logs - Rotate a set of numbered files
- * @param file  Template filename
- * @param count Maximum number of files
- * @retval ptr Name of the 0'th file
- *
- * Given a template 'temp', rename files numbered 0 to (count-1).
- *
- * Rename:
- * - ...
- * - temp1 -> temp2
- * - temp0 -> temp1
- */
-static const char *rotate_logs(const char *file, int count)
-{
-  if (!file)
-    return NULL;
-
-  struct Buffer *old_file = mutt_buffer_pool_get();
-  struct Buffer *new_file = mutt_buffer_pool_get();
-
-  /* rotate the old debug logs */
-  for (count -= 2; count >= 0; count--)
-  {
-    mutt_buffer_printf(old_file, "%s%d", file, count);
-    mutt_buffer_printf(new_file, "%s%d", file, count + 1);
-
-    mutt_buffer_expand_path(old_file);
-    mutt_buffer_expand_path(new_file);
-    (void) rename(mutt_buffer_string(old_file), mutt_buffer_string(new_file));
-  }
-
-  file = mutt_buffer_strdup(old_file);
-  mutt_buffer_pool_release(&old_file);
-  mutt_buffer_pool_release(&new_file);
-
-  return file;
 }
 
 /**
@@ -131,23 +91,23 @@ int log_disp_curses(time_t stamp, const char *file, int line,
   if (level > c_debug_level)
     return 0;
 
-  char buf[1024];
+  char buf[1024] = { 0 };
 
   va_list ap;
   va_start(ap, level);
   const char *fmt = va_arg(ap, const char *);
-  int ret = vsnprintf(buf, sizeof(buf), fmt, ap);
+  int rc = vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
 
-  if ((level == LL_PERROR) && (ret >= 0) && (ret < sizeof(buf)))
+  if ((level == LL_PERROR) && (rc >= 0) && (rc < sizeof(buf)))
   {
-    char *buf2 = buf + ret;
-    int len = sizeof(buf) - ret;
+    char *buf2 = buf + rc;
+    int len = sizeof(buf) - rc;
     const char *p = strerror(errno);
     if (!p)
       p = _("unknown error");
 
-    ret += snprintf(buf2, len, ": %s (errno = %d)", p, errno);
+    rc += snprintf(buf2, len, ": %s (errno = %d)", p, errno);
   }
 
   const bool dupe = (strcmp(buf, ErrorBuf) == 0);
@@ -195,7 +155,7 @@ int log_disp_curses(time_t stamp, const char *file, int line,
   if ((level <= LL_ERROR) && !dupe)
   {
     OptMsgErr = true;
-    LastError = mutt_date_epoch_ms();
+    LastError = mutt_date_now_ms();
   }
   else
   {
@@ -204,7 +164,7 @@ int log_disp_curses(time_t stamp, const char *file, int line,
   }
 
   window_redraw(msgwin_get_window());
-  return ret;
+  return rc;
 }
 
 /**
@@ -212,7 +172,7 @@ int log_disp_curses(time_t stamp, const char *file, int line,
  */
 void mutt_log_prep(void)
 {
-  char ver[64];
+  char ver[64] = { 0 };
   snprintf(ver, sizeof(ver), "-%s%s", PACKAGE_VERSION, GitVer);
   log_file_set_version(ver);
 }
@@ -239,7 +199,12 @@ int mutt_log_set_file(const char *file)
   const char *const c_debug_file = cs_subset_path(NeoMutt->sub, "debug_file");
   if (!mutt_str_equal(CurrentFile, c_debug_file))
   {
-    const char *name = rotate_logs(c_debug_file, NumOfLogs);
+    struct Buffer *expanded = mutt_buffer_pool_get();
+    mutt_buffer_addstr(expanded, c_debug_file);
+    mutt_buffer_expand_path(expanded);
+
+    const char *name = mutt_file_rotate(mutt_buffer_string(expanded), NumOfLogs);
+    mutt_buffer_pool_release(&expanded);
     if (!name)
       return -1;
 
@@ -321,7 +286,9 @@ int level_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
  */
 int main_log_observer(struct NotifyCallback *nc)
 {
-  if ((nc->event_type != NT_CONFIG) || !nc->event_data)
+  if (nc->event_type != NT_CONFIG)
+    return 0;
+  if (!nc->event_data)
     return -1;
 
   struct EventConfig *ev_c = nc->event_data;

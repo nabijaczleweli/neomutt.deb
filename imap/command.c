@@ -44,14 +44,13 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "conn/lib.h"
+#include "parse/lib.h"
 #include "adata.h"
 #include "edata.h"
-#include "init.h"
 #include "mdata.h"
 #include "msn.h"
 #include "mutt_account.h"
 #include "mutt_logging.h"
-#include "mutt_socket.h"
 #include "mx.h"
 
 #define IMAP_CMD_BUFSIZE 512
@@ -568,7 +567,7 @@ static void cmd_parse_list(struct ImapAccountData *adata, char *s)
 {
   struct ImapList *list = NULL;
   struct ImapList lb = { 0 };
-  char delimbuf[5]; /* worst case: "\\"\0 */
+  char delimbuf[5] = { 0 }; /* worst case: "\\"\0 */
   unsigned int litlen;
 
   if (adata->cmdresult)
@@ -661,8 +660,8 @@ static void cmd_parse_list(struct ImapAccountData *adata, char *s)
  */
 static void cmd_parse_lsub(struct ImapAccountData *adata, char *s)
 {
-  char buf[256];
-  char quoted_name[256];
+  char buf[256] = { 0 };
+  char quoted_name[256] = { 0 };
   struct Buffer err;
   struct Url url = { 0 };
   struct ImapList list = { 0 };
@@ -701,7 +700,7 @@ static void cmd_parse_lsub(struct ImapAccountData *adata, char *s)
   mutt_buffer_init(&err);
   err.dsize = 256;
   err.data = mutt_mem_malloc(err.dsize);
-  if (mutt_parse_rc_line(buf, &err))
+  if (parse_rc_line(buf, &err))
     mutt_debug(LL_DEBUG1, "Error adding subscribed mailbox: %s\n", err.data);
   FREE(&err.data);
 }
@@ -1128,7 +1127,7 @@ int imap_cmd_step(struct ImapAccountData *adata)
     mutt_debug(LL_DEBUG3, "shrank buffer to %lu bytes\n", adata->blen);
   }
 
-  adata->lastread = mutt_date_epoch();
+  adata->lastread = mutt_date_now();
 
   /* handle untagged messages. The caller still gets its shot afterwards. */
   if ((mutt_str_startswith(adata->buf, "* ") ||

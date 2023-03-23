@@ -23,8 +23,8 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
-#include "mutt/lib.h"
-#include "config/common.h"
+#include <stddef.h>
+#include <stdbool.h>
 #include "config/lib.h"
 #include "core/lib.h"
 #include "test_common.h"
@@ -46,7 +46,7 @@ void test_account_mailbox_remove(void)
 
   {
     NeoMutt = test_neomutt_create();
-    TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, 0));
+    TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, DT_NO_FLAGS));
 
     struct ConfigSubset *sub = cs_subset_new("account", NULL, NULL);
     struct Account *a = account_new("dummy", sub);

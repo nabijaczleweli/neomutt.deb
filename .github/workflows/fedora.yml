@@ -13,16 +13,16 @@ jobs:
       fail-fast: false
       matrix:
         distro:
-          - version: 34
-          - version: 35
           - version: 36
+          - version: 37
+          - version: 38
         config:
           - name: Default
-            options:
+            options: --testing
           - name: Minimal
-            options: --disable-idn --disable-nls --disable-pgp --disable-smime --ssl --with-lock=flock
+            options: --disable-idn --disable-nls --disable-pgp --disable-smime --ssl --gsasl --testing --with-lock=flock
           - name: Everything
-            options: --autocrypt --bdb --disable-idn --full-doc --gdbm --gnutls --gpgme --gss --idn2 --lmdb --lua --lz4 --notmuch --pcre2 --qdbm --sasl --tdb --tokyocabinet --with-lock=fcntl --zlib --zstd
+            options: --autocrypt --bdb --disable-idn --full-doc --gdbm --gnutls --gpgme --gss --idn2 --lmdb --lua --lz4 --notmuch --pcre2 --qdbm --sasl --tdb --testing --tokyocabinet --with-lock=fcntl --zlib --zstd
 
     name: Fedora ${{ matrix.distro.version }} - ${{ matrix.config.name }}
     runs-on: ubuntu-latest
@@ -30,10 +30,10 @@ jobs:
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v3.4.0
 
     - name: Checkout Test Files
-      uses: actions/checkout@v3
+      uses: actions/checkout@v3.4.0
       with:
         repository: neomutt/neomutt-test-files
         path: test-files
@@ -47,7 +47,7 @@ jobs:
       run: ./configure ${{ matrix.config.options }}
 
     - name: Build Neomutt
-      run: make -j 2
+      run: make -j 2 neomutt
 
     - name: Neomutt Version
       run: ./neomutt -v

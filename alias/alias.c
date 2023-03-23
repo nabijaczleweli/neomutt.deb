@@ -46,11 +46,12 @@
 #include "mutt.h"
 #include "alias.h"
 #include "lib.h"
+#include "enter/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "alternates.h"
+#include "globals.h" // IWYU pragma: keep
 #include "maillist.h"
-#include "mutt_globals.h"
 #include "muttlib.h"
 #include "reverse.h"
 
@@ -158,7 +159,7 @@ static void expand_aliases_r(struct AddressList *al, struct ListHead *expn)
         struct passwd *pw = getpwnam(a->mailbox);
         if (pw)
         {
-          char namebuf[256];
+          char namebuf[256] = { 0 };
 
           mutt_gecos_name(namebuf, sizeof(namebuf), pw);
           mutt_str_replace(&a->personal, namebuf);
@@ -259,7 +260,7 @@ static int check_alias_name(const char *s, char *dest, size_t destlen)
  */
 static bool string_is_address(const char *str, const char *user, const char *domain)
 {
-  char buf[1024];
+  char buf[1024] = { 0 };
 
   snprintf(buf, sizeof(buf), "%s@%s", NONULL(user), NONULL(domain));
   if (mutt_istr_equal(str, buf))
@@ -476,7 +477,7 @@ retry_name:
   }
 
   mutt_buffer_reset(buf);
-  mutt_addrlist_write(&alias->addr, buf->data, buf->dsize, true);
+  mutt_addrlist_write(&alias->addr, buf, true);
   prompt = mutt_buffer_pool_get();
   if (alias->comment)
   {
@@ -497,8 +498,8 @@ retry_name:
   alias_reverse_add(alias);
   TAILQ_INSERT_TAIL(&Aliases, alias, entries);
 
-  const char *const alias_file = cs_subset_path(sub, "alias_file");
-  mutt_buffer_strcpy(buf, alias_file);
+  const char *const c_alias_file = cs_subset_path(sub, "alias_file");
+  mutt_buffer_strcpy(buf, c_alias_file);
 
   if (mutt_buffer_get_field(_("Save to file: "), buf, MUTT_COMP_FILE | MUTT_COMP_CLEAR,
                             false, NULL, NULL, NULL) != 0)
@@ -546,7 +547,7 @@ retry_name:
   fprintf(fp_alias, "alias %s ", mutt_buffer_string(buf));
   mutt_buffer_reset(buf);
 
-  mutt_addrlist_write(&alias->addr, buf->data, buf->dsize, false);
+  mutt_addrlist_write(&alias->addr, buf, false);
   recode_buf(buf->data, buf->dsize);
   write_safe_address(fp_alias, mutt_buffer_string(buf));
   if (alias->comment)

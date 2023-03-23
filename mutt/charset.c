@@ -38,7 +38,7 @@
 #include "config/lib.h"
 #include "core/lib.h"
 #include "charset.h"
-#include "buffer.h"
+#include "lib.h"
 #include "memory.h"
 #include "queue.h"
 #include "regex3.h"
@@ -314,16 +314,13 @@ int mutt_ch_convert_nonmime_string(char **ps)
   if (ulen == 0)
     return 0;
 
-  const char *c1 = NULL;
-
-  const char *const c_assumed_charset = cs_subset_string(NeoMutt->sub, "assumed_charset");
+  const struct Slist *const c_assumed_charset = cs_subset_slist(NeoMutt->sub, "assumed_charset");
   const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
-  for (const char *c = c_assumed_charset; c; c = c1 ? c1 + 1 : 0)
+  const struct ListNode *np = NULL;
+  STAILQ_FOREACH(np, &c_assumed_charset->head, entries)
   {
-    c1 = strchr(c, ':');
-    size_t n = c1 ? c1 - c : mutt_str_len(c);
-    if (n == 0)
-      return 0;
+    char const *c = np->data;
+    size_t n = mutt_str_len(c);
     char *fromcode = mutt_mem_malloc(n + 1);
     mutt_str_copy(fromcode, c, n + 1);
     char *s = mutt_strn_dup(u, ulen);
@@ -422,7 +419,7 @@ bool mutt_ch_chscmp(const char *cs1, const char *cs2)
   if (!cs1 || !cs2)
     return false;
 
-  char buf[256];
+  char buf[256] = { 0 };
 
   mutt_ch_canonical_charset(buf, sizeof(buf), cs1);
 
@@ -442,23 +439,16 @@ bool mutt_ch_chscmp(const char *cs1, const char *cs2)
 char *mutt_ch_get_default_charset(void)
 {
   static char fcharset[128];
-  const char *const c_assumed_charset = cs_subset_string(NeoMutt->sub, "assumed_charset");
-  const char *c = c_assumed_charset;
-  const char *c1 = NULL;
+  const char *c = NULL;
+  const struct Slist *const c_assumed_charset = cs_subset_slist(NeoMutt->sub, "assumed_charset");
 
-  if (c)
-  {
-    c1 = strchr(c, ':');
+  if (c_assumed_charset && (c_assumed_charset->count > 0))
+    c = STAILQ_FIRST(&c_assumed_charset->head)->data;
+  else
+    c = "us-ascii";
 
-    size_t copysize;
-    if (c1)
-      copysize = MIN((c1 - c + 1), sizeof(fcharset));
-    else
-      copysize = sizeof(fcharset);
-    mutt_str_copy(fcharset, c, copysize);
-    return fcharset;
-  }
-  return strcpy(fcharset, "us-ascii");
+  mutt_str_copy(fcharset, c, sizeof(fcharset));
+  return fcharset;
 }
 
 /**
@@ -738,7 +728,7 @@ int mutt_ch_check(const char *s, size_t slen, const char *from, const char *to)
   char *saved_out = out;
 
   const size_t convlen = iconv(cd, (ICONV_CONST char **) &s, &slen, &out, &outlen);
-  if (convlen == -1)
+  if (convlen == (size_t) -1)
     rc = errno;
 
   FREE(&saved_out);
@@ -1011,7 +1001,7 @@ char *mutt_ch_fgetconvs(char *buf, size_t buflen, struct FgetConv *fc)
  */
 void mutt_ch_set_charset(const char *charset)
 {
-  char buf[256];
+  char buf[256] = { 0 };
 
   mutt_ch_canonical_charset(buf, sizeof(buf), charset);
 
@@ -1034,7 +1024,7 @@ void mutt_ch_set_charset(const char *charset)
 /**
  * mutt_ch_choose - Figure the best charset to encode a string
  * @param[in] fromcode Original charset of the string
- * @param[in] charsets Colon-separated list of potential charsets to use
+ * @param[in] charsets List of potential charsets to use
  * @param[in] u        String to encode
  * @param[in] ulen     Length of the string to encode
  * @param[out] d       If not NULL, point it to the converted string
@@ -1042,28 +1032,23 @@ void mutt_ch_set_charset(const char *charset)
  * @retval ptr  Best performing charset
  * @retval NULL None could be found
  */
-char *mutt_ch_choose(const char *fromcode, const char *charsets, const char *u,
-                     size_t ulen, char **d, size_t *dlen)
+char *mutt_ch_choose(const char *fromcode, const struct Slist *charsets,
+                     const char *u, size_t ulen, char **d, size_t *dlen)
 {
-  if (!fromcode)
+  if (!fromcode || !charsets)
     return NULL;
 
   char *e = NULL, *tocode = NULL;
   size_t elen = 0, bestn = 0;
-  const char *q = NULL;
 
-  for (const char *p = charsets; p; p = q ? q + 1 : 0)
+  const struct ListNode *np = NULL;
+  STAILQ_FOREACH(np, &charsets->head, entries)
   {
-    q = strchr(p, ':');
-
-    size_t n = q ? q - p : strlen(p);
-    if (n == 0)
+    char *t = mutt_str_dup(np->data);
+    if (!t)
       continue;
 
-    char *t = mutt_mem_malloc(n + 1);
-    memcpy(t, p, n);
-    t[n] = '\0';
-
+    size_t n = mutt_str_len(t);
     char *s = mutt_strn_dup(u, ulen);
     const int rc = d ? mutt_ch_convert_string(&s, fromcode, t, MUTT_ICONV_NO_FLAGS) :
                        mutt_ch_check(s, ulen, fromcode, t);
@@ -1102,7 +1087,7 @@ char *mutt_ch_choose(const char *fromcode, const char *charsets, const char *u,
     if (dlen)
       *dlen = elen;
 
-    char canonical_buf[1024];
+    char canonical_buf[1024] = { 0 };
     mutt_ch_canonical_charset(canonical_buf, sizeof(canonical_buf), tocode);
     mutt_str_replace(&tocode, canonical_buf);
   }

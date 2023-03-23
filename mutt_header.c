@@ -31,6 +31,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include "mutt/lib.h"
 #include "email/lib.h"
@@ -39,12 +40,13 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "mutt_header.h"
+#include "enter/lib.h"
 #include "index/lib.h"
 #include "ncrypt/lib.h"
+#include "postpone/lib.h"
 #include "send/lib.h"
+#include "globals.h" // IWYU pragma: keep
 #include "muttlib.h"
-#include "options.h"
-#include "protos.h"
 
 /**
  * label_ref_dec - Decrease the refcount of a label
@@ -53,11 +55,11 @@
  */
 static void label_ref_dec(struct Mailbox *m, char *label)
 {
-  struct HashElem *elem = mutt_hash_find_elem(m->label_hash, label);
-  if (!elem)
+  struct HashElem *he = mutt_hash_find_elem(m->label_hash, label);
+  if (!he)
     return;
 
-  uintptr_t count = (uintptr_t) elem->data;
+  uintptr_t count = (uintptr_t) he->data;
   if (count <= 1)
   {
     mutt_hash_delete(m->label_hash, label, NULL);
@@ -65,7 +67,7 @@ static void label_ref_dec(struct Mailbox *m, char *label)
   }
 
   count--;
-  elem->data = (void *) count;
+  he->data = (void *) count;
 }
 
 /**
@@ -77,17 +79,17 @@ static void label_ref_inc(struct Mailbox *m, char *label)
 {
   uintptr_t count;
 
-  struct HashElem *elem = mutt_hash_find_elem(m->label_hash, label);
-  if (!elem)
+  struct HashElem *he = mutt_hash_find_elem(m->label_hash, label);
+  if (!he)
   {
     count = 1;
     mutt_hash_insert(m->label_hash, label, (void *) count);
     return;
   }
 
-  count = (uintptr_t) elem->data;
+  count = (uintptr_t) he->data;
   count++;
-  elem->data = (void *) count;
+  he->data = (void *) count;
 }
 
 /**
@@ -243,7 +245,7 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
   }
 
   struct Envelope *env_new = NULL;
-  char buf[1024];
+  char buf[1024] = { 0 };
   env_new = mutt_rfc822_read_header(fp_in, NULL, true, false);
   int bytes_read;
   while ((bytes_read = fread(buf, 1, sizeof(buf), fp_in)) > 0)
@@ -280,15 +282,18 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
   mutt_expand_aliases_env(e->env);
 
   /* search through the user defined headers added to see if
-   * fcc: or attach: or pgp: was specified */
+   * fcc: or attach: or pgp: or smime: was specified */
 
   struct ListNode *np = NULL, *tmp = NULL;
   STAILQ_FOREACH_SAFE(np, &e->env->userhdrs, entries, tmp)
   {
     bool keep = true;
-    size_t plen;
+    size_t plen = 0;
 
-    if (fcc && (plen = mutt_istr_startswith(np->data, "fcc:")))
+    // Check for header names: most specific first
+    if (fcc && ((plen = mutt_istr_startswith(np->data, "X-Mutt-Fcc:")) ||
+                (plen = mutt_istr_startswith(np->data, "Mutt-Fcc:")) ||
+                (plen = mutt_istr_startswith(np->data, "fcc:"))))
     {
       const char *p = mutt_str_skip_email_wsp(np->data + plen);
       if (*p)
@@ -298,7 +303,10 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
       }
       keep = false;
     }
-    else if ((plen = mutt_istr_startswith(np->data, "attach:")))
+    // Check for header names: most specific first
+    else if ((plen = mutt_istr_startswith(np->data, "X-Mutt-Attach:")) ||
+             (plen = mutt_istr_startswith(np->data, "Mutt-Attach:")) ||
+             (plen = mutt_istr_startswith(np->data, "attach:")))
     {
       struct Body *body2 = NULL;
       struct Body *parts = NULL;
@@ -337,8 +345,11 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
       }
       keep = false;
     }
+    // Check for header names: most specific first
     else if (((WithCrypto & APPLICATION_PGP) != 0) &&
-             (plen = mutt_istr_startswith(np->data, "pgp:")))
+             ((plen = mutt_istr_startswith(np->data, "X-Mutt-PGP:")) ||
+              (plen = mutt_istr_startswith(np->data, "Mutt-PGP:")) ||
+              (plen = mutt_istr_startswith(np->data, "pgp:"))))
     {
       SecurityFlags sec = mutt_parse_crypt_hdr(np->data + plen, false, APPLICATION_PGP);
       if (sec != SEC_NO_FLAGS)
@@ -350,6 +361,38 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
       }
       keep = false;
     }
+    // Check for header names: most specific first
+    else if (((WithCrypto & APPLICATION_SMIME) != 0) &&
+             ((plen = mutt_istr_startswith(np->data, "X-Mutt-SMIME:")) ||
+              (plen = mutt_istr_startswith(np->data, "Mutt-SMIME:")) ||
+              (plen = mutt_istr_startswith(np->data, "smime:"))))
+    {
+      SecurityFlags sec = mutt_parse_crypt_hdr(np->data + plen, false, APPLICATION_SMIME);
+      if (sec != SEC_NO_FLAGS)
+        sec |= APPLICATION_SMIME;
+      if (sec != e->security)
+      {
+        e->security = sec;
+        notify_send(e->notify, NT_EMAIL, NT_EMAIL_CHANGE, NULL);
+      }
+      keep = false;
+    }
+#ifdef MIXMASTER
+    // Check for header names: most specific first
+    else if ((plen = mutt_istr_startswith(np->data, "X-Mutt-Mix:")) ||
+             (plen = mutt_istr_startswith(np->data, "Mutt-Mix:")))
+    {
+      mutt_list_free(&e->chain);
+
+      char *t = strtok(np->data + plen, ", \t\n");
+      while (t)
+      {
+        mutt_list_insert_tail(&e->chain, mutt_str_dup(t));
+        t = strtok(NULL, ", \t\n");
+      }
+      keep = false;
+    }
+#endif
 
     if (!keep)
     {

@@ -23,8 +23,9 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include <stdbool.h>
+#include <time.h>
 #include "mutt/lib.h"
-#include "address/lib.h"
 #include "email/lib.h"
 
 struct IsFromTest
@@ -95,6 +96,12 @@ static struct IsFromTest test[] = {
   },
   {
     "From god@heaven.af.mil Sat Jan  3 01:05:34 MET DST 1996",
+    true,
+    "god@heaven.af.mil",
+    820631134
+  },
+  {
+    "From god@heaven.af.mil Sat Jan  3 01:05:34 +0000 1996",
     true,
     "god@heaven.af.mil",
     820631134

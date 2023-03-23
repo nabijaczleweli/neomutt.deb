@@ -26,6 +26,7 @@
  * Config used by libcompose
  */
 
+#include "config.h"
 #include <stddef.h>
 #include <stdbool.h>
 #include "config/lib.h"
@@ -34,9 +35,12 @@
 #define ISPELL "ispell"
 #endif
 
+/**
+ * ComposeVars - Config definitions for compose
+ */
 static struct ConfigDef ComposeVars[] = {
   // clang-format off
-  { "compose_format", DT_STRING|R_MENU, IP "-- NeoMutt: Compose  [Approx. msg size: %l   Atts: %a]%>-", 0, NULL,
+  { "compose_format", DT_STRING, IP "-- NeoMutt: Compose  [Approx. msg size: %l   Atts: %a]%>-", 0, NULL,
     "printf-like format string for the Compose panel's status bar"
   },
   { "compose_show_user_headers", DT_BOOL, true, 0, NULL,
@@ -54,7 +58,7 @@ static struct ConfigDef ComposeVars[] = {
   { "postpone", DT_QUAD, MUTT_ASKYES, 0, NULL,
     "Save messages to the `$postponed` folder"
   },
-  { NULL }
+  { NULL },
   // clang-format on
 };
 
@@ -63,5 +67,5 @@ static struct ConfigDef ComposeVars[] = {
  */
 bool config_init_compose(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, ComposeVars, 0);
+  return cs_register_variables(cs, ComposeVars, DT_NO_FLAGS);
 }

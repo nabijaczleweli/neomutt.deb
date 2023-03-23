@@ -24,8 +24,7 @@
 #define MUTT_GUI_CURS_LIB_H
 
 #include <stdbool.h>
-#include <wchar.h> // IWYU pragma: keep
-#include "mutt.h"
+#include <wchar.h>
 #include "browser/lib.h"
 #include "keymap.h"
 
@@ -49,7 +48,6 @@ int          mutt_addwch(struct MuttWindow *win, wchar_t wc);
 int          mutt_any_key_to_continue(const char *s);
 void         mutt_beep(bool force);
 int          mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname, bool mailbox, struct Mailbox *m, bool multiple, char ***files, int *numfiles, SelectFileFlags flags);
-int          mutt_buffer_get_field(const char *field, struct Buffer *buf, CompletionFlags complete, bool multiple, struct Mailbox *m, char ***files, int *numfiles);
 void         mutt_edit_file(const char *editor, const char *file);
 void         mutt_endwin(void);
 void         mutt_flushinp(void);
@@ -58,9 +56,8 @@ void         mutt_flush_unget_to_endcond(void);
 void         mutt_format_s(char *buf, size_t buflen, const char *prec, const char *s);
 void         mutt_format_s_tree(char *buf, size_t buflen, const char *prec, const char *s);
 void         mutt_format_s_x(char *buf, size_t buflen, const char *prec, const char *s, bool arboreal);
-void         mutt_getch_timeout(int delay);
+struct KeyEvent mutt_getch_timeout(int delay);
 struct KeyEvent mutt_getch(void);
-int          mutt_get_field_unbuffered(const char *msg, struct Buffer *buf, CompletionFlags flags);
 void         mutt_need_hard_redraw(void);
 void         mutt_paddstr(struct MuttWindow *win, int n, const char *s);
 void         mutt_perror_debug(const char *s);
@@ -70,7 +67,8 @@ void         mutt_refresh(void);
 void         mutt_simple_format(char *buf, size_t buflen, int min_width, int max_width, enum FormatJustify justify, char pad_char, const char *s, size_t n, bool arboreal);
 size_t       mutt_strwidth(const char *s);
 size_t       mutt_strnwidth(const char *s, size_t len);
-void         mutt_unget_event(int ch, int op);
+void         mutt_unget_ch(int ch);
+void         mutt_unget_op(int op);
 void         mutt_unget_string(const char *s);
 size_t       mutt_wstr_trunc(const char *src, size_t maxlen, size_t maxwid, size_t *width);
 

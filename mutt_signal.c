@@ -36,9 +36,9 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "attach/lib.h"
-#include "mutt_globals.h"
-#include "protos.h" // IWYU pragma: keep
-#ifdef USE_DEBUG_GRAPHVIZ
+#include "globals.h"
+#include "protos.h"
+#if defined(USE_DEBUG_GRAPHVIZ) || defined(HAVE_LIBUNWIND)
 #include "debug/lib.h"
 #endif
 
