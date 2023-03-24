@@ -46,7 +46,7 @@ Copyright: 1999-2004 Marco d'Itri <md@linux.it>
 	   2016 Faidon Liambotis <paravoid@debian.org>
 License: GPL-2+
 
-Files: contrib/logo/neomutt.svg
+Files: data/logo/neomutt.svg
 Copyright: 2017 Malcolm Locke <malc@wholemeal.co.nz>
 License: CC-BY-SA-4.0
 
