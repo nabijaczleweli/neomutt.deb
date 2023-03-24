@@ -35,7 +35,7 @@ override_dh_auto_configure:
 		--gss \
 		--idn \
 		--mixmaster \
-		--sasl \
+		--gsasl \
 		--lmdb \
 		--zlib \
 		--zstd \
