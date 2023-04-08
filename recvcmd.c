@@ -52,7 +52,6 @@
 #include "hdrline.h"
 #include "mutt_body.h"
 #include "mutt_logging.h"
-#include "muttlib.h"
 #include "protos.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
@@ -308,7 +307,9 @@ void mutt_attach_resend(FILE *fp, struct Mailbox *m, struct AttachCtx *actx, str
     return;
 
   if (cur)
+  {
     mutt_resend_message(fp, m, cur->email, NeoMutt->sub);
+  }
   else
   {
     for (short i = 0; i < actx->idxlen; i++)
@@ -428,7 +429,9 @@ static void include_header(bool quote, FILE *fp_in, struct Email *e, FILE *fp_ou
   {
     const bool c_text_flowed = cs_subset_bool(NeoMutt->sub, "text_flowed");
     if (prefix)
+    {
       mutt_str_copy(prefix2, prefix, sizeof(prefix2));
+    }
     else if (!c_text_flowed)
     {
       const char *const c_attribution_locale = cs_subset_string(NeoMutt->sub, "attribution_locale");
@@ -439,7 +442,9 @@ static void include_header(bool quote, FILE *fp_in, struct Email *e, FILE *fp_ou
       setlocale(LC_TIME, "");
     }
     else
+    {
       mutt_str_copy(prefix2, ">", sizeof(prefix2));
+    }
 
     chflags |= CH_PREFIX;
   }
@@ -530,7 +535,9 @@ static void attach_forward_bodies(FILE *fp, struct Email *e, struct AttachCtx *a
   {
     const bool c_text_flowed = cs_subset_bool(NeoMutt->sub, "text_flowed");
     if (c_text_flowed)
+    {
       mutt_str_copy(prefix, ">", sizeof(prefix));
+    }
     else
     {
       const char *const c_attribution_locale = cs_subset_string(NeoMutt->sub, "attribution_locale");
@@ -676,7 +683,9 @@ static void attach_forward_msgs(FILE *fp, struct AttachCtx *actx,
   CopyHeaderFlags chflags = CH_DECODE;
 
   if (cur)
+  {
     e_cur = cur->email;
+  }
   else
   {
     for (short i = 0; i < actx->idxlen; i++)
@@ -754,7 +763,9 @@ static void attach_forward_msgs(FILE *fp, struct AttachCtx *actx,
   {
     last = &e_tmp->body;
     if (cur)
+    {
       mutt_body_copy(fp, last, cur);
+    }
     else
     {
       for (short i = 0; i < actx->idxlen; i++)
@@ -768,7 +779,9 @@ static void attach_forward_msgs(FILE *fp, struct AttachCtx *actx,
     }
   }
   else
+  {
     email_free(&e_tmp);
+  }
 
   struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
   emaillist_add_email(&el, e_cur);
@@ -795,7 +808,9 @@ void mutt_attach_forward(FILE *fp, struct Email *e, struct AttachCtx *actx,
                          struct Body *cur, SendFlags flags)
 {
   if (check_all_msg(actx, cur, false))
+  {
     attach_forward_msgs(fp, actx, cur, flags);
+  }
   else
   {
     const short nattach = count_tagged(actx);
@@ -893,7 +908,9 @@ static int attach_reply_envelope_defaults(struct Envelope *env, struct AttachCtx
   mutt_make_misc_reply_headers(env, curenv, NeoMutt->sub);
 
   if (parent)
+  {
     mutt_add_to_reference_headers(env, curenv, NeoMutt->sub);
+  }
   else
   {
     for (short i = 0; i < actx->idxlen; i++)
@@ -1020,7 +1037,9 @@ void mutt_attach_reply(FILE *fp, struct Mailbox *m, struct Email *e,
   if (!e_parent)
   {
     if (e_cur)
+    {
       attach_include_reply(fp, fp_tmp, e_cur->email);
+    }
     else
     {
       for (short i = 0; i < actx->idxlen; i++)
@@ -1073,7 +1092,9 @@ void mutt_attach_reply(FILE *fp, struct Mailbox *m, struct Email *e,
         state_putc(&state, '\n');
       }
       else
+      {
         mutt_body_copy(fp, &e_tmp->body, e_cur);
+      }
     }
     else
     {

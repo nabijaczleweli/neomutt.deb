@@ -478,7 +478,9 @@ int nntp_newsrc_update(struct NntpAccountData *adata)
       if (j)
         buf[off++] = ',';
       if (mdata->newsrc_ent[j].first == mdata->newsrc_ent[j].last)
+      {
         snprintf(buf + off, buflen - off, ANUM, mdata->newsrc_ent[j].first);
+      }
       else if (mdata->newsrc_ent[j].first < mdata->newsrc_ent[j].last)
       {
         snprintf(buf + off, buflen - off, ANUM "-" ANUM,
@@ -534,7 +536,9 @@ static void cache_expand(char *dst, size_t dstlen, struct ConnAccount *cac, cons
     FREE(&url.path);
   }
   else
+  {
     mutt_str_copy(file, src ? src : "", sizeof(file));
+  }
 
   const char *const c_news_cache_dir = cs_subset_path(NeoMutt->sub, "news_cache_dir");
   snprintf(dst, dstlen, "%s/%s", c_news_cache_dir, file);
@@ -1158,7 +1162,7 @@ struct NntpAccountData *nntp_select_server(struct Mailbox *m, const char *server
         char *group = de->d_name;
 
         char *p = group + strlen(group) - 7;
-        if ((strlen(group) < 8) || (strcmp(p, ".hcache") != 0))
+        if ((strlen(group) < 8) || !mutt_str_equal(p, ".hcache"))
           continue;
         *p = '\0';
         struct NntpMboxData *mdata = mutt_hash_find(adata->groups_hash, group);

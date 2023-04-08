@@ -56,7 +56,6 @@
 #include "mutt_header.h"
 #include "mutt_logging.h"
 #include "mutt_socket.h"
-#include "muttlib.h"
 #include "mx.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
@@ -262,7 +261,7 @@ static int msg_cache_check(const char *id, struct BodyCache *bcache, void *data)
 
 #ifdef USE_HCACHE
   /* keep hcache file if hcache == bcache */
-  if (strcmp(HC_FNAME "." HC_FEXT, id) == 0)
+  if (mutt_str_equal(HC_FNAME "." HC_FEXT, id))
     return 0;
 #endif
 
@@ -1076,7 +1075,9 @@ static bool pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
   /* Update the header information.  Previously, we only downloaded a
    * portion of the headers, those required for the main display.  */
   if (bcache)
+  {
     mutt_bcache_commit(adata->bcache, cache_id(edata->uid));
+  }
   else
   {
     cache->index = e->index;

@@ -112,6 +112,8 @@ static void parse_parameters(struct ParameterList *pl, const char *s, bool allow
   struct Parameter *pnew = NULL;
   const char *p = NULL;
   size_t i;
+  const struct Slist *const c_assumed_charset =
+    cs_subset_slist(NeoMutt->sub, "assumed_charset");
 
   struct Buffer *buf = mutt_buffer_pool_get();
   /* allow_value_spaces, especially with autocrypt keydata, can result
@@ -164,8 +166,6 @@ static void parse_parameters(struct ParameterList *pl, const char *s, bool allow
           s++;
           for (; *s; s++)
           {
-            const struct Slist *const c_assumed_charset =
-                cs_subset_slist(NeoMutt->sub, "assumed_charset");
             if (c_assumed_charset)
             {
               // As iso-2022-* has a character of '"' with non-ascii state, ignore it
@@ -189,7 +189,9 @@ static void parse_parameters(struct ParameterList *pl, const char *s, bool allow
               }
             }
             else
+            {
               mutt_buffer_addch(buf, *s);
+            }
           }
           if (*s)
             s++; /* skip over the " */
@@ -497,7 +499,9 @@ void mutt_parse_content_type(const char *s, struct Body *ct)
       ct->subtype = mutt_str_dup(buf);
     }
     else
+    {
       ct->subtype = mutt_str_dup("x-unknown");
+    }
   }
 
   /* Default character set for text types. */
@@ -513,8 +517,9 @@ void mutt_parse_content_type(const char *s, struct Body *ct)
     }
     else
     {
+      const struct Slist *const c_assumed_charset = cs_subset_slist(NeoMutt->sub, "assumed_charset");
       mutt_param_set(&ct->parameter, "charset",
-                     (const char *) mutt_ch_get_default_charset());
+                     mutt_ch_get_default_charset(c_assumed_charset));
     }
   }
 }
@@ -1196,7 +1201,9 @@ struct Envelope *mutt_rfc822_read_header(FILE *fp, struct Email *e, bool user_hd
 
       /* some bogus MTAs will quote the original "From " line */
       if (mutt_str_startswith(line, ">From "))
+      {
         continue; /* just ignore */
+      }
       else if (is_from(line, return_path, sizeof(return_path), &t))
       {
         /* MH sometimes has the From_ line in the middle of the header! */
@@ -1278,7 +1285,9 @@ struct Envelope *mutt_rfc822_read_header(FILE *fp, struct Email *e, bool user_hd
           env->real_subj = NULL;
       }
       else
+      {
         env->real_subj = env->subject;
+      }
     }
 
     if (e->received < 0)

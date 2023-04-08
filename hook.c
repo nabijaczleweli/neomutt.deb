@@ -406,8 +406,8 @@ static void delete_idxfmt_hooks(void)
 /**
  * mutt_parse_idxfmt_hook - Parse the 'index-format-hook' command - Implements Command::parse() - @ingroup command_parse
  */
-enum CommandResult mutt_parse_idxfmt_hook(struct Buffer *buf, struct Buffer *s,
-                                          intptr_t data, struct Buffer *err)
+static enum CommandResult mutt_parse_idxfmt_hook(struct Buffer *buf, struct Buffer *s,
+                                                 intptr_t data, struct Buffer *err)
 {
   enum CommandResult rc = MUTT_CMD_ERROR;
   bool pat_not = false;
@@ -533,8 +533,8 @@ static HookFlags mutt_get_hook_type(const char *name)
 /**
  * mutt_parse_unhook - Parse the 'unhook' command - Implements Command::parse() - @ingroup command_parse
  */
-enum CommandResult mutt_parse_unhook(struct Buffer *buf, struct Buffer *s,
-                                     intptr_t data, struct Buffer *err)
+static enum CommandResult mutt_parse_unhook(struct Buffer *buf, struct Buffer *s,
+                                            intptr_t data, struct Buffer *err)
 {
   while (MoreArgs(s))
   {
@@ -795,10 +795,14 @@ void mutt_select_fcc(struct Buffer *path, struct Email *e)
         mutt_buffer_strcpy(path, c_record);
     }
     else
+    {
       mutt_buffer_strcpy(path, c_record);
+    }
   }
   else
+  {
     mutt_buffer_fix_dptr(path);
+  }
 
   mutt_buffer_pretty_mailbox(path);
 }

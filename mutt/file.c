@@ -39,8 +39,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <utime.h>
-#include "config/lib.h"
-#include "core/lib.h"
 #include "file.h"
 #include "buffer.h"
 #include "date.h"
@@ -179,7 +177,9 @@ int mutt_file_fsync_close(FILE **fp)
     errno = save_errno;
   }
   else
+  {
     rc = mutt_file_fclose(fp);
+  }
 
   return rc;
 }
@@ -477,7 +477,7 @@ int mutt_file_rmtree(const char *path)
 
   while ((de = readdir(dir)))
   {
-    if ((strcmp(".", de->d_name) == 0) || (strcmp("..", de->d_name) == 0))
+    if ((mutt_str_equal(".", de->d_name)) || (mutt_str_equal("..", de->d_name)))
       continue;
 
     mutt_buffer_printf(&cur, "%s/%s", path, de->d_name);
@@ -652,7 +652,9 @@ FILE *mutt_file_fopen(const char *path, const char *mode)
     return fdopen(fd, mode);
   }
   else
+  {
     return fopen(path, mode);
+  }
 }
 
 /**
@@ -889,7 +891,9 @@ size_t mutt_file_quote_filename(const char *filename, char *buf, size_t buflen)
       buf[j++] = '\'';
     }
     else
+    {
       buf[j++] = filename[i];
+    }
   }
 
   buf[j++] = '\'';
@@ -923,7 +927,9 @@ void mutt_buffer_quote_filename(struct Buffer *buf, const char *filename, bool a
       mutt_buffer_addch(buf, '\'');
     }
     else
+    {
       mutt_buffer_addch(buf, *filename);
+    }
   }
 
   if (add_outer)
@@ -986,41 +992,6 @@ int mutt_file_mkdir(const char *path, mode_t mode)
     return -1;
 
   return 0;
-}
-
-/**
- * mutt_file_mkstemp_full - Create temporary file safely
- * @param file Source file of caller
- * @param line Source line number of caller
- * @param func Function name of caller
- * @retval ptr  FILE handle
- * @retval NULL Error, see errno
- *
- * Create and immediately unlink a temp file using mkstemp().
- */
-FILE *mutt_file_mkstemp_full(const char *file, int line, const char *func)
-{
-  char name[PATH_MAX] = { 0 };
-
-  const char *const c_tmp_dir = cs_subset_path(NeoMutt->sub, "tmp_dir");
-  int n = snprintf(name, sizeof(name), "%s/neomutt-XXXXXX", NONULL(c_tmp_dir));
-  if (n < 0)
-    return NULL;
-
-  int fd = mkstemp(name);
-  if (fd == -1)
-    return NULL;
-
-  FILE *fp = fdopen(fd, "w+");
-
-  if ((unlink(name) != 0) && (errno != ENOENT))
-  {
-    mutt_file_fclose(&fp);
-    return NULL;
-  }
-
-  MuttLogger(0, file, line, func, 1, "created temp file '%s'\n", name);
-  return fp;
 }
 
 /**

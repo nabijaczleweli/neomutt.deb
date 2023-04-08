@@ -407,8 +407,8 @@ static int op_display_message(struct IndexSharedData *shared,
   const int index = menu_get_index(priv->menu);
   index_shared_data_set_email(shared, mutt_get_virt_email(shared->mailbox, index));
 
-  const char *const c_pager = cs_subset_string(NeoMutt->sub, "pager");
-  if (c_pager && !mutt_str_equal(c_pager, "builtin"))
+  const char *const c_pager = pager_get_pager(NeoMutt->sub);
+  if (c_pager)
   {
     op = external_pager(shared->mailbox, shared->email, c_pager);
   }
@@ -968,7 +968,7 @@ static int op_main_delete_pattern(struct IndexSharedData *shared,
 }
 
 /**
- * op_main_limit - Limit view to current thread - Implements ::index_function_t - @ingroup index_function_api
+ * op_main_limit - Limit view to a pattern/thread - Implements ::index_function_t - @ingroup index_function_api
  *
  * This function handles:
  * - OP_LIMIT_CURRENT_THREAD
@@ -1575,7 +1575,9 @@ static int op_main_show_limit(struct IndexSharedData *shared,
                               struct IndexPrivateData *priv, int op)
 {
   if (!mview_has_limit(shared->mailboxview))
+  {
     mutt_message(_("No limit pattern is in effect"));
+  }
   else
   {
     char buf2[256];
@@ -2375,7 +2377,9 @@ static int op_get_children(struct IndexSharedData *shared,
     /* if the root message was retrieved, move to it */
     struct Email *e = mutt_hash_find(shared->mailbox->id_hash, buf);
     if (e)
+    {
       menu_set_index(priv->menu, e->vnum);
+    }
     else
     {
       /* try to restore old position */
@@ -2585,7 +2589,9 @@ static int op_post(struct IndexSharedData *shared, struct IndexPrivateData *priv
       return FR_ERROR;
     }
     if (op == OP_POST)
+    {
       mutt_send_message(SEND_NEWS, NULL, NULL, shared->mailbox, NULL, shared->sub);
+    }
     else
     {
       struct EmailList el = STAILQ_HEAD_INITIALIZER(el);

@@ -85,7 +85,6 @@ bool g_addr_is_user = false;
 int g_body_parts = 1;
 bool g_is_mail_list = false;
 bool g_is_subscribed_list = false;
-const char *g_myvar = "hello";
 short AbortKey;
 bool OptForceRefresh;
 bool OptIgnoreMacroEvents;
@@ -187,7 +186,7 @@ int mx_msg_padding_size(struct Mailbox *m)
 
 const char *myvar_get(const char *var)
 {
-  return g_myvar;
+  return NULL;
 }
 
 struct Email *mutt_get_virt_email(struct Mailbox *m, int vnum)
@@ -203,11 +202,6 @@ struct Email *mutt_get_virt_email(struct Mailbox *m, int vnum)
     return NULL;
 
   return m->emails[inum];
-}
-
-void mutt_buffer_mktemp_full(struct Buffer *buf, const char *prefix,
-                             const char *suffix, const char *src, int line)
-{
 }
 
 int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach,
