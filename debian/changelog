@@ -1,3 +1,15 @@
+neomutt (20230407+dfsg-0.1) unstable; urgency=medium
+
+  * Fix lintian build-depends-on-obsolete-package
+  * d/copyright: fix path to neomutt.svg
+  * Use libgsasl instead of libsasl2 as the SASL back-end
+  * Fix d/watch for gbp import-orig
+  * New upstream version 20230407+dfsg
+  * d/control: Build-Depends: pkg-config -> pkgconf
+  * Import warning fixes from upstream PR #3811
+
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Sat, 08 Apr 2023 12:05:06 +0200
+
 neomutt (20230322+dfsg-0.1) unstable; urgency=medium
 
   * New upstream version 20230322+dfsg
