@@ -50,7 +50,6 @@
 #include "globals.h" // IWYU pragma: keep
 #include "gnupgparse.h"
 #include "mutt_logging.h"
-#include "muttlib.h"
 #include "pgpinvoke.h"
 #ifdef CRYPT_BACKEND_CLASSIC_PGP
 #include "pgp.h"
@@ -208,7 +207,9 @@ struct PgpKeyInfo *pgp_ask_for_key(char *tag, char *whatfor, KeyFlags abilities,
     if (whatfor)
     {
       if (l)
+      {
         mutt_str_replace(&l->dflt, mutt_buffer_string(resp));
+      }
       else
       {
         l = mutt_mem_malloc(sizeof(struct PgpCache));
@@ -455,7 +456,9 @@ struct PgpKeyInfo *pgp_getkeybyaddr(struct Address *a, KeyFlags abilities,
         k = a_valid_addrmatch_key;
       }
       else
+      {
         k = NULL;
+      }
     }
     else if (the_strong_valid_key && !multi)
     {

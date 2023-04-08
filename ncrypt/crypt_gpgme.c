@@ -63,7 +63,6 @@
 #include "handler.h"
 #include "hook.h"
 #include "mutt_logging.h"
-#include "muttlib.h"
 #ifdef USE_AUTOCRYPT
 #include "autocrypt/lib.h"
 #endif
@@ -441,7 +440,9 @@ static gpgme_data_t body_to_data_object(struct Body *a, bool convert)
     while ((c = fgetc(fp_tmp)) != EOF)
     {
       if (c == '\r')
+      {
         hadcr = 1;
+      }
       else
       {
         if ((c == '\n') && !hadcr)
@@ -627,7 +628,9 @@ static void create_recipient_string(const char *keylist, struct Buffer *recpstri
           mutt_buffer_addstr(recpstring, "--\n");
       }
       else
+      {
         mutt_buffer_addch(recpstring, '\n');
+      }
       n++;
 
       while ((*s != '\0') && (*s != ' '))
@@ -1207,7 +1210,7 @@ static int show_sig_summary(unsigned long sum, gpgme_ctx_t ctx, gpgme_key_t key,
       state_puts(state, ": ");
       if (t0)
         state_puts(state, t0);
-      if (t1 && !(t0 && (strcmp(t0, t1) == 0)))
+      if (t1 && !(t0 && (mutt_str_equal(t0, t1))))
       {
         if (t0)
           state_puts(state, ",");
@@ -1462,7 +1465,9 @@ static int show_one_sig_status(gpgme_ctx_t ctx, int idx, struct State *state)
     }
 
     if (!state || !state->fp_out || !(state->flags & STATE_DISPLAY))
+    {
       ; /* No state information so no way to print anything. */
+    }
     else if (err != 0)
     {
       char buf[1024] = { 0 };
@@ -1728,7 +1733,9 @@ restart:
     }
   }
   else
+  {
     err = gpgme_op_decrypt(ctx, ciphertext, plaintext);
+  }
   gpgme_data_release(ciphertext);
   ciphertext = NULL;
   if (err != 0)
@@ -1868,7 +1875,9 @@ int pgp_gpgme_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Bo
     need_decode = true;
   }
   else
+  {
     return -1;
+  }
 
   state.fp_in = fp_in;
 
@@ -2228,7 +2237,9 @@ bool pgp_gpgme_check_traditional(FILE *fp, struct Body *b, bool just_one)
   for (; b; b = b->next)
   {
     if (!just_one && is_multipart(b))
+    {
       rc = (pgp_gpgme_check_traditional(fp, b->parts, false) || rc);
+    }
     else if (b->type == TYPE_TEXT)
     {
       SecurityFlags r = mutt_is_application_pgp(b);
@@ -2459,7 +2470,9 @@ int pgp_gpgme_application_handler(struct Body *m, struct State *state)
       clearsign = false;
 
       if (MESSAGE(buf + plen))
+      {
         needpass = 1;
+      }
       else if (SIGNED_MESSAGE(buf + plen))
       {
         clearsign = true;
@@ -2494,7 +2507,9 @@ int pgp_gpgme_application_handler(struct Body *m, struct State *state)
         gpgme_ctx_t ctx = create_gpgme_context(false);
 
         if (clearsign)
+        {
           err = gpgme_op_verify(ctx, armored_data, NULL, plaintext);
+        }
         else
         {
           err = gpgme_op_decrypt_verify(ctx, armored_data, plaintext);
@@ -3197,7 +3212,9 @@ static struct CryptKeyInfo *crypt_getkeybyaddr(struct Address *a,
             this_key_has_strong = true;
           }
           else
+          {
             this_key_has_addr_match = true;
+          }
         }
       }
     }
@@ -3246,7 +3263,9 @@ static struct CryptKeyInfo *crypt_getkeybyaddr(struct Address *a,
     crypt_key_free(&matches);
   }
   else
+  {
     k = NULL;
+  }
 
   return k;
 }
@@ -3362,7 +3381,9 @@ static struct CryptKeyInfo *crypt_ask_for_key(char *tag, char *whatfor, KeyFlags
     if (whatfor)
     {
       if (l)
+      {
         mutt_str_replace(&l->dflt, mutt_buffer_string(resp));
+      }
       else
       {
         l = mutt_mem_malloc(sizeof(struct CryptCache));
@@ -3984,10 +4005,14 @@ static bool verify_sender(struct Email *e)
       }
     }
     else
+    {
       mutt_any_key_to_continue(_("Failed to verify sender"));
+    }
   }
   else
+  {
     mutt_any_key_to_continue(_("Failed to figure out sender"));
+  }
 
   if (signature_key)
   {

@@ -114,7 +114,9 @@ static size_t q_encoder(char *str, const char *buf, size_t buflen, const char *t
   {
     unsigned char c = *buf++;
     if (c == ' ')
+    {
       *str++ = '_';
+    }
     else if ((c >= 0x7f) || (c < 0x20) || (c == '_') || strchr(MimeSpecials, c))
     {
       *str++ = '=';
@@ -251,7 +253,9 @@ static size_t try_block(const char *d, size_t dlen, const char *fromcode,
     return 0;
   }
   else
+  {
     return dlen;
+  }
 }
 
 /**
@@ -480,7 +484,9 @@ static int encode(const char *d, size_t dlen, int col, const char *fromcode,
   {
     tocode1 = mutt_ch_choose(icode, charsets, u, ulen, 0, 0);
     if (tocode1)
+    {
       tocode = tocode1;
+    }
     else
     {
       rc = 2;
@@ -694,7 +700,8 @@ void rfc2047_decode(char **pd)
         if (c_assumed_charset)
         {
           char *conv = mutt_strn_dup(s, holelen);
-          mutt_ch_convert_nonmime_string(&conv);
+          const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
+          mutt_ch_convert_nonmime_string(c_assumed_charset, c_charset, &conv);
           mutt_buffer_addstr(&buf, conv);
           FREE(&conv);
         }
@@ -773,10 +780,11 @@ void rfc2047_decode_addrlist(struct AddressList *al)
   if (!al)
     return;
 
+  const struct Slist *const c_assumed_charset = cs_subset_slist(NeoMutt->sub, "assumed_charset");
+
   struct Address *a = NULL;
   TAILQ_FOREACH(a, al, entries)
   {
-    const struct Slist *const c_assumed_charset = cs_subset_slist(NeoMutt->sub, "assumed_charset");
     if (a->personal && ((strstr(a->personal, "=?")) || c_assumed_charset))
     {
       rfc2047_decode(&a->personal);

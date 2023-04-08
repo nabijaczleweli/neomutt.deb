@@ -39,7 +39,6 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "rfc3676.h"
-#include "muttlib.h"
 
 #define FLOWED_MAX 72
 
@@ -141,7 +140,9 @@ static size_t print_indent(int ql, struct State *state, int add_suffix)
      * for format=flowed replies to format=flowed, use '>' indentation */
     const bool c_text_flowed = cs_subset_bool(NeoMutt->sub, "text_flowed");
     if (c_text_flowed)
+    {
       ql++;
+    }
     else
     {
       state_puts(state, state->prefix);

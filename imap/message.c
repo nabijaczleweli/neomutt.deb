@@ -57,7 +57,6 @@
 #include "mdata.h"
 #include "msn.h"
 #include "mutt_logging.h"
-#include "muttlib.h"
 #include "mx.h"
 #include "protos.h"
 #ifdef ENABLE_NLS
@@ -274,7 +273,9 @@ static char *msg_parse_flags(struct ImapHeader *h, char *s)
 
   /* wrap up, or note bad flags response */
   if (*s == ')')
+  {
     s++;
+  }
   else
   {
     mutt_debug(LL_DEBUG1, "Unterminated FLAGS response: %s\n", s);
@@ -368,7 +369,9 @@ static int msg_parse_fetch(struct ImapHeader *h, char *s)
       while (*s && (*s != ')'))
         s++;
       if (*s == ')')
+      {
         s++;
+      }
       else
       {
         mutt_debug(LL_DEBUG1, "Unterminated MODSEQ response: %s\n", s);
@@ -1484,7 +1487,9 @@ retry:
                             sizeof(mdata->modseq));
     }
     else
+    {
       mutt_hcache_delete_record(mdata->hcache, "/MODSEQ", 7);
+    }
 
     if (has_qresync)
       imap_hcache_store_uid_seqset(mdata);
@@ -2101,11 +2106,9 @@ parsemsg:
   }
 
   e->lines = 0;
-  fgets(buf, sizeof(buf), msg->fp);
-  while (!feof(msg->fp))
+  while (fgets(buf, sizeof(buf), msg->fp) && !feof(msg->fp))
   {
     e->lines++;
-    fgets(buf, sizeof(buf), msg->fp);
   }
 
   e->body->length = ftell(msg->fp) - e->body->offset;

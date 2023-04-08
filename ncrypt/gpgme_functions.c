@@ -46,7 +46,6 @@
 #include "crypt_gpgme.h"
 #include "globals.h"
 #include "mutt_logging.h"
-#include "muttlib.h"
 #include "opcodes.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
@@ -110,7 +109,7 @@ static bool print_dn_part(FILE *fp, struct DnArray *dn, const char *key)
 
   for (; dn->key; dn++)
   {
-    if (strcmp(dn->key, key) == 0)
+    if (mutt_str_equal(dn->key, key))
     {
       if (any)
         fputs(" + ", fp);
@@ -146,7 +145,7 @@ static void print_dn_parts(FILE *fp, struct DnArray *dn)
     int i;
     for (i = 0; stdpart[i]; i++)
     {
-      if (strcmp(dn->key, stdpart[i]) == 0)
+      if (mutt_str_equal(dn->key, stdpart[i]))
         break;
     }
     if (!stdpart[i])
@@ -225,7 +224,9 @@ static const char *parse_dn_part(struct DnArray *array, const char *str)
           n++;
         }
         else
+        {
           return NULL; /* invalid escape sequence */
+        }
       }
       else if (*s == '\"')
         return NULL; /* invalid encoding */
@@ -235,7 +236,9 @@ static const char *parse_dn_part(struct DnArray *array, const char *str)
         break;
       }
       else
+      {
         n++;
+      }
     }
 
     p = mutt_mem_malloc(n + 1);
@@ -349,7 +352,9 @@ static void parse_and_print_user_id(FILE *fp, const char *userid)
   {
     struct DnArray *dn = parse_dn(userid);
     if (!dn)
+    {
       fputs(_("[Can't display this user ID (invalid DN)]"), fp);
+    }
     else
     {
       print_dn_parts(fp, dn);
@@ -637,7 +642,7 @@ static void verify_key(struct CryptKeyInfo *key)
 
   k = key->kobj;
   gpgme_key_ref(k);
-  while ((s = k->chain_id) && k->subkeys && (strcmp(s, k->subkeys->fpr) != 0))
+  while ((s = k->chain_id) && k->subkeys && !mutt_str_equal(s, k->subkeys->fpr))
   {
     putc('\n', fp);
     err = gpgme_op_keylist_start(listctx, s, 0);

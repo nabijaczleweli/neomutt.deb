@@ -31,7 +31,6 @@
 #include "config.h"
 #include <ctype.h>
 #include <errno.h>
-#include <inttypes.h>
 #include <limits.h>
 #include <pwd.h>
 #include <stdbool.h>
@@ -173,7 +172,9 @@ void mutt_buffer_expand_path_regex(struct Buffer *buf, bool regex)
               tail = t;
             }
             else
+            {
               tail = "";
+            }
           }
           else
           {
@@ -296,7 +297,9 @@ void mutt_buffer_expand_path_regex(struct Buffer *buf, bool regex)
       mutt_buffer_printf(tmp, "%s%s", mutt_buffer_string(q), tail);
     }
     else
+    {
       mutt_buffer_printf(tmp, "%s%s", mutt_buffer_string(p), tail);
+    }
 
     mutt_buffer_copy(buf, tmp);
   } while (recurse);
@@ -454,63 +457,6 @@ bool mutt_is_text_part(struct Body *b)
   }
 
   return false;
-}
-
-/**
- * mutt_buffer_mktemp_full - Create a temporary file
- * @param buf    Buffer for result
- * @param prefix Prefix for filename
- * @param suffix Suffix for filename
- * @param src    Source file of caller
- * @param line   Source line number of caller
- */
-void mutt_buffer_mktemp_full(struct Buffer *buf, const char *prefix,
-                             const char *suffix, const char *src, int line)
-{
-  const char *const c_tmp_dir = cs_subset_path(NeoMutt->sub, "tmp_dir");
-  mutt_buffer_printf(buf, "%s/%s-%s-%d-%d-%" PRIu64 "%s%s", NONULL(c_tmp_dir),
-                     NONULL(prefix), NONULL(ShortHostname), (int) getuid(),
-                     (int) getpid(), mutt_rand64(), suffix ? "." : "", NONULL(suffix));
-
-  mutt_debug(LL_DEBUG3, "%s:%d: mutt_mktemp returns \"%s\"\n", src, line,
-             mutt_buffer_string(buf));
-  if (unlink(mutt_buffer_string(buf)) && (errno != ENOENT))
-  {
-    mutt_debug(LL_DEBUG1, "%s:%d: ERROR: unlink(\"%s\"): %s (errno %d)\n", src,
-               line, mutt_buffer_string(buf), strerror(errno), errno);
-  }
-}
-
-/**
- * mutt_mktemp_full - Create a temporary filename
- * @param buf    Buffer for result
- * @param buflen Length of buffer
- * @param prefix Prefix for filename
- * @param suffix Suffix for filename
- * @param src    Source file of caller
- * @param line   Source line number of caller
- *
- * @note This doesn't create the file, only the name
- */
-void mutt_mktemp_full(char *buf, size_t buflen, const char *prefix,
-                      const char *suffix, const char *src, int line)
-{
-  const char *const c_tmp_dir = cs_subset_path(NeoMutt->sub, "tmp_dir");
-  size_t n = snprintf(buf, buflen, "%s/%s-%s-%d-%d-%" PRIu64 "%s%s",
-                      NONULL(c_tmp_dir), NONULL(prefix), NONULL(ShortHostname),
-                      (int) getuid(), (int) getpid(), mutt_rand64(),
-                      suffix ? "." : "", NONULL(suffix));
-  if (n >= buflen)
-  {
-    mutt_debug(LL_DEBUG1, "%s:%d: ERROR: insufficient buffer space to hold temporary filename! buflen=%zu but need %zu\n",
-               src, line, buflen, n);
-  }
-  mutt_debug(LL_DEBUG3, "%s:%d: mutt_mktemp returns \"%s\"\n", src, line, buf);
-  if ((unlink(buf) != 0) && (errno != ENOENT))
-  {
-    mutt_debug(LL_DEBUG1, "%s:%d: ERROR: unlink(\"%s\"): %s (errno %d)\n", src,
-               line, buf, strerror(errno), errno);
-  }
 }
 
 /**
@@ -746,7 +692,9 @@ void mutt_buffer_save_path(struct Buffer *dest, const struct Address *a)
     mutt_str_lower(dest->data);
   }
   else
+  {
     mutt_buffer_reset(dest);
+  }
 }
 
 /**
@@ -858,7 +806,9 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
             mutt_buffer_addstr(&cmd, "'\"'\"'");
           }
           else
+          {
             mutt_buffer_addch(&cmd, *p);
+          }
         }
         mutt_buffer_addch(&cmd, '\'');
         mutt_buffer_addch(&cmd, ' ');
@@ -1124,7 +1074,9 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
             /* try to consume as many columns as we can, if we don't have
              * memory for that, use as much memory as possible */
             if (wlen + (pad * pl) + len > buflen)
+            {
               pad = (buflen > (wlen + len)) ? ((buflen - wlen - len) / pl) : 0;
+            }
             else
             {
               /* Add pre-spacing to make multi-column pad characters and
@@ -1572,7 +1524,9 @@ void mutt_get_parent_path(const char *path, char *buf, size_t buflen)
       ; // do nothing
 
     if (n > 0)
+    {
       buf[n] = '\0';
+    }
     else
     {
       buf[0] = '/';
@@ -1745,7 +1699,9 @@ void add_to_stailq(struct ListHead *head, const char *str)
 void remove_from_stailq(struct ListHead *head, const char *str)
 {
   if (mutt_str_equal("*", str))
+  {
     mutt_list_free(head); /* "unCMD *" means delete all current entries */
+  }
   else
   {
     struct ListNode *np = NULL, *tmp = NULL;

@@ -559,7 +559,7 @@ static int mh_cmp_path(const void *a, const void *b)
 {
   struct MdEmail const *const *pa = (struct MdEmail const *const *) a;
   struct MdEmail const *const *pb = (struct MdEmail const *const *) b;
-  return strcmp((*pa)->email->path, (*pb)->email->path);
+  return mutt_str_cmp((*pa)->email->path, (*pb)->email->path);
 }
 
 /**
@@ -669,7 +669,9 @@ static void mh_delayed_parsing(struct Mailbox *m, struct MdEmailArray *mda,
 #endif
       }
       else
+      {
         email_free(&md->email);
+      }
     }
   }
 #ifdef USE_HCACHE

@@ -51,7 +51,6 @@
 #include "copy.h"
 #include "handler.h"
 #include "maillist.h"
-#include "muttlib.h"
 #include "mx.h"
 #ifndef USE_FMEMOPEN
 #include <sys/stat.h>
@@ -957,7 +956,9 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
         result = get_pattern_cache_value(*cache_entry);
       }
       else
+      {
         result = mutt_is_list_recipient(pat->all_addr, e->env);
+      }
       return pat->pat_not ^ result;
     }
     case MUTT_PAT_SUBSCRIBED_LIST:
@@ -977,7 +978,9 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
         result = get_pattern_cache_value(*cache_entry);
       }
       else
+      {
         result = mutt_is_subscribed_list_recipient(pat->all_addr, e->env);
+      }
       return pat->pat_not ^ result;
     }
     case MUTT_PAT_PERSONAL_RECIP:
