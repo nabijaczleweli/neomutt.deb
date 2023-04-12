@@ -33,13 +33,12 @@ override_dh_auto_configure:
 		$(notmuch) \
 		--gnutls \
 		--gss \
-		--idn \
+		--idn2 \
 		--mixmaster \
 		--gsasl \
 		--lmdb \
 		--zlib \
-		--zstd \
-		--testing
+		--zstd
 
 override_dh_auto_test:
 ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
