@@ -237,11 +237,11 @@ static void update_tables(struct MailboxView *mv)
   m->changed = false;
   m->msg_flagged = 0;
   padding = mx_msg_padding_size(m);
+  const bool c_maildir_trash = cs_subset_bool(NeoMutt->sub, "maildir_trash");
   for (i = 0, j = 0; i < m->msg_count; i++)
   {
     if (!m->emails[i])
       break;
-    const bool c_maildir_trash = cs_subset_bool(NeoMutt->sub, "maildir_trash");
     if (!m->emails[i]->quasi_deleted &&
         (!m->emails[i]->deleted || ((m->type == MUTT_MAILDIR) && c_maildir_trash)))
     {
@@ -446,4 +446,70 @@ bool mview_has_limit(const struct MailboxView *mv)
 struct Mailbox *mview_mailbox(struct MailboxView *mv)
 {
   return mv ? mv->mailbox : NULL;
+}
+
+/**
+ * top_of_thread - Find the first email in the current thread
+ * @param e Current Email
+ * @retval ptr  Success, email found
+ * @retval NULL Error
+ */
+static struct MuttThread *top_of_thread(struct Email *e)
+{
+  if (!e)
+    return NULL;
+
+  struct MuttThread *t = e->thread;
+
+  while (t && t->parent)
+    t = t->parent;
+
+  return t;
+}
+
+/**
+ * mutt_limit_current_thread - Limit the email view to the current thread
+ * @param mv Mailbox View
+ * @param e  Email
+ * @retval true Success
+ * @retval false Failure
+ */
+bool mutt_limit_current_thread(struct MailboxView *mv, struct Email *e)
+{
+  if (!mv || !mv->mailbox || !e)
+    return false;
+
+  struct Mailbox *m = mv->mailbox;
+
+  struct MuttThread *me = top_of_thread(e);
+  if (!me)
+    return false;
+
+  m->vcount = 0;
+  mv->vsize = 0;
+  mv->collapsed = false;
+
+  for (int i = 0; i < m->msg_count; i++)
+  {
+    e = m->emails[i];
+    if (!e)
+      break;
+
+    e->vnum = -1;
+    e->visible = false;
+    e->collapsed = false;
+    e->num_hidden = 0;
+
+    if (top_of_thread(e) == me)
+    {
+      struct Body *body = e->body;
+
+      e->vnum = m->vcount;
+      e->visible = true;
+      m->v2r[m->vcount] = i;
+      m->vcount++;
+      mv->vsize += (body->length + body->offset - body->hdr_offset);
+    }
+  }
+  return true;
 }

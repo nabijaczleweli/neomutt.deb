@@ -34,33 +34,22 @@
 #include "core/lib.h"
 #include "test_common.h"
 
-static struct ConfigDef Vars[] = {
-  // clang-format off
-  { "assumed_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY, 0, 0, NULL, },
-  { NULL },
-  // clang-format on
-};
-
 static void check_addrlist(struct AddressList *list, const char *const exp[], size_t num)
 {
-  struct Buffer *parsed = mutt_buffer_pool_get();
+  struct Buffer *parsed = buf_pool_get();
   if (mutt_addrlist_write(list, parsed, false) == 0)
   {
     TEST_MSG("Expected: parsed %s (...)", exp[0]);
     TEST_MSG("Actual  : not parsed");
   }
 
-  char *pp = mutt_buffer_strdup(parsed);
+  char *pp = buf_strdup(parsed);
   char *orig = pp;
-  mutt_buffer_pool_release(&parsed);
+  buf_pool_release(&parsed);
   for (size_t i = 0; i < num; ++i)
   {
     char *tok = mutt_str_skip_whitespace(mutt_str_sep(&pp, ","));
-    if (!TEST_CHECK(mutt_str_equal(tok, exp[i])))
-    {
-      TEST_MSG("Expected: %s", exp[i]);
-      TEST_MSG("Actual  : %s", tok);
-    }
+    TEST_CHECK_STR_EQ(tok, exp[i]);
   }
   FREE(&orig);
 }
@@ -68,9 +57,6 @@ static void check_addrlist(struct AddressList *list, const char *const exp[], si
 void test_mutt_parse_mailto(void)
 {
   // int mutt_parse_mailto(struct Envelope *e, char **body, const char *src);
-
-  NeoMutt = test_neomutt_create();
-  TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, DT_NO_FLAGS));
 
   mutt_list_insert_head(&MailToAllow, "cc");
   mutt_list_insert_head(&MailToAllow, "body");
@@ -110,14 +96,8 @@ void test_mutt_parse_mailto(void)
     }
     check_addrlist(&env->to, to, mutt_array_size(to));
     check_addrlist(&env->cc, cc, mutt_array_size(cc));
-    if (!TEST_CHECK(mutt_str_equal(body, parsed_body)))
-    {
-      TEST_MSG("Expected: %s", body);
-      TEST_MSG("Actual  : %s", parsed_body);
-    }
+    TEST_CHECK_STR_EQ(body, parsed_body);
     FREE(&parsed_body);
     mutt_env_free(&env);
   }
-
-  test_neomutt_destroy(&NeoMutt);
 }

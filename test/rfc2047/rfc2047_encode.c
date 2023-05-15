@@ -32,20 +32,9 @@
 #include "common.h"
 #include "test_common.h"
 
-static struct ConfigDef Vars[] = {
-  // clang-format off
-  { "assumed_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY, 0,          0, NULL, },
-  { "charset",         DT_STRING|DT_NOT_EMPTY|DT_CHARSET_SINGLE,   IP "utf-8", 0, NULL, },
-  { NULL },
-  // clang-format on
-};
-
 void test_rfc2047_encode(void)
 {
   // void rfc2047_encode(char **pd, const char *specials, int col, const struct Slist *charsets);
-
-  NeoMutt = test_neomutt_create();
-  TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, DT_NO_FLAGS));
 
   {
     struct Slist *charsets = slist_parse("apple", SLIST_SEP_COLON);
@@ -75,16 +64,9 @@ void test_rfc2047_encode(void)
       /* encode the expected result */
       char *s = mutt_str_dup(rfc2047_test_data[i].decoded);
       rfc2047_encode(&s, NULL, 0, charsets);
-      if (!TEST_CHECK(mutt_str_equal(s, rfc2047_test_data[i].encoded)))
-      {
-        TEST_MSG("Iteration: %zu", i);
-        TEST_MSG("Expected : %s", rfc2047_test_data[i].encoded);
-        TEST_MSG("Actual   : %s", s);
-      }
+      TEST_CHECK_STR_EQ(s, rfc2047_test_data[i].encoded);
       FREE(&s);
     }
     slist_free(&charsets);
   }
-
-  test_neomutt_destroy(&NeoMutt);
 }

@@ -110,7 +110,8 @@ struct PgpEntry
   struct PgpUid *uid;
 };
 
-static const char trust_flags[] = "?- +";
+/// Characters used to show the trust level for PGP keys
+static const char TrustFlags[] = "?- +";
 
 /**
  * pgp_compare_key_address - Compare Key addresses and IDs for sorting
@@ -406,7 +407,7 @@ static const char *pgp_entry_format_str(char *buf, size_t buflen, size_t col, in
       if (!optional)
       {
         snprintf(fmt, sizeof(fmt), "%%%sc", prec);
-        snprintf(buf, buflen, fmt, trust_flags[uid->trust & 0x03]);
+        snprintf(buf, buflen, fmt, TrustFlags[uid->trust & 0x03]);
       }
       else if (!(uid->trust & 0x03))
       {
@@ -647,7 +648,9 @@ struct PgpKeyInfo *dlg_select_pgp_key(struct PgpKeyInfo *keys,
       f = pgp_compare_trust_qsort;
       break;
   }
-  qsort(key_table, i, sizeof(struct PgpUid *), f);
+
+  if (key_table)
+    qsort(key_table, i, sizeof(struct PgpUid *), f);
 
   struct MuttWindow *dlg = simple_dialog_new(MENU_PGP, WT_DLG_PGP, PgpHelp);
 

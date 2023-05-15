@@ -42,7 +42,6 @@
 #include "commands.h"
 #include "functions.h"
 #include "keymap.h"
-#include "myvar.h"
 #include "sort.h"
 
 /**
@@ -167,7 +166,6 @@ int mutt_command_complete(struct CompletionData *cd, char *buf, size_t buflen,
 {
   char *pt = buf;
   int spaces; /* keep track of the number of leading spaces on the line */
-  struct MyVar *myv = NULL;
 
   SKIPWS(buf);
   spaces = buf - pt;
@@ -258,10 +256,6 @@ int mutt_command_complete(struct CompletionData *cd, char *buf, size_t buflen,
       }
       FREE(&he_list);
 
-      TAILQ_FOREACH(myv, &MyVars, entries)
-      {
-        candidate(cd, cd->user_typed, myv->name, cd->completed, sizeof(cd->completed));
-      }
       matches_ensure_morespace(cd, cd->num_matched);
       cd->match_list[cd->num_matched++] = cd->user_typed;
 
@@ -350,6 +344,19 @@ int mutt_command_complete(struct CompletionData *cd, char *buf, size_t buflen,
 }
 
 /**
+ * label_sort - Sort two label strings
+ * @param a First string
+ * @param b Second string
+ * @retval -1 a precedes b
+ * @retval  0 a and b are identical
+ * @retval  1 b precedes a
+ */
+static int label_sort(const void *a, const void *b)
+{
+  return strcasecmp(*(const char **) a, *(const char **) b);
+}
+
+/**
  * mutt_label_complete - Complete a label name
  * @param cd      Completion Data
  * @param buf     Buffer for the result
@@ -383,7 +390,7 @@ int mutt_label_complete(struct CompletionData *cd, char *buf, size_t buflen, int
     while ((he = mutt_hash_walk(m_cur->label_hash, &hws)))
       candidate(cd, cd->user_typed, he->key.strkey, cd->completed, sizeof(cd->completed));
     matches_ensure_morespace(cd, cd->num_matched);
-    qsort(cd->match_list, cd->num_matched, sizeof(char *), (sort_t) mutt_istr_cmp);
+    qsort(cd->match_list, cd->num_matched, sizeof(char *), label_sort);
     cd->match_list[cd->num_matched++] = cd->user_typed;
 
     /* All matches are stored. Longest non-ambiguous string is ""
@@ -569,7 +576,6 @@ int mutt_var_value_complete(struct CompletionData *cd, char *buf, size_t buflen,
 
   if (mutt_str_startswith(buf, "set"))
   {
-    const char *myvarval = NULL;
     char var[256] = { 0 };
     mutt_str_copy(var, pt, sizeof(var));
     /* ignore the trailing '=' when comparing */
@@ -582,32 +588,23 @@ int mutt_var_value_complete(struct CompletionData *cd, char *buf, size_t buflen,
     struct HashElem *he = cs_subset_lookup(NeoMutt->sub, var);
     if (!he)
     {
-      myvarval = myvar_get(var);
-      if (myvarval)
-      {
-        struct Buffer pretty = mutt_buffer_make(256);
-        pretty_var(myvarval, &pretty);
-        snprintf(pt, buflen - (pt - buf), "%s=%s", var, pretty.data);
-        mutt_buffer_dealloc(&pretty);
-        return 1;
-      }
       return 0; /* no such variable. */
     }
     else
     {
-      struct Buffer value = mutt_buffer_make(256);
-      struct Buffer pretty = mutt_buffer_make(256);
+      struct Buffer value = buf_make(256);
+      struct Buffer pretty = buf_make(256);
       int rc = cs_subset_he_string_get(NeoMutt->sub, he, &value);
       if (CSR_RESULT(rc) == CSR_SUCCESS)
       {
         pretty_var(value.data, &pretty);
         snprintf(pt, buflen - (pt - buf), "%s=%s", var, pretty.data);
-        mutt_buffer_dealloc(&value);
-        mutt_buffer_dealloc(&pretty);
+        buf_dealloc(&value);
+        buf_dealloc(&pretty);
         return 0;
       }
-      mutt_buffer_dealloc(&value);
-      mutt_buffer_dealloc(&pretty);
+      buf_dealloc(&value);
+      buf_dealloc(&pretty);
       return 1;
     }
   }

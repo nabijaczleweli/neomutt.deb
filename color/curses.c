@@ -34,7 +34,7 @@
 #include "lib.h"
 
 struct CursesColorList CursesColors; ///< List of all Curses colours
-int NumCursesColors;
+int NumCursesColors; ///< Number of ncurses colours left to allocate
 
 /**
  * curses_colors_init - Initialise the Curses colours
@@ -96,15 +96,18 @@ static int curses_color_init(int fg, int bg)
     return 0;
   }
 
-  // const char *color = color_debug_log_color(fg, bg);
-  // printf("%s\n", color);
   if (fg == COLOR_DEFAULT)
     fg = COLOR_UNSET;
   if (bg == COLOR_DEFAULT)
     bg = COLOR_UNSET;
 
+#ifdef NEOMUTT_DIRECT_COLORS
+  int rc = init_extended_pair(index, fg, bg);
+  color_debug(LL_DEBUG5, "init_extended_pair(%d,%d,%d) -> %d\n", index, fg, bg, rc);
+#else
   int rc = init_pair(index, fg, bg);
   color_debug(LL_DEBUG5, "init_pair(%d,%d,%d) -> %d\n", index, fg, bg, rc);
+#endif
 
   return index;
 }
@@ -124,7 +127,6 @@ void curses_color_free(struct CursesColor **ptr)
     cc->ref_count--;
     curses_color_dump(cc, "CursesColor rc--: ");
     *ptr = NULL;
-    // curses_colors_dump();
     return;
   }
 
@@ -132,7 +134,6 @@ void curses_color_free(struct CursesColor **ptr)
   TAILQ_REMOVE(&CursesColors, cc, entries);
   NumCursesColors--;
   color_debug(LL_DEBUG5, "CursesColors: %d\n", NumCursesColors);
-  // curses_colors_dump();
   FREE(ptr);
 }
 

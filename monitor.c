@@ -46,15 +46,22 @@
 #include <fcntl.h>
 #endif
 
+/// Set to true when a monitored file has changed
 bool MonitorFilesChanged = false;
+/// Set to true when the current mailbox has changed
 bool MonitorContextChanged = false;
 
+/// Inotify file descriptor
 static int INotifyFd = -1;
+/// Linked list of monitored Mailboxes
 static struct Monitor *Monitor = NULL;
+/// Number of used entries in the #PollFds array
 static size_t PollFdsCount = 0;
+/// Size of #PollFds array
 static size_t PollFdsLen = 0;
+/// Array of monitored file descriptors
 static struct pollfd *PollFds = NULL;
-
+/// Monitor file descriptor of the current mailbox
 static int MonitorContextDescriptor = -1;
 
 #define INOTIFY_MASK_DIR (IN_MOVED_TO | IN_ATTRIB | IN_CLOSE_WRITE | IN_ISDIR)
@@ -235,7 +242,7 @@ static void monitor_info_init(struct MonitorInfo *info)
  */
 static void monitor_info_free(struct MonitorInfo *info)
 {
-  mutt_buffer_dealloc(&info->path_buf);
+  buf_dealloc(&info->path_buf);
 }
 
 /**
@@ -366,8 +373,8 @@ static enum ResolveResult monitor_resolve(struct MonitorInfo *info, struct Mailb
   }
   if (fmt)
   {
-    mutt_buffer_printf(&info->path_buf, fmt, info->path);
-    info->path = mutt_buffer_string(&info->path_buf);
+    buf_printf(&info->path_buf, fmt, info->path);
+    info->path = buf_string(&info->path_buf);
   }
   if (stat(info->path, &st) != 0)
     return RESOLVE_RES_FAIL_STAT;

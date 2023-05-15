@@ -25,8 +25,8 @@
  * #include <string.h>
  */
 
-#ifndef MUTT_LIB_STRING2_H
-#define MUTT_LIB_STRING2_H
+#ifndef MUTT_MUTT_STRING2_H
+#define MUTT_MUTT_STRING2_H
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -35,7 +35,6 @@
 #define STR_COMMAND 8192  ///< Enough space for a long command line
 
 #define NONULL(x) ((x) ? (x) : "")
-#define IS_SPACE(ch) isspace((unsigned char) ch)
 
 /* Exit values */
 #define S_ERR 127
@@ -112,4 +111,4 @@ static inline bool mutt_str_is_email_wsp(char c)
   return (c == ' ') || (c == '\t') || (c == '\r') || (c == '\n');
 }
 
-#endif /* MUTT_LIB_STRING2_H */
+#endif /* MUTT_MUTT_STRING2_H */

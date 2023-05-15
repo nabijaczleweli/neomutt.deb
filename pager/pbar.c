@@ -110,8 +110,11 @@ static int pbar_recalc(struct MuttWindow *win)
 
   if (offset < (priv->st.st_size - 1))
   {
-    snprintf(pager_progress_str, sizeof(pager_progress_str), OFF_T_FMT "%%",
-             (100 * offset / priv->st.st_size));
+    const long percent = (100 * offset) / priv->st.st_size;
+    /* L10N: Pager position percentage.
+       `%ld` is the number, `%%` is the percent symbol.
+       They may be reordered, or space inserted, if you wish. */
+    snprintf(pager_progress_str, sizeof(pager_progress_str), _("%ld%%"), percent);
   }
   else
   {
@@ -152,7 +155,6 @@ static int pbar_recalc(struct MuttWindow *win)
 static int pbar_repaint(struct MuttWindow *win)
 {
   struct PBarPrivateData *pbar_data = win->wdata;
-  // struct IndexSharedData *shared = pbar_data->shared;
 
   mutt_window_move(win, 0, 0);
   mutt_curses_set_normal_backed_color_by_id(MT_COLOR_STATUS);

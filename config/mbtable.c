@@ -68,14 +68,13 @@ struct MbTable *mbtable_parse(const char *s)
 
   while (slen && (k = mbrtowc(NULL, s, slen, &mbstate)))
   {
-    if ((k == (size_t) (-1)) || (k == (size_t) (-2)))
+    if ((k == ICONV_ILLEGAL_SEQ) || (k == ICONV_BUF_TOO_SMALL))
     {
       /* XXX put message in err buffer; fail? warning? */
-      mutt_debug(LL_DEBUG1, "mbrtowc returned %d converting %s in %s\n",
-                 (k == (size_t) (-1)) ? -1 : -2, s, t->orig_str);
-      if (k == (size_t) (-1))
+      mutt_debug(LL_DEBUG1, "mbrtowc returned %zd converting %s in %s\n", k, s, t->orig_str);
+      if (k == ICONV_ILLEGAL_SEQ)
         memset(&mbstate, 0, sizeof(mbstate));
-      k = (k == (size_t) (-1)) ? 1 : slen;
+      k = (k == ICONV_ILLEGAL_SEQ) ? 1 : slen;
     }
 
     slen -= k;
@@ -172,7 +171,7 @@ static int mbtable_string_get(const struct ConfigSet *cs, void *var,
     str = (char *) cdef->initial;
   }
 
-  mutt_buffer_addstr(result, str);
+  buf_addstr(result, str);
   return CSR_SUCCESS;
 }
 

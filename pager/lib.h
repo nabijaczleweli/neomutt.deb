@@ -189,12 +189,12 @@ typedef uint8_t PagerRedrawFlags;       ///< Flags, e.g. #PAGER_REDRAW_PAGER
 #define PAGER_REDRAW_PAGER     (1 << 1) ///< Redraw the pager
 #define PAGER_REDRAW_FLOW      (1 << 2) ///< Reflow the pager
 
-extern int braille_row;
-extern int braille_col;
+extern int BrailleRow;
+extern int BrailleCol;
 
 int mutt_pager(struct PagerView *pview);
 int mutt_do_pager(struct PagerView *pview, struct Email *e);
-void mutt_buffer_strip_formatting(struct Buffer *dest, const char *src, bool strip_markers);
+void buf_strip_formatting(struct Buffer *dest, const char *src, bool strip_markers);
 struct MuttWindow *ppanel_new(bool status_on_top, struct IndexSharedData *shared);
 struct MuttWindow *pager_window_new(struct IndexSharedData *shared, struct PagerPrivateData *priv);
 int mutt_display_message(struct MuttWindow *win_index, struct IndexSharedData *shared);

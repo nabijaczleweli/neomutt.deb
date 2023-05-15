@@ -33,8 +33,7 @@
 
 static struct ConfigDef Vars[] = {
   // clang-format off
-  { "charset",    DT_STRING|DT_NOT_EMPTY|DT_CHARSET_SINGLE, IP "utf-8", 0, NULL, },
-  { "idn_decode", DT_BOOL,                                  true,       0, NULL, },
+  { "idn_decode", DT_BOOL, true, 0, NULL, },
   { NULL },
   // clang-format on
 };
@@ -59,14 +58,11 @@ void test_mutt_addr_for_display(void)
       .intl_checked = 0,
     };
 
-    NeoMutt = test_neomutt_create();
     TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, DT_NO_FLAGS));
 
     const char *expected = "bob@bobsdomain";
     const char *actual = mutt_addr_for_display(&addr);
 
     TEST_CHECK_STR_EQ(expected, actual);
-
-    test_neomutt_destroy(&NeoMutt);
   }
 }

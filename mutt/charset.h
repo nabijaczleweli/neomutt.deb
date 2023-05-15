@@ -20,8 +20,8 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_LIB_CHARSET_H
-#define MUTT_LIB_CHARSET_H
+#ifndef MUTT_MUTT_CHARSET_H
+#define MUTT_MUTT_CHARSET_H
 
 #include <iconv.h>
 #include <stdbool.h>
@@ -40,7 +40,7 @@ extern wchar_t ReplacementChar;
 struct FgetConv
 {
   FILE *fp;
-  iconv_t cd;
+  iconv_t cd; ///< iconv conversion descriptor
   char bufi[512];
   char bufo[512];
   char *p;
@@ -56,7 +56,7 @@ struct FgetConv
 struct FgetConvNot
 {
   FILE *fp;
-  iconv_t cd;
+  iconv_t cd; ///< iconv conversion descriptor
 };
 
 /**
@@ -91,8 +91,27 @@ iconv_t          mutt_ch_iconv_open(const char *tocode, const char *fromcode, ui
 bool             mutt_ch_lookup_add(enum LookupType type, const char *pat, const char *replace, struct Buffer *err);
 void             mutt_ch_lookup_remove(void);
 void             mutt_ch_set_charset(const char *charset);
+void             mutt_ch_cache_cleanup(void);
 
 #define mutt_ch_is_utf8(str)     mutt_ch_chscmp(str, "utf-8")
 #define mutt_ch_is_us_ascii(str) mutt_ch_chscmp(str, "us-ascii")
 
-#endif /* MUTT_LIB_CHARSET_H */
+/// Error value for iconv functions
+#define ICONV_T_INVALID ((iconv_t) -1)
+
+/// Error value for iconv() - Illegal sequence
+#define ICONV_ILLEGAL_SEQ ((size_t) -1)
+/// Error value for iconv() - Buffer too small
+#define ICONV_BUF_TOO_SMALL ((size_t) -2)
+
+/**
+ * iconv_t_valid - Is the conversion descriptor valid?
+ * @param cd Conversion descriptor to test
+ * @retval true It's valid
+ */
+static inline bool iconv_t_valid(const iconv_t cd)
+{
+  return cd != ICONV_T_INVALID;
+}
+
+#endif /* MUTT_MUTT_CHARSET_H */

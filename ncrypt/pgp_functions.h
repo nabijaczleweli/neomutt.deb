@@ -20,8 +20,8 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_PGP_FUNCTIONS_H
-#define MUTT_PGP_FUNCTIONS_H
+#ifndef MUTT_NCRYPT_PGP_FUNCTIONS_H
+#define MUTT_NCRYPT_PGP_FUNCTIONS_H
 
 #include <stdbool.h>
 
@@ -59,8 +59,6 @@ struct PgpFunction
   pgp_function_t function; ///< Function to call
 };
 
-extern struct PgpFunction PgpFunctions[];
-
 int pgp_function_dispatcher(struct MuttWindow *win, int op);
 
-#endif /* MUTT_PGP_FUNCTIONS_H */
+#endif /* MUTT_NCRYPT_PGP_FUNCTIONS_H */

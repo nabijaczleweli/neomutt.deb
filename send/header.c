@@ -46,7 +46,7 @@
  * override pre-defined headers NeoMutt would emit. Keep the array sorted and
  * in sync with the enum.
  */
-static const char *const userhdrs_override_headers[] = {
+static const char *const UserhdrsOverrideHeaders[] = {
   "content-type:",
   "user-agent:",
 };
@@ -66,7 +66,7 @@ enum UserHdrsOverrideIdx
 struct UserHdrsOverride
 {
   /// Which email headers have been overridden
-  bool is_overridden[mutt_array_size(userhdrs_override_headers)];
+  bool is_overridden[mutt_array_size(UserhdrsOverrideHeaders)];
 };
 
 /**
@@ -261,9 +261,9 @@ static char *unfold_header(char *s)
 }
 
 /**
- * userhdrs_override_cmp - Compare a user-defined header with an element of the userhdrs_override_headers list
+ * userhdrs_override_cmp - Compare a user-defined header with an element of the UserhdrsOverrideHeaders list
  * @param a Pointer to the string containing the user-defined header
- * @param b Pointer to an element of the userhdrs_override_headers list
+ * @param b Pointer to an element of the UserhdrsOverrideHeaders list
  * @retval -1 a precedes b
  * @retval  0 a and b are identical
  * @retval  1 b precedes a
@@ -378,13 +378,13 @@ static struct UserHdrsOverride write_userhdrs(FILE *fp, const struct ListHead *u
     }
 
     /* check whether the current user-header is an override */
-    size_t cur_override = (size_t) -1;
-    const char *const *idx = bsearch(tmp->data, userhdrs_override_headers,
-                                     mutt_array_size(userhdrs_override_headers),
+    size_t cur_override = ICONV_ILLEGAL_SEQ;
+    const char *const *idx = bsearch(tmp->data, UserhdrsOverrideHeaders,
+                                     mutt_array_size(UserhdrsOverrideHeaders),
                                      sizeof(char *), userhdrs_override_cmp);
     if (idx != NULL)
     {
-      cur_override = idx - userhdrs_override_headers;
+      cur_override = idx - UserhdrsOverrideHeaders;
       overrides.is_overridden[cur_override] = true;
     }
 
@@ -440,7 +440,9 @@ int mutt_write_one_header(FILE *fp, const char *tag, const char *value,
       wraplen = c_wrap_headers;
   }
   else if (wraplen <= 0)
+  {
     wraplen = 78;
+  }
 
   const size_t vlen = mutt_str_len(v);
   if (tag)
@@ -576,10 +578,10 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
        (mode == MUTT_WRITE_HEADER_POSTPONE)) &&
       !privacy)
   {
-    struct Buffer *date = mutt_buffer_pool_get();
+    struct Buffer *date = buf_pool_get();
     mutt_date_make_date(date, cs_subset_bool(sub, "local_date_header"));
-    fprintf(fp, "Date: %s\n", mutt_buffer_string(date));
-    mutt_buffer_pool_release(&date);
+    fprintf(fp, "Date: %s\n", buf_string(date));
+    buf_pool_release(&date);
   }
 
   /* UseFrom is not consulted here so that we can still write a From:

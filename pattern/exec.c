@@ -237,29 +237,42 @@ static bool msg_search(struct Pattern *pat, struct Email *e, struct Message *msg
     }
   }
 
-  size_t blen = 256;
-  char *buf = mutt_mem_malloc(blen);
-
   /* search the file "fp" */
-  while (len > 0)
+  if (pat->op == MUTT_PAT_HEADER)
   {
-    if (pat->op == MUTT_PAT_HEADER)
+    struct Buffer *buf = buf_pool_get();
+    while (len > 0)
     {
-      buf = mutt_rfc822_read_line(fp, buf, &blen);
-      if (*buf == '\0')
+      if (mutt_rfc822_read_line(fp, buf) == 0)
+      {
         break;
+      }
+      len -= buf_len(buf);
+      if (patmatch(pat, buf_string(buf)))
+      {
+        match = true;
+        break;
+      }
     }
-    else if (!fgets(buf, blen - 1, fp))
-      break; /* don't loop forever */
-    if (patmatch(pat, buf))
-    {
-      match = true;
-      break;
-    }
-    len -= mutt_str_len(buf);
+    buf_pool_release(&buf);
   }
-
-  FREE(&buf);
+  else
+  {
+    char buf[1024] = { 0 };
+    while (len > 0)
+    {
+      if (!fgets(buf, sizeof(buf), fp))
+      {
+        break; /* don't loop forever */
+      }
+      len -= mutt_str_len(buf);
+      if (patmatch(pat, buf))
+      {
+        match = true;
+        break;
+      }
+    }
+  }
 
   if (c_thorough_search)
     mutt_file_fclose(&fp);
@@ -633,10 +646,10 @@ static bool match_mime_content_type(const struct Pattern *pat, struct Email *e, 
  */
 static bool match_update_dynamic_date(struct Pattern *pat)
 {
-  struct Buffer *err = mutt_buffer_pool_get();
+  struct Buffer *err = buf_pool_get();
 
   bool rc = eval_date_minmax(pat, pat->p.str, err);
-  mutt_buffer_pool_release(&err);
+  buf_pool_release(&err);
 
   return rc;
 }
@@ -691,13 +704,13 @@ static int msg_search_sendmode(struct Email *e, struct Pattern *pat)
 
   if ((pat->op == MUTT_PAT_HEADER) || (pat->op == MUTT_PAT_WHOLE_MSG))
   {
-    struct Buffer *tempfile = mutt_buffer_pool_get();
-    mutt_buffer_mktemp(tempfile);
-    fp = mutt_file_fopen(mutt_buffer_string(tempfile), "w+");
+    struct Buffer *tempfile = buf_pool_get();
+    buf_mktemp(tempfile);
+    fp = mutt_file_fopen(buf_string(tempfile), "w+");
     if (!fp)
     {
-      mutt_perror(mutt_buffer_string(tempfile));
-      mutt_buffer_pool_release(&tempfile);
+      mutt_perror(buf_string(tempfile));
+      buf_pool_release(&tempfile);
       return 0;
     }
 
@@ -718,8 +731,8 @@ static int msg_search_sendmode(struct Email *e, struct Pattern *pat)
 
     FREE(&buf);
     mutt_file_fclose(&fp);
-    unlink(mutt_buffer_string(tempfile));
-    mutt_buffer_pool_release(&tempfile);
+    unlink(buf_string(tempfile));
+    buf_pool_release(&tempfile);
 
     if (match)
       return match;

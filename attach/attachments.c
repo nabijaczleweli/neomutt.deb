@@ -51,11 +51,11 @@ struct AttachMatch
   regex_t minor_regex;        ///< Minor mime type regex
 };
 
-struct ListHead AttachAllow = STAILQ_HEAD_INITIALIZER(AttachAllow); ///< List of attachment types to be counted
-struct ListHead AttachExclude = STAILQ_HEAD_INITIALIZER(AttachExclude); ///< List of attachment types to be ignored
-struct ListHead InlineAllow = STAILQ_HEAD_INITIALIZER(InlineAllow); ///< List of inline types to counted
-struct ListHead InlineExclude = STAILQ_HEAD_INITIALIZER(InlineExclude); ///< List of inline types to ignore
-static struct Notify *AttachmentsNotify = NULL;
+static struct ListHead AttachAllow = STAILQ_HEAD_INITIALIZER(AttachAllow); ///< List of attachment types to be counted
+static struct ListHead AttachExclude = STAILQ_HEAD_INITIALIZER(AttachExclude); ///< List of attachment types to be ignored
+static struct ListHead InlineAllow = STAILQ_HEAD_INITIALIZER(InlineAllow); ///< List of inline types to counted
+static struct ListHead InlineExclude = STAILQ_HEAD_INITIALIZER(InlineExclude); ///< List of inline types to ignore
+static struct Notify *AttachmentsNotify = NULL; ///< Notifications: #NotifyAttach
 
 /**
  * attachmatch_free - Free an AttachMatch - Implements ::list_free_t - @ingroup list_free_api
@@ -474,7 +474,7 @@ enum CommandResult parse_attachments(struct Buffer *buf, struct Buffer *s,
   parse_extract_token(buf, s, TOKEN_NO_FLAGS);
   if (!buf->data || (*buf->data == '\0'))
   {
-    mutt_buffer_strcpy(err, _("attachments: no disposition"));
+    buf_strcpy(err, _("attachments: no disposition"));
     return MUTT_CMD_WARNING;
   }
 
@@ -517,7 +517,7 @@ enum CommandResult parse_attachments(struct Buffer *buf, struct Buffer *s,
   }
   else
   {
-    mutt_buffer_strcpy(err, _("attachments: invalid disposition"));
+    buf_strcpy(err, _("attachments: invalid disposition"));
     return MUTT_CMD_ERROR;
   }
 
@@ -537,7 +537,7 @@ enum CommandResult parse_unattachments(struct Buffer *buf, struct Buffer *s,
   parse_extract_token(buf, s, TOKEN_NO_FLAGS);
   if (!buf->data || (*buf->data == '\0'))
   {
-    mutt_buffer_strcpy(err, _("unattachments: no disposition"));
+    buf_strcpy(err, _("unattachments: no disposition"));
     return MUTT_CMD_WARNING;
   }
 
@@ -577,7 +577,7 @@ enum CommandResult parse_unattachments(struct Buffer *buf, struct Buffer *s,
   }
   else
   {
-    mutt_buffer_strcpy(err, _("unattachments: invalid disposition"));
+    buf_strcpy(err, _("unattachments: invalid disposition"));
     return MUTT_CMD_ERROR;
   }
 

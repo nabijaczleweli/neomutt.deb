@@ -57,12 +57,10 @@
 #define CERTERR_OTHER        (1 << 7)
 // clang-format on
 
-const int dialog_row_len = 128;
-
 #define CERT_SEP "-----BEGIN"
 
 #ifndef HAVE_GNUTLS_PRIORITY_SET_DIRECT
-/* This array needs to be large enough to hold all the possible values support
+/** This array needs to be large enough to hold all the possible values support
  * by NeoMutt.  The initialized values are just placeholders--the array gets
  * overwrriten in tls_negotiate() depending on the $ssl_use_* options.
  *
@@ -70,8 +68,7 @@ const int dialog_row_len = 128;
  * 3.4 (2015-04).  TLS 1.3 support wasn't added until version 3.6.5.
  * Therefore, no attempt is made to support $ssl_use_tlsv1_3 in this code.
  */
-static int protocol_priority[] = { GNUTLS_TLS1_2, GNUTLS_TLS1_1, GNUTLS_TLS1,
-                                   GNUTLS_SSL3, 0 };
+static int ProtocolPriority[] = { GNUTLS_TLS1_2, GNUTLS_TLS1_1, GNUTLS_TLS1, GNUTLS_SSL3, 0 };
 #endif
 
 /**
@@ -753,43 +750,43 @@ static int tls_set_priority(struct TlsSockData *data)
   size_t nproto = 5;
   int rv = -1;
 
-  struct Buffer *priority = mutt_buffer_pool_get();
+  struct Buffer *priority = buf_pool_get();
 
   const char *const c_ssl_ciphers = cs_subset_string(NeoMutt->sub, "ssl_ciphers");
   if (c_ssl_ciphers)
-    mutt_buffer_strcpy(priority, c_ssl_ciphers);
+    buf_strcpy(priority, c_ssl_ciphers);
   else
-    mutt_buffer_strcpy(priority, "NORMAL");
+    buf_strcpy(priority, "NORMAL");
 
   const bool c_ssl_use_tlsv1_3 = cs_subset_bool(NeoMutt->sub, "ssl_use_tlsv1_3");
   if (!c_ssl_use_tlsv1_3)
   {
     nproto--;
-    mutt_buffer_addstr(priority, ":-VERS-TLS1.3");
+    buf_addstr(priority, ":-VERS-TLS1.3");
   }
   const bool c_ssl_use_tlsv1_2 = cs_subset_bool(NeoMutt->sub, "ssl_use_tlsv1_2");
   if (!c_ssl_use_tlsv1_2)
   {
     nproto--;
-    mutt_buffer_addstr(priority, ":-VERS-TLS1.2");
+    buf_addstr(priority, ":-VERS-TLS1.2");
   }
   const bool c_ssl_use_tlsv1_1 = cs_subset_bool(NeoMutt->sub, "ssl_use_tlsv1_1");
   if (!c_ssl_use_tlsv1_1)
   {
     nproto--;
-    mutt_buffer_addstr(priority, ":-VERS-TLS1.1");
+    buf_addstr(priority, ":-VERS-TLS1.1");
   }
   const bool c_ssl_use_tlsv1 = cs_subset_bool(NeoMutt->sub, "ssl_use_tlsv1");
   if (!c_ssl_use_tlsv1)
   {
     nproto--;
-    mutt_buffer_addstr(priority, ":-VERS-TLS1.0");
+    buf_addstr(priority, ":-VERS-TLS1.0");
   }
   const bool c_ssl_use_sslv3 = cs_subset_bool(NeoMutt->sub, "ssl_use_sslv3");
   if (!c_ssl_use_sslv3)
   {
     nproto--;
-    mutt_buffer_addstr(priority, ":-VERS-SSL3.0");
+    buf_addstr(priority, ":-VERS-SSL3.0");
   }
 
   if (nproto == 0)
@@ -798,18 +795,18 @@ static int tls_set_priority(struct TlsSockData *data)
     goto cleanup;
   }
 
-  int err = gnutls_priority_set_direct(data->session, mutt_buffer_string(priority), NULL);
+  int err = gnutls_priority_set_direct(data->session, buf_string(priority), NULL);
   if (err < 0)
   {
-    mutt_error("gnutls_priority_set_direct(%s): %s",
-               mutt_buffer_string(priority), gnutls_strerror(err));
+    mutt_error("gnutls_priority_set_direct(%s): %s", buf_string(priority),
+               gnutls_strerror(err));
     goto cleanup;
   }
 
   rv = 0;
 
 cleanup:
-  mutt_buffer_pool_release(&priority);
+  buf_pool_release(&priority);
   return rv;
 }
 
@@ -826,17 +823,17 @@ static int tls_set_priority(struct TlsSockData *data)
 
   const bool c_ssl_use_tlsv1_2 = cs_subset_bool(NeoMutt->sub, "ssl_use_tlsv1_2");
   if (c_ssl_use_tlsv1_2)
-    protocol_priority[nproto++] = GNUTLS_TLS1_2;
+    ProtocolPriority[nproto++] = GNUTLS_TLS1_2;
   const bool c_ssl_use_tlsv1_1 = cs_subset_bool(NeoMutt->sub, "ssl_use_tlsv1_1");
   if (c_ssl_use_tlsv1_1)
-    protocol_priority[nproto++] = GNUTLS_TLS1_1;
+    ProtocolPriority[nproto++] = GNUTLS_TLS1_1;
   const bool c_ssl_use_tlsv1 = cs_subset_bool(NeoMutt->sub, "ssl_use_tlsv1");
   if (c_ssl_use_tlsv1)
-    protocol_priority[nproto++] = GNUTLS_TLS1;
+    ProtocolPriority[nproto++] = GNUTLS_TLS1;
   const bool c_ssl_use_sslv3 = cs_subset_bool(NeoMutt->sub, "ssl_use_sslv3");
   if (c_ssl_use_sslv3)
-    protocol_priority[nproto++] = GNUTLS_SSL3;
-  protocol_priority[nproto] = 0;
+    ProtocolPriority[nproto++] = GNUTLS_SSL3;
+  ProtocolPriority[nproto] = 0;
 
   if (nproto == 0)
   {
@@ -853,7 +850,7 @@ static int tls_set_priority(struct TlsSockData *data)
   /* We use default priorities (see gnutls documentation),
    * except for protocol version */
   gnutls_set_default_priority(data->session);
-  gnutls_protocol_set_priority(data->session, protocol_priority);
+  gnutls_protocol_set_priority(data->session, ProtocolPriority);
   return 0;
 }
 #endif

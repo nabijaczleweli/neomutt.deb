@@ -48,10 +48,9 @@
 #include "mutt_lua.h"
 #include "parse/lib.h"
 #include "muttlib.h"
-#include "myvar.h"
 
 /// Global Lua State
-lua_State *LuaState = NULL;
+static lua_State *LuaState = NULL;
 
 /**
  * LuaCommands - List of NeoMutt commands to register
@@ -98,8 +97,8 @@ static int handle_error(lua_State *l)
 static int lua_mutt_call(lua_State *l)
 {
   mutt_debug(LL_DEBUG2, " * lua_mutt_call()\n");
-  struct Buffer *err = mutt_buffer_pool_get();
-  struct Buffer *token = mutt_buffer_pool_get();
+  struct Buffer *err = buf_pool_get();
+  struct Buffer *token = buf_pool_get();
   char buf[1024] = { 0 };
   const struct Command *cmd = NULL;
   int rc = 0;
@@ -124,26 +123,26 @@ static int lua_mutt_call(lua_State *l)
     mutt_strn_cat(buf, sizeof(buf), " ", 1);
   }
 
-  struct Buffer expn = mutt_buffer_make(0);
+  struct Buffer expn = buf_make(0);
   expn.data = buf;
   expn.dptr = buf;
   expn.dsize = mutt_str_len(buf);
 
   if (cmd->parse(token, &expn, cmd->data, err))
   {
-    luaL_error(l, "NeoMutt error: %s", mutt_buffer_string(err));
+    luaL_error(l, "NeoMutt error: %s", buf_string(err));
     rc = -1;
   }
   else
   {
-    if (!lua_pushstring(l, mutt_buffer_string(err)))
+    if (!lua_pushstring(l, buf_string(err)))
       handle_error(l);
     else
       rc++;
   }
 
-  mutt_buffer_pool_release(&token);
-  mutt_buffer_pool_release(&err);
+  buf_pool_release(&token);
+  buf_pool_release(&err);
   return rc;
 }
 
@@ -158,30 +157,37 @@ static int lua_mutt_set(lua_State *l)
   const char *param = lua_tostring(l, -2);
   mutt_debug(LL_DEBUG2, " * lua_mutt_set(%s)\n", param);
 
-  if (mutt_str_startswith(param, "my_"))
-  {
-    const char *val = lua_tostring(l, -1);
-    myvar_set(param, val);
-    return 0;
-  }
-
+  struct Buffer err = buf_make(256);
   struct HashElem *he = cs_subset_lookup(NeoMutt->sub, param);
   if (!he)
   {
-    luaL_error(l, "NeoMutt parameter not found %s", param);
-    return -1;
+    // In case it is a my_var, we have to create it
+    if (mutt_str_startswith(param, "my_"))
+    {
+      struct ConfigDef my_cdef = { 0 };
+      my_cdef.name = param;
+      my_cdef.type = DT_MYVAR;
+      he = cs_create_variable(NeoMutt->sub->cs, &my_cdef, &err);
+      if (!he)
+        return -1;
+    }
+    else
+    {
+      luaL_error(l, "NeoMutt parameter not found %s", param);
+      return -1;
+    }
   }
 
   struct ConfigDef *cdef = he->data;
 
   int rc = 0;
-  struct Buffer err = mutt_buffer_make(256);
 
   switch (DTYPE(cdef->type))
   {
     case DT_ADDRESS:
     case DT_ENUM:
     case DT_MBTABLE:
+    case DT_MYVAR:
     case DT_PATH:
     case DT_REGEX:
     case DT_SLIST:
@@ -190,13 +196,13 @@ static int lua_mutt_set(lua_State *l)
     {
       const char *value = lua_tostring(l, -1);
       size_t val_size = lua_rawlen(l, -1);
-      struct Buffer value_buf = mutt_buffer_make(val_size);
-      mutt_buffer_strcpy_n(&value_buf, value, val_size);
+      struct Buffer value_buf = buf_make(val_size);
+      buf_strcpy_n(&value_buf, value, val_size);
       if (DTYPE(he->type) == DT_PATH)
-        mutt_buffer_expand_path(&value_buf);
+        buf_expand_path(&value_buf);
 
       int rv = cs_subset_he_string_set(NeoMutt->sub, he, value_buf.data, &err);
-      mutt_buffer_dealloc(&value_buf);
+      buf_dealloc(&value_buf);
       if (CSR_RESULT(rv) != CSR_SUCCESS)
         rc = -1;
       break;
@@ -224,7 +230,7 @@ static int lua_mutt_set(lua_State *l)
       break;
   }
 
-  mutt_buffer_dealloc(&err);
+  buf_dealloc(&err);
   return rc;
 }
 
@@ -238,19 +244,6 @@ static int lua_mutt_get(lua_State *l)
 {
   const char *param = lua_tostring(l, -1);
   mutt_debug(LL_DEBUG2, " * lua_mutt_get(%s)\n", param);
-
-  if (mutt_str_startswith(param, "my_"))
-  {
-    const char *mv = myvar_get(param);
-    if (!mv)
-    {
-      luaL_error(l, "NeoMutt parameter not found %s", param);
-      return -1;
-    }
-
-    lua_pushstring(l, mv);
-    return 1;
-  }
 
   struct HashElem *he = cs_subset_lookup(NeoMutt->sub, param);
   if (!he)
@@ -267,24 +260,25 @@ static int lua_mutt_get(lua_State *l)
     case DT_ADDRESS:
     case DT_ENUM:
     case DT_MBTABLE:
+    case DT_MYVAR:
     case DT_REGEX:
     case DT_SLIST:
     case DT_SORT:
     case DT_STRING:
     {
-      struct Buffer value = mutt_buffer_make(256);
+      struct Buffer value = buf_make(256);
       int rc = cs_subset_he_string_get(NeoMutt->sub, he, &value);
       if (CSR_RESULT(rc) != CSR_SUCCESS)
       {
-        mutt_buffer_dealloc(&value);
+        buf_dealloc(&value);
         return -1;
       }
 
-      struct Buffer escaped = mutt_buffer_make(256);
+      struct Buffer escaped = buf_make(256);
       escape_string(&escaped, value.data);
       lua_pushstring(l, escaped.data);
-      mutt_buffer_dealloc(&value);
-      mutt_buffer_dealloc(&escaped);
+      buf_dealloc(&value);
+      buf_dealloc(&escaped);
       return 1;
     }
     case DT_QUAD:
@@ -311,25 +305,25 @@ static int lua_mutt_get(lua_State *l)
 static int lua_mutt_enter(lua_State *l)
 {
   mutt_debug(LL_DEBUG2, " * lua_mutt_enter()\n");
-  struct Buffer *err = mutt_buffer_pool_get();
+  struct Buffer *err = buf_pool_get();
   char *buf = mutt_str_dup(lua_tostring(l, -1));
   int rc = 0;
 
   if (parse_rc_line(buf, err))
   {
-    luaL_error(l, "NeoMutt error: %s", mutt_buffer_string(err));
+    luaL_error(l, "NeoMutt error: %s", buf_string(err));
     rc = -1;
   }
   else
   {
-    if (!lua_pushstring(l, mutt_buffer_string(err)))
+    if (!lua_pushstring(l, buf_string(err)))
       handle_error(l);
     else
       rc++;
   }
 
   FREE(&buf);
-  mutt_buffer_pool_release(&err);
+  buf_pool_release(&err);
 
   return rc;
 }
@@ -485,13 +479,13 @@ enum CommandResult mutt_lua_parse(struct Buffer *buf, struct Buffer *s,
   if (luaL_dostring(LuaState, s->dptr))
   {
     mutt_debug(LL_DEBUG2, " * %s -> failure\n", s->dptr);
-    mutt_buffer_printf(err, "%s: %s", s->dptr, lua_tostring(LuaState, -1));
+    buf_printf(err, "%s: %s", s->dptr, lua_tostring(LuaState, -1));
     /* pop error message from the stack */
     lua_pop(LuaState, 1);
     return MUTT_CMD_ERROR;
   }
   mutt_debug(LL_DEBUG2, " * %s -> success\n", s->dptr);
-  mutt_buffer_reset(s); // Clear the rest of the line
+  buf_reset(s); // Clear the rest of the line
   return MUTT_CMD_SUCCESS;
 }
 
@@ -509,12 +503,12 @@ enum CommandResult mutt_lua_source_file(struct Buffer *buf, struct Buffer *s,
 
   if (parse_extract_token(buf, s, TOKEN_NO_FLAGS) != 0)
   {
-    mutt_buffer_printf(err, _("source: error at %s"), s->dptr);
+    buf_printf(err, _("source: error at %s"), s->dptr);
     return MUTT_CMD_ERROR;
   }
   if (MoreArgs(s))
   {
-    mutt_buffer_printf(err, _("%s: too many arguments"), "source");
+    buf_printf(err, _("%s: too many arguments"), "source");
     return MUTT_CMD_WARNING;
   }
   mutt_str_copy(path, buf->data, sizeof(path));

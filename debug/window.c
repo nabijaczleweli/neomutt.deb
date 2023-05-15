@@ -35,7 +35,9 @@
 
 // #define DEBUG_SHOW_SERIALISE
 
-static struct MuttWindow *win_focus = NULL;
+/// The Window that is currently focussed.
+/// The focus spans from #RootWindow through MuttWindow.focus
+static struct MuttWindow *WinFocus = NULL;
 
 static const char *win_size(const struct MuttWindow *win)
 {
@@ -65,7 +67,7 @@ static void win_dump(struct MuttWindow *win, int indent)
              (win->orient == MUTT_WIN_ORIENT_VERTICAL) ? 'V' : 'H',
              mutt_window_win_name(win), win->state.cols, win->state.rows,
              visible ? "" : "\033[0m",
-             (win == win_focus) ? " <-- \033[1;31mFOCUS\033[0m" : "");
+             (win == WinFocus) ? " <-- \033[1;31mFOCUS\033[0m" : "");
 
   struct MuttWindow *np = NULL;
   TAILQ_FOREACH(np, &win->children, entries)
@@ -80,29 +82,28 @@ static void win_serialise(struct MuttWindow *win, struct Buffer *buf)
   if (!mutt_window_is_visible(win))
     return;
 
-  mutt_buffer_add_printf(buf, "<%s {%dx,%dy} [%dC,%dR]", win_size(win),
-                         win->state.col_offset, win->state.row_offset,
-                         win->state.cols, win->state.rows);
+  buf_add_printf(buf, "<%s {%dx,%dy} [%dC,%dR]", win_size(win), win->state.col_offset,
+                 win->state.row_offset, win->state.cols, win->state.rows);
   struct MuttWindow *np = NULL;
   TAILQ_FOREACH(np, &win->children, entries)
   {
     win_serialise(np, buf);
   }
-  mutt_buffer_addstr(buf, ">");
+  buf_addstr(buf, ">");
 }
 #endif
 
 void debug_win_dump(void)
 {
-  win_focus = window_get_focus();
+  WinFocus = window_get_focus();
   mutt_debug(LL_DEBUG1, "\n");
   win_dump(RootWindow, 0);
   mutt_debug(LL_DEBUG1, "\n");
 #ifdef DEBUG_SHOW_SERIALISE
-  struct Buffer buf = mutt_buffer_make(1024);
+  struct Buffer buf = buf_make(1024);
   win_serialise(RootWindow, &buf);
-  mutt_debug(LL_DEBUG1, "%s\n", mutt_buffer_string(&buf));
-  mutt_buffer_dealloc(&buf);
+  mutt_debug(LL_DEBUG1, "%s\n", buf_string(&buf));
+  buf_dealloc(&buf);
 #endif
-  win_focus = NULL;
+  WinFocus = NULL;
 }

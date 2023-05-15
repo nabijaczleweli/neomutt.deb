@@ -169,7 +169,8 @@ static int pop_read_header(struct PopAccountData *adata, struct Email *e)
       while (!feof(fp))
       {
         e->body->length--;
-        fgets(buf, sizeof(buf), fp);
+        if (!fgets(buf, sizeof(buf), fp))
+          break;
       }
       break;
     }
@@ -284,7 +285,7 @@ static int msg_cache_check(const char *id, struct BodyCache *bcache, void *data)
  */
 static void pop_hcache_namer(const char *path, struct Buffer *dest)
 {
-  mutt_buffer_printf(dest, "%s." HC_FEXT, path);
+  buf_printf(dest, "%s." HC_FEXT, path);
 }
 
 /**
@@ -547,7 +548,6 @@ void pop_fetch_mail(void)
 
   if (pop_open_connection(adata) < 0)
   {
-    //XXX mutt_socket_free(adata->conn);
     pop_adata_free((void **) &adata);
     return;
   }
@@ -755,7 +755,7 @@ static enum MxOpenReturns pop_mbox_open(struct Mailbox *m)
   url.path = NULL;
   url_tostring(&url, buf, sizeof(buf), U_NO_FLAGS);
 
-  mutt_buffer_strcpy(&m->pathbuf, buf);
+  buf_strcpy(&m->pathbuf, buf);
   mutt_str_replace(&m->realpath, mailbox_path(m));
 
   struct PopAccountData *adata = m->account->adata;
@@ -957,7 +957,6 @@ static enum MxStatus pop_mbox_close(struct Mailbox *m)
   if (adata->status != POP_NONE)
   {
     mutt_socket_close(adata->conn);
-    // FREE(&adata->conn);
   }
 
   adata->status = POP_NONE;
@@ -1012,7 +1011,7 @@ static bool pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
     }
   }
 
-  path = mutt_buffer_pool_get();
+  path = buf_pool_get();
 
   while (true)
   {
@@ -1032,11 +1031,11 @@ static bool pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
     {
       /* no */
       bcache = false;
-      mutt_buffer_mktemp(path);
-      msg->fp = mutt_file_fopen(mutt_buffer_string(path), "w+");
+      buf_mktemp(path);
+      msg->fp = mutt_file_fopen(buf_string(path), "w+");
       if (!msg->fp)
       {
-        mutt_perror(mutt_buffer_string(path));
+        mutt_perror(buf_string(path));
         goto cleanup;
       }
     }
@@ -1057,7 +1056,7 @@ static bool pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
      * the file in bcache or from POP's own cache since the next iteration
      * of the loop will re-attempt to put() the message */
     if (!bcache)
-      unlink(mutt_buffer_string(path));
+      unlink(buf_string(path));
 
     if (rc == -2)
     {
@@ -1081,7 +1080,7 @@ static bool pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
   else
   {
     cache->index = e->index;
-    cache->path = mutt_buffer_strdup(path);
+    cache->path = buf_strdup(path);
   }
   rewind(msg->fp);
 
@@ -1103,11 +1102,9 @@ static bool pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
   e->edata_free = pop_edata_free;
 
   e->lines = 0;
-  fgets(buf, sizeof(buf), msg->fp);
-  while (!feof(msg->fp))
+  while (fgets(buf, sizeof(buf), msg->fp) && !feof(msg->fp))
   {
     m->emails[msgno]->lines++;
-    fgets(buf, sizeof(buf), msg->fp);
   }
 
   e->body->length = ftello(msg->fp) - e->body->offset;
@@ -1122,7 +1119,7 @@ static bool pop_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
   success = true;
 
 cleanup:
-  mutt_buffer_pool_release(&path);
+  buf_pool_release(&path);
   return success;
 }
 
@@ -1196,7 +1193,7 @@ static int pop_path_parent(char *buf, size_t buflen)
 /**
  * MxPopOps - POP Mailbox - Implements ::MxOps - @ingroup mx_api
  */
-struct MxOps MxPopOps = {
+const struct MxOps MxPopOps = {
   // clang-format off
   .type            = MUTT_POP,
   .name             = "pop",

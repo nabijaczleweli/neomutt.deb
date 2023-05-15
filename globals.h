@@ -43,13 +43,13 @@ extern char *LastFolder;     ///< Previously selected mailbox
 extern const char *GitVer;
 
 /* Lists of strings */
-extern struct ListHead AlternativeOrderList; ///< List of preferred mime types to display 
-extern struct ListHead AutoViewList;         ///< List of mime types to auto view 
+extern struct ListHead AlternativeOrderList; ///< List of preferred mime types to display
+extern struct ListHead AutoViewList;         ///< List of mime types to auto view
 extern struct ListHead HeaderOrderList;      ///< List of header fields in the order they should be displayed
 extern struct ListHead MimeLookupList;       ///< List of mime types that that shouldn't use the mailcap entry
-extern struct ListHead Muttrc;               ///< List of config files to read 
-extern struct ListHead TempAttachmentsList;  ///< List of temporary files for displaying attachments 
-extern struct ListHead UserHeader;           ///< List of custom headers to add to outgoing emails 
+extern struct ListHead Muttrc;               ///< List of config files to read
+extern struct ListHead TempAttachmentsList;  ///< List of temporary files for displaying attachments
+extern struct ListHead UserHeader;           ///< List of custom headers to add to outgoing emails
 
 /* flags for received signals */
 extern SIG_ATOMIC_VOLATILE_T SigInt;   ///< true after SIGINT is received
@@ -81,5 +81,7 @@ extern bool OptResortInit;          ///< (pseudo) used to force the next resort 
 extern bool OptSearchInvalid;       ///< (pseudo) used to invalidate the search pattern
 extern bool OptSearchReverse;       ///< (pseudo) used by ci_search_command
 extern bool OptSortSubthreads;      ///< (pseudo) used when $sort_aux changes
+
+extern char **EnvList;              ///< Private copy of the environment variables
 
 #endif /* MUTT_GLOBALS_H */

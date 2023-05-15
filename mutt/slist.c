@@ -169,6 +169,19 @@ void slist_free(struct Slist **list)
 }
 
 /**
+ * slist_is_empty - Is the slist empty?
+ * @param list List to check
+ * @retval true List is empty
+ */
+bool slist_is_empty(const struct Slist *list)
+{
+  if (!list)
+    return true;
+
+  return list->count == 0;
+}
+
+/**
  * slist_is_member - Is a string a member of a list?
  * @param list List to modify
  * @param str  String to find
@@ -297,16 +310,16 @@ int slist_to_buffer(const struct Slist *list, struct Buffer *buf)
   struct ListNode *np = NULL;
   STAILQ_FOREACH(np, &list->head, entries)
   {
-    mutt_buffer_addstr(buf, np->data);
+    buf_addstr(buf, np->data);
     if (STAILQ_NEXT(np, entries))
     {
       const int sep = (list->flags & SLIST_SEP_MASK);
       if (sep == SLIST_SEP_COMMA)
-        mutt_buffer_addch(buf, ',');
+        buf_addch(buf, ',');
       else if (sep == SLIST_SEP_COLON)
-        mutt_buffer_addch(buf, ':');
+        buf_addch(buf, ':');
       else
-        mutt_buffer_addch(buf, ' ');
+        buf_addch(buf, ' ');
     }
   }
 

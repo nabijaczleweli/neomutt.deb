@@ -23,8 +23,11 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include "mutt/lib.h"
 
 void test_notify_set_parent(void)
 {
   // void notify_set_parent(struct Notify *notify, struct Notify *parent);
+
+  notify_set_parent(NULL, NULL);
 }

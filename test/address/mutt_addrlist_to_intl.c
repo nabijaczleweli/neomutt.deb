@@ -34,9 +34,8 @@
 
 static struct ConfigDef Vars[] = {
   // clang-format off
-  { "charset",    DT_STRING|DT_NOT_EMPTY|DT_CHARSET_SINGLE, IP "utf-8", 0, NULL, },
-  { "idn_decode", DT_BOOL,                                  true,       0, NULL, },
-  { "idn_encode", DT_BOOL,                                  true,       0, NULL, },
+  { "idn_decode", DT_BOOL, true, 0, NULL, },
+  { "idn_encode", DT_BOOL, true, 0, NULL, },
   { NULL },
   // clang-format on
 };
@@ -65,7 +64,6 @@ void test_mutt_addrlist_to_intl(void)
                          .intl = "test@xn--nixierhre-57a.nixieclock-tube.com" },
                        { .local = "test@வலைப்பூ.com", .intl = "test@xn--xlcawl2e7azb.com" } };
 
-    NeoMutt = test_neomutt_create();
     TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, DT_NO_FLAGS));
 
     cs_subset_str_string_set(NeoMutt->sub, "charset", "utf-8", NULL);
@@ -89,7 +87,5 @@ void test_mutt_addrlist_to_intl(void)
       TEST_CHECK_STR_EQ(local2intl[i].local, a->mailbox);
       mutt_addrlist_clear(&al);
     }
-
-    test_neomutt_destroy(&NeoMutt);
   }
 }

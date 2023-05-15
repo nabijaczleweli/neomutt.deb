@@ -125,10 +125,10 @@ static int address_string_get(const struct ConfigSet *cs, void *var,
   }
   else
   {
-    mutt_buffer_addstr(result, (char *) cdef->initial);
+    buf_addstr(result, (char *) cdef->initial);
   }
 
-  if (mutt_buffer_is_empty(result))
+  if (buf_is_empty(result))
     return CSR_SUCCESS | CSR_SUC_EMPTY; /* empty string */
 
   return CSR_SUCCESS;
@@ -232,7 +232,6 @@ static int address_reset(const struct ConfigSet *cs, void *var,
 struct Address *address_new(const char *addr)
 {
   struct Address *a = mutt_mem_calloc(1, sizeof(*a));
-  // a->personal = mutt_str_dup(addr);
   a->mailbox = mutt_str_dup(addr);
   return a;
 }

@@ -20,8 +20,8 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_LIB_FILE_H
-#define MUTT_LIB_FILE_H
+#ifndef MUTT_MUTT_FILE_H
+#define MUTT_MUTT_FILE_H
 
 #include "config.h"
 #include <dirent.h>
@@ -32,7 +32,7 @@
 
 struct Buffer;
 struct stat;
-extern const char filename_safe_chars[];
+extern const char FilenameSafeChars[];
 
 /* Flags for mutt_file_read_line() */
 typedef uint8_t ReadLineFlags;             ///< Flags for mutt_file_read_line(), e.g. #MUTT_RL_CONT
@@ -141,7 +141,7 @@ void        mutt_file_unlink_empty(const char *path);
 int         mutt_file_unlock(int fd);
 void        mutt_file_resolve_symlink(struct Buffer *buf);
 
-void        mutt_buffer_quote_filename(struct Buffer *buf, const char *filename, bool add_outer);
-void        mutt_buffer_file_expand_fmt_quote(struct Buffer *dest, const char *fmt, const char *src);
+void        buf_quote_filename(struct Buffer *buf, const char *filename, bool add_outer);
+void        buf_file_expand_fmt_quote(struct Buffer *dest, const char *fmt, const char *src);
 
-#endif /* MUTT_LIB_FILE_H */
+#endif /* MUTT_MUTT_FILE_H */

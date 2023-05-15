@@ -76,9 +76,12 @@ struct Resize
   bool search_back;
 };
 
-int braille_row = -1;
-int braille_col = -1;
+/// Braille display: row to leave the cursor
+int BrailleRow = -1;
+/// Braille display: column to leave the cursor
+int BrailleCol = -1;
 
+/// Data to keep track of screen resizes
 static struct Resize *Resize = NULL;
 
 /// Help Bar for the Pager's Help Page
@@ -390,10 +393,10 @@ int mutt_pager(struct PagerView *pview)
     const bool c_braille_friendly = cs_subset_bool(NeoMutt->sub, "braille_friendly");
     if (c_braille_friendly)
     {
-      if (braille_row != -1)
+      if (BrailleRow != -1)
       {
-        mutt_window_move(priv->pview->win_pager, braille_col, braille_row + 1);
-        braille_row = -1;
+        mutt_window_move(priv->pview->win_pager, BrailleCol, BrailleRow + 1);
+        BrailleRow = -1;
       }
     }
     else
@@ -417,7 +420,7 @@ int mutt_pager(struct PagerView *pview)
       enum MxStatus check = mx_mbox_check(shared->mailbox);
       if (check == MX_STATUS_ERROR)
       {
-        if (!shared->mailbox || mutt_buffer_is_empty(&shared->mailbox->pathbuf))
+        if (!shared->mailbox || buf_is_empty(&shared->mailbox->pathbuf))
         {
           /* fatal error occurred */
           pager_queue_redraw(priv, PAGER_REDRAW_PAGER);

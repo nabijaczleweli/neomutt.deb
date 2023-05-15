@@ -31,20 +31,9 @@
 #include "common.h"
 #include "test_common.h"
 
-static struct ConfigDef Vars[] = {
-  // clang-format off
-  { "assumed_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY, 0,          0, NULL, },
-  { "charset",         DT_STRING|DT_NOT_EMPTY|DT_CHARSET_SINGLE,   IP "utf-8", 0, NULL, },
-  { NULL },
-  // clang-format on
-};
-
 void test_rfc2047_decode(void)
 {
   // void rfc2047_decode(char **pd);
-
-  NeoMutt = test_neomutt_create();
-  TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, DT_NO_FLAGS));
 
   {
     rfc2047_decode(NULL);
@@ -63,26 +52,14 @@ void test_rfc2047_decode(void)
       /* decode the original string */
       char *s = mutt_str_dup(rfc2047_test_data[i].original);
       rfc2047_decode(&s);
-      if (!TEST_CHECK(mutt_str_equal(s, rfc2047_test_data[i].decoded)))
-      {
-        TEST_MSG("Iteration: %zu", i);
-        TEST_MSG("Expected : %s", rfc2047_test_data[i].decoded);
-        TEST_MSG("Actual   : %s", s);
-      }
+      TEST_CHECK_STR_EQ(s, rfc2047_test_data[i].decoded);
       FREE(&s);
 
       /* decode the encoded result */
       s = mutt_str_dup(rfc2047_test_data[i].encoded);
       rfc2047_decode(&s);
-      if (!TEST_CHECK(mutt_str_equal(s, rfc2047_test_data[i].decoded)))
-      {
-        TEST_MSG("Iteration: %zu", i);
-        TEST_MSG("Expected : %s", rfc2047_test_data[i].decoded);
-        TEST_MSG("Actual   : %s", s);
-      }
+      TEST_CHECK_STR_EQ(s, rfc2047_test_data[i].decoded);
       FREE(&s);
     }
   }
-
-  test_neomutt_destroy(&NeoMutt);
 }

@@ -97,7 +97,7 @@ static void test_parse_set(void)
     "%s inv%s=42", "%s inv%s?", "%s &%s",     "%s &%s=42", "%s &%s?",
   };
 
-  struct Buffer err = mutt_buffer_make(256);
+  struct Buffer err = buf_make(256);
   char line[64];
 
   for (size_t v = 0; v < mutt_array_size(vars); v++)
@@ -107,7 +107,7 @@ static void test_parse_set(void)
       TEST_CASE_("%s %s", commands[c], vars[v]);
       for (size_t t = 0; t < mutt_array_size(tests); t++)
       {
-        mutt_buffer_reset(&err);
+        buf_reset(&err);
 
         snprintf(line, sizeof(line), tests[t], commands[c], vars[v]);
         // enum CommandResult rc =
@@ -116,7 +116,7 @@ static void test_parse_set(void)
     }
   }
 
-  mutt_buffer_dealloc(&err);
+  buf_dealloc(&err);
 }
 
 void test_parse_rc(void)
@@ -131,10 +131,8 @@ void test_parse_rc(void)
   rc = parse_rc_buffer(NULL, NULL, NULL);
   TEST_CHECK(rc == MUTT_CMD_SUCCESS);
 
-  NeoMutt = test_neomutt_create();
   TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, DT_NO_FLAGS));
   cs_str_initial_set(NeoMutt->sub->cs, "from", "rich@flatcap.org", NULL);
   cs_str_reset(NeoMutt->sub->cs, "from", NULL);
   test_parse_set();
-  test_neomutt_destroy(&NeoMutt);
 }

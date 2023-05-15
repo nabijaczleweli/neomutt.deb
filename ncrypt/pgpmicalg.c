@@ -27,7 +27,6 @@
  */
 
 #include "config.h"
-#include <iconv.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -140,7 +139,7 @@ static void pgp_dearmor(FILE *fp_in, FILE *fp_out)
     return;
   }
 
-  mutt_decode_base64(&state, end - start, false, (iconv_t) -1);
+  mutt_decode_base64(&state, end - start, false, ICONV_T_INVALID);
 }
 
 /**

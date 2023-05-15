@@ -338,8 +338,8 @@ int mutt_copy_hdr(FILE *fp_in, FILE *fp_out, LOFF_T off_start, LOFF_T off_end,
       {
         size_t blen = mutt_str_len(buf);
 
-        mutt_mem_realloc(&this_one, this_one_len + blen + sizeof(char));
-        strcat(this_one + this_one_len, buf);
+        mutt_mem_realloc(&this_one, this_one_len + blen + 1);
+        mutt_strn_copy(this_one + this_one_len, buf, blen, blen + 1);
         this_one_len += blen;
       }
       else
@@ -367,6 +367,8 @@ int mutt_copy_hdr(FILE *fp_in, FILE *fp_out, LOFF_T off_start, LOFF_T off_end,
   /* Now output the headers in order */
   bool error = false;
   char **hp = NULL;
+  const short c_wrap = cs_subset_number(NeoMutt->sub, "wrap");
+
   ARRAY_FOREACH(hp, &headers)
   {
     if (!error && hp && *hp)
@@ -376,7 +378,6 @@ int mutt_copy_hdr(FILE *fp_in, FILE *fp_out, LOFF_T off_start, LOFF_T off_end,
       if (chflags & (CH_DECODE | CH_PREFIX))
       {
         const char *pre = (chflags & CH_PREFIX) ? prefix : NULL;
-        const short c_wrap = cs_subset_number(NeoMutt->sub, "wrap");
         wraplen = mutt_window_wrap_cols(wraplen, c_wrap);
 
         if (mutt_write_one_header(fp_out, 0, *hp, pre, wraplen, chflags, NeoMutt->sub) == -1)
@@ -436,7 +437,7 @@ int mutt_copy_header(FILE *fp_in, struct Email *e, FILE *fp_out,
     fputs("MIME-Version: 1.0\n", fp_out);
     fputs("Content-Transfer-Encoding: 8bit\n", fp_out);
     fputs("Content-Type: text/plain; charset=", fp_out);
-    const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
+    const char *const c_charset = cc_charset();
     mutt_ch_canonical_charset(chsbuf, sizeof(chsbuf), c_charset ? c_charset : "us-ascii");
     mutt_addr_cat(buf, sizeof(buf), chsbuf, MimeSpecials);
     fputs(buf, fp_out);
@@ -679,18 +680,17 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
       LOFF_T new_length = body->length;
       struct Buffer *quoted_date = NULL;
 
-      quoted_date = mutt_buffer_pool_get();
-      mutt_buffer_addch(quoted_date, '"');
+      quoted_date = buf_pool_get();
+      buf_addch(quoted_date, '"');
       mutt_date_make_date(quoted_date, cs_subset_bool(NeoMutt->sub, "local_date_header"));
-      mutt_buffer_addch(quoted_date, '"');
+      buf_addch(quoted_date, '"');
 
       /* Count the number of lines and bytes to be deleted */
       if (!mutt_file_seek(fp_in, body->offset, SEEK_SET))
       {
         goto attach_del_cleanup;
       }
-      const int del = count_delete_lines(fp_in, body, &new_length,
-                                         mutt_buffer_len(quoted_date));
+      const int del = count_delete_lines(fp_in, body, &new_length, buf_len(quoted_date));
       if (del == -1)
       {
         goto attach_del_cleanup;
@@ -714,10 +714,10 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
       /* Copy the body */
       if (!mutt_file_seek(fp_in, body->offset, SEEK_SET))
         goto attach_del_cleanup;
-      if (copy_delete_attach(body, fp_in, fp_out, mutt_buffer_string(quoted_date)))
+      if (copy_delete_attach(body, fp_in, fp_out, buf_string(quoted_date)))
         goto attach_del_cleanup;
 
-      mutt_buffer_pool_release(&quoted_date);
+      buf_pool_release(&quoted_date);
 
       LOFF_T fail = ((ftello(fp_out) - new_offset) - new_length);
       if (fail)
@@ -742,7 +742,7 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
       rc_attach_del = 0;
 
     attach_del_cleanup:
-      mutt_buffer_pool_release(&quoted_date);
+      buf_pool_release(&quoted_date);
       return rc_attach_del;
     }
 
@@ -1129,7 +1129,7 @@ static int address_header_decode(char **h)
     struct Buffer buf = { 0 };
     (*h)[l - 1] = '\0';
     mutt_addrlist_write_wrap(&al, &buf, *h);
-    mutt_buffer_addch(&buf, '\n');
+    buf_addch(&buf, '\n');
     *h = buf.data;
   }
 

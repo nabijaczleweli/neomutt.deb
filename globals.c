@@ -27,6 +27,7 @@
  */
 
 #include "config.h"
+#include <stddef.h>
 #include <signal.h> // IWYU pragma: keep
 #include <stdbool.h>
 #include "mutt/lib.h"
@@ -35,13 +36,13 @@
 bool ErrorBufMessage; ///< true if the last message was an error
 char ErrorBuf[256];   ///< Copy of the last error message
 
-char *HomeDir;       ///< User's home directory
-char *ShortHostname; ///< Short version of the hostname
+char *HomeDir = NULL;       ///< User's home directory
+char *ShortHostname = NULL; ///< Short version of the hostname
 
-char *Username; ///< User's login name
+char *Username = NULL; ///< User's login name
 
-char *CurrentFolder; ///< Currently selected mailbox
-char *LastFolder;    ///< Previously selected mailbox
+char *CurrentFolder = NULL; ///< Currently selected mailbox
+char *LastFolder = NULL;    ///< Previously selected mailbox
 
 /* Lists of strings */
 // clang-format off
@@ -86,3 +87,5 @@ bool OptSearchInvalid;      ///< (pseudo) used to invalidate the search pattern
 bool OptSearchReverse;      ///< (pseudo) used by ci_search_command
 bool OptSortSubthreads;     ///< (pseudo) used when $sort_aux changes
 // clang-format on
+
+char **EnvList = NULL; ///< Private copy of the environment variables

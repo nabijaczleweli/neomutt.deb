@@ -371,11 +371,7 @@ static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int co
   struct CryptEntry *entry = (struct CryptEntry *) data;
   struct CryptKeyInfo *key = entry->key;
 
-  /*    if (isupper ((unsigned char) op)) */
-  /*      key = pkey; */
-
-  KeyFlags kflags = (key->flags /* | (pkey->flags & KEYFLAG_RESTRICTIONS)
-                                 | uid->flags */);
+  KeyFlags kflags = (key->flags);
 
   switch (tolower(op))
   {
@@ -689,9 +685,9 @@ struct CryptKeyInfo *dlg_select_gpgme_key(struct CryptKeyInfo *keys,
   keymax = 0;
   i = 0;
   struct CryptKeyInfo **key_table = NULL;
+  const bool c_pgp_show_unusable = cs_subset_bool(NeoMutt->sub, "pgp_show_unusable");
   for (struct CryptKeyInfo *k = keys; k; k = k->next)
   {
-    const bool c_pgp_show_unusable = cs_subset_bool(NeoMutt->sub, "pgp_show_unusable");
     if (!c_pgp_show_unusable && (k->flags & KEYFLAG_CANTUSE))
     {
       unusable = true;
@@ -730,7 +726,9 @@ struct CryptKeyInfo *dlg_select_gpgme_key(struct CryptKeyInfo *keys,
       f = crypt_compare_trust_qsort;
       break;
   }
-  qsort(key_table, i, sizeof(struct CryptKeyInfo *), f);
+
+  if (key_table)
+    qsort(key_table, i, sizeof(struct CryptKeyInfo *), f);
 
   if (app & APPLICATION_PGP)
     menu_to_use = MENU_KEY_SELECT_PGP;

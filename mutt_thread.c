@@ -48,11 +48,11 @@
  */
 struct ThreadsContext
 {
-  struct Mailbox *mailbox; ///< Current mailbox
-  struct MuttThread *tree; ///< Top of thread tree
-  struct HashTable *hash;  ///< Hash Table: "message-id" -> MuttThread
-  short c_sort;            ///< Last sort method
-  short c_sort_aux;        ///< Last sort_aux method
+  struct Mailbox *mailbox;  ///< Current mailbox
+  struct MuttThread *tree;  ///< Top of thread tree
+  struct HashTable *hash;   ///< Hash Table: "message-id" -> MuttThread
+  enum SortType c_sort;     ///< Last sort method
+  enum SortType c_sort_aux; ///< Last sort_aux method
 };
 
 /**
@@ -71,7 +71,8 @@ static const struct Mapping UseThreadsMethods[] = {
   // clang-format on
 };
 
-struct EnumDef UseThreadsTypeDef = {
+/// Data for the $use_threads enumeration
+const struct EnumDef UseThreadsTypeDef = {
   "use_threads_type",
   4,
   (struct Mapping *) &UseThreadsMethods,
@@ -89,7 +90,7 @@ struct EnumDef UseThreadsTypeDef = {
 enum UseThreads mutt_thread_style(void)
 {
   const unsigned char c_use_threads = cs_subset_enum(NeoMutt->sub, "use_threads");
-  const short c_sort = cs_subset_sort(NeoMutt->sub, "sort");
+  const enum SortType c_sort = cs_subset_sort(NeoMutt->sub, "sort");
   if (c_use_threads > UT_FLAT)
     return c_use_threads;
   if ((c_sort & SORT_MASK) != SORT_THREADS)
@@ -117,7 +118,7 @@ int sort_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
 {
   if (((value & SORT_MASK) == SORT_THREADS) && (value & SORT_LAST))
   {
-    mutt_buffer_printf(err, _("Cannot use 'last-' prefix with 'threads' for %s"), cdef->name);
+    buf_printf(err, _("Cannot use 'last-' prefix with 'threads' for %s"), cdef->name);
     return CSR_ERR_INVALID;
   }
   return CSR_SUCCESS;
@@ -404,13 +405,13 @@ void mutt_draw_tree(struct ThreadsContext *tctx)
   calculate_visibility(tree, &max_depth);
   pfx = mutt_mem_malloc((width * max_depth) + 2);
   arrow = mutt_mem_malloc((width * max_depth) + 2);
+  const bool c_hide_limited = cs_subset_bool(NeoMutt->sub, "hide_limited");
+  const bool c_hide_missing = cs_subset_bool(NeoMutt->sub, "hide_missing");
   while (tree)
   {
     if (depth != 0)
     {
       myarrow = arrow + (depth - start_depth - ((start_depth != 0) ? 0 : 1)) * width;
-      const bool c_hide_limited = cs_subset_bool(NeoMutt->sub, "hide_limited");
-      const bool c_hide_missing = cs_subset_bool(NeoMutt->sub, "hide_missing");
       if (start_depth == depth)
         myarrow[0] = nextdisp ? MUTT_TREE_LTEE : corner;
       else if (parent->message && !c_hide_limited)
@@ -524,6 +525,8 @@ static void make_subject_list(struct ListHead *subjects, struct MuttThread *cur,
   time_t thisdate;
   int rc = 0;
 
+  const bool c_thread_received = cs_subset_bool(NeoMutt->sub, "thread_received");
+  const bool c_sort_re = cs_subset_bool(NeoMutt->sub, "sort_re");
   while (true)
   {
     while (!cur->message)
@@ -531,14 +534,12 @@ static void make_subject_list(struct ListHead *subjects, struct MuttThread *cur,
 
     if (dateptr)
     {
-      const bool c_thread_received = cs_subset_bool(NeoMutt->sub, "thread_received");
       thisdate = c_thread_received ? cur->message->received : cur->message->date_sent;
       if ((*dateptr == 0) || (thisdate < *dateptr))
         *dateptr = thisdate;
     }
 
     env = cur->message->env;
-    const bool c_sort_re = cs_subset_bool(NeoMutt->sub, "sort_re");
     if (env->real_subj && ((env->real_subj != env->subject) || !c_sort_re))
     {
       struct ListNode *np = NULL;
@@ -586,11 +587,11 @@ static struct MuttThread *find_subject(struct Mailbox *m, struct MuttThread *cur
   make_subject_list(&subjects, cur, &date);
 
   struct ListNode *np = NULL;
+  const bool c_thread_received = cs_subset_bool(NeoMutt->sub, "thread_received");
   STAILQ_FOREACH(np, &subjects, entries)
   {
     for (he = mutt_hash_find_bucket(m->subj_hash, np->data); he; he = he->next)
     {
-      const bool c_thread_received = cs_subset_bool(NeoMutt->sub, "thread_received");
       tmp = ((struct Email *) he->data)->thread;
       if ((tmp != cur) &&                  /* don't match the same message */
           !tmp->fake_thread &&             /* don't match pseudo threads */
@@ -784,8 +785,8 @@ static void mutt_sort_subthreads(struct ThreadsContext *tctx, bool init)
    * resorting, so we sort backwards and then put them back
    * in reverse order so they're forwards */
   const bool reverse = (mutt_thread_style() == UT_REVERSE);
-  short c_sort = cs_subset_sort(NeoMutt->sub, "sort");
-  short c_sort_aux = cs_subset_sort(NeoMutt->sub, "sort_aux");
+  enum SortType c_sort = cs_subset_sort(NeoMutt->sub, "sort");
+  enum SortType c_sort_aux = cs_subset_sort(NeoMutt->sub, "sort_aux");
   if ((c_sort & SORT_MASK) == SORT_THREADS)
   {
     assert(!(c_sort & SORT_REVERSE) != reverse);
@@ -794,7 +795,7 @@ static void mutt_sort_subthreads(struct ThreadsContext *tctx, bool init)
   }
   c_sort ^= SORT_REVERSE;
   c_sort_aux ^= SORT_REVERSE;
-  if (init || tctx->c_sort != c_sort || tctx->c_sort_aux != c_sort_aux)
+  if (init || (tctx->c_sort != c_sort) || (tctx->c_sort_aux != c_sort_aux))
   {
     tctx->c_sort = c_sort;
     tctx->c_sort_aux = c_sort_aux;
@@ -1001,6 +1002,14 @@ static void check_subjects(struct Mailbox *m, bool init)
       e->subject_changed = (e->env->real_subj || tmp->message->env->real_subj);
     }
   }
+}
+
+/**
+ * thread_hash_destructor - Hash Destructor callback - Implements ::hash_hdata_free_t - @ingroup hash_hdata_free_api
+ */
+static void thread_hash_destructor(int type, void *obj, intptr_t data)
+{
+  FREE(&obj);
 }
 
 /**

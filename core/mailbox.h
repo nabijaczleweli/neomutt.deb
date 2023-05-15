@@ -40,8 +40,8 @@ struct Email;
 enum MailboxType
 {
   MUTT_MAILBOX_ANY = -2,   ///< Match any Mailbox type
-  MUTT_MAILBOX_ERROR = -1, ///< Error occurred examining Mailbox
-  MUTT_UNKNOWN = 0,        ///< Mailbox wasn't recognised
+  MUTT_MAILBOX_ERROR,      ///< Error occurred examining Mailbox
+  MUTT_UNKNOWN,            ///< Mailbox wasn't recognised
   MUTT_MBOX,               ///< 'mbox' Mailbox type
   MUTT_MMDF,               ///< 'mmdf' Mailbox type
   MUTT_MH,                 ///< 'MH' Mailbox type
@@ -208,7 +208,7 @@ const char *mailbox_get_type_name(enum MailboxType type);
  */
 static inline const char *mailbox_path(const struct Mailbox *m) // LCOV_EXCL_LINE
 {
-  return mutt_buffer_string(&m->pathbuf); // LCOV_EXCL_LINE
+  return buf_string(&m->pathbuf); // LCOV_EXCL_LINE
 }
 
 #endif /* MUTT_CORE_MAILBOX_H */

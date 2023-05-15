@@ -49,6 +49,7 @@
 #include "private_data.h"
 #include "protos.h"
 
+/// Error message for unavailable functions
 static const char *Not_available_in_this_menu = N_("Not available in this menu");
 
 static int op_pager_search_next(struct IndexSharedData *shared,
@@ -215,8 +216,8 @@ static int op_pager_next_line(struct IndexSharedData *shared,
     priv->top_line++;
     if (priv->hide_quoted)
     {
-      while ((priv->lines[priv->top_line].cid == MT_COLOR_QUOTED) &&
-             (priv->top_line < priv->lines_used))
+      while ((priv->top_line < priv->lines_used) &&
+             (priv->lines[priv->top_line].cid == MT_COLOR_QUOTED))
       {
         priv->top_line++;
       }
@@ -307,19 +308,17 @@ static int op_pager_search(struct IndexSharedData *shared,
   struct PagerView *pview = priv->pview;
 
   int rc = FR_NO_ACTION;
-  struct Buffer *buf = mutt_buffer_pool_get();
+  struct Buffer *buf = buf_pool_get();
 
-  mutt_buffer_strcpy(buf, priv->search_str);
-  if (mutt_buffer_get_field(((op == OP_SEARCH) || (op == OP_SEARCH_NEXT)) ?
-                                _("Search for: ") :
-                                _("Reverse search for: "),
-                            buf, MUTT_COMP_CLEAR | MUTT_COMP_PATTERN, false,
-                            NULL, NULL, NULL) != 0)
+  buf_strcpy(buf, priv->search_str);
+  if (buf_get_field(((op == OP_SEARCH) || (op == OP_SEARCH_NEXT)) ? _("Search for: ") :
+                                                                    _("Reverse search for: "),
+                    buf, MUTT_COMP_CLEAR | MUTT_COMP_PATTERN, false, NULL, NULL, NULL) != 0)
   {
     goto done;
   }
 
-  if (mutt_str_equal(mutt_buffer_string(buf), priv->search_str))
+  if (mutt_str_equal(buf_string(buf), priv->search_str))
   {
     if (priv->search_compiled)
     {
@@ -334,10 +333,10 @@ static int op_pager_search(struct IndexSharedData *shared,
     }
   }
 
-  if (mutt_buffer_is_empty(buf))
+  if (buf_is_empty(buf))
     goto done;
 
-  mutt_str_copy(priv->search_str, mutt_buffer_string(buf), sizeof(priv->search_str));
+  mutt_str_copy(priv->search_str, buf_string(buf), sizeof(priv->search_str));
 
   /* leave search_back alone if op == OP_SEARCH_NEXT */
   if (op == OP_SEARCH)
@@ -360,7 +359,7 @@ static int op_pager_search(struct IndexSharedData *shared,
   if (err != 0)
   {
     regerror(err, &priv->search_re, buf->data, buf->dsize);
-    mutt_error("%s", mutt_buffer_string(buf));
+    mutt_error("%s", buf_string(buf));
     for (size_t i = 0; i < priv->lines_max; i++)
     {
       /* cleanup */
@@ -441,7 +440,7 @@ static int op_pager_search(struct IndexSharedData *shared,
   rc = FR_SUCCESS;
 
 done:
-  mutt_buffer_pool_release(&buf);
+  buf_pool_release(&buf);
   return rc;
 }
 
@@ -757,7 +756,7 @@ static int op_view_attachments(struct IndexSharedData *shared,
 /**
  * PagerFunctions - All the NeoMutt functions that the Pager supports
  */
-struct PagerFunction PagerFunctions[] = {
+static const struct PagerFunction PagerFunctions[] = {
   // clang-format off
   { OP_EXIT,                   op_exit },
   { OP_HALF_DOWN,              op_pager_half_down },

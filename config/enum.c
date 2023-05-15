@@ -55,21 +55,21 @@ static int enum_string_set(const struct ConfigSet *cs, void *var, struct ConfigD
   int num = mutt_map_get_value(value, ed->lookup);
   if (num < 0)
   {
-    mutt_buffer_printf(err, _("Invalid enum value: %s"), value);
-    return (CSR_ERR_INVALID | CSR_INV_TYPE);
+    buf_printf(err, _("Invalid enum value: %s"), value);
+    return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
   if (var)
   {
     if (num == (*(unsigned char *) var))
-      return (CSR_SUCCESS | CSR_SUC_NO_CHANGE);
+      return CSR_SUCCESS | CSR_SUC_NO_CHANGE;
 
     if (cdef->validator)
     {
       int rc = cdef->validator(cs, cdef, (intptr_t) num, err);
 
       if (CSR_RESULT(rc) != CSR_SUCCESS)
-        return (rc | CSR_INV_VALIDATOR);
+        return rc | CSR_INV_VALIDATOR;
     }
 
     *(unsigned char *) var = num;
@@ -106,10 +106,10 @@ static int enum_string_get(const struct ConfigSet *cs, void *var,
   if (!name)
   {
     mutt_debug(LL_DEBUG1, "Variable has an invalid value: %d\n", value);
-    return (CSR_ERR_INVALID | CSR_INV_TYPE);
+    return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
-  mutt_buffer_addstr(result, name);
+  buf_addstr(result, name);
   return CSR_SUCCESS;
 }
 
@@ -129,19 +129,19 @@ static int enum_native_set(const struct ConfigSet *cs, void *var,
   const char *name = mutt_map_get_name(value, ed->lookup);
   if (!name)
   {
-    mutt_buffer_printf(err, _("Invalid enum value: %ld"), value);
-    return (CSR_ERR_INVALID | CSR_INV_TYPE);
+    buf_printf(err, _("Invalid enum value: %ld"), value);
+    return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
   if (value == (*(unsigned char *) var))
-    return (CSR_SUCCESS | CSR_SUC_NO_CHANGE);
+    return CSR_SUCCESS | CSR_SUC_NO_CHANGE;
 
   if (cdef->validator)
   {
     int rc = cdef->validator(cs, cdef, value, err);
 
     if (CSR_RESULT(rc) != CSR_SUCCESS)
-      return (rc | CSR_INV_VALIDATOR);
+      return rc | CSR_INV_VALIDATOR;
   }
 
   *(unsigned char *) var = value;
@@ -170,14 +170,14 @@ static int enum_reset(const struct ConfigSet *cs, void *var,
     return CSR_ERR_CODE; /* LCOV_EXCL_LINE */
 
   if (cdef->initial == (*(unsigned char *) var))
-    return (CSR_SUCCESS | CSR_SUC_NO_CHANGE);
+    return CSR_SUCCESS | CSR_SUC_NO_CHANGE;
 
   if (cdef->validator)
   {
     int rc = cdef->validator(cs, cdef, cdef->initial, err);
 
     if (CSR_RESULT(rc) != CSR_SUCCESS)
-      return (rc | CSR_INV_VALIDATOR);
+      return rc | CSR_INV_VALIDATOR;
   }
 
   *(unsigned char *) var = cdef->initial;

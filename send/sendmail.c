@@ -63,7 +63,7 @@ struct Mailbox;
 extern char **environ;
 #endif
 
-SIG_ATOMIC_VOLATILE_T SigAlrm; ///< true after SIGALRM is received
+static SIG_ATOMIC_VOLATILE_T SigAlrm; ///< true after SIGALRM is received
 
 ARRAY_HEAD(SendmailArgs, const char *);
 
@@ -104,10 +104,10 @@ static int send_msg(const char *path, struct SendmailArgs *args,
 
   if ((wait_time >= 0) && tempfile)
   {
-    struct Buffer *tmp = mutt_buffer_pool_get();
-    mutt_buffer_mktemp(tmp);
-    *tempfile = mutt_buffer_strdup(tmp);
-    mutt_buffer_pool_release(&tmp);
+    struct Buffer *tmp = buf_pool_get();
+    buf_mktemp(tmp);
+    *tempfile = buf_strdup(tmp);
+    buf_pool_release(&tmp);
   }
 
   pid_t pid = fork();
@@ -168,7 +168,7 @@ static int send_msg(const char *path, struct SendmailArgs *args,
       }
 
       /* execvpe is a glibc extension, so just manually set environ */
-      environ = mutt_envlist_getlist();
+      environ = EnvList;
       execvp(path, (char **) args->entries);
       _exit(S_ERR);
     }

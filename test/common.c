@@ -23,6 +23,7 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include <limits.h>
 #include <locale.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -46,6 +47,8 @@ char *ShortHostname = "example";
 
 static struct ConfigDef Vars[] = {
   // clang-format off
+  { "assumed_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY, 0, 0, NULL, },
+  { "charset", DT_STRING|DT_NOT_EMPTY|DT_CHARSET_SINGLE, IP "utf-8", 0, NULL, },
   { "tmp_dir", DT_PATH|DT_PATH_DIR|DT_NOT_EMPTY, IP TMPDIR, 0, NULL, },
   { NULL },
   // clang-format on
@@ -60,9 +63,53 @@ static const char *get_test_dir(void)
   return mutt_str_getenv(TEST_DIR);
 }
 
+static void init_tmp_dir(struct NeoMutt *n)
+{
+  char buf[PATH_MAX] = { 0 };
+
+  snprintf(buf, sizeof(buf), "%s/tmp", mutt_str_getenv(TEST_DIR));
+
+  cs_str_initial_set(n->sub->cs, "tmp_dir", buf, NULL);
+  cs_str_reset(n->sub->cs, "tmp_dir", NULL);
+}
+
 void test_gen_path(char *buf, size_t buflen, const char *fmt)
 {
   snprintf(buf, buflen, NONULL(fmt), NONULL(get_test_dir()));
+}
+
+bool test_neomutt_create(void)
+{
+  struct ConfigSet *cs = cs_new(50);
+  CONFIG_INIT_TYPE(cs, Address);
+  CONFIG_INIT_TYPE(cs, Bool);
+  CONFIG_INIT_TYPE(cs, Enum);
+  CONFIG_INIT_TYPE(cs, Long);
+  CONFIG_INIT_TYPE(cs, Mbtable);
+  CONFIG_INIT_TYPE(cs, MyVar);
+  CONFIG_INIT_TYPE(cs, Number);
+  CONFIG_INIT_TYPE(cs, Path);
+  CONFIG_INIT_TYPE(cs, Quad);
+  CONFIG_INIT_TYPE(cs, Regex);
+  CONFIG_INIT_TYPE(cs, Slist);
+  CONFIG_INIT_TYPE(cs, Sort);
+  CONFIG_INIT_TYPE(cs, String);
+
+  NeoMutt = neomutt_new(cs);
+  TEST_CHECK(NeoMutt != NULL);
+
+  TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS));
+
+  init_tmp_dir(NeoMutt);
+
+  return NeoMutt;
+}
+
+void test_neomutt_destroy(void)
+{
+  struct ConfigSet *cs = NeoMutt->sub->cs;
+  neomutt_free(&NeoMutt);
+  cs_free(&cs);
 }
 
 void test_init(void)
@@ -105,6 +152,7 @@ void test_init(void)
     goto done;
   }
 
+  test_neomutt_create();
   success = true;
 done:
   if (!success)
@@ -113,38 +161,9 @@ done:
 
 void test_fini(void)
 {
-  mutt_buffer_pool_free();
-}
-
-struct NeoMutt *test_neomutt_create(void)
-{
-  struct ConfigSet *cs = cs_new(50);
-  CONFIG_INIT_TYPE(cs, Address);
-  CONFIG_INIT_TYPE(cs, Bool);
-  CONFIG_INIT_TYPE(cs, Enum);
-  CONFIG_INIT_TYPE(cs, Long);
-  CONFIG_INIT_TYPE(cs, Mbtable);
-  CONFIG_INIT_TYPE(cs, Number);
-  CONFIG_INIT_TYPE(cs, Path);
-  CONFIG_INIT_TYPE(cs, Quad);
-  CONFIG_INIT_TYPE(cs, Regex);
-  CONFIG_INIT_TYPE(cs, Slist);
-  CONFIG_INIT_TYPE(cs, Sort);
-  CONFIG_INIT_TYPE(cs, String);
-
-  struct NeoMutt *n = neomutt_new(cs);
-
-  cs_register_variables(cs, Vars, DT_NO_FLAGS);
-  return n;
-}
-
-void test_neomutt_destroy(struct NeoMutt **ptr)
-{
-  struct NeoMutt *n = *ptr;
-
-  struct ConfigSet *cs = n->sub->cs;
-  neomutt_free(ptr);
-  cs_free(&cs);
+  config_cache_free();
+  test_neomutt_destroy();
+  buf_pool_free();
 }
 
 struct IndexSharedData *index_shared_data_new(void)

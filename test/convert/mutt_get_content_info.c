@@ -36,18 +36,8 @@
 
 static struct ConfigDef CharsetVars[] = {
   // clang-format off
-  { "assumed_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY, 0, 0, charset_slist_validator,
-    "If a message is missing a character set, assume this character set"
-  },
-  { "charset", DT_STRING|DT_NOT_EMPTY|DT_CHARSET_SINGLE, 0, 0, charset_validator,
-    "Default character set for displaying text on screen"
-  },
-  { "config_charset", DT_STRING, 0, 0, charset_validator,
-    "Character set that the config files are in"
-  },
-  { "send_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY|DT_CHARSET_STRICT, IP "us-ascii:iso-8859-1:utf-8", 0, charset_slist_validator,
-    "Character sets for outgoing mail"
-  },
+  { "config_charset", DT_STRING, 0, 0, charset_validator, },
+  { "send_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY|DT_CHARSET_STRICT, IP "us-ascii:iso-8859-1:utf-8", 0, charset_slist_validator, },
   { NULL },
   // clang-format on
 };
@@ -56,26 +46,22 @@ void test_mutt_get_content_info(void)
 {
   // struct Content *mutt_get_content_info(const char *fname, struct Body *b, struct ConfigSubset *sub);
 
-  const char *text = "file\ncontent";
-  const char *tmpdir = mutt_str_getenv("TMPDIR");
-  if (!tmpdir)
-    tmpdir = "/tmp";
+  static const char *text = "file\ncontent";
 
   char fname[PATH_MAX] = { 0 };
-  snprintf(fname, sizeof(fname), "%s/mutt-test-file-XXXXXX", tmpdir);
+  mutt_mktemp(fname, sizeof(fname));
 
-  int fd = mkstemp(fname);
-  TEST_CHECK(fd != -1);
+  FILE *fp = fopen(fname, "w");
+  TEST_CHECK(fp != NULL);
   TEST_MSG("unable to open temp file for writing");
 
-  TEST_CHECK(write(fd, text, strlen(text)) > 0);
+  TEST_CHECK(fwrite(text, strlen(text), 1, fp) > 0);
   TEST_MSG("unable to write to temp file: %s", fname);
-  close(fd);
+  fclose(fp);
 
-  NeoMutt = test_neomutt_create();
   struct ConfigSubset *sub = NeoMutt->sub;
   struct ConfigSet *cs = sub->cs;
-  cs_register_variables(cs, CharsetVars, DT_NO_FLAGS);
+  TEST_CHECK(cs_register_variables(cs, CharsetVars, DT_NO_FLAGS));
 
   struct Body *body = mutt_body_new();
   struct Content *content = mutt_get_content_info(fname, body, sub);
@@ -105,6 +91,5 @@ void test_mutt_get_content_info(void)
   TEST_MSG("Check failed: %d == 0", content->cr);
 
   mutt_body_free(&body);
-  cs_free(&cs);
   FREE(&content);
 }

@@ -47,7 +47,9 @@
 #include "recvattach.h"
 #include "recvcmd.h"
 
+/// Error message for unavailable functions
 static const char *Not_available_in_this_menu = N_("Not available in this menu");
+/// Error message for unavailable functions in attach mode
 static const char *Function_not_permitted_in_attach_message_mode = N_(
     "Function not permitted in attach-message mode");
 
@@ -601,7 +603,7 @@ static int op_forward_to_group(struct AttachPrivateData *priv, int op)
 /**
  * AttachFunctions - All the NeoMutt functions that the Attach supports
  */
-struct AttachFunction AttachFunctions[] = {
+static const struct AttachFunction AttachFunctions[] = {
   // clang-format off
   { OP_ATTACHMENT_COLLAPSE,         op_attachment_collapse },
   { OP_ATTACHMENT_DELETE,           op_attachment_delete },
@@ -653,10 +655,6 @@ int attach_function_dispatcher(struct MuttWindow *win, int op)
   struct Menu *menu = win->wdata;
   struct AttachPrivateData *priv = menu->mdata;
   if (!priv)
-    return FR_ERROR;
-
-  struct MuttWindow *dlg = dialog_find(win);
-  if (!dlg || !dlg->wdata)
     return FR_ERROR;
 
   int rc = FR_UNKNOWN;
