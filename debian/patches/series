@@ -2,6 +2,4 @@ debian-specific/neomuttrc.patch
 debian-specific/use_usr_bin_editor.patch
 debian-specific/document_debian_defaults.patch
 misc/fix_ALL_FILES.patch
-0001-Chase-warning-tidy-code-POP-edition.patch
-0002-pop-check-fgets-too-instead-of-just-feof-for-body-si.patch
-0003-send-search_attach_keyword-check-line-iff-it-was-rea.patch
+0001-index-only-refresh-the-menu-on-non-focus-window-changes.patch
