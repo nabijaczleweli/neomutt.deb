@@ -1,3 +1,14 @@
+neomutt (20230512+dfsg-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * d/control, d/rules: replace libidn with libidn2, remove --testing (now default)
+  * ppc64 and sparc64 have notmuch now
+  * New upstream version 20230512+dfsg
+  * Rebase patches, dropping upstream PR #3811
+  * Import upstream PR #3853 fixing random scrolling
+
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Mon, 15 May 2023 14:33:03 +0200
+
 neomutt (20230407+dfsg-0.1) unstable; urgency=medium
 
   * Fix lintian build-depends-on-obsolete-package
