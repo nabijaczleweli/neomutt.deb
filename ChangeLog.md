@@ -1,3 +1,33 @@
+2023-05-12  Richard Russon  \<rich@flatcap.org\>
+* Features
+  - #3699 - Support 24bit colors, aka truecolor
+  - #3738 - Show complete MIME structure in attachments
+  - #3842 - Allow percentages to be localized
+* Bug Fixes
+  - #3813 - Fix crash in op_browser_subscribe
+  - #3844 - Select the first email when coming from an empty limit
+  - #3848 - Fix counting new mails in maildir
+  - Fix sorting of labels
+* Build
+ - #3798 - Build with libidn2 by default, remove support for libidn1
+* Code
+  - config: dynamically create/delete variables
+  - config: unify handling of NeoMutt and user (my_) variables
+  - config: cache config variables used often
+  - speed: various speedups in parsing emails
+  - cleanups: lots of code cleanups
+* Translations
+  - 100% :serbia: Serbian
+  - 100% :tr: Turkish
+  - 100% :lithuania: Lithuanian
+  - 100% :hungary: Hungarian
+  - 100% :de: German
+  - 99% :norway: Norwegian (Bokmål)
+  - 99% :slovakia: Slovak
+  - 99% :brazil: Portuguese (Brazil)
+  - 99% :czech_republic: Czech
+  - 95% :fr: French
+
 2023-04-07  Richard Russon  \<rich@flatcap.org\>
 * Features
   - #3769 - imap : support IMAP4 ID extension (RFC2971)
@@ -78,15 +108,15 @@
   - #3572 - fix hostname detection for hostname ending with a "."
   - #3596 - fix truncated SMTP lines in case of very long lines
   - #3600 - use `smime_sign_as` instead of `pgp_sign_as` when signing S/MIME messages
-  - #3697 - set `smime_sign_as` instead of `smime_default_key` when signing 
+  - #3697 - set `smime_sign_as` instead of `smime_default_key` when signing
   - #3609 - fix wrong message being marked as read with `$pager_read_delay = 1`
   - #3653 - fix negative new-mail count on maildir
-  - #3656 - skip zero width non-joiner character in the pager 
+  - #3656 - skip zero width non-joiner character in the pager
   - #3664 - handle text/vcard as not being an attachment, same as for text/x-vcard
   - #3666 - fix `hdr_order` not sorting last header correctly
   - #3673 - make exiting via SIGINT more graceful
   - #3700 - fix `unhook index-format-hook`
-  - #3709 - send: delete signature when sending fails #3709 
+  - #3709 - send: delete signature when sending fails #3709
   - #3727 - SMTP: try all available methods even if SASL is not compiled in
   - #3730 - fix decryption issue when postponing S/MIME encrypted mails
   - avoid unnecessary refreshes
@@ -97,7 +127,7 @@
   - #3629 - skip line rest of line after a warning
   - #3670 - `vfolder_format` is now deprecated, use `folder_format`
   - #3702 - rename `connect_timeout` to `socket_timeout`
-  - #3697 - `pgp_entry_format`: add %i expand for the key fingerprint 
+  - #3697 - `pgp_entry_format`: add %i expand for the key fingerprint
   - #3724 - rename `attribution` to `attribution_intro` and
     `post_indent_string` to `attribution_trailer`
   - config variables are now properly spelled with underscores between names,
@@ -1770,7 +1800,7 @@
   - Change OpenSSL to use SHA-256 for cert comparison
   - Fix conststrings type mismatches
   - Pass envlist to filter children too
-  - Fix mutt_envlist_set() for the case that envlist is null
+  - Fix envlist_set() for the case that envlist is null
   - Fix setenv overwriting to not truncate the envlist
   - Fix (un)sidebar_pin to expand paths
   - Fix mutt_refresh() pausing during macro events
@@ -1807,7 +1837,7 @@
   - Change OpenSSL to use SHA-256 for cert comparison
   - Fix conststrings type mismatches
   - Pass envlist to filter children too
-  - Fix mutt_envlist_set() for the case that envlist is null
+  - Fix envlist_set() for the case that envlist is null
   - Fix setenv overwriting to not truncate the envlist
   - Fix mutt_refresh() pausing during macro events
   - Add a menu stack to track current and past menus
@@ -1918,7 +1948,7 @@
   - refactor: create a generic base64 encode/decode
   - debug: remove dprint in favor of mutt_debug (#375)
   - Fix dubious use macro for _() / gettext() (#376)
-  - Use mutt_buffer_init instead of memset
+  - Use buf_init instead of memset
   - Make the heap method and datatype a plain list
   - Reverts making AliasFile into a list_t (#379)
   - Turn mutt_new_* macros into inline functions

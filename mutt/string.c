@@ -36,7 +36,7 @@
 #include <string.h>
 #include <strings.h>
 #include "exit.h"
-#include "logging.h"
+#include "logging2.h"
 #include "memory.h"
 #include "message.h"
 #include "string2.h"
@@ -109,7 +109,8 @@ struct SysExits
   const char *err_str; ///< Human-readable string for error
 };
 
-static const struct SysExits sysexits[] = {
+/// Lookup table of error messages
+static const struct SysExits SysExits[] = {
 #ifdef EX_USAGE
   { 0xff & EX_USAGE, "Bad usage." },
 #endif
@@ -165,10 +166,10 @@ static const struct SysExits sysexits[] = {
  */
 const char *mutt_str_sysexit(int err_num)
 {
-  for (size_t i = 0; i < mutt_array_size(sysexits); i++)
+  for (size_t i = 0; i < mutt_array_size(SysExits); i++)
   {
-    if (err_num == sysexits[i].err_num)
-      return sysexits[i].err_str;
+    if (err_num == SysExits[i].err_num)
+      return SysExits[i].err_str;
   }
 
   return NULL;
@@ -638,7 +639,7 @@ void mutt_str_remove_trailing_ws(char *s)
   if (!s)
     return;
 
-  for (char *p = s + mutt_str_len(s) - 1; (p >= s) && IS_SPACE(*p); p--)
+  for (char *p = s + mutt_str_len(s) - 1; (p >= s) && isspace(*p); p--)
     *p = '\0';
 }
 
@@ -826,7 +827,7 @@ const char *mutt_str_next_word(const char *s)
   if (!s)
     return NULL;
 
-  while (*s && !IS_SPACE(*s))
+  while (*s && !isspace(*s))
     s++;
   SKIPWS(s);
   return s;

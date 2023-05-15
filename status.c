@@ -162,7 +162,7 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
       {
         mutt_str_copy(tmp, m->name, sizeof(tmp));
       }
-      else if (m && !mutt_buffer_is_empty(&m->pathbuf))
+      else if (m && !buf_is_empty(&m->pathbuf))
       {
         mutt_str_copy(tmp, mailbox_path(m), sizeof(tmp));
         mutt_pretty_mailbox(tmp, sizeof(tmp));
@@ -296,7 +296,10 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
       else
       {
         int count = (100 * (menu->top + menu->page_len)) / menu->max;
-        snprintf(tmp, sizeof(tmp), "%d%%", count);
+        /* L10N: Status bar, percentage of way through index.
+           `%d` is the number, `%%` is the percent symbol.
+           They may be reordered, or space inserted, if you wish. */
+        snprintf(tmp, sizeof(tmp), _("%d%%"), count);
         cp = tmp;
       }
       snprintf(fmt, sizeof(fmt), "%%%ss", prec);
@@ -345,7 +348,7 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
     case 's':
     {
       snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-      const short c_sort = cs_subset_sort(NeoMutt->sub, "sort");
+      const enum SortType c_sort = cs_subset_sort(NeoMutt->sub, "sort");
       snprintf(buf, buflen, fmt, get_sort_str(tmp, sizeof(tmp), c_sort));
       break;
     }
@@ -353,7 +356,7 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
     case 'S':
     {
       snprintf(fmt, sizeof(fmt), "%%%ss", prec);
-      const short c_sort_aux = cs_subset_sort(NeoMutt->sub, "sort_aux");
+      const enum SortType c_sort_aux = cs_subset_sort(NeoMutt->sub, "sort_aux");
       snprintf(buf, buflen, fmt, get_sort_str(tmp, sizeof(tmp), c_sort_aux));
       break;
     }

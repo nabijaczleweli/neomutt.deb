@@ -91,16 +91,16 @@ static void maildir_check_dir(struct Mailbox *m, const char *dir_name,
   char *p = NULL;
   struct stat st = { 0 };
 
-  struct Buffer *path = mutt_buffer_pool_get();
-  struct Buffer *msgpath = mutt_buffer_pool_get();
-  mutt_buffer_printf(path, "%s/%s", mailbox_path(m), dir_name);
+  struct Buffer *path = buf_pool_get();
+  struct Buffer *msgpath = buf_pool_get();
+  buf_printf(path, "%s/%s", mailbox_path(m), dir_name);
 
   /* when $mail_check_recent is set, if the new/ directory hasn't been modified since
    * the user last exited the m, then we know there is no recent mail.  */
   const bool c_mail_check_recent = cs_subset_bool(NeoMutt->sub, "mail_check_recent");
   if (check_new && c_mail_check_recent)
   {
-    if ((stat(mutt_buffer_string(path), &st) == 0) &&
+    if ((stat(buf_string(path), &st) == 0) &&
         (mutt_file_stat_timespec_compare(&st, MUTT_STAT_MTIME, &m->last_visited) < 0))
     {
       check_new = false;
@@ -110,7 +110,7 @@ static void maildir_check_dir(struct Mailbox *m, const char *dir_name,
   if (!(check_new || check_stats))
     goto cleanup;
 
-  dir = mutt_file_opendir(mutt_buffer_string(path), MUTT_OPENDIR_CREATE);
+  dir = mutt_file_opendir(buf_string(path), MUTT_OPENDIR_CREATE);
   if (!dir)
   {
     m->type = MUTT_UNKNOWN;
@@ -140,19 +140,23 @@ static void maildir_check_dir(struct Mailbox *m, const char *dir_name,
       {
         if (c_mail_check_recent)
         {
-          mutt_buffer_printf(msgpath, "%s/%s", mutt_buffer_string(path), de->d_name);
+          buf_printf(msgpath, "%s/%s", buf_string(path), de->d_name);
           /* ensure this message was received since leaving this m */
-          if ((stat(mutt_buffer_string(msgpath), &st) == 0) &&
+          if ((stat(buf_string(msgpath), &st) == 0) &&
               (mutt_file_stat_timespec_compare(&st, MUTT_STAT_CTIME, &m->last_visited) <= 0))
           {
             continue;
           }
         }
         m->has_new = true;
-        check_new = false;
-        m->msg_new++;
-        if (!check_stats)
+        if (check_stats)
+        {
+          m->msg_new++;
+        }
+        else
+        {
           break;
+        }
       }
     }
   }
@@ -160,8 +164,8 @@ static void maildir_check_dir(struct Mailbox *m, const char *dir_name,
   closedir(dir);
 
 cleanup:
-  mutt_buffer_pool_release(&path);
-  mutt_buffer_pool_release(&msgpath);
+  buf_pool_release(&path);
+  buf_pool_release(&msgpath);
 }
 
 /**
@@ -258,18 +262,17 @@ static int maildir_commit_message(struct Mailbox *m, struct Message *msg, struct
     suffix[0] = '\0';
 
   /* construct a new file name. */
-  struct Buffer *path = mutt_buffer_pool_get();
-  struct Buffer *full = mutt_buffer_pool_get();
+  struct Buffer *path = buf_pool_get();
+  struct Buffer *full = buf_pool_get();
   while (true)
   {
-    mutt_buffer_printf(path, "%s/%lld.R%" PRIu64 ".%s%s", subdir,
-                       (long long) mutt_date_now(), mutt_rand64(),
-                       NONULL(ShortHostname), suffix);
-    mutt_buffer_printf(full, "%s/%s", mailbox_path(m), mutt_buffer_string(path));
+    buf_printf(path, "%s/%lld.R%" PRIu64 ".%s%s", subdir, (long long) mutt_date_now(),
+               mutt_rand64(), NONULL(ShortHostname), suffix);
+    buf_printf(full, "%s/%s", mailbox_path(m), buf_string(path));
 
-    mutt_debug(LL_DEBUG2, "renaming %s to %s\n", msg->path, mutt_buffer_string(full));
+    mutt_debug(LL_DEBUG2, "renaming %s to %s\n", msg->path, buf_string(full));
 
-    if (mutt_file_safe_rename(msg->path, mutt_buffer_string(full)) == 0)
+    if (mutt_file_safe_rename(msg->path, buf_string(full)) == 0)
     {
       /* Adjust the mtime on the file to match the time at which this
        * message was received.  Currently this is only set when copying
@@ -284,7 +287,7 @@ static int maildir_commit_message(struct Mailbox *m, struct Message *msg, struct
         ut.modtime = msg->received;
         do
         {
-          rc_utime = utime(mutt_buffer_string(full), &ut);
+          rc_utime = utime(buf_string(full), &ut);
         } while ((rc_utime == -1) && (errno == EINTR));
         if (rc_utime == -1)
         {
@@ -296,11 +299,11 @@ static int maildir_commit_message(struct Mailbox *m, struct Message *msg, struct
 
 #ifdef USE_NOTMUCH
       if (m->type == MUTT_NOTMUCH)
-        nm_update_filename(m, e->path, mutt_buffer_string(full), e);
+        nm_update_filename(m, e->path, buf_string(full), e);
 #endif
       if (e)
-        mutt_str_replace(&e->path, mutt_buffer_string(path));
-      mutt_str_replace(&msg->committed_path, mutt_buffer_string(full));
+        mutt_str_replace(&e->path, buf_string(path));
+      mutt_str_replace(&msg->committed_path, buf_string(full));
       FREE(&msg->path);
 
       goto cleanup;
@@ -314,8 +317,8 @@ static int maildir_commit_message(struct Mailbox *m, struct Message *msg, struct
   }
 
 cleanup:
-  mutt_buffer_pool_release(&path);
-  mutt_buffer_pool_release(&full);
+  buf_pool_release(&path);
+  buf_pool_release(&full);
 
   return rc;
 }
@@ -421,12 +424,12 @@ static int maildir_sync_message(struct Mailbox *m, int msgno)
       return -1;
     }
     p++;
-    newpath = mutt_buffer_pool_get();
-    partpath = mutt_buffer_pool_get();
-    fullpath = mutt_buffer_pool_get();
-    oldpath = mutt_buffer_pool_get();
+    newpath = buf_pool_get();
+    partpath = buf_pool_get();
+    fullpath = buf_pool_get();
+    oldpath = buf_pool_get();
 
-    mutt_buffer_strcpy(newpath, p);
+    buf_strcpy(newpath, p);
 
     /* kill the previous flags */
     p = strchr(newpath->data, ':');
@@ -438,12 +441,12 @@ static int maildir_sync_message(struct Mailbox *m, int msgno)
 
     maildir_gen_flags(suffix, sizeof(suffix), e);
 
-    mutt_buffer_printf(partpath, "%s/%s%s", (e->read || e->old) ? "cur" : "new",
-                       mutt_buffer_string(newpath), suffix);
-    mutt_buffer_printf(fullpath, "%s/%s", mailbox_path(m), mutt_buffer_string(partpath));
-    mutt_buffer_printf(oldpath, "%s/%s", mailbox_path(m), e->path);
+    buf_printf(partpath, "%s/%s%s", (e->read || e->old) ? "cur" : "new",
+               buf_string(newpath), suffix);
+    buf_printf(fullpath, "%s/%s", mailbox_path(m), buf_string(partpath));
+    buf_printf(oldpath, "%s/%s", mailbox_path(m), e->path);
 
-    if (mutt_str_equal(mutt_buffer_string(fullpath), mutt_buffer_string(oldpath)))
+    if (mutt_str_equal(buf_string(fullpath), buf_string(oldpath)))
     {
       /* message hasn't really changed */
       goto cleanup;
@@ -452,20 +455,20 @@ static int maildir_sync_message(struct Mailbox *m, int msgno)
     /* record that the message is possibly marked as trashed on disk */
     e->trash = e->deleted;
 
-    if (rename(mutt_buffer_string(oldpath), mutt_buffer_string(fullpath)) != 0)
+    if (rename(buf_string(oldpath), buf_string(fullpath)) != 0)
     {
       mutt_perror("rename");
       rc = -1;
       goto cleanup;
     }
-    mutt_str_replace(&e->path, mutt_buffer_string(partpath));
+    mutt_str_replace(&e->path, buf_string(partpath));
   }
 
 cleanup:
-  mutt_buffer_pool_release(&newpath);
-  mutt_buffer_pool_release(&partpath);
-  mutt_buffer_pool_release(&fullpath);
-  mutt_buffer_pool_release(&oldpath);
+  buf_pool_release(&newpath);
+  buf_pool_release(&partpath);
+  buf_pool_release(&fullpath);
+  buf_pool_release(&oldpath);
 
   return rc;
 }
@@ -519,12 +522,12 @@ static int maildir_parse_dir(struct Mailbox *m, struct MdEmailArray *mda,
   struct MdEmail *entry = NULL;
   struct Email *e = NULL;
 
-  struct Buffer *buf = mutt_buffer_pool_get();
+  struct Buffer *buf = buf_pool_get();
 
-  mutt_buffer_printf(buf, "%s/%s", mailbox_path(m), subdir);
+  buf_printf(buf, "%s/%s", mailbox_path(m), subdir);
   is_old = mutt_str_equal("cur", subdir);
 
-  DIR *dir = mutt_file_opendir(mutt_buffer_string(buf), MUTT_OPENDIR_CREATE);
+  DIR *dir = mutt_file_opendir(buf_string(buf), MUTT_OPENDIR_CREATE);
   if (!dir)
   {
     rc = -1;
@@ -549,8 +552,8 @@ static int maildir_parse_dir(struct Mailbox *m, struct MdEmailArray *mda,
     if (m->verbose && progress)
       progress_update(progress, ARRAY_SIZE(mda) + 1, -1);
 
-    mutt_buffer_printf(buf, "%s/%s", subdir, de->d_name);
-    e->path = mutt_buffer_strdup(buf);
+    buf_printf(buf, "%s/%s", subdir, de->d_name);
+    e->path = buf_strdup(buf);
 
     entry = maildir_entry_new();
     entry->email = e;
@@ -569,7 +572,7 @@ static int maildir_parse_dir(struct Mailbox *m, struct MdEmailArray *mda,
   ARRAY_SORT(mda, maildir_cmp_inode);
 
 cleanup:
-  mutt_buffer_pool_release(&buf);
+  buf_pool_release(&buf);
 
   return rc;
 }
@@ -740,7 +743,7 @@ static void maildir_canon_filename(struct Buffer *dest, const char *src)
   if (t)
     src = t + 1;
 
-  mutt_buffer_strcpy(dest, src);
+  buf_strcpy(dest, src);
   char *u = strpbrk(dest->data, ",:");
   if (u)
   {
@@ -764,18 +767,18 @@ static void maildir_canon_filename(struct Buffer *dest, const char *src)
 static FILE *maildir_open_find_message_dir(const char *folder, const char *unique,
                                            const char *subfolder, char **newname)
 {
-  struct Buffer *dirname = mutt_buffer_pool_get();
-  struct Buffer *tunique = mutt_buffer_pool_get();
-  struct Buffer *fname = mutt_buffer_pool_get();
+  struct Buffer *dirname = buf_pool_get();
+  struct Buffer *tunique = buf_pool_get();
+  struct Buffer *fname = buf_pool_get();
 
   struct dirent *de = NULL;
 
   FILE *fp = NULL;
   int oe = ENOENT;
 
-  mutt_buffer_printf(dirname, "%s/%s", folder, subfolder);
+  buf_printf(dirname, "%s/%s", folder, subfolder);
 
-  DIR *dir = mutt_file_opendir(mutt_buffer_string(dirname), MUTT_OPENDIR_CREATE);
+  DIR *dir = mutt_file_opendir(buf_string(dirname), MUTT_OPENDIR_CREATE);
   if (!dir)
   {
     errno = ENOENT;
@@ -786,10 +789,10 @@ static FILE *maildir_open_find_message_dir(const char *folder, const char *uniqu
   {
     maildir_canon_filename(tunique, de->d_name);
 
-    if (mutt_str_equal(mutt_buffer_string(tunique), unique))
+    if (mutt_str_equal(buf_string(tunique), unique))
     {
-      mutt_buffer_printf(fname, "%s/%s/%s", folder, subfolder, de->d_name);
-      fp = fopen(mutt_buffer_string(fname), "r");
+      buf_printf(fname, "%s/%s/%s", folder, subfolder, de->d_name);
+      fp = fopen(buf_string(fname), "r");
       oe = errno;
       break;
     }
@@ -798,14 +801,14 @@ static FILE *maildir_open_find_message_dir(const char *folder, const char *uniqu
   closedir(dir);
 
   if (newname && fp)
-    *newname = mutt_buffer_strdup(fname);
+    *newname = buf_strdup(fname);
 
   errno = oe;
 
 cleanup:
-  mutt_buffer_pool_release(&dirname);
-  mutt_buffer_pool_release(&tunique);
-  mutt_buffer_pool_release(&fname);
+  buf_pool_release(&dirname);
+  buf_pool_release(&tunique);
+  buf_pool_release(&fname);
 
   return fp;
 }
@@ -1005,10 +1008,10 @@ FILE *maildir_open_find_message(const char *folder, const char *msg, char **newn
 {
   static unsigned int new_hits = 0, cur_hits = 0; /* simple dynamic optimization */
 
-  struct Buffer *unique = mutt_buffer_pool_get();
+  struct Buffer *unique = buf_pool_get();
   maildir_canon_filename(unique, msg);
 
-  FILE *fp = maildir_open_find_message_dir(folder, mutt_buffer_string(unique),
+  FILE *fp = maildir_open_find_message_dir(folder, buf_string(unique),
                                            (new_hits > cur_hits) ? "new" : "cur", newname);
   if (fp || (errno != ENOENT))
   {
@@ -1020,7 +1023,7 @@ FILE *maildir_open_find_message(const char *folder, const char *msg, char **newn
 
     goto cleanup;
   }
-  fp = maildir_open_find_message_dir(folder, mutt_buffer_string(unique),
+  fp = maildir_open_find_message_dir(folder, buf_string(unique),
                                      (new_hits > cur_hits) ? "cur" : "new", newname);
   if (fp || (errno != ENOENT))
   {
@@ -1036,7 +1039,7 @@ FILE *maildir_open_find_message(const char *folder, const char *msg, char **newn
   fp = NULL;
 
 cleanup:
-  mutt_buffer_pool_release(&unique);
+  buf_pool_release(&unique);
 
   return fp;
 }
@@ -1191,18 +1194,18 @@ static enum MxStatus maildir_mbox_check(struct Mailbox *m)
   if (!c_check_new)
     return MX_STATUS_OK;
 
-  struct Buffer *buf = mutt_buffer_pool_get();
-  mutt_buffer_printf(buf, "%s/new", mailbox_path(m));
-  if (stat(mutt_buffer_string(buf), &st_new) == -1)
+  struct Buffer *buf = buf_pool_get();
+  buf_printf(buf, "%s/new", mailbox_path(m));
+  if (stat(buf_string(buf), &st_new) == -1)
   {
-    mutt_buffer_pool_release(&buf);
+    buf_pool_release(&buf);
     return MX_STATUS_ERROR;
   }
 
-  mutt_buffer_printf(buf, "%s/cur", mailbox_path(m));
-  if (stat(mutt_buffer_string(buf), &st_cur) == -1)
+  buf_printf(buf, "%s/cur", mailbox_path(m));
+  if (stat(buf_string(buf), &st_cur) == -1)
   {
-    mutt_buffer_pool_release(&buf);
+    buf_pool_release(&buf);
     return MX_STATUS_ERROR;
   }
 
@@ -1214,7 +1217,7 @@ static enum MxStatus maildir_mbox_check(struct Mailbox *m)
 
   if (changed == MMC_NO_DIRS)
   {
-    mutt_buffer_pool_release(&buf);
+    buf_pool_release(&buf);
     return MX_STATUS_OK; /* nothing to do */
   }
 
@@ -1253,7 +1256,7 @@ static enum MxStatus maildir_mbox_check(struct Mailbox *m)
   {
     md = *mdp;
     maildir_canon_filename(buf, md->email->path);
-    md->canon_fname = mutt_buffer_strdup(buf);
+    md->canon_fname = buf_strdup(buf);
     mutt_hash_insert(fnames, md->canon_fname, md);
   }
 
@@ -1266,7 +1269,7 @@ static enum MxStatus maildir_mbox_check(struct Mailbox *m)
 
     e->active = false;
     maildir_canon_filename(buf, e->path);
-    md = mutt_hash_find(fnames, mutt_buffer_string(buf));
+    md = mutt_hash_find(fnames, buf_string(buf));
     if (md && md->email)
     {
       /* message already exists, merge flags */
@@ -1336,7 +1339,7 @@ static enum MxStatus maildir_mbox_check(struct Mailbox *m)
     m->changed = true;
   }
 
-  mutt_buffer_pool_release(&buf);
+  buf_pool_release(&buf);
 
   ARRAY_FREE(&mda);
   if (occult)
@@ -1355,10 +1358,10 @@ static enum MxStatus maildir_mbox_check_stats(struct Mailbox *m, uint8_t flags)
 {
   bool check_stats = flags & MUTT_MAILBOX_CHECK_FORCE_STATS;
   bool check_new = true;
-  m->msg_new = 0;
 
   if (check_stats)
   {
+    m->msg_new = 0;
     m->msg_count = 0;
     m->msg_unread = 0;
     m->msg_flagged = 0;
@@ -1427,13 +1430,13 @@ static enum MxStatus maildir_mbox_sync(struct Mailbox *m)
 
   if (m->msg_deleted)
   {
+    const bool c_maildir_trash = cs_subset_bool(NeoMutt->sub, "maildir_trash");
     for (int i = 0, j = 0; i < m->msg_count; i++)
     {
       struct Email *e = m->emails[i];
       if (!e)
         break;
 
-      const bool c_maildir_trash = cs_subset_bool(NeoMutt->sub, "maildir_trash");
       if (!e->deleted || c_maildir_trash)
         e->index = j++;
     }
@@ -1654,7 +1657,7 @@ static enum MailboxType maildir_path_probe(const char *path, const struct stat *
 /**
  * MxMaildirOps - Maildir Mailbox - Implements ::MxOps - @ingroup mx_api
  */
-struct MxOps MxMaildirOps = {
+const struct MxOps MxMaildirOps = {
   // clang-format off
   .type            = MUTT_MAILDIR,
   .name             = "maildir",

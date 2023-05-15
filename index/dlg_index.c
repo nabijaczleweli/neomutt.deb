@@ -329,7 +329,7 @@ int ci_first_message(struct Mailbox *m)
    * message is first.  Otherwise, the latest message is first if exactly
    * one of `$use_threads` and `$sort` are reverse.
    */
-  short c_sort = cs_subset_sort(m->sub, "sort");
+  enum SortType c_sort = cs_subset_sort(m->sub, "sort");
   if ((c_sort & SORT_MASK) == SORT_THREADS)
     c_sort = cs_subset_sort(m->sub, "sort_aux");
   bool reverse = false;
@@ -570,20 +570,6 @@ void update_index(struct Menu *menu, struct MailboxView *mv, enum MxStatus check
 }
 
 /**
- * mutt_update_index - Update the index
- * @param menu      Current Menu
- * @param mv       Mailbox
- * @param check     Flags, e.g. #MX_STATUS_REOPENED
- * @param oldcount  How many items are currently in the index
- * @param shared    Shared Index data
- */
-void mutt_update_index(struct Menu *menu, struct MailboxView *mv, enum MxStatus check,
-                       int oldcount, struct IndexSharedData *shared)
-{
-  update_index(menu, mv, check, oldcount, shared);
-}
-
-/**
  * index_mailbox_observer - Notification that a Mailbox has changed - Implements ::observer_t - @ingroup observer_api
  *
  * If a Mailbox is closed, then set a pointer to NULL.
@@ -598,7 +584,7 @@ static int index_mailbox_observer(struct NotifyCallback *nc)
     return 0;
 
   struct Mailbox **ptr = nc->global_data;
-  if (!ptr || !*ptr)
+  if (!*ptr)
     return 0;
 
   *ptr = NULL;
@@ -621,7 +607,7 @@ void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *oldcount,
     return;
 
   /* keepalive failure in mutt_enter_fname may kill connection. */
-  if (shared->mailbox && (mutt_buffer_is_empty(&shared->mailbox->pathbuf)))
+  if (shared->mailbox && (buf_is_empty(&shared->mailbox->pathbuf)))
   {
     mview_free(&shared->mailboxview);
     mailbox_free(&shared->mailbox);
@@ -700,7 +686,7 @@ void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *oldcount,
   if (mx_mbox_open(m, flags))
   {
     struct MailboxView *mv = mview_new(m);
-    index_shared_data_set_context(shared, mv);
+    index_shared_data_set_mview(shared, mv);
 
     menu->max = m->msg_count;
     menu_set_index(menu, ci_first_message(shared->mailbox));
@@ -710,7 +696,7 @@ void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *oldcount,
   }
   else
   {
-    index_shared_data_set_context(shared, NULL);
+    index_shared_data_set_mview(shared, NULL);
     menu_set_index(menu, 0);
   }
 
@@ -1067,7 +1053,7 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
   index_adjust_sort_threads(NeoMutt->sub);
 
   struct IndexSharedData *shared = dlg->wdata;
-  index_shared_data_set_context(shared, mview_new(m_init));
+  index_shared_data_set_mview(shared, mview_new(m_init));
 
   struct MuttWindow *panel_index = window_find_child(dlg, WT_INDEX);
 
@@ -1101,13 +1087,11 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
   mutt_monitor_add(NULL);
 #endif
 
+  const bool c_collapse_all = cs_subset_bool(shared->sub, "collapse_all");
+  if (mutt_using_threads() && c_collapse_all)
   {
-    const bool c_collapse_all = cs_subset_bool(shared->sub, "collapse_all");
-    if (mutt_using_threads() && c_collapse_all)
-    {
-      collapse_all(shared->mailboxview, priv->menu, 0);
-      menu_queue_redraw(priv->menu, MENU_REDRAW_FULL);
-    }
+    collapse_all(shared->mailboxview, priv->menu, 0);
+    menu_queue_redraw(priv->menu, MENU_REDRAW_FULL);
   }
 
   int rc = 0;
@@ -1153,7 +1137,7 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
 
       if (check == MX_STATUS_ERROR)
       {
-        if (mutt_buffer_is_empty(&shared->mailbox->pathbuf))
+        if (buf_is_empty(&shared->mailbox->pathbuf))
         {
           /* fatal error occurred */
           mview_free(&shared->mailboxview);

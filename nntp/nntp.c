@@ -74,16 +74,18 @@
 
 struct stat;
 
-struct NntpAccountData *CurrentNewsSrv;
+/// Current news server
+struct NntpAccountData *CurrentNewsSrv = NULL;
 
-const char *OverviewFmt = "Subject:\0"
-                          "From:\0"
-                          "Date:\0"
-                          "Message-ID:\0"
-                          "References:\0"
-                          "Content-Length:\0"
-                          "Lines:\0"
-                          "\0";
+/// Fields to get from server, if it supports the LIST OVERVIEW.FMT feature
+static const char *OverviewFmt = "Subject:\0"
+                                 "From:\0"
+                                 "Date:\0"
+                                 "Message-ID:\0"
+                                 "References:\0"
+                                 "Content-Length:\0"
+                                 "Lines:\0"
+                                 "\0";
 
 /**
  * struct FetchCtx - Keep track when getting data from a server
@@ -433,6 +435,7 @@ static int nntp_auth(struct NntpAccountData *adata)
   char *method = NULL, *a = NULL, *p = NULL;
   unsigned char flags = conn->account.flags;
 
+  const char *const c_nntp_authenticators = cs_subset_string(NeoMutt->sub, "nntp_authenticators");
   while (true)
   {
     /* get login and password */
@@ -443,7 +446,6 @@ static int nntp_auth(struct NntpAccountData *adata)
     }
 
     /* get list of authenticators */
-    const char *const c_nntp_authenticators = cs_subset_string(NeoMutt->sub, "nntp_authenticators");
     if (c_nntp_authenticators)
     {
       mutt_str_copy(authenticators, c_nntp_authenticators, sizeof(authenticators));
@@ -2770,7 +2772,7 @@ static int nntp_path_parent(char *buf, size_t buflen)
 /**
  * MxNntpOps - NNTP Mailbox - Implements ::MxOps - @ingroup mx_api
  */
-struct MxOps MxNntpOps = {
+const struct MxOps MxNntpOps = {
   // clang-format off
   .type            = MUTT_NNTP,
   .name             = "nntp",

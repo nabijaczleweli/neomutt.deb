@@ -57,27 +57,27 @@ BODY_OBJS	= test/body/mutt_body_cmp_strict.o \
 		  test/body/mutt_body_free.o \
 		  test/body/mutt_body_new.o
 
-BUFFER_OBJS	= test/buffer/mutt_buffer_add_printf.o \
-		  test/buffer/mutt_buffer_addch.o \
-		  test/buffer/mutt_buffer_addstr.o \
-		  test/buffer/mutt_buffer_addstr_n.o \
-		  test/buffer/mutt_buffer_alloc.o \
-		  test/buffer/mutt_buffer_concat_path.o \
-		  test/buffer/mutt_buffer_concatn_path.o \
-		  test/buffer/mutt_buffer_copy.o \
-		  test/buffer/mutt_buffer_dealloc.o \
-		  test/buffer/mutt_buffer_fix_dptr.o \
-		  test/buffer/mutt_buffer_init.o \
-		  test/buffer/mutt_buffer_insert.o \
-		  test/buffer/mutt_buffer_is_empty.o \
-		  test/buffer/mutt_buffer_len.o \
-		  test/buffer/mutt_buffer_make.o \
-		  test/buffer/mutt_buffer_printf.o \
-		  test/buffer/mutt_buffer_reset.o \
-		  test/buffer/mutt_buffer_strcpy.o \
-		  test/buffer/mutt_buffer_strcpy_n.o \
-		  test/buffer/mutt_buffer_strdup.o \
-		  test/buffer/mutt_buffer_substrcpy.o
+BUFFER_OBJS	= test/buffer/buf_add_printf.o \
+		  test/buffer/buf_addch.o \
+		  test/buffer/buf_addstr.o \
+		  test/buffer/buf_addstr_n.o \
+		  test/buffer/buf_alloc.o \
+		  test/buffer/buf_concat_path.o \
+		  test/buffer/buf_concatn_path.o \
+		  test/buffer/buf_copy.o \
+		  test/buffer/buf_dealloc.o \
+		  test/buffer/buf_fix_dptr.o \
+		  test/buffer/buf_init.o \
+		  test/buffer/buf_insert.o \
+		  test/buffer/buf_is_empty.o \
+		  test/buffer/buf_len.o \
+		  test/buffer/buf_make.o \
+		  test/buffer/buf_printf.o \
+		  test/buffer/buf_reset.o \
+		  test/buffer/buf_strcpy.o \
+		  test/buffer/buf_strcpy_n.o \
+		  test/buffer/buf_strdup.o \
+		  test/buffer/buf_substrcpy.o
 
 CHARSET_OBJS	= test/charset/mutt_ch_canonical_charset.o \
 		  test/charset/mutt_ch_charset_lookup.o \
@@ -116,6 +116,7 @@ COMPRESS_OBJS	+= test/compress/zstd.o
 CONFIG_OBJS	= test/config/account.o \
 		  test/config/address.o \
 		  test/config/bool.o \
+		  test/config/cache.o \
 		  test/config/common.o \
 		  test/config/dump.o \
 		  test/config/enum.o \
@@ -123,6 +124,7 @@ CONFIG_OBJS	= test/config/account.o \
 		  test/config/initial.o \
 		  test/config/long.o \
 		  test/config/mbtable.o \
+		  test/config/myvar.o \
 		  test/config/number.o \
 		  test/config/path.o \
 		  test/config/quad.o \
@@ -140,7 +142,7 @@ CONVERT_OBJS	= test/convert/mutt_update_content_info.o \
 		  test/convert/mutt_convert_file_to.o \
 		  test/convert/mutt_convert_file_from_to.o
 
-CORE_OBJS	= test/core/mutt_buffer_mktemp_full.o \
+CORE_OBJS	= test/core/buf_mktemp_full.o \
 		  test/core/mutt_file_mkstemp_full.o \
 		  test/core/mutt_mktemp_full.o
 
@@ -180,6 +182,11 @@ ENTER_OBJS	= test/enter/editor_backspace.o \
 		  test/enter/editor_backward_char.o \
 		  test/enter/editor_backward_word.o \
 		  test/enter/editor_bol.o \
+		  test/enter/editor_buffer_get_cursor.o \
+		  test/enter/editor_buffer_get_lastchar.o \
+		  test/enter/editor_buffer_is_empty.o \
+		  test/enter/editor_buffer_set.o \
+		  test/enter/editor_buffer_set_cursor.o \
 		  test/enter/editor_case_word.o \
 		  test/enter/editor_delete_char.o \
 		  test/enter/editor_eol.o \
@@ -200,15 +207,16 @@ ENVELOPE_OBJS	= test/envelope/mutt_env_cmp_strict.o \
 		  test/envelope/mutt_env_to_intl.o \
 		  test/envelope/mutt_env_to_local.o
 
-ENVLIST_OBJS	= test/envlist/mutt_envlist_free.o \
-		  test/envlist/mutt_envlist_getlist.o \
-		  test/envlist/mutt_envlist_init.o \
-		  test/envlist/mutt_envlist_set.o \
-		  test/envlist/mutt_envlist_unset.o
+ENVLIST_OBJS	= test/envlist/envlist_free.o \
+		  test/envlist/envlist_init.o \
+		  test/envlist/envlist_set.o \
+		  test/envlist/envlist_unset.o
+
+EQI_OBJS	= test/eqi/eqi.o
 
 FILE_OBJS	= test/file/common.o \
-		  test/file/mutt_buffer_file_expand_fmt_quote.o \
-		  test/file/mutt_buffer_quote_filename.o \
+		  test/file/buf_file_expand_fmt_quote.o \
+		  test/file/buf_quote_filename.o \
 		  test/file/mutt_file_check_empty.o \
 		  test/file/mutt_file_chmod.o \
 		  test/file/mutt_file_chmod_add.o \
@@ -439,9 +447,9 @@ PATTERN_OBJS	= pattern/pattern.o \
 		  test/pattern/dummy.o \
 		  test/pattern/leak.o
 
-POOL_OBJS	= test/pool/mutt_buffer_pool_free.o \
-		  test/pool/mutt_buffer_pool_get.o \
-		  test/pool/mutt_buffer_pool_release.o
+POOL_OBJS	= test/pool/buf_pool_free.o \
+		  test/pool/buf_pool_get.o \
+		  test/pool/buf_pool_release.o
 
 PREX_OBJS	= test/prex/mutt_prex_capture.o \
 		  test/prex/mutt_prex_free.o
@@ -489,6 +497,7 @@ SLIST_OBJS	= test/slist/slist_add_list.o \
 		  test/slist/slist_dup.o \
 		  test/slist/slist_empty.o \
 		  test/slist/slist_free.o \
+		  test/slist/slist_is_empty.o \
 		  test/slist/slist_is_member.o \
 		  test/slist/slist_parse.o \
 		  test/slist/slist_remove_string.o \
@@ -551,10 +560,12 @@ STRING_OBJS	= test/string/mutt_istr_equal.o \
 		  test/string/mutt_str_next_word.o \
 		  test/string/mutt_str_remove_trailing_ws.o \
 		  test/string/mutt_str_replace.o \
+		  test/string/mutt_str_sep.o \
 		  test/string/mutt_str_skip_email_wsp.o \
 		  test/string/mutt_str_skip_whitespace.o \
 		  test/string/mutt_str_startswith.o \
 		  test/string/mutt_str_sysexit.o \
+		  test/string/mutt_str_upper.o \
 		  test/string/mutt_strn_cat.o \
 		  test/string/mutt_strn_copy.o \
 		  test/string/mutt_strn_dup.o \
@@ -573,7 +584,6 @@ THREAD_OBJS	= test/thread/clean_references.o \
 		  test/thread/insert_message.o \
 		  test/thread/is_descendant.o \
 		  test/thread/mutt_break_thread.o \
-		  test/thread/thread_hash_destructor.o \
 		  test/thread/unlink_message.o
 
 URL_OBJS	= test/url/url_check_scheme.o \
@@ -590,6 +600,7 @@ BUILD_DIRS	= $(PWD)/test/account $(PWD)/test/address $(PWD)/test/array \
 		  $(PWD)/test/compress $(PWD)/test/config $(PWD)/test/convert \
 		  $(PWD)/test/core $(PWD)/test/date $(PWD)/test/email \
 		  $(PWD)/test/enter $(PWD)/test/envelope $(PWD)/test/envlist \
+		  $(PWD)/test/eqi \
 		  $(PWD)/test/file $(PWD)/test/filter $(PWD)/test/from \
 		  $(PWD)/test/group $(PWD)/test/gui $(PWD)/test/hash \
 		  $(PWD)/test/history $(PWD)/test/idna $(PWD)/test/list \
@@ -622,6 +633,7 @@ TEST_OBJS	= test/main.o test/common.o \
 		  $(ENTER_OBJS) \
 		  $(ENVELOPE_OBJS) \
 		  $(ENVLIST_OBJS) \
+		  $(EQI_OBJS) \
 		  $(FILE_OBJS) \
 		  $(FILTER_OBJS) \
 		  $(FROM_OBJS) \
@@ -657,7 +669,6 @@ TEST_OBJS	= test/main.o test/common.o \
 		  $(TAGS_OBJS) \
 		  $(THREAD_OBJS) \
 		  $(URL_OBJS)
-ALLOBJS+=   $(TEST_OBJS)
 
 CFLAGS	+= -I$(SRCDIR)/test
 
@@ -673,7 +684,7 @@ $(BUILD_DIRS):
 $(TEST_BINARY): $(BUILD_DIRS) $(MUTTLIBS) $(TEST_OBJS)
 	$(CC) -o $@ $(TEST_OBJS) $(MUTTLIBS) $(LDFLAGS) $(LIBS)
 
-all-test: $(TEST_BINARY)
+all-test:
 
 clean-test:
 	$(RM) $(TEST_BINARY) $(TEST_OBJS) $(TEST_OBJS:.o=.Po)

@@ -119,9 +119,11 @@ static const char *const SaslAuthenticators[] = {
  * plus two bytes for the ';' and trailing \0 */
 #define IP_PORT_BUFLEN (NI_MAXHOST + NI_MAXSERV)
 
+/// SASL callback functions, e.g. mutt_sasl_cb_authname(), mutt_sasl_cb_pass()
 static sasl_callback_t MuttSaslCallbacks[5];
 
-static sasl_secret_t *secret_ptr = NULL;
+/// SASL secret, to store the password
+static sasl_secret_t *SecretPtr = NULL;
 
 /**
  * sasl_auth_validator - Validate an auth method against Cyrus SASL methods
@@ -368,10 +370,10 @@ static int mutt_sasl_cb_pass(sasl_conn_t *conn, void *context, int id, sasl_secr
 
   len = strlen(cac->pass);
 
-  mutt_mem_realloc(&secret_ptr, sizeof(sasl_secret_t) + len);
-  memcpy((char *) secret_ptr->data, cac->pass, (size_t) len);
-  secret_ptr->len = len;
-  *psecret = secret_ptr;
+  mutt_mem_realloc(&SecretPtr, sizeof(sasl_secret_t) + len);
+  memcpy((char *) SecretPtr->data, cac->pass, (size_t) len);
+  SecretPtr->len = len;
+  *psecret = SecretPtr;
 
   return SASL_OK;
 }
@@ -701,28 +703,28 @@ int mutt_sasl_interact(sasl_interact_t *interaction)
 {
   int rc = SASL_OK;
   char prompt[128] = { 0 };
-  struct Buffer *resp = mutt_buffer_pool_get();
+  struct Buffer *resp = buf_pool_get();
 
   while (interaction->id != SASL_CB_LIST_END)
   {
     mutt_debug(LL_DEBUG2, "filling in SASL interaction %ld\n", interaction->id);
 
     snprintf(prompt, sizeof(prompt), "%s: ", interaction->prompt);
-    mutt_buffer_reset(resp);
+    buf_reset(resp);
 
-    if (OptNoCurses || (mutt_buffer_get_field(prompt, resp, MUTT_COMP_NO_FLAGS,
-                                              false, NULL, NULL, NULL) != 0))
+    if (OptNoCurses ||
+        (buf_get_field(prompt, resp, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0))
     {
       rc = SASL_FAIL;
       break;
     }
 
-    interaction->len = mutt_buffer_len(resp) + 1;
-    interaction->result = mutt_buffer_strdup(resp);
+    interaction->len = buf_len(resp) + 1;
+    interaction->result = buf_strdup(resp);
     interaction++;
   }
 
-  mutt_buffer_pool_release(&resp);
+  buf_pool_release(&resp);
   return rc;
 }
 

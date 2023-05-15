@@ -123,6 +123,7 @@ static struct Mapping KeyNames[] = {
 
 keycode_t AbortKey; ///< code of key to abort prompts, normally Ctrl-G
 
+/// Array of key mappings, one for each #MenuType
 struct KeymapList Keymaps[MENU_MAX];
 
 /**
@@ -134,6 +135,9 @@ struct Extkey
   const char *sym;  ///< Curses key name
 };
 
+/**
+ * ExtKeys - Mapping between NeoMutt and Curses key names
+ */
 static const struct Extkey ExtKeys[] = {
   { "<c-up>", "kUP5" },
   { "<s-up>", "kUP" },
@@ -253,7 +257,7 @@ static int parse_keycode(const char *s)
   char *end_char = NULL;
   long int result = strtol(s + 1, &end_char, 8);
   /* allow trailing whitespace, eg.  < 1001 > */
-  while (IS_SPACE(*end_char))
+  while (isspace(*end_char))
     end_char++;
   /* negative keycodes don't make sense, also detect overflow */
   if ((*end_char != '>') || (result < 0) || (result == LONG_MAX))
@@ -405,8 +409,8 @@ static enum CommandResult km_bind_err(const char *s, enum MenuType mtype, int op
         if (err)
         {
           /* err was passed, put the string there */
-          mutt_buffer_printf(err, err_msg, old_binding, new_binding,
-                             mutt_map_get_name(mtype, MenuNames), new_binding);
+          buf_printf(err, err_msg, old_binding, new_binding,
+                     mutt_map_get_name(mtype, MenuNames), new_binding);
         }
         else
         {
@@ -648,13 +652,13 @@ struct KeyEvent km_dokey_event(enum MenuType mtype)
   const short c_imap_keepalive = cs_subset_number(NeoMutt->sub, "imap_keepalive");
 #endif
 
+  const short c_timeout = cs_subset_number(NeoMutt->sub, "timeout");
   while (true)
   {
-    const short c_timeout = cs_subset_number(NeoMutt->sub, "timeout");
     int i = (c_timeout > 0) ? c_timeout : 60;
 #ifdef USE_IMAP
     /* keepalive may need to run more frequently than `$timeout` allows */
-    if (c_imap_keepalive)
+    if (c_imap_keepalive != 0)
     {
       if (c_imap_keepalive >= i)
       {
@@ -662,7 +666,7 @@ struct KeyEvent km_dokey_event(enum MenuType mtype)
       }
       else
       {
-        while (c_imap_keepalive && (c_imap_keepalive < i))
+        while (c_imap_keepalive < i)
         {
           tmp = mutt_getch_timeout(c_imap_keepalive * 1000);
           /* If a timeout was not received, or the window was resized, exit the
@@ -1124,7 +1128,7 @@ enum CommandResult mutt_parse_push(struct Buffer *buf, struct Buffer *s,
   parse_extract_token(buf, s, TOKEN_CONDENSE);
   if (MoreArgs(s))
   {
-    mutt_buffer_printf(err, _("%s: too many arguments"), "push");
+    buf_printf(err, _("%s: too many arguments"), "push");
     return MUTT_CMD_ERROR;
   }
 
@@ -1153,7 +1157,7 @@ static char *parse_keymap(enum MenuType *mtypes, struct Buffer *s, int max_menus
   int i = 0;
   char *q = NULL;
 
-  mutt_buffer_init(&buf);
+  buf_init(&buf);
 
   /* menu name */
   parse_extract_token(&buf, s, TOKEN_NO_FLAGS);
@@ -1169,7 +1173,7 @@ static char *parse_keymap(enum MenuType *mtypes, struct Buffer *s, int max_menus
       int val = mutt_map_get_value(p, MenuNames);
       if (val == -1)
       {
-        mutt_buffer_printf(err, _("%s: no such menu"), p);
+        buf_printf(err, _("%s: no such menu"), p);
         goto error;
       }
       mtypes[i] = val;
@@ -1185,14 +1189,14 @@ static char *parse_keymap(enum MenuType *mtypes, struct Buffer *s, int max_menus
 
     if (buf.data[0] == '\0')
     {
-      mutt_buffer_printf(err, _("%s: null key sequence"), bind ? "bind" : "macro");
+      buf_printf(err, _("%s: null key sequence"), bind ? "bind" : "macro");
     }
     else if (MoreArgs(s))
       return buf.data;
   }
   else
   {
-    mutt_buffer_printf(err, _("%s: too few arguments"), bind ? "bind" : "macro");
+    buf_printf(err, _("%s: too few arguments"), bind ? "bind" : "macro");
   }
 error:
   FREE(&buf.data);
@@ -1220,8 +1224,8 @@ static enum CommandResult try_bind(char *key, enum MenuType mtype, char *func,
   }
   if (err)
   {
-    mutt_buffer_printf(err, _("Function '%s' not available for menu '%s'"),
-                       func, mutt_map_get_name(mtype, MenuNames));
+    buf_printf(err, _("Function '%s' not available for menu '%s'"), func,
+               mutt_map_get_name(mtype, MenuNames));
   }
   return MUTT_CMD_ERROR; /* Couldn't find an existing function with this name */
 }
@@ -1299,7 +1303,7 @@ static bool dump_bind(struct Buffer *buf, struct Mapping *menu)
     km_expand_key(key_binding, sizeof(key_binding), map);
     if (map->op == OP_NULL)
     {
-      mutt_buffer_add_printf(buf, "bind %s %s noop\n", menu->name, key_binding);
+      buf_add_printf(buf, "bind %s %s noop\n", menu->name, key_binding);
       continue;
     }
 
@@ -1322,7 +1326,7 @@ static bool dump_bind(struct Buffer *buf, struct Mapping *menu)
       fn_name = mutt_get_func(funcs, map->op);
     }
 
-    mutt_buffer_add_printf(buf, "bind %s %s %s\n", menu->name, key_binding, fn_name);
+    buf_add_printf(buf, "bind %s %s %s\n", menu->name, key_binding, fn_name);
     empty = false;
   }
 
@@ -1344,7 +1348,7 @@ static void dump_all_binds(struct Buffer *buf)
 
     /* Add a new line for readability between menus. */
     if (!empty && (i < (MENU_MAX - 1)))
-      mutt_buffer_addch(buf, '\n');
+      buf_addch(buf, '\n');
   }
 }
 
@@ -1368,20 +1372,20 @@ static bool dump_macro(struct Buffer *buf, struct Mapping *menu)
     char key_binding[MAX_SEQ] = { 0 };
     km_expand_key(key_binding, MAX_SEQ, map);
 
-    struct Buffer tmp = mutt_buffer_make(0);
+    struct Buffer tmp = buf_make(0);
     escape_string(&tmp, map->macro);
 
     if (map->desc)
     {
-      mutt_buffer_add_printf(buf, "macro %s %s \"%s\" \"%s\"\n", menu->name,
-                             key_binding, tmp.data, map->desc);
+      buf_add_printf(buf, "macro %s %s \"%s\" \"%s\"\n", menu->name,
+                     key_binding, tmp.data, map->desc);
     }
     else
     {
-      mutt_buffer_add_printf(buf, "macro %s %s \"%s\"\n", menu->name, key_binding, tmp.data);
+      buf_add_printf(buf, "macro %s %s \"%s\"\n", menu->name, key_binding, tmp.data);
     }
 
-    mutt_buffer_dealloc(&tmp);
+    buf_dealloc(&tmp);
     empty = false;
   }
 
@@ -1403,7 +1407,7 @@ static void dump_all_macros(struct Buffer *buf)
 
     /* Add a new line for legibility between menus. */
     if (!empty && (i < (MENU_MAX - 1)))
-      mutt_buffer_addch(buf, '\n');
+      buf_addch(buf, '\n');
   }
 }
 
@@ -1429,7 +1433,7 @@ static enum CommandResult dump_bind_macro(struct Buffer *buf, struct Buffer *s,
     return MUTT_CMD_ERROR;
   }
 
-  struct Buffer filebuf = mutt_buffer_make(4096);
+  struct Buffer filebuf = buf_make(4096);
   if (dump_all || mutt_istr_equal(buf->data, "all"))
   {
     if (bind)
@@ -1443,8 +1447,8 @@ static enum CommandResult dump_bind_macro(struct Buffer *buf, struct Buffer *s,
     if (menu_index == -1)
     {
       // L10N: '%s' is the (misspelled) name of the menu, e.g. 'index' or 'pager'
-      mutt_buffer_printf(err, _("%s: no such menu"), buf->data);
-      mutt_buffer_dealloc(&filebuf);
+      buf_printf(err, _("%s: no such menu"), buf->data);
+      buf_dealloc(&filebuf);
       return MUTT_CMD_ERROR;
     }
 
@@ -1455,13 +1459,13 @@ static enum CommandResult dump_bind_macro(struct Buffer *buf, struct Buffer *s,
       dump_macro(&filebuf, &menu);
   }
 
-  if (mutt_buffer_is_empty(&filebuf))
+  if (buf_is_empty(&filebuf))
   {
     // L10N: '%s' is the name of the menu, e.g. 'index' or 'pager',
     //       it might also be 'all' when all menus are affected.
-    mutt_buffer_printf(err, bind ? _("%s: no binds for this menu") : _("%s: no macros for this menu"),
-                       dump_all ? "all" : buf->data);
-    mutt_buffer_dealloc(&filebuf);
+    buf_printf(err, bind ? _("%s: no binds for this menu") : _("%s: no macros for this menu"),
+               dump_all ? "all" : buf->data);
+    buf_dealloc(&filebuf);
     return MUTT_CMD_ERROR;
   }
 
@@ -1470,14 +1474,14 @@ static enum CommandResult dump_bind_macro(struct Buffer *buf, struct Buffer *s,
   if (!fp_out)
   {
     // L10N: '%s' is the file name of the temporary file
-    mutt_buffer_printf(err, _("Could not create temporary file %s"), tempfile);
-    mutt_buffer_dealloc(&filebuf);
+    buf_printf(err, _("Could not create temporary file %s"), tempfile);
+    buf_dealloc(&filebuf);
     return MUTT_CMD_ERROR;
   }
   fputs(filebuf.data, fp_out);
 
   mutt_file_fclose(&fp_out);
-  mutt_buffer_dealloc(&filebuf);
+  buf_dealloc(&filebuf);
 
   struct PagerData pdata = { 0 };
   struct PagerView pview = { &pdata };
@@ -1506,7 +1510,7 @@ enum CommandResult mutt_parse_bind(struct Buffer *buf, struct Buffer *s,
     char *dptr = s->dptr;
     if (dump_bind_macro(buf, s, data, err) == MUTT_CMD_SUCCESS)
       return MUTT_CMD_SUCCESS;
-    if (!mutt_buffer_is_empty(err))
+    if (!buf_is_empty(err))
       return MUTT_CMD_ERROR;
     s->dptr = dptr;
   }
@@ -1524,7 +1528,7 @@ enum CommandResult mutt_parse_bind(struct Buffer *buf, struct Buffer *s,
   parse_extract_token(buf, s, TOKEN_NO_FLAGS);
   if (MoreArgs(s))
   {
-    mutt_buffer_printf(err, _("%s: too many arguments"), "bind");
+    buf_printf(err, _("%s: too many arguments"), "bind");
     rc = MUTT_CMD_ERROR;
   }
   else if (mutt_istr_equal("noop", buf->data))
@@ -1616,7 +1620,7 @@ static void *parse_menu(bool *menus, char *s, struct Buffer *err)
     int value = mutt_map_get_value(menu_name, MenuNames);
     if (value == -1)
     {
-      mutt_buffer_printf(err, _("%s: no such menu"), menu_name);
+      buf_printf(err, _("%s: no such menu"), menu_name);
       break;
     }
     else
@@ -1692,7 +1696,7 @@ enum CommandResult mutt_parse_unbind(struct Buffer *buf, struct Buffer *s,
   {
     const char *cmd = (data & MUTT_UNMACRO) ? "unmacro" : "unbind";
 
-    mutt_buffer_printf(err, _("%s: too many arguments"), cmd);
+    buf_printf(err, _("%s: too many arguments"), cmd);
     return MUTT_CMD_ERROR;
   }
 
@@ -1756,7 +1760,7 @@ enum CommandResult mutt_parse_macro(struct Buffer *buf, struct Buffer *s,
     char *dptr = s->dptr;
     if (dump_bind_macro(buf, s, data, err) == MUTT_CMD_SUCCESS)
       return MUTT_CMD_SUCCESS;
-    if (!mutt_buffer_is_empty(err))
+    if (!buf_is_empty(err))
       return MUTT_CMD_ERROR;
     s->dptr = dptr;
   }
@@ -1773,7 +1777,7 @@ enum CommandResult mutt_parse_macro(struct Buffer *buf, struct Buffer *s,
   /* make sure the macro sequence is not an empty string */
   if (buf->data[0] == '\0')
   {
-    mutt_buffer_strcpy(err, _("macro: empty key sequence"));
+    buf_strcpy(err, _("macro: empty key sequence"));
   }
   else
   {
@@ -1784,7 +1788,7 @@ enum CommandResult mutt_parse_macro(struct Buffer *buf, struct Buffer *s,
 
       if (MoreArgs(s))
       {
-        mutt_buffer_printf(err, _("%s: too many arguments"), "macro");
+        buf_printf(err, _("%s: too many arguments"), "macro");
       }
       else
       {
@@ -1843,7 +1847,7 @@ enum CommandResult mutt_parse_exec(struct Buffer *buf, struct Buffer *s,
 
   if (!MoreArgs(s))
   {
-    mutt_buffer_strcpy(err, _("exec: no arguments"));
+    buf_strcpy(err, _("exec: no arguments"));
     return MUTT_CMD_ERROR;
   }
 

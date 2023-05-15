@@ -73,9 +73,9 @@ struct stat;
 /* imap.c */
 void imap_init(void);
 int imap_access(const char *path);
-int imap_check_mailbox(struct Mailbox *m, bool force);
+enum MxStatus imap_check_mailbox(struct Mailbox *m, bool force);
 int imap_delete_mailbox(struct Mailbox *m, char *path);
-int imap_sync_mailbox(struct Mailbox *m, bool expunge, bool close);
+enum MxStatus imap_sync_mailbox(struct Mailbox *m, bool expunge, bool close);
 int imap_path_status(const char *path, bool queue);
 int imap_mailbox_status(struct Mailbox *m, bool queue);
 int imap_subscribe(char *path, bool subscribe);
@@ -85,7 +85,7 @@ enum MailboxType imap_path_probe(const char *path, const struct stat *st);
 int imap_path_canon(char *buf, size_t buflen);
 void imap_notify_delete_email(struct Mailbox *m, struct Email *e);
 
-extern struct MxOps MxImapOps;
+extern const struct MxOps MxImapOps;
 
 /* browse.c */
 int imap_browse(const char *path, struct BrowserState *state);

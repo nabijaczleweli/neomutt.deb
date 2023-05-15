@@ -51,8 +51,10 @@
 #include <libintl.h>
 #endif
 
+/// Number of padding spaces needed after each of the strings in #KeyInfoPrompts after translation
 int KeyInfoPadding[KIP_MAX] = { 0 };
 
+/// Names of header fields used in the pgp key display, e.g. Name:, Fingerprint:
 static const char *const KeyInfoPrompts[] = {
   /* L10N: The following are the headers for the "verify key" output from the
      GPGME key selection menu (bound to "c" in the key selection menu).
@@ -87,8 +89,7 @@ static void print_utf8(FILE *fp, const char *buf, size_t len)
 
   /* fromcode "utf-8" is sure, so we don't want
    * charset-hook corrections: flags must be 0.  */
-  const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
-  mutt_ch_convert_string(&tstr, "utf-8", c_charset, MUTT_ICONV_NO_FLAGS);
+  mutt_ch_convert_string(&tstr, "utf-8", cc_charset(), MUTT_ICONV_NO_FLAGS);
   fputs(tstr, fp);
   FREE(&tstr);
 }
@@ -626,9 +627,9 @@ static void verify_key(struct CryptKeyInfo *key)
   gpgme_key_t k = NULL;
   int maxdepth = 100;
 
-  struct Buffer tempfile = mutt_buffer_make(PATH_MAX);
-  mutt_buffer_mktemp(&tempfile);
-  FILE *fp = mutt_file_fopen(mutt_buffer_string(&tempfile), "w");
+  struct Buffer tempfile = buf_make(PATH_MAX);
+  buf_mktemp(&tempfile);
+  FILE *fp = mutt_file_fopen(buf_string(&tempfile), "w");
   if (!fp)
   {
     mutt_perror(_("Can't create temporary file"));
@@ -677,7 +678,7 @@ leave:
   struct PagerData pdata = { 0 };
   struct PagerView pview = { &pdata };
 
-  pdata.fname = mutt_buffer_string(&tempfile);
+  pdata.fname = buf_string(&tempfile);
 
   pview.banner = title;
   pview.flags = MUTT_PAGER_NO_FLAGS;
@@ -686,7 +687,7 @@ leave:
   mutt_do_pager(&pview, NULL);
 
 cleanup:
-  mutt_buffer_dealloc(&tempfile);
+  buf_dealloc(&tempfile);
 }
 
 /**
@@ -802,7 +803,7 @@ static int op_view_id(struct GpgmeData *gd, int op)
 /**
  * GpgmeFunctions - All the NeoMutt functions that the Gpgme supports
  */
-struct GpgmeFunction GpgmeFunctions[] = {
+static const struct GpgmeFunction GpgmeFunctions[] = {
   // clang-format off
   { OP_EXIT,                   op_exit },
   { OP_GENERIC_SELECT_ENTRY,   op_generic_select_entry },

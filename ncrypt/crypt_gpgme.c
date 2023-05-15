@@ -86,9 +86,12 @@ struct CryptCache
   struct CryptCache *next;
 };
 
-static struct CryptCache *id_defaults = NULL;
-static gpgme_key_t signature_key = NULL;
-static char *current_sender = NULL;
+/// Cache of GPGME keys
+static struct CryptCache *IdDefaults = NULL;
+/// PGP Key to sign with
+static gpgme_key_t SignatureKey = NULL;
+/// Email address of the sender
+static char *CurrentSender = NULL;
 
 #define PKA_NOTATION_NAME "pka-address@gnupg.org"
 
@@ -417,12 +420,12 @@ static gpgme_data_t body_to_data_object(struct Body *a, bool convert)
   int err = 0;
   gpgme_data_t data = NULL;
 
-  struct Buffer *tempfile = mutt_buffer_pool_get();
-  mutt_buffer_mktemp(tempfile);
-  FILE *fp_tmp = mutt_file_fopen(mutt_buffer_string(tempfile), "w+");
+  struct Buffer *tempfile = buf_pool_get();
+  buf_mktemp(tempfile);
+  FILE *fp_tmp = mutt_file_fopen(buf_string(tempfile), "w+");
   if (!fp_tmp)
   {
-    mutt_perror(mutt_buffer_string(tempfile));
+    mutt_perror(buf_string(tempfile));
     goto cleanup;
   }
 
@@ -463,7 +466,7 @@ static gpgme_data_t body_to_data_object(struct Body *a, bool convert)
   else
   {
     mutt_file_fclose(&fp_tmp);
-    err = gpgme_data_new_from_file(&data, mutt_buffer_string(tempfile), 1);
+    err = gpgme_data_new_from_file(&data, buf_string(tempfile), 1);
     if (err != 0)
     {
       mutt_error(_("error allocating data object: %s"), gpgme_strerror(err));
@@ -472,10 +475,10 @@ static gpgme_data_t body_to_data_object(struct Body *a, bool convert)
       /* fall through to unlink the tempfile */
     }
   }
-  unlink(mutt_buffer_string(tempfile));
+  unlink(buf_string(tempfile));
 
 cleanup:
-  mutt_buffer_pool_release(&tempfile);
+  buf_pool_release(&tempfile);
   return data;
 }
 
@@ -558,11 +561,11 @@ static char *data_object_to_tempfile(gpgme_data_t data, FILE **fp_ret)
 {
   ssize_t nread = 0;
   char *rv = NULL;
-  struct Buffer *tempf = mutt_buffer_pool_get();
+  struct Buffer *tempf = buf_pool_get();
 
-  mutt_buffer_mktemp(tempf);
+  buf_mktemp(tempf);
 
-  FILE *fp = mutt_file_fopen(mutt_buffer_string(tempf), "w+");
+  FILE *fp = mutt_file_fopen(buf_string(tempf), "w+");
   if (!fp)
   {
     mutt_perror(_("Can't create temporary file"));
@@ -578,9 +581,9 @@ static char *data_object_to_tempfile(gpgme_data_t data, FILE **fp_ret)
     {
       if (fwrite(buf, nread, 1, fp) != 1)
       {
-        mutt_perror(mutt_buffer_string(tempf));
+        mutt_perror(buf_string(tempf));
         mutt_file_fclose(&fp);
-        unlink(mutt_buffer_string(tempf));
+        unlink(buf_string(tempf));
         goto cleanup;
       }
     }
@@ -592,16 +595,16 @@ static char *data_object_to_tempfile(gpgme_data_t data, FILE **fp_ret)
   if (nread == -1)
   {
     mutt_error(_("error reading data object: %s"), gpgme_strerror(err));
-    unlink(mutt_buffer_string(tempf));
+    unlink(buf_string(tempf));
     mutt_file_fclose(&fp);
     goto cleanup;
   }
   if (fp_ret)
     *fp_ret = fp;
-  rv = mutt_buffer_strdup(tempf);
+  rv = buf_strdup(tempf);
 
 cleanup:
-  mutt_buffer_pool_release(&tempf);
+  buf_pool_release(&tempf);
   return rv;
 }
 
@@ -625,16 +628,16 @@ static void create_recipient_string(const char *keylist, struct Buffer *recpstri
       if (n == 0)
       {
         if (!use_smime)
-          mutt_buffer_addstr(recpstring, "--\n");
+          buf_addstr(recpstring, "--\n");
       }
       else
       {
-        mutt_buffer_addch(recpstring, '\n');
+        buf_addch(recpstring, '\n');
       }
       n++;
 
       while ((*s != '\0') && (*s != ' '))
-        mutt_buffer_addch(recpstring, *s++);
+        buf_addch(recpstring, *s++);
     }
   } while (*s != '\0');
 }
@@ -751,7 +754,7 @@ static int set_signer(gpgme_ctx_t ctx, const struct AddressList *al, bool for_sm
  */
 static gpgme_error_t set_pka_sig_notation(gpgme_ctx_t ctx)
 {
-  gpgme_error_t err = gpgme_sig_notation_add(ctx, PKA_NOTATION_NAME, current_sender, 0);
+  gpgme_error_t err = gpgme_sig_notation_add(ctx, PKA_NOTATION_NAME, CurrentSender, 0);
   if (err)
   {
     mutt_error(_("error setting PKA signature notation: %s"), gpgme_strerror(err));
@@ -777,11 +780,11 @@ static char *encrypt_gpgme_object(gpgme_data_t plaintext, char *keylist, bool us
   gpgme_data_t ciphertext = NULL;
   char *outfile = NULL;
 
-  struct Buffer *recpstring = mutt_buffer_pool_get();
+  struct Buffer *recpstring = buf_pool_get();
   create_recipient_string(keylist, recpstring, use_smime);
-  if (mutt_buffer_is_empty(recpstring))
+  if (buf_is_empty(recpstring))
   {
-    mutt_buffer_pool_release(&recpstring);
+    buf_pool_release(&recpstring);
     return NULL;
   }
 
@@ -804,12 +807,12 @@ static char *encrypt_gpgme_object(gpgme_data_t plaintext, char *keylist, bool us
         goto cleanup;
     }
 
-    err = gpgme_op_encrypt_sign_ext(ctx, NULL, mutt_buffer_string(recpstring),
+    err = gpgme_op_encrypt_sign_ext(ctx, NULL, buf_string(recpstring),
                                     GPGME_ENCRYPT_ALWAYS_TRUST, plaintext, ciphertext);
   }
   else
   {
-    err = gpgme_op_encrypt_ext(ctx, NULL, mutt_buffer_string(recpstring),
+    err = gpgme_op_encrypt_ext(ctx, NULL, buf_string(recpstring),
                                GPGME_ENCRYPT_ALWAYS_TRUST, plaintext, ciphertext);
   }
 
@@ -823,7 +826,7 @@ static char *encrypt_gpgme_object(gpgme_data_t plaintext, char *keylist, bool us
   outfile = data_object_to_tempfile(ciphertext, NULL);
 
 cleanup:
-  mutt_buffer_pool_release(&recpstring);
+  buf_pool_release(&recpstring);
   gpgme_release(ctx);
   gpgme_data_release(ciphertext);
   return outfile;
@@ -1433,10 +1436,10 @@ static int show_one_sig_status(gpgme_ctx_t ctx, int idx, struct State *state)
     if (!sig)
       return -1; /* Signature not found.  */
 
-    if (signature_key)
+    if (SignatureKey)
     {
-      gpgme_key_unref(signature_key);
-      signature_key = NULL;
+      gpgme_key_unref(SignatureKey);
+      SignatureKey = NULL;
     }
 
     fpr = sig->fpr;
@@ -1450,8 +1453,8 @@ static int show_one_sig_status(gpgme_ctx_t ctx, int idx, struct State *state)
       err = gpgme_get_key(ctx, fpr, &key, 0); /* secret key?  */
       if (err == 0)
       {
-        if (!signature_key)
-          signature_key = key;
+        if (!SignatureKey)
+          SignatureKey = key;
       }
       else
       {
@@ -1515,7 +1518,7 @@ static int show_one_sig_status(gpgme_ctx_t ctx, int idx, struct State *state)
       anywarn = true;
     }
 
-    if (key != signature_key)
+    if (key != SignatureKey)
       gpgme_key_unref(key);
   }
 
@@ -1583,10 +1586,10 @@ static int verify_one(struct Body *sigbdy, struct State *state,
   { /* Verification succeeded, see what the result is. */
     gpgme_verify_result_t verify_result = NULL;
 
-    if (signature_key)
+    if (SignatureKey)
     {
-      gpgme_key_unref(signature_key);
-      signature_key = NULL;
+      gpgme_key_unref(SignatureKey);
+      SignatureKey = NULL;
     }
 
     verify_result = gpgme_op_verify_result(ctx);
@@ -2177,19 +2180,19 @@ static int pgp_check_traditional_one_body(FILE *fp, struct Body *b)
   if (b->type != TYPE_TEXT)
     return 0;
 
-  struct Buffer *tempfile = mutt_buffer_pool_get();
-  mutt_buffer_mktemp(tempfile);
-  if (mutt_decode_save_attachment(fp, b, mutt_buffer_string(tempfile),
-                                  STATE_NO_FLAGS, MUTT_SAVE_NO_FLAGS) != 0)
+  struct Buffer *tempfile = buf_pool_get();
+  buf_mktemp(tempfile);
+  if (mutt_decode_save_attachment(fp, b, buf_string(tempfile), STATE_NO_FLAGS,
+                                  MUTT_SAVE_NO_FLAGS) != 0)
   {
-    unlink(mutt_buffer_string(tempfile));
+    unlink(buf_string(tempfile));
     goto cleanup;
   }
 
-  FILE *fp_tmp = fopen(mutt_buffer_string(tempfile), "r");
+  FILE *fp_tmp = fopen(buf_string(tempfile), "r");
   if (!fp_tmp)
   {
-    unlink(mutt_buffer_string(tempfile));
+    unlink(buf_string(tempfile));
     goto cleanup;
   }
 
@@ -2211,7 +2214,7 @@ static int pgp_check_traditional_one_body(FILE *fp, struct Body *b)
     }
   }
   mutt_file_fclose(&fp_tmp);
-  unlink(mutt_buffer_string(tempfile));
+  unlink(buf_string(tempfile));
 
   if (!enc && !sgn)
     goto cleanup;
@@ -2224,7 +2227,7 @@ static int pgp_check_traditional_one_body(FILE *fp, struct Body *b)
   rc = true;
 
 cleanup:
-  mutt_buffer_pool_release(&tempfile);
+  buf_pool_release(&tempfile);
   return rc;
 }
 
@@ -2385,8 +2388,7 @@ static void copy_clearsigned(gpgme_data_t data, struct State *state, char *chars
   /* fromcode comes from the MIME Content-Type charset label. It might
    * be a wrong label, so we want the ability to do corrections via
    * charset-hooks. Therefore we set flags to MUTT_ICONV_HOOK_FROM.  */
-  const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
-  struct FgetConv *fc = mutt_ch_fgetconv_open(fp, charset, c_charset, MUTT_ICONV_HOOK_FROM);
+  struct FgetConv *fc = mutt_ch_fgetconv_open(fp, charset, cc_charset(), MUTT_ICONV_HOOK_FROM);
 
   for (complete = true, armor_header = true;
        mutt_ch_fgetconvs(buf, sizeof(buf), fc); complete = (strchr(buf, '\n')))
@@ -2606,8 +2608,7 @@ int pgp_gpgme_application_handler(struct Body *m, struct State *state)
       {
         int c;
         rewind(fp_out);
-        const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
-        struct FgetConv *fc = mutt_ch_fgetconv_open(fp_out, "utf-8", c_charset,
+        struct FgetConv *fc = mutt_ch_fgetconv_open(fp_out, "utf-8", cc_charset(),
                                                     MUTT_ICONV_NO_FLAGS);
         while ((c = mutt_ch_fgetconv(fc)) != EOF)
         {
@@ -3354,17 +3355,17 @@ static struct CryptKeyInfo *crypt_ask_for_key(char *tag, char *whatfor, KeyFlags
 {
   struct CryptKeyInfo *key = NULL;
   struct CryptCache *l = NULL;
-  struct Buffer *resp = mutt_buffer_pool_get();
+  struct Buffer *resp = buf_pool_get();
 
   mutt_clear_error();
 
   if (whatfor)
   {
-    for (l = id_defaults; l; l = l->next)
+    for (l = IdDefaults; l; l = l->next)
     {
       if (mutt_istr_equal(whatfor, l->what))
       {
-        mutt_buffer_strcpy(resp, l->dflt);
+        buf_strcpy(resp, l->dflt);
         break;
       }
     }
@@ -3372,8 +3373,8 @@ static struct CryptKeyInfo *crypt_ask_for_key(char *tag, char *whatfor, KeyFlags
 
   while (true)
   {
-    mutt_buffer_reset(resp);
-    if (mutt_buffer_get_field(tag, resp, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0)
+    buf_reset(resp);
+    if (buf_get_field(tag, resp, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0)
     {
       goto done;
     }
@@ -3382,27 +3383,27 @@ static struct CryptKeyInfo *crypt_ask_for_key(char *tag, char *whatfor, KeyFlags
     {
       if (l)
       {
-        mutt_str_replace(&l->dflt, mutt_buffer_string(resp));
+        mutt_str_replace(&l->dflt, buf_string(resp));
       }
       else
       {
         l = mutt_mem_malloc(sizeof(struct CryptCache));
-        l->next = id_defaults;
-        id_defaults = l;
+        l->next = IdDefaults;
+        IdDefaults = l;
         l->what = mutt_str_dup(whatfor);
-        l->dflt = mutt_buffer_strdup(resp);
+        l->dflt = buf_strdup(resp);
       }
     }
 
-    key = crypt_getkeybystr(mutt_buffer_string(resp), abilities, app, forced_valid);
+    key = crypt_getkeybystr(buf_string(resp), abilities, app, forced_valid);
     if (key)
       goto done;
 
-    mutt_error(_("No matching keys found for \"%s\""), mutt_buffer_string(resp));
+    mutt_error(_("No matching keys found for \"%s\""), buf_string(resp));
   }
 
 done:
-  mutt_buffer_pool_release(&resp);
+  buf_pool_release(&resp);
   return key;
 }
 
@@ -3434,6 +3435,7 @@ static char *find_keys(const struct AddressList *addrlist, unsigned int app, boo
   struct AddressList hookal = TAILQ_HEAD_INITIALIZER(hookal);
 
   struct Address *a = NULL;
+  const bool c_crypt_confirm_hook = cs_subset_bool(NeoMutt->sub, "crypt_confirm_hook");
   TAILQ_FOREACH(a, addrlist, entries)
   {
     key_selected = false;
@@ -3449,7 +3451,6 @@ static char *find_keys(const struct AddressList *addrlist, unsigned int app, boo
       {
         keyid = crypt_hook->data;
         enum QuadOption ans = MUTT_YES;
-        const bool c_crypt_confirm_hook = cs_subset_bool(NeoMutt->sub, "crypt_confirm_hook");
         if (!oppenc_mode && c_crypt_confirm_hook)
         {
           snprintf(buf, sizeof(buf), _("Use keyID = \"%s\" for %s?"), keyid, p->mailbox);
@@ -3632,7 +3633,7 @@ int mutt_gpgme_select_secret_key(struct Buffer *keyid)
   choice = dlg_select_gpgme_key(results, NULL, "*", APPLICATION_PGP, NULL);
   if (!(choice && choice->kobj && choice->kobj->subkeys && choice->kobj->subkeys->fpr))
     goto cleanup;
-  mutt_buffer_strcpy(keyid, choice->kobj->subkeys->fpr);
+  buf_strcpy(keyid, choice->kobj->subkeys->fpr);
 
   rc = 0;
 
@@ -3965,9 +3966,9 @@ static bool verify_sender(struct Email *e)
 
   if (sender)
   {
-    if (signature_key)
+    if (SignatureKey)
     {
-      gpgme_key_t key = signature_key;
+      gpgme_key_t key = SignatureKey;
       gpgme_user_id_t uid = NULL;
       int sender_length = strlen(sender->mailbox);
       for (uid = key->uids; uid && rc; uid = uid->next)
@@ -4014,10 +4015,10 @@ static bool verify_sender(struct Email *e)
     mutt_any_key_to_continue(_("Failed to figure out sender"));
   }
 
-  if (signature_key)
+  if (SignatureKey)
   {
-    gpgme_key_unref(signature_key);
-    signature_key = NULL;
+    gpgme_key_unref(SignatureKey);
+    SignatureKey = NULL;
   }
 
   return rc;
@@ -4037,8 +4038,8 @@ int smime_gpgme_verify_sender(struct Email *e, struct Message *msg)
 void pgp_gpgme_set_sender(const char *sender)
 {
   mutt_debug(LL_DEBUG2, "setting to: %s\n", sender);
-  FREE(&current_sender);
-  current_sender = mutt_str_dup(sender);
+  FREE(&CurrentSender);
+  CurrentSender = mutt_str_dup(sender);
 }
 
 /**

@@ -66,7 +66,8 @@ struct PgpCache
   struct PgpCache *next; ///< Linked list
 };
 
-static struct PgpCache *id_defaults = NULL;
+/// Cache of GPGME keys
+static struct PgpCache *IdDefaults = NULL;
 
 // clang-format off
 typedef uint8_t PgpKeyValidFlags; ///< Flags for valid Pgp Key fields, e.g. #PGP_KV_VALID
@@ -180,17 +181,17 @@ struct PgpKeyInfo *pgp_ask_for_key(char *tag, char *whatfor, KeyFlags abilities,
 {
   struct PgpKeyInfo *key = NULL;
   struct PgpCache *l = NULL;
-  struct Buffer *resp = mutt_buffer_pool_get();
+  struct Buffer *resp = buf_pool_get();
 
   mutt_clear_error();
 
   if (whatfor)
   {
-    for (l = id_defaults; l; l = l->next)
+    for (l = IdDefaults; l; l = l->next)
     {
       if (mutt_istr_equal(whatfor, l->what))
       {
-        mutt_buffer_strcpy(resp, l->dflt);
+        buf_strcpy(resp, l->dflt);
         break;
       }
     }
@@ -198,8 +199,8 @@ struct PgpKeyInfo *pgp_ask_for_key(char *tag, char *whatfor, KeyFlags abilities,
 
   while (true)
   {
-    mutt_buffer_reset(resp);
-    if (mutt_buffer_get_field(tag, resp, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0)
+    buf_reset(resp);
+    if (buf_get_field(tag, resp, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0)
     {
       goto done;
     }
@@ -208,27 +209,27 @@ struct PgpKeyInfo *pgp_ask_for_key(char *tag, char *whatfor, KeyFlags abilities,
     {
       if (l)
       {
-        mutt_str_replace(&l->dflt, mutt_buffer_string(resp));
+        mutt_str_replace(&l->dflt, buf_string(resp));
       }
       else
       {
         l = mutt_mem_malloc(sizeof(struct PgpCache));
-        l->next = id_defaults;
-        id_defaults = l;
+        l->next = IdDefaults;
+        IdDefaults = l;
         l->what = mutt_str_dup(whatfor);
-        l->dflt = mutt_buffer_strdup(resp);
+        l->dflt = buf_strdup(resp);
       }
     }
 
-    key = pgp_getkeybystr(mutt_buffer_string(resp), abilities, keyring);
+    key = pgp_getkeybystr(buf_string(resp), abilities, keyring);
     if (key)
       goto done;
 
-    mutt_error(_("No matching keys found for \"%s\""), mutt_buffer_string(resp));
+    mutt_error(_("No matching keys found for \"%s\""), buf_string(resp));
   }
 
 done:
-  mutt_buffer_pool_release(&resp);
+  buf_pool_release(&resp);
   return key;
 }
 
@@ -254,9 +255,9 @@ struct Body *pgp_class_make_key_attachment(void)
   snprintf(tmp, sizeof(tmp), "0x%s", pgp_fpr_or_lkeyid(pgp_principal_key(key)));
   pgp_key_free(&key);
 
-  tempf = mutt_buffer_pool_get();
-  mutt_buffer_mktemp(tempf);
-  FILE *fp_tmp = mutt_file_fopen(mutt_buffer_string(tempf), "w");
+  tempf = buf_pool_get();
+  buf_mktemp(tempf);
+  FILE *fp_tmp = mutt_file_fopen(buf_string(tempf), "w");
   if (!fp_tmp)
   {
     mutt_perror(_("Can't create temporary file"));
@@ -268,7 +269,7 @@ struct Body *pgp_class_make_key_attachment(void)
   {
     mutt_perror(_("Can't open /dev/null"));
     mutt_file_fclose(&fp_tmp);
-    unlink(mutt_buffer_string(tempf));
+    unlink(buf_string(tempf));
     goto cleanup;
   }
 
@@ -278,7 +279,7 @@ struct Body *pgp_class_make_key_attachment(void)
   if (pid == -1)
   {
     mutt_perror(_("Can't create filter"));
-    unlink(mutt_buffer_string(tempf));
+    unlink(buf_string(tempf));
     mutt_file_fclose(&fp_tmp);
     mutt_file_fclose(&fp_null);
     goto cleanup;
@@ -290,7 +291,7 @@ struct Body *pgp_class_make_key_attachment(void)
   mutt_file_fclose(&fp_null);
 
   att = mutt_body_new();
-  att->filename = mutt_buffer_strdup(tempf);
+  att->filename = buf_strdup(tempf);
   att->unlink = true;
   att->use_disp = false;
   att->type = TYPE_APPLICATION;
@@ -299,11 +300,11 @@ struct Body *pgp_class_make_key_attachment(void)
   att->description = mutt_str_dup(buf);
   mutt_update_encoding(att, NeoMutt->sub);
 
-  stat(mutt_buffer_string(tempf), &st);
+  stat(buf_string(tempf), &st);
   att->length = st.st_size;
 
 cleanup:
-  mutt_buffer_pool_release(&tempf);
+  buf_pool_release(&tempf);
   return att;
 }
 

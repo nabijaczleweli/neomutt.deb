@@ -40,7 +40,6 @@
 #include "memory.h"
 #include "queue.h"
 #include "regex3.h"
-#include "string2.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
@@ -73,7 +72,25 @@ struct Lookup
 };
 TAILQ_HEAD(LookupList, Lookup);
 
+/// Lookup table of preferred character set names
 static struct LookupList Lookups = TAILQ_HEAD_INITIALIZER(Lookups);
+
+/**
+ * struct IconvCacheEntry - Cached iconv conversion descriptor
+ */
+struct IconvCacheEntry
+{
+  char *fromcode1; ///< Source character set
+  char *tocode1;   ///< Destination character set
+  iconv_t cd;      ///< iconv conversion descriptor
+};
+
+/// Max size of the iconv cache
+#define ICONV_CACHE_SIZE 16
+/// Cache of iconv conversion descriptors
+static struct IconvCacheEntry IconvCache[ICONV_CACHE_SIZE];
+/// Number of iconv descriptors in the cache
+static int IconvCacheUsed = 0;
 
 /**
  * struct MimeNames - MIME name lookup entry
@@ -94,7 +111,7 @@ struct MimeNames
  * @note It includes only the subset of character sets for which a preferred
  * MIME name is given.
  */
-const struct MimeNames PreferredMimeNames[] = {
+static const struct MimeNames PreferredMimeNames[] = {
   // clang-format off
   { "ansi_x3.4-1968",        "us-ascii"      },
   { "iso-ir-6",              "us-ascii"      },
@@ -554,6 +571,11 @@ const char *mutt_ch_charset_lookup(const char *chs)
  * label, or such. Misusing MUTT_ICONV_HOOK_FROM leads to unwanted interactions
  * in some setups.
  *
+ * Since calling iconv_open() repeatedly can be expensive, we keep a cache of
+ * the most recently used iconv_t objects, kept in LRU order. This means that
+ * you should not call iconv_close() on the object yourself. All remaining
+ * objects in the cache will exit when main() calls mutt_ch_cache_cleanup().
+ *
  * @note By design charset-hooks should never be, and are never, applied
  * to tocode.
  *
@@ -566,8 +588,6 @@ iconv_t mutt_ch_iconv_open(const char *tocode, const char *fromcode, uint8_t fla
   char fromcode1[128];
   const char *tocode2 = NULL, *fromcode2 = NULL;
   const char *tmp = NULL;
-
-  iconv_t cd;
 
   /* transform to MIME preferred charset names */
   mutt_ch_canonical_charset(tocode1, sizeof(tocode1), tocode);
@@ -583,6 +603,32 @@ iconv_t mutt_ch_iconv_open(const char *tocode, const char *fromcode, uint8_t fla
       mutt_ch_canonical_charset(fromcode1, sizeof(fromcode1), tmp);
   }
 
+  /* check if we have this pair cached already */
+  for (int i = 0; i < IconvCacheUsed; ++i)
+  {
+    if (strcmp(tocode1, IconvCache[i].tocode1) == 0 &&
+        strcmp(fromcode1, IconvCache[i].fromcode1) == 0)
+    {
+      iconv_t cd = IconvCache[i].cd;
+
+      /* make room for this one at the top */
+      struct IconvCacheEntry top = IconvCache[i];
+      for (int j = i; j-- > 0;)
+      {
+        IconvCache[j + 1] = IconvCache[j];
+      }
+      IconvCache[0] = top;
+
+      if (iconv_t_valid(cd))
+      {
+        /* reset state */
+        iconv(cd, NULL, NULL, NULL, NULL);
+      }
+      return cd;
+    }
+  }
+
+  /* not found in cache */
   /* always apply iconv-hooks to suit system's iconv tastes */
   tocode2 = mutt_ch_iconv_lookup(tocode1);
   tocode2 = tocode2 ? tocode2 : tocode1;
@@ -590,11 +636,37 @@ iconv_t mutt_ch_iconv_open(const char *tocode, const char *fromcode, uint8_t fla
   fromcode2 = fromcode2 ? fromcode2 : fromcode1;
 
   /* call system iconv with names it appreciates */
-  cd = iconv_open(tocode2, fromcode2);
-  if (cd != (iconv_t) -1)
-    return cd;
+  iconv_t cd = iconv_open(tocode2, fromcode2);
 
-  return (iconv_t) -1;
+  if (IconvCacheUsed == ICONV_CACHE_SIZE)
+  {
+    mutt_debug(LL_DEBUG2, "iconv: dropping %s -> %s from the cache\n",
+               IconvCache[IconvCacheUsed - 1].fromcode1,
+               IconvCache[IconvCacheUsed - 1].tocode1);
+    /* get rid of the oldest entry */
+    FREE(&IconvCache[IconvCacheUsed - 1].fromcode1);
+    FREE(&IconvCache[IconvCacheUsed - 1].tocode1);
+    if (iconv_t_valid(IconvCache[IconvCacheUsed - 1].cd))
+    {
+      iconv_close(IconvCache[IconvCacheUsed - 1].cd);
+    }
+    --IconvCacheUsed;
+  }
+
+  /* make room for this one at the top */
+  for (int j = IconvCacheUsed; j-- > 0;)
+  {
+    IconvCache[j + 1] = IconvCache[j];
+  }
+
+  ++IconvCacheUsed;
+
+  mutt_debug(LL_DEBUG2, "iconv: adding %s -> %s to the cache\n", fromcode1, tocode1);
+  IconvCache[0].fromcode1 = strdup(fromcode1);
+  IconvCache[0].tocode1 = strdup(tocode1);
+  IconvCache[0].cd = cd;
+
+  return cd;
 }
 
 /**
@@ -627,7 +699,7 @@ size_t mutt_ch_iconv(iconv_t cd, const char **inbuf, size_t *inbytesleft,
   {
     errno = 0;
     const size_t ret1 = iconv(cd, (ICONV_CONST char **) &ib, &ibl, &ob, &obl);
-    if (ret1 != (size_t) -1)
+    if (ret1 != ICONV_ILLEGAL_SEQ)
       rc += ret1;
     if (iconverrno)
       *iconverrno = errno;
@@ -719,7 +791,7 @@ int mutt_ch_check(const char *s, size_t slen, const char *from, const char *to)
 
   int rc = 0;
   iconv_t cd = mutt_ch_iconv_open(to, from, MUTT_ICONV_NO_FLAGS);
-  if (cd == (iconv_t) -1)
+  if (!iconv_t_valid(cd))
     return -1;
 
   size_t outlen = MB_LEN_MAX * slen;
@@ -727,11 +799,10 @@ int mutt_ch_check(const char *s, size_t slen, const char *from, const char *to)
   char *saved_out = out;
 
   const size_t convlen = iconv(cd, (ICONV_CONST char **) &s, &slen, &out, &outlen);
-  if (convlen == (size_t) -1)
+  if (convlen == ICONV_ILLEGAL_SEQ)
     rc = errno;
 
   FREE(&saved_out);
-  iconv_close(cd);
   return rc;
 }
 
@@ -765,7 +836,7 @@ int mutt_ch_convert_string(char **ps, const char *from, const char *to, uint8_t 
   int rc = 0;
 
   iconv_t cd = mutt_ch_iconv_open(to, from, flags);
-  if (cd == (iconv_t) -1)
+  if (!iconv_t_valid(cd))
     return -1;
 
   const char **inrepls = NULL;
@@ -782,7 +853,6 @@ int mutt_ch_convert_string(char **ps, const char *from, const char *to, uint8_t 
   size_t ibl = strlen(s);
   if (ibl >= (SIZE_MAX / MB_LEN_MAX))
   {
-    iconv_close(cd);
     return -1;
   }
   size_t obl = MB_LEN_MAX * ibl;
@@ -791,7 +861,6 @@ int mutt_ch_convert_string(char **ps, const char *from, const char *to, uint8_t 
 
   mutt_ch_iconv(cd, &ib, &ibl, &ob, &obl, inrepls, outrepl, &rc);
   iconv(cd, 0, 0, &ob, &obl);
-  iconv_close(cd);
 
   *ob = '\0';
 
@@ -834,9 +903,8 @@ bool mutt_ch_check_charset(const char *cs, bool strict)
   }
 
   iconv_t cd = mutt_ch_iconv_open(cs, cs, MUTT_ICONV_NO_FLAGS);
-  if (cd != (iconv_t) (-1))
+  if (iconv_t_valid(cd))
   {
-    iconv_close(cd);
     return true;
   }
 
@@ -856,12 +924,12 @@ bool mutt_ch_check_charset(const char *cs, bool strict)
 struct FgetConv *mutt_ch_fgetconv_open(FILE *fp, const char *from, const char *to, uint8_t flags)
 {
   struct FgetConv *fc = NULL;
-  iconv_t cd = (iconv_t) -1;
+  iconv_t cd = ICONV_T_INVALID;
 
   if (from && to)
     cd = mutt_ch_iconv_open(to, from, flags);
 
-  if (cd != (iconv_t) -1)
+  if (iconv_t_valid(cd))
   {
     static const char *repls[] = { "\357\277\275", "?", 0 };
 
@@ -890,8 +958,6 @@ void mutt_ch_fgetconv_close(struct FgetConv **fc)
   if (!fc || !*fc)
     return;
 
-  if ((*fc)->cd != (iconv_t) -1)
-    iconv_close((*fc)->cd);
   FREE(fc);
 }
 
@@ -909,7 +975,7 @@ int mutt_ch_fgetconv(struct FgetConv *fc)
 {
   if (!fc)
     return EOF;
-  if (fc->cd == (iconv_t) -1)
+  if (!iconv_t_valid(fc->cd))
     return fgetc(fc->fp);
   if (!fc->p)
     return EOF;
@@ -1095,4 +1161,21 @@ char *mutt_ch_choose(const char *fromcode, const struct Slist *charsets,
     mutt_str_replace(&tocode, canonical_buf);
   }
   return tocode;
+}
+
+/**
+ * mutt_ch_cache_cleanup - Clean up the cached iconv handles and charset strings
+ */
+void mutt_ch_cache_cleanup(void)
+{
+  for (int i = 0; i < IconvCacheUsed; ++i)
+  {
+    FREE(&IconvCache[i].fromcode1);
+    FREE(&IconvCache[i].tocode1);
+    if (iconv_t_valid(IconvCache[i].cd))
+    {
+      iconv_close(IconvCache[i].cd);
+    }
+  }
+  IconvCacheUsed = 0;
 }

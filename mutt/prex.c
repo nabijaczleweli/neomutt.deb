@@ -31,7 +31,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "prex.h"
-#include "logging.h"
+#include "logging2.h"
 #include "memory.h"
 
 #ifdef HAVE_PCRE2
@@ -159,25 +159,6 @@ static struct PrexStorage *prex(enum Prex which)
       "^\\#H ([[:alnum:]_\\.-]+) ([[:alnum:]]{4}( [[:alnum:]]{4}){7})[ \t]*$"
     },
     {
-      PREX_RFC5322_DATE,
-      PREX_RFC5322_DATE_MATCH_MAX,
-      /* Spec: https://tools.ietf.org/html/rfc5322#section-3.3 */
-      "^"
-        "(" PREX_DOW ", )?"       // Day of week
-        " *"
-        "([[:digit:]]{1,2}) "     // Day
-        PREX_MONTH                // Month
-        " ([[:digit:]]{2,4}) "    // Year
-        "([[:digit:]]{2})"        // Hour
-        ":([[:digit:]]{2})"       // Minute
-        "(:([[:digit:]]{2}))?"    // Second
-        " *"
-        "("
-        "([+-][[:digit:]]{4})|"   // TZ
-        "([[:alpha:]]+)"          // Obsolete TZ
-        ")"
-    },
-    {
       PREX_RFC5322_DATE_LAX,
       PREX_RFC5322_DATE_LAX_MATCH_MAX,
       /* Spec: https://tools.ietf.org/html/rfc5322#section-3.3 */
@@ -286,7 +267,7 @@ static struct PrexStorage *prex(enum Prex which)
     h->mdata = pcre2_match_data_create_from_pattern(h->re, NULL);
     uint32_t ccount = 0;
     pcre2_pattern_info(h->re, PCRE2_INFO_CAPTURECOUNT, &ccount);
-    assert(ccount + 1 == h->nmatches && "Number of matches do not match (...)");
+    assert(((ccount + 1) == h->nmatches) && "Number of matches do not match (...)");
     h->matches = mutt_mem_calloc(h->nmatches, sizeof(*h->matches));
 #else
     h->re = mutt_mem_calloc(1, sizeof(*h->re));

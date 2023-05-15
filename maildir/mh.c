@@ -506,10 +506,10 @@ static int mh_parse_dir(struct Mailbox *m, struct MdEmailArray *mda, struct Prog
   struct MdEmail *entry = NULL;
   struct Email *e = NULL;
 
-  struct Buffer *buf = mutt_buffer_pool_get();
-  mutt_buffer_strcpy(buf, mailbox_path(m));
+  struct Buffer *buf = buf_pool_get();
+  buf_strcpy(buf, mailbox_path(m));
 
-  DIR *dir = mutt_file_opendir(mutt_buffer_string(buf), MUTT_OPENDIR_NONE);
+  DIR *dir = mutt_file_opendir(buf_string(buf), MUTT_OPENDIR_NONE);
   if (!dir)
   {
     rc = -1;
@@ -547,7 +547,7 @@ static int mh_parse_dir(struct Mailbox *m, struct MdEmailArray *mda, struct Prog
   }
 
 cleanup:
-  mutt_buffer_pool_release(&buf);
+  buf_pool_release(&buf);
 
   return rc;
 }
@@ -678,7 +678,7 @@ static void mh_delayed_parsing(struct Mailbox *m, struct MdEmailArray *mda,
   mutt_hcache_close(hc);
 #endif
 
-  const short c_sort = cs_subset_sort(NeoMutt->sub, "sort");
+  const enum SortType c_sort = cs_subset_sort(NeoMutt->sub, "sort");
   if (m && mda && (ARRAY_SIZE(mda) > 0) && (c_sort == SORT_ORDER))
   {
     mutt_debug(LL_DEBUG3, "maildir: sorting %s into natural order\n", mailbox_path(m));
@@ -1254,7 +1254,7 @@ static enum MailboxType mh_path_probe(const char *path, const struct stat *st)
 /**
  * MxMhOps - MH Mailbox - Implements ::MxOps - @ingroup mx_api
  */
-struct MxOps MxMhOps = {
+const struct MxOps MxMhOps = {
   // clang-format off
   .type            = MUTT_MH,
   .name             = "mh",

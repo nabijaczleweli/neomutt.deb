@@ -27,6 +27,7 @@
  */
 
 #include "config.h"
+#include <ctype.h>
 #include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -71,7 +72,7 @@ static int check_sig(const char *s, struct Line *info, int offset)
     /* check for a blank line */
     while (*s)
     {
-      if (!IS_SPACE(*s))
+      if (!isspace(*s))
         return 0;
       s++;
     }
@@ -312,7 +313,7 @@ bool mutt_is_quote_line(char *line, regmatch_t *pmatch)
 {
   bool is_quote = false;
   const struct Regex *c_smileys = cs_subset_regex(NeoMutt->sub, "smileys");
-  regmatch_t pmatch_internal[1], smatch[1];
+  regmatch_t pmatch_internal[1];
 
   if (!pmatch)
     pmatch = pmatch_internal;
@@ -320,6 +321,7 @@ bool mutt_is_quote_line(char *line, regmatch_t *pmatch)
   const struct Regex *c_quote_regex = cs_subset_regex(NeoMutt->sub, "quote_regex");
   if (mutt_regex_capture(c_quote_regex, line, 1, pmatch))
   {
+    regmatch_t smatch[1];
     if (mutt_regex_capture(c_smileys, line, 1, smatch))
     {
       if (smatch[0].rm_so > 0)
@@ -374,7 +376,7 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw,
     if (buf[0] == '\n') /* end of header */
     {
       lines[line_num].cid = MT_COLOR_NORMAL;
-      mutt_window_get_coords(win, &braille_col, &braille_row);
+      mutt_window_get_coords(win, &BrailleCol, &BrailleRow);
     }
     else
     {
@@ -666,7 +668,7 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw,
 }
 
 /**
- * mutt_buffer_strip_formatting - Removes ANSI and backspace formatting
+ * buf_strip_formatting - Removes ANSI and backspace formatting
  * @param dest Buffer for the result
  * @param src  String to strip
  * @param strip_markers Remove
@@ -678,11 +680,11 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw,
  * This logic is pulled from the pager fill_buffer() function, for use
  * in stripping reply-quoted autoview output of ansi sequences.
  */
-void mutt_buffer_strip_formatting(struct Buffer *dest, const char *src, bool strip_markers)
+void buf_strip_formatting(struct Buffer *dest, const char *src, bool strip_markers)
 {
   const char *s = src;
 
-  mutt_buffer_reset(dest);
+  buf_reset(dest);
 
   if (!s)
     return;
@@ -695,14 +697,14 @@ void mutt_buffer_strip_formatting(struct Buffer *dest, const char *src, bool str
       {
         s += 2;
       }
-      else if (s[1] && mutt_buffer_len(dest)) /* bold or overstrike */
+      else if (s[1] && buf_len(dest)) /* bold or overstrike */
       {
         dest->dptr--;
-        mutt_buffer_addch(dest, s[1]);
+        buf_addch(dest, s[1]);
         s += 2;
       }
       else /* ^H */
-        mutt_buffer_addch(dest, *s++);
+        buf_addch(dest, *s++);
       continue;
     }
 
@@ -720,7 +722,7 @@ void mutt_buffer_strip_formatting(struct Buffer *dest, const char *src, bool str
     }
     else
     {
-      mutt_buffer_addch(dest, *s++);
+      buf_addch(dest, *s++);
     }
   }
 }
@@ -764,9 +766,9 @@ static int fill_buffer(FILE *fp, LOFF_T *bytes_read, LOFF_T offset, unsigned cha
     b_read = (int) (*bytes_read - offset);
     *buf_ready = 1;
 
-    mutt_buffer_init(&stripped);
-    mutt_buffer_alloc(&stripped, *blen);
-    mutt_buffer_strip_formatting(&stripped, (const char *) *buf, 1);
+    buf_init(&stripped);
+    buf_alloc(&stripped, *blen);
+    buf_strip_formatting(&stripped, (const char *) *buf, 1);
     /* This should be a noop, because *fmt should be NULL */
     FREE(fmt);
     *fmt = (unsigned char *) stripped.data;
@@ -834,9 +836,9 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
       break;
 
     k = mbrtowc(&wc, (char *) buf + ch, cnt - ch, &mbstate);
-    if ((k == (size_t) (-2)) || (k == (size_t) (-1)))
+    if ((k == ICONV_BUF_TOO_SMALL) || (k == ICONV_ILLEGAL_SEQ))
     {
-      if (k == (size_t) (-1))
+      if (k == ICONV_ILLEGAL_SEQ)
         memset(&mbstate, 0, sizeof(mbstate));
       mutt_debug(LL_DEBUG1, "mbrtowc returned %lu; errno = %d\n", k, errno);
       if ((col + 4) > wrap_cols)
@@ -872,12 +874,16 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
       wchar_t wc1 = 0;
       mbstate_t mbstate1 = mbstate;
       size_t k1 = mbrtowc(&wc1, (char *) buf + ch + k, cnt - ch - k, &mbstate1);
-      while ((k1 != (size_t) (-2)) && (k1 != (size_t) (-1)) && (k1 > 0) && (wc1 == '\b'))
+      while ((k1 != ICONV_BUF_TOO_SMALL) && (k1 != ICONV_ILLEGAL_SEQ) &&
+             (k1 > 0) && (wc1 == '\b'))
       {
         const size_t k2 = mbrtowc(&wc1, (char *) buf + ch + k + k1,
                                   cnt - ch - k - k1, &mbstate1);
-        if ((k2 == (size_t) (-2)) || (k2 == (size_t) (-1)) || (k2 == 0) || (!IsWPrint(wc1)))
+        if ((k2 == ICONV_BUF_TOO_SMALL) || (k2 == ICONV_ILLEGAL_SEQ) ||
+            (k2 == 0) || (!IsWPrint(wc1)))
+        {
           break;
+        }
 
         if (wc == wc1)
         {
@@ -906,7 +912,6 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
     {
       resolve_color(win, *lines, line_num, vch, flags, special, ansi);
       last_special = special;
-      // memset(ansi, 0, sizeof(*ansi));
     }
 
     /* no-break space, narrow no-break space */
@@ -1184,7 +1189,7 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
   if (c_smart_wrap)
   {
     if ((cnt < b_read) && (ch != -1) &&
-        !simple_color_is_header(cur_line->cid) && !IS_SPACE(buf[cnt]))
+        !simple_color_is_header(cur_line->cid) && !isspace(buf[cnt]))
     {
       buf_ptr = buf + ch;
       /* skip trailing blanks */

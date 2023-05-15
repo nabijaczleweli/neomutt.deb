@@ -16,11 +16,11 @@ use system cc cc-lib mutt-gettext mutt-iconv pkg-config
 ###############################################################################
 # Names and versions
 define PACKAGE          "neomutt"
-define PACKAGE_VERSION  "20230407"
+define PACKAGE_VERSION  "20230512"
 define BUGS_ADDRESS     "neomutt-devel@neomutt.org"
 
 # Subdirectories that contain additional Makefile.autosetup files
-set subdirs {po data docs contrib}
+set subdirs {po data docs contrib test}
 ###############################################################################
 
 ###############################################################################
@@ -72,9 +72,7 @@ set valid_options {
   nls=1                     => "Disable Native Language Support"
   with-nls:path             => "Location of libintl"
 # IDN
-  idn=1                     => "Disable GNU libidn for internationalized domain names"
-  with-idn:path             => "Location of GNU libidn"
-  idn2=0                    => "Enable GNU libidn2 for internationalized domain names"
+  idn2=1                    => "Enable GNU libidn2 for internationalized domain names"
   with-idn2:path            => "Location of GNU libidn2"
 # PCRE2
   pcre2=0                   => "Enable PCRE2 regular expressions"
@@ -114,7 +112,6 @@ set valid_options {
   asan=0                    => "Enable the Address Sanitizer"
   ubsan=0                   => "Enable the Undefined Behaviour Sanitizer"
   coverage=0                => "Enable Coverage Testing"
-  testing=0                 => "Enable Unit Testing"
   fuzzing                   => "Enable Fuzz Testing"
   compile-commands          => "Generate compile_commands.json (requires clang)"
 # Enable all options
@@ -131,7 +128,10 @@ set valid_options {
 }
 
 set deprecated_options  {
+  idn:
+  with-idn:=
   pkgconf:=
+  testing:=
   with-slang:
   with-ui:=
   with-gpgme:
@@ -169,10 +169,10 @@ if {1} {
   foreach opt {
     asan autocrypt bdb compile-commands coverage debug-backtrace debug-color debug-email
     debug-graphviz debug-notify debug-queue debug-window doc
-    everything fmemopen full-doc fuzzing gdbm gnutls gpgme gsasl gss homespool idn
+    everything fmemopen full-doc fuzzing gdbm gnutls gpgme gsasl gss homespool
     idn2 include-path-in-cflags inotify kyotocabinet lmdb locales-fix lua lz4
     mixmaster nls notmuch pcre2 pgp qdbm rocksdb sasl smime sqlite ssl
-    testing tdb tokyocabinet ubsan zlib zstd
+    tdb tokyocabinet ubsan zlib zstd
   } {
     define want-$opt [opt-bool $opt]
   }
@@ -181,7 +181,7 @@ if {1} {
   # relative --enable-opt to true. This allows "--with-opt=/usr" to be used as
   # a shortcut for "--opt --with-opt=/usr".
   foreach opt {
-    bdb gdbm gnutls gpgme gsasl gss homespool idn idn2 kyotocabinet lmdb lua lz4
+    bdb gdbm gnutls gpgme gsasl gss homespool idn2 kyotocabinet lmdb lua lz4
     mixmaster nls notmuch pcre2 qdbm rocksdb sasl sqlite ssl tdb tokyocabinet
     zlib zstd
   } {
@@ -287,6 +287,17 @@ if {1} {
     } else {
       return 0
     }
+  }
+
+  # lkill l p is the list of the elements in l that don't match p
+  proc lkill {l p} {
+    set res [list]
+    foreach elem $l {
+      if {![apply $p $elem]} {
+        lappend res $elem
+      }
+    }
+    set res
   }
 }
 ###############################################################################
@@ -553,13 +564,6 @@ if {[get-define want-sasl]} {
 }
 
 ###############################################################################
-# Unit Testing
-if {[get-define want-testing]} {
-  define ENABLE_UNIT_TESTS
-  lappend subdirs test
-}
-
-###############################################################################
 # Lua
 if {[get-define want-lua]} {
 
@@ -763,27 +767,7 @@ if {[get-define want-ssl] && ![get-define want-gnutls]} {
 
 ###############################################################################
 # GNU libidn
-if {[get-define want-idn] && [get-define want-idn2]} {
-  user-error "Cannot specify both --idn and --idn2"
-}
-if {[get-define want-idn]} {
-  proc find-idn1-includes {} {
-    # These are used to figure which header to include
-    if {!([cc-check-includes stringprep.h] || [cc-check-includes idn/stringprep.h]) ||
-        !([cc-check-includes idna.h] || [cc-check-includes idn/idna.h])} {
-      user-error "Unable to find GNU libidn"
-    }
-  }
-  pkgconf true libidn
-  find-idn1-includes
-  if {![cc-check-function-in-lib stringprep_check_version idn]} {
-    user-error "Unable to find stringprep_check_version in libidn"
-  }
-  cc-check-functions idna_to_unicode_utf8_from_utf8 idna_to_unicode_8z8z
-  cc-check-functions idna_to_ascii_from_utf8 idna_to_ascii_8z
-  cc-check-functions idna_to_ascii_lz idna_to_ascii_from_locale
-  define-feature libidn
-} elseif {[get-define want-idn2]} {
+if {[get-define want-idn2]} {
   proc find-idn2-includes {} {
     # These are used to figure which header to include
     if {!([cc-check-includes idn2.h] || [cc-check-includes idn/idn2.h])} {
@@ -795,8 +779,7 @@ if {[get-define want-idn]} {
   if {![cc-check-function-in-lib idn2_to_ascii_8z     idn2] ||
       ![cc-check-function-in-lib idn2_to_unicode_8z8z idn2] ||
       ![cc-check-function-in-lib idn2_check_version   idn2]} {
-    user-error "Unable to find required functions in GNU libidn2.\
-                Please consider using idn1 with './configure --idn'."
+    user-error "Unable to find required functions in GNU libidn2"
   }
   define-feature libidn
 }
@@ -1125,8 +1108,6 @@ if {[get-define want-compile-commands]} {
 ###############################################################################
 # Coverage Testing
 if {[get-define want-coverage]} {
-  define ENABLE_UNIT_TESTS
-  lappend subdirs test
   define ENABLE_COVERAGE
   define-append CFLAGS -fprofile-arcs -ftest-coverage
   define-append LDFLAGS -fprofile-arcs -ftest-coverage
@@ -1138,9 +1119,7 @@ set conststrings "\
   unsigned char cc_cflags\[\] = {[text2c [expr {
     [get-define want-include-path-in-cflags]
     ? [get-define CFLAGS]
-    : [lmap x [get-define CFLAGS] {
-        expr {[string equal -length 2 $x {-I}] ? [continue] : $x}
-      }]
+    : [lkill [get-define CFLAGS] {{x} {string equal -length 2 $x {-I}}}]
   }]]};\n\
   unsigned char configure_options\[\] = {[text2c $conf_options]};\n"
 if {[catch {set fd [open conststrings.c w]
@@ -1200,16 +1179,13 @@ if {[get-define CCACHE] ne {none}} {
 
 ###############################################################################
 # Generate targets and Makefile variables for subdirectories
-set vpath "\$(SRCDIR)"
+define VPATH "\$(SRCDIR)"
 foreach dir $subdirs {
-  append vpath ":\$(SRCDIR)/$dir"
   define-append ALL_TARGETS all-$dir
   define-append CLEAN_TARGETS clean-$dir
   define-append INSTALL_TARGETS install-$dir
   define-append UNINSTALL_TARGETS uninstall-$dir
-  define-append VPATH
 }
-define VPATH $vpath
 
 ###############################################################################
 # Define package timestamp (UTC) based on PACKAGE_VERSION for:
@@ -1225,16 +1201,8 @@ make-config-header config.h -auto $auto_rep -bare $bare_rep -str $str_rep
 
 ###############################################################################
 # Generate .clang_complete
-proc cflags-for-clang-complete {} {
-  lmap x [get-define CFLAGS] {
-    if {[string match "-MJ*" $x]} {
-      continue
-    } else {
-      set x
-    }
-  }
-}
-define cflags-one-per-line [string map {" " "\n"} [cflags-for-clang-complete]]
+define cflags-one-per-line [string map {" " "\n"} \
+  [lkill [get-define CFLAGS] {{x} {string equal -length 3 $x "-MJ"}}]]
 make-template .clang_complete.in
 
 ###############################################################################

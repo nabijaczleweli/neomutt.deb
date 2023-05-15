@@ -30,7 +30,7 @@
  *
  * In modified UTF-7:
  *   - printable ascii 0x20-0x25 and 0x27-0x7e represents itself.
- *   - "&" (0x26) is represented by the two-octet sequence "&-"
+ *   - "&" (0x26) is represented by the two-byte sequence "&-"
  *   - other values use the UTF-16 representation of the code point
  *     and encode it using a modified version of BASE64.
  *   - BASE64 mode is enabled by "&" and disabled by "-".
@@ -52,7 +52,6 @@
 #include "private.h"
 #include "mutt/lib.h"
 #include "config/lib.h"
-#include "core/lib.h"
 
 /**
  * Index64u - Lookup table for Base64 encoding/decoding
@@ -62,7 +61,7 @@
  *   utf7 A-Za-z0-9+,
  *   mime A-Za-z0-9+/
  */
-const int Index64u[128] = {
+static const int Index64u[128] = {
   // clang-format off
   -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
   -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1, -1,-1,-1,-1,
@@ -391,8 +390,11 @@ bail:
  */
 void imap_utf_encode(bool unicode, char **s)
 {
-  const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
-  if (!c_charset || !s || !*s)
+  if (!s || !*s)
+    return;
+
+  const char *c_charset = cc_charset();
+  if (!c_charset)
     return;
 
   if (unicode && mutt_ch_is_utf8(c_charset))
@@ -421,8 +423,11 @@ void imap_utf_encode(bool unicode, char **s)
  */
 void imap_utf_decode(bool unicode, char **s)
 {
-  const char *const c_charset = cs_subset_string(NeoMutt->sub, "charset");
-  if (!c_charset || !s || !*s)
+  if (!s || !*s)
+    return;
+
+  const char *c_charset = cc_charset();
+  if (!c_charset)
     return;
 
   if (unicode && mutt_ch_is_utf8(c_charset))

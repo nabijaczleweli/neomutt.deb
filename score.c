@@ -50,10 +50,11 @@ struct Score
   char *str;
   struct PatternList *pat;
   int val;
-  bool exact; ///< if this rule matches, don't evaluate any more
-  struct Score *next;
+  bool exact;         ///< If this rule matches, don't evaluate any more
+  struct Score *next; ///< Linked list
 };
 
+/// Linked list of email scoring rules
 static struct Score *ScoreList = NULL;
 
 /**
@@ -65,8 +66,8 @@ void mutt_check_rescore(struct Mailbox *m)
   const bool c_score = cs_subset_bool(NeoMutt->sub, "score");
   if (OptNeedRescore && c_score)
   {
-    const short c_sort = cs_subset_sort(NeoMutt->sub, "sort");
-    const short c_sort_aux = cs_subset_sort(NeoMutt->sub, "sort_aux");
+    const enum SortType c_sort = cs_subset_sort(NeoMutt->sub, "sort");
+    const enum SortType c_sort_aux = cs_subset_sort(NeoMutt->sub, "sort_aux");
     if (((c_sort & SORT_MASK) == SORT_SCORE) || ((c_sort_aux & SORT_MASK) == SORT_SCORE))
     {
       OptNeedResort = true;
@@ -92,15 +93,15 @@ enum CommandResult mutt_parse_score(struct Buffer *buf, struct Buffer *s,
   parse_extract_token(buf, s, TOKEN_NO_FLAGS);
   if (!MoreArgs(s))
   {
-    mutt_buffer_printf(err, _("%s: too few arguments"), "score");
+    buf_printf(err, _("%s: too few arguments"), "score");
     return MUTT_CMD_WARNING;
   }
-  pattern = mutt_buffer_strdup(buf);
+  pattern = buf_strdup(buf);
   parse_extract_token(buf, s, TOKEN_NO_FLAGS);
   if (MoreArgs(s))
   {
     FREE(&pattern);
-    mutt_buffer_printf(err, _("%s: too many arguments"), "score");
+    buf_printf(err, _("%s: too many arguments"), "score");
     return MUTT_CMD_WARNING;
   }
 
@@ -143,7 +144,7 @@ enum CommandResult mutt_parse_score(struct Buffer *buf, struct Buffer *s,
   if (!mutt_str_atoi_full(pc, &ptr->val))
   {
     FREE(&pattern);
-    mutt_buffer_strcpy(err, _("Error: score: invalid number"));
+    buf_strcpy(err, _("Error: score: invalid number"));
     return MUTT_CMD_ERROR;
   }
   OptNeedRescore = true;

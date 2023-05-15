@@ -42,8 +42,9 @@ struct Notify;
  */
 static const struct Mapping ConfigEventNames[] = {
   // clang-format off
-  { "NT_CONFIG_SET",   NT_CONFIG_SET   },
-  { "NT_CONFIG_RESET", NT_CONFIG_RESET },
+  { "NT_CONFIG_SET",     NT_CONFIG_SET     },
+  { "NT_CONFIG_RESET",   NT_CONFIG_RESET   },
+  { "NT_CONFIG_DELETED", NT_CONFIG_DELETED },
   { NULL, 0 },
   // clang-format on
 };
@@ -107,6 +108,10 @@ void cs_subset_free(struct ConfigSubset **ptr)
     return;
 
   struct ConfigSubset *sub = *ptr;
+
+  struct EventConfig ev_c = { sub, NULL, NULL };
+  mutt_debug(LL_NOTIFY, "NT_CONFIG_DELETED: ALL\n");
+  notify_send(sub->notify, NT_CONFIG, NT_CONFIG_DELETED, &ev_c);
 
   if (sub->cs && sub->name)
   {
@@ -487,4 +492,44 @@ int cs_subset_str_string_minus_equals(const struct ConfigSubset *sub, const char
   struct HashElem *he = cs_subset_create_inheritance(sub, name);
 
   return cs_subset_he_string_minus_equals(sub, he, value, err);
+}
+
+/**
+ * cs_subset_he_delete - Delete config item from a config
+ * @param sub   Config Subset
+ * @param he    HashElem representing config item
+ * @param err   Buffer for error messages
+ * @retval num Result, e.g. #CSR_SUCCESS
+ */
+int cs_subset_he_delete(const struct ConfigSubset *sub, struct HashElem *he, struct Buffer *err)
+{
+  if (!sub)
+    return CSR_ERR_CODE;
+
+  const char *name = mutt_str_dup(he->key.strkey);
+  int rc = cs_he_delete(sub->cs, he, err);
+
+  if (CSR_RESULT(rc) == CSR_SUCCESS)
+  {
+    struct EventConfig ev_c = { sub, name, NULL };
+    mutt_debug(LL_NOTIFY, "NT_CONFIG_DELETED: %s\n", name);
+    notify_send(sub->notify, NT_CONFIG, NT_CONFIG_DELETED, &ev_c);
+  }
+
+  FREE(&name);
+  return rc;
+}
+
+/**
+ * cs_subset_str_delete - Delete config item from a config by string
+ * @param sub   Config Subset
+ * @param name  Name of config item
+ * @param err   Buffer for error messages
+ * @retval num Result, e.g. #CSR_SUCCESS
+ */
+int cs_subset_str_delete(const struct ConfigSubset *sub, const char *name, struct Buffer *err)
+{
+  struct HashElem *he = cs_subset_create_inheritance(sub, name);
+
+  return cs_subset_he_delete(sub, he, err);
 }

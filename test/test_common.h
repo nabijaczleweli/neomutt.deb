@@ -26,25 +26,26 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
-
-struct NeoMutt;
+#include "mutt/lib.h"
 
 void test_gen_path(char *buf, size_t buflen, const char *fmt);
-void test_init(void);
-void test_fini(void);
 
-struct NeoMutt *test_neomutt_create(void);
-void            test_neomutt_destroy(struct NeoMutt **ptr);
+bool test_neomutt_create (void);
+void test_neomutt_destroy(void);
 
-#define TEST_CHECK_STR_EQ(expected, actual)                                    \
-  do                                                                           \
-  {                                                                            \
-    if (!TEST_CHECK(mutt_str_equal(expected, actual)))                         \
-    {                                                                          \
-      TEST_MSG("Expected: %s", expected);                                      \
-      TEST_MSG("Actual  : %s", actual);                                        \
-    }                                                                          \
-  } while (false)
+static inline bool test_check_str_eq(const char *actual, const char *expected, const char *file, int lnum)
+{
+  const bool rc = mutt_str_equal(actual, expected);
+  if (!acutest_check_(rc, file, lnum, "test_check_str_eq"))
+  {
+    TEST_MSG("Expected : %s", expected);
+    TEST_MSG("Actual   : %s", actual);
+  }
+
+  return rc;
+}
+
+#define TEST_CHECK_STR_EQ(actual, expected) test_check_str_eq(actual, expected, __FILE__, __LINE__)
 
 #define LONG_IS_64 (LONG_MAX == 9223372036854775807)
 

@@ -555,7 +555,7 @@ static int reopen_mailbox(struct Mailbox *m)
   m->verbose = false;
 
   /* our heuristics require the old mailbox to be unsorted */
-  const short c_sort = cs_subset_sort(NeoMutt->sub, "sort");
+  const enum SortType c_sort = cs_subset_sort(NeoMutt->sub, "sort");
   if (c_sort != SORT_ORDER)
   {
     cs_subset_str_native_set(NeoMutt->sub, "sort", SORT_ORDER, NULL);
@@ -1186,7 +1186,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
   enum MxStatus rc = MX_STATUS_ERROR;
 
   /* sort message by their position in the mailbox on disk */
-  const short c_sort = cs_subset_sort(NeoMutt->sub, "sort");
+  const enum SortType c_sort = cs_subset_sort(NeoMutt->sub, "sort");
   const unsigned char c_use_threads = cs_subset_enum(NeoMutt->sub, "use_threads");
   if (c_sort != SORT_ORDER)
   {
@@ -1231,9 +1231,9 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
   }
 
   /* Create a temporary file to write the new version of the mailbox in. */
-  tempfile = mutt_buffer_pool_get();
-  mutt_buffer_mktemp(tempfile);
-  int fd = open(mutt_buffer_string(tempfile), O_WRONLY | O_EXCL | O_CREAT, 0600);
+  tempfile = buf_pool_get();
+  buf_mktemp(tempfile);
+  int fd = open(buf_string(tempfile), O_WRONLY | O_EXCL | O_CREAT, 0600);
   if ((fd == -1) || !(fp = fdopen(fd, "w")))
   {
     if (fd != -1)
@@ -1306,7 +1306,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
       {
         if (fputs(MMDF_SEP, fp) == EOF)
         {
-          mutt_perror(mutt_buffer_string(tempfile));
+          mutt_perror(buf_string(tempfile));
           goto bail;
         }
       }
@@ -1322,7 +1322,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
       mx_msg_close(m, &msg);
       if (rc2 != 0)
       {
-        mutt_perror(mutt_buffer_string(tempfile));
+        mutt_perror(buf_string(tempfile));
         goto bail;
       }
 
@@ -1334,21 +1334,21 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
       new_offset[i - first].body = ftello(fp) - m->emails[i]->body->length + offset;
       mutt_body_free(&m->emails[i]->body->parts);
 
-      switch (m->type)
+      if (m->type == MUTT_MMDF)
       {
-        case MUTT_MMDF:
-          if (fputs(MMDF_SEP, fp) == EOF)
-          {
-            mutt_perror(mutt_buffer_string(tempfile));
-            goto bail;
-          }
-          break;
-        default:
-          if (fputs("\n", fp) == EOF)
-          {
-            mutt_perror(mutt_buffer_string(tempfile));
-            goto bail;
-          }
+        if (fputs(MMDF_SEP, fp) == EOF)
+        {
+          mutt_perror(buf_string(tempfile));
+          goto bail;
+        }
+      }
+      else
+      {
+        if (fputs("\n", fp) == EOF)
+        {
+          mutt_perror(buf_string(tempfile));
+          goto bail;
+        }
       }
     }
   }
@@ -1356,7 +1356,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
   if (mutt_file_fclose(&fp) != 0)
   {
     mutt_debug(LL_DEBUG1, "mutt_file_fclose (&) returned non-zero\n");
-    mutt_perror(mutt_buffer_string(tempfile));
+    mutt_perror(buf_string(tempfile));
     goto bail;
   }
 
@@ -1369,13 +1369,13 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
 
   unlink_tempfile = false;
 
-  fp = fopen(mutt_buffer_string(tempfile), "r");
+  fp = fopen(buf_string(tempfile), "r");
   if (!fp)
   {
     mutt_sig_unblock();
     mx_fastclose_mailbox(m, false);
     mutt_debug(LL_DEBUG1, "unable to reopen temp copy of mailbox!\n");
-    mutt_perror(mutt_buffer_string(tempfile));
+    mutt_perror(buf_string(tempfile));
     FREE(&new_offset);
     FREE(&old_offset);
     goto fatal;
@@ -1427,17 +1427,17 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
   {
     /* error occurred while writing the mailbox back, so keep the temp copy around */
 
-    struct Buffer *savefile = mutt_buffer_pool_get();
+    struct Buffer *savefile = buf_pool_get();
 
     const char *const c_tmp_dir = cs_subset_path(NeoMutt->sub, "tmp_dir");
-    mutt_buffer_printf(savefile, "%s/neomutt.%s-%s-%u", NONULL(c_tmp_dir),
-                       NONULL(Username), NONULL(ShortHostname), (unsigned int) getpid());
-    rename(mutt_buffer_string(tempfile), mutt_buffer_string(savefile));
+    buf_printf(savefile, "%s/neomutt.%s-%s-%u", NONULL(c_tmp_dir),
+               NONULL(Username), NONULL(ShortHostname), (unsigned int) getpid());
+    rename(buf_string(tempfile), buf_string(savefile));
     mutt_sig_unblock();
     mx_fastclose_mailbox(m, false);
-    mutt_buffer_pretty_mailbox(savefile);
-    mutt_error(_("Write failed!  Saved partial mailbox to %s"), mutt_buffer_string(savefile));
-    mutt_buffer_pool_release(&savefile);
+    buf_pretty_mailbox(savefile);
+    mutt_error(_("Write failed!  Saved partial mailbox to %s"), buf_string(savefile));
+    buf_pool_release(&savefile);
     FREE(&new_offset);
     FREE(&old_offset);
     goto fatal;
@@ -1454,7 +1454,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
   }
   if (!adata->fp)
   {
-    unlink(mutt_buffer_string(tempfile));
+    unlink(buf_string(tempfile));
     mutt_sig_unblock();
     mx_fastclose_mailbox(m, false);
     mutt_error(_("Fatal error!  Could not reopen mailbox!"));
@@ -1476,8 +1476,8 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
   }
   FREE(&new_offset);
   FREE(&old_offset);
-  unlink(mutt_buffer_string(tempfile)); /* remove partial copy of the mailbox */
-  mutt_buffer_pool_release(&tempfile);
+  unlink(buf_string(tempfile)); /* remove partial copy of the mailbox */
+  buf_pool_release(&tempfile);
   mutt_sig_unblock();
 
   const bool c_check_mbox_size = cs_subset_bool(NeoMutt->sub, "check_mbox_size");
@@ -1496,7 +1496,7 @@ bail: /* Come here in case of disaster */
   mutt_file_fclose(&fp);
 
   if (tempfile && unlink_tempfile)
-    unlink(mutt_buffer_string(tempfile));
+    unlink(buf_string(tempfile));
 
   /* restore offsets, as far as they are valid */
   if ((first >= 0) && old_offset)
@@ -1535,7 +1535,7 @@ bail: /* Come here in case of disaster */
   }
 
 fatal:
-  mutt_buffer_pool_release(&tempfile);
+  buf_pool_release(&tempfile);
   progress_free(&progress);
   return rc;
 }
@@ -1561,7 +1561,7 @@ static enum MxStatus mbox_mbox_close(struct Mailbox *m)
   mutt_file_fclose(&adata->fp);
 
   /* fix up the times so mailbox won't get confused */
-  if (m->peekonly && !mutt_buffer_is_empty(&m->pathbuf) &&
+  if (m->peekonly && !buf_is_empty(&m->pathbuf) &&
       (mutt_file_timespec_compare(&m->mtime, &adata->atime) > 0))
   {
 #ifdef HAVE_UTIMENSAT
@@ -1853,7 +1853,7 @@ static enum MxStatus mbox_mbox_check_stats(struct Mailbox *m, uint8_t flags)
 /**
  * MxMboxOps - Mbox Mailbox - Implements ::MxOps - @ingroup mx_api
  */
-struct MxOps MxMboxOps = {
+const struct MxOps MxMboxOps = {
   // clang-format off
   .type            = MUTT_MBOX,
   .name             = "mbox",
@@ -1885,7 +1885,7 @@ struct MxOps MxMboxOps = {
 /**
  * MxMmdfOps - MMDF Mailbox - Implements ::MxOps - @ingroup mx_api
  */
-struct MxOps MxMmdfOps = {
+const struct MxOps MxMmdfOps = {
   // clang-format off
   .type            = MUTT_MMDF,
   .name             = "mmdf",

@@ -106,7 +106,7 @@ static int multipart_validator(const struct ConfigSet *cs, const struct ConfigDe
   if (mutt_str_equal(str, "inline") || mutt_str_equal(str, "info"))
     return CSR_SUCCESS;
 
-  mutt_buffer_printf(err, _("Invalid value for option %s: %s"), cdef->name, str);
+  buf_printf(err, _("Invalid value for option %s: %s"), cdef->name, str);
   return CSR_ERR_INVALID;
 }
 
@@ -119,8 +119,7 @@ static int reply_validator(const struct ConfigSet *cs, const struct ConfigDef *c
   if (!OptAttachMsg)
     return CSR_SUCCESS;
 
-  mutt_buffer_printf(err, _("Option %s may not be set when in attach-message mode"),
-                     cdef->name);
+  buf_printf(err, _("Option %s may not be set when in attach-message mode"), cdef->name);
   return CSR_ERR_INVALID;
 }
 
@@ -191,6 +190,9 @@ static struct ConfigDef MainVars[] = {
   },
   { "collapse_unread", DT_BOOL, true, 0, NULL,
     "Prevent the collapse of threads with unread emails"
+  },
+  { "color_directcolor", DT_BOOL, false, 0, NULL,
+    "Use 24bit colors (aka truecolor aka directcolor)"
   },
   { "config_charset", DT_STRING, 0, 0, charset_validator,
     "Character set that the config files are in"
@@ -678,6 +680,7 @@ static void init_types(struct ConfigSet *cs)
   CONFIG_INIT_TYPE(cs, Enum);
   CONFIG_INIT_TYPE(cs, Long);
   CONFIG_INIT_TYPE(cs, Mbtable);
+  CONFIG_INIT_TYPE(cs, MyVar);
   CONFIG_INIT_TYPE(cs, Number);
   CONFIG_INIT_TYPE(cs, Path);
   CONFIG_INIT_TYPE(cs, Quad);

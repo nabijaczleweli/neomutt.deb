@@ -60,7 +60,8 @@
 #error "No hcache backend defined"
 #endif
 
-static unsigned int hcachever = 0x0;
+/// Header Cache version
+static unsigned int HcacheVer = 0x0;
 
 /**
  * header_size - Compute the size of the header with uuid validity and crc
@@ -272,42 +273,44 @@ static void hcache_per_folder(struct Buffer *hcpath, const char *path,
   {
     /* An existing file or a non-existing path not ending with a slash */
     mutt_encode_path(hcpath, path);
-    create_hcache_dir(mutt_buffer_string(hcpath));
+    create_hcache_dir(buf_string(hcpath));
     return;
   }
 
   /* We have a directory - no matter whether it exists, or not */
-  struct Buffer *hcfile = mutt_buffer_pool_get();
+  struct Buffer *hcfile = buf_pool_get();
   if (namer)
   {
     namer(folder, hcfile);
-    mutt_buffer_concat_path(hcpath, path, mutt_buffer_string(hcfile));
+    buf_concat_path(hcpath, path, buf_string(hcfile));
   }
   else
   {
     unsigned char m[16]; /* binary md5sum */
-    struct Buffer *name = mutt_buffer_pool_get();
+    struct Buffer *name = buf_pool_get();
 
     const char *const c_header_cache_backend = cs_subset_string(NeoMutt->sub, "header_cache_backend");
     const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
+    if (!ops)
+      return;
 
 #ifdef USE_HCACHE_COMPRESSION
     const char *const c_header_cache_compress_method = cs_subset_string(NeoMutt->sub, "header_cache_compress_method");
     const char *cm = c_header_cache_compress_method;
-    mutt_buffer_printf(name, "%s|%s%s", ops->name, folder, cm ? cm : "");
+    buf_printf(name, "%s|%s%s", ops->name, folder, cm ? cm : "");
 #else
-    mutt_buffer_printf(name, "%s|%s", ops->name, folder);
+    buf_printf(name, "%s|%s", ops->name, folder);
 #endif
-    mutt_md5(mutt_buffer_string(name), m);
-    mutt_buffer_reset(name);
+    mutt_md5(buf_string(name), m);
+    buf_reset(name);
     mutt_md5_toascii(m, name->data);
-    mutt_buffer_printf(hcpath, "%s%s%s", path, slash ? "" : "/", mutt_buffer_string(name));
-    mutt_buffer_pool_release(&name);
+    buf_printf(hcpath, "%s%s%s", path, slash ? "" : "/", buf_string(name));
+    buf_pool_release(&name);
   }
 
-  mutt_encode_path(hcpath, mutt_buffer_string(hcpath));
-  create_hcache_dir(mutt_buffer_string(hcpath));
-  mutt_buffer_pool_release(&hcfile);
+  mutt_encode_path(hcpath, buf_string(hcpath));
+  create_hcache_dir(buf_string(hcpath));
+  buf_pool_release(&hcfile);
 }
 
 /**
@@ -349,10 +352,10 @@ static void *fetch_raw(struct HeaderCache *hc, const char *key, size_t keylen, s
   if (!ops)
     return NULL;
 
-  struct Buffer path = mutt_buffer_make(1024);
-  keylen = mutt_buffer_printf(&path, "%s%.*s", hc->folder, (int) keylen, key);
-  void *blob = ops->fetch(hc->ctx, mutt_buffer_string(&path), keylen, dlen);
-  mutt_buffer_dealloc(&path);
+  struct Buffer path = buf_make(1024);
+  keylen = buf_printf(&path, "%s%.*s", hc->folder, (int) keylen, key);
+  void *blob = ops->fetch(hc->ctx, buf_string(&path), keylen, dlen);
+  buf_dealloc(&path);
   return blob;
 }
 
@@ -383,7 +386,7 @@ struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcach
   struct HeaderCache *hc = mutt_mem_calloc(1, sizeof(struct HeaderCache));
 
   /* Calculate the current hcache version from dynamic configuration */
-  if (hcachever == 0x0)
+  if (HcacheVer == 0x0)
   {
     union
     {
@@ -392,12 +395,12 @@ struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcach
     } digest;
     struct Md5Ctx md5ctx;
 
-    hcachever = HCACHEVER;
+    HcacheVer = HCACHEVER;
 
     mutt_md5_init_ctx(&md5ctx);
 
     /* Seed with the compiled-in header structure hash */
-    mutt_md5_process_bytes(&hcachever, sizeof(hcachever), &md5ctx);
+    mutt_md5_process_bytes(&HcacheVer, sizeof(HcacheVer), &md5ctx);
 
     /* Mix in user's spam list */
     struct Replace *sp = NULL;
@@ -416,7 +419,7 @@ struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcach
 
     /* Get a hash and take its bytes as an (unsigned int) hash version */
     mutt_md5_finish_ctx(&md5ctx, digest.charval);
-    hcachever = digest.intval;
+    HcacheVer = digest.intval;
   }
 
   const struct ComprOps *cops = NULL;
@@ -440,7 +443,7 @@ struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcach
 #endif
 
   hc->folder = get_foldername(folder);
-  hc->crc = hcachever;
+  hc->crc = HcacheVer;
 
   if (!path || (path[0] == '\0'))
   {
@@ -454,16 +457,16 @@ struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcach
     return NULL;
   }
 
-  struct Buffer *hcpath = mutt_buffer_pool_get();
+  struct Buffer *hcpath = buf_pool_get();
   hcache_per_folder(hcpath, path, hc->folder, namer);
 
-  hc->ctx = ops->open(mutt_buffer_string(hcpath));
+  hc->ctx = ops->open(buf_string(hcpath));
   if (!hc->ctx)
   {
     /* remove a possibly incompatible version */
-    if (unlink(mutt_buffer_string(hcpath)) == 0)
+    if (unlink(buf_string(hcpath)) == 0)
     {
-      hc->ctx = ops->open(mutt_buffer_string(hcpath));
+      hc->ctx = ops->open(buf_string(hcpath));
       if (!hc->ctx)
       {
         if (cops)
@@ -476,7 +479,7 @@ struct HeaderCache *mutt_hcache_open(const char *path, const char *folder, hcach
     }
   }
 
-  mutt_buffer_pool_release(&hcpath);
+  buf_pool_release(&hcpath);
   return hc;
 }
 
@@ -677,11 +680,11 @@ int mutt_hcache_store_raw(struct HeaderCache *hc, const char *key,
   if (!hc || !ops)
     return -1;
 
-  struct Buffer path = mutt_buffer_make(1024);
+  struct Buffer path = buf_make(1024);
 
-  keylen = mutt_buffer_printf(&path, "%s%.*s", hc->folder, (int) keylen, key);
-  int rc = ops->store(hc->ctx, mutt_buffer_string(&path), keylen, data, dlen);
-  mutt_buffer_dealloc(&path);
+  keylen = buf_printf(&path, "%s%.*s", hc->folder, (int) keylen, key);
+  int rc = ops->store(hc->ctx, buf_string(&path), keylen, data, dlen);
+  buf_dealloc(&path);
 
   return rc;
 }
@@ -696,12 +699,14 @@ int mutt_hcache_delete_record(struct HeaderCache *hc, const char *key, size_t ke
 
   const char *const c_header_cache_backend = cs_subset_string(NeoMutt->sub, "header_cache_backend");
   const struct StoreOps *ops = store_get_backend_ops(c_header_cache_backend);
+  if (!ops)
+    return -1;
 
-  struct Buffer path = mutt_buffer_make(1024);
+  struct Buffer path = buf_make(1024);
 
-  keylen = mutt_buffer_printf(&path, "%s%s", hc->folder, key);
+  keylen = buf_printf(&path, "%s%s", hc->folder, key);
 
-  int rc = ops->delete_record(hc->ctx, mutt_buffer_string(&path), keylen);
-  mutt_buffer_dealloc(&path);
+  int rc = ops->delete_record(hc->ctx, buf_string(&path), keylen);
+  buf_dealloc(&path);
   return rc;
 }

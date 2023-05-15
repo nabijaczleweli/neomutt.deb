@@ -1,18 +1,12 @@
 #include "config.h"
-#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include "mutt/logging.h"
-#include "config/set.h"
-#include "email/body.h"
-#include "email/email.h"
-#include "email/envelope.h"
-#include "email/mime.h"
-#include "email/parse.h"
-#include "core/neomutt.h"
-#include "globals.h"
+#include <stdio.h>
+#include "mutt/lib.h"
+#include "config/lib.h"
+#include "email/lib.h"
+#include "core/lib.h"
+#include "globals.h" // IWYU pragma: keep
 #include "init.h"
 
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
@@ -24,12 +18,15 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
   OptNoCurses = true;
   char file[] = "/tmp/mutt-fuzz";
   FILE *fp = fopen(file, "wb");
-  if (fp != NULL)
-  {
-    fwrite(data, 1, size, fp);
-    fclose(fp);
-  }
+  if (!fp)
+    return -1;
+
+  fwrite(data, 1, size, fp);
+  fclose(fp);
   fp = fopen(file, "rb");
+  if (!fp)
+    return -1;
+
   struct Email *e = email_new();
   struct Envelope *env = mutt_rfc822_read_header(fp, e, 0, 0);
   mutt_parse_part(fp, e->body);

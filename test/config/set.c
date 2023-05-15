@@ -31,6 +31,7 @@
 #include "config/lib.h"
 #include "core/lib.h"
 #include "common.h" // IWYU pragma: keep
+#include "test_common.h"
 
 // clang-format off
 static struct ConfigDef Vars[] = {
@@ -243,17 +244,112 @@ bool invalid_tests(struct ConfigSet *cs)
   return true;
 }
 
+bool creation_and_deletion_tests(struct ConfigSet *cs, struct Buffer *err)
+{
+  struct ConfigDef cherryDef = {
+    "Cherry", DT_BOOL, 1, 0, NULL,
+  };
+  struct ConfigDef damsonDef = {
+    "Damson", DT_BOOL, 1, 0, NULL,
+  };
+
+  {
+    buf_reset(err);
+    struct HashElem *cherry = cs_register_variable(cs, &cherryDef, err);
+    if (!TEST_CHECK(cherry != NULL))
+    {
+      TEST_MSG("Variable registration failed: %s\n", buf_string(err));
+      return false;
+    }
+
+    buf_reset(err);
+    struct HashElem *damson = cs_register_variable(cs, &damsonDef, err);
+    if (!TEST_CHECK(damson != NULL))
+    {
+      TEST_MSG("Variable registration failed: %s\n", buf_string(err));
+      return false;
+    }
+  }
+
+  {
+    struct ConfigDef my_cdef = { 0 };
+    struct HashElem *he = cs_create_variable(NULL, &my_cdef, err);
+    TEST_CHECK(he == NULL);
+
+    int rc = cs_he_delete(NULL, NULL, err);
+    TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
+    rc = cs_str_delete(NULL, NULL, err);
+    TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+  }
+
+  /* Dynamically created variables */
+  {
+    struct HashElem *cherry = cs_get_elem(cs, "Cherry");
+    buf_reset(err);
+    if (!TEST_CHECK(cs_he_delete(cs, cherry, err) == CSR_SUCCESS))
+    {
+      TEST_MSG("HashElem deletion failed: %s\n", buf_string(err));
+      return false;
+    }
+    cherry = cs_get_elem(cs, "Cherry");
+    if (!TEST_CHECK(cherry == NULL))
+    {
+      TEST_MSG("Cherry not deleted.\n");
+      return false;
+    }
+
+    buf_reset(err);
+    if (!TEST_CHECK(cs_str_delete(cs, "Damson", err) == CSR_SUCCESS))
+    {
+      TEST_MSG("String deletion failed: %s\n", buf_string(err));
+      return false;
+    }
+    struct HashElem *damson = cs_get_elem(cs, "Damson");
+    if (!TEST_CHECK(damson == NULL))
+    {
+      TEST_MSG("Damson not deleted.\n");
+      return false;
+    }
+  }
+
+  /* Delete unknown variable must fail */
+  if (!TEST_CHECK(cs_str_delete(cs, "does-not-exist", err) == CSR_ERR_UNKNOWN))
+  {
+    TEST_MSG("Deletion of non-existent variable succeeded but should have failed: %s\n",
+             buf_string(err));
+    return false;
+  }
+
+  /* Delete a variable from a global ConfigDef struct */
+  {
+    struct HashElem *banana = cs_get_elem(cs, "Banana");
+    buf_reset(err);
+    if (!TEST_CHECK(cs_he_delete(cs, banana, NULL) == CSR_SUCCESS))
+    {
+      TEST_MSG("HashElem deletion failed: %s\n", buf_string(err));
+      return false;
+    }
+    struct HashElem *banana_after = cs_get_elem(cs, "Banana");
+    if (!TEST_CHECK(banana_after == NULL))
+    {
+      TEST_MSG("Banana not deleted.\n");
+      return false;
+    }
+  }
+
+  return true;
+}
+
 void test_config_set(void)
 {
   log_line(__func__);
 
-  struct Buffer *err = mutt_buffer_pool_get();
+  struct Buffer *err = buf_pool_get();
 
   struct ConfigSet *cs = cs_new(30);
   if (!TEST_CHECK(cs != NULL))
     return;
-
-  NeoMutt = neomutt_new(cs);
 
   const struct ConfigSetType CstDummy = {
     DT_STRING, "dummy", NULL, NULL, NULL, NULL, NULL, NULL,
@@ -388,8 +484,11 @@ void test_config_set(void)
   if (!TEST_CHECK(!cst))
     return;
 
-  neomutt_free(&NeoMutt);
+  /* Test deleting elements.  This deletes Banana from cs! */
+  if (!creation_and_deletion_tests(cs, err))
+    return;
+
   cs_free(&cs);
-  mutt_buffer_pool_release(&err);
+  buf_pool_release(&err);
   log_line(__func__);
 }

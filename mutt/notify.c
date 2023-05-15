@@ -30,13 +30,13 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "notify.h"
-#include "logging.h"
+#include "logging2.h"
 #include "memory.h"
 #include "queue.h"
 
 /// Lookup table for NotifyType
 /// Must be the same size and order as #NotifyType
-static char *NotifyTypeNames[] = {
+static const char *NotifyTypeNames[] = {
   "NT_ALL",     "NT_ACCOUNT",  "NT_ALIAS",   "NT_ALTERN", "NT_ATTACH",
   "NT_BINDING", "NT_COLOR",    "NT_COMMAND", "NT_CONFIG", "NT_CONTEXT",
   "NT_EMAIL",   "NT_ENVELOPE", "NT_GLOBAL",  "NT_HEADER", "NT_INDEX",

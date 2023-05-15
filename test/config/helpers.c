@@ -29,6 +29,7 @@
 #include "config/lib.h"
 #include "core/lib.h"
 #include "common.h" // IWYU pragma: keep
+#include "test_common.h"
 
 // clang-format off
 static struct Mapping MboxTypeMap[] = {
@@ -87,61 +88,22 @@ static struct ConfigDef Vars[] = {
 };
 // clang-format on
 
-static struct ConfigSet *create_sample_data(void)
-{
-  struct ConfigSet *cs = cs_new(30);
-  if (!cs)
-    return NULL;
-
-  cs_register_type(cs, &CstAddress);
-  cs_register_type(cs, &CstBool);
-  cs_register_type(cs, &CstEnum);
-  cs_register_type(cs, &CstLong);
-  cs_register_type(cs, &CstMbtable);
-  cs_register_type(cs, &CstNumber);
-  cs_register_type(cs, &CstPath);
-  cs_register_type(cs, &CstQuad);
-  cs_register_type(cs, &CstPath);
-  cs_register_type(cs, &CstRegex);
-  cs_register_type(cs, &CstSlist);
-  cs_register_type(cs, &CstSort);
-  cs_register_type(cs, &CstString);
-
-  if (!cs_register_variables(cs, Vars, DT_NO_FLAGS))
-    return NULL;
-
-  return cs;
-}
-
 void test_config_helpers(void)
 {
-  struct ConfigSet *cs = create_sample_data();
-  if (!cs)
-    return;
+  TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, DT_NO_FLAGS));
 
-  NeoMutt = neomutt_new(cs);
-  if (!NeoMutt)
-    return;
-
-  struct ConfigSubset *sub = cs_subset_new(NULL, NULL, NULL);
-  if (!sub)
-    return;
-  sub->cs = cs;
+  struct ConfigSubset *sub = NeoMutt->sub;
 
   TEST_CHECK(cs_subset_address(sub, "Elderberry") != NULL);
   TEST_CHECK(cs_subset_bool(sub, "Apple") == false);
   TEST_CHECK(cs_subset_enum(sub, "Hawthorn") == 2);
   TEST_CHECK(cs_subset_long(sub, "Guava") == 0);
-  TEST_CHECK(mutt_str_equal(cs_subset_mbtable(sub, "Ilama")->orig_str, "abcdef"));
+  TEST_CHECK_STR_EQ(cs_subset_mbtable(sub, "Ilama")->orig_str, "abcdef");
   TEST_CHECK(cs_subset_number(sub, "Cherry") == 0);
-  TEST_CHECK(mutt_str_equal(cs_subset_path(sub, "Jackfruit"), "/etc/passwd"));
+  TEST_CHECK_STR_EQ(cs_subset_path(sub, "Jackfruit"), "/etc/passwd");
   TEST_CHECK(cs_subset_quad(sub, "Kumquat") == 0);
   TEST_CHECK(cs_subset_regex(sub, "Lemon") == 0);
   TEST_CHECK(cs_subset_slist(sub, "Olive") != NULL);
   TEST_CHECK(cs_subset_sort(sub, "Mango") == 1);
-  TEST_CHECK(mutt_str_equal(cs_subset_string(sub, "Nectarine"), "nectarine"));
-
-  neomutt_free(&NeoMutt);
-  cs_subset_free(&sub);
-  cs_free(&cs);
+  TEST_CHECK_STR_EQ(cs_subset_string(sub, "Nectarine"), "nectarine");
 }

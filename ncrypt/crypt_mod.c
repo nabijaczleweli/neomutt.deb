@@ -37,18 +37,19 @@
  */
 struct CryptModule
 {
-  struct CryptModuleSpecs *specs;    ///< Crypto module definition
-  STAILQ_ENTRY(CryptModule) entries; ///< Linked list
+  const struct CryptModuleSpecs *specs; ///< Crypto module definition
+  STAILQ_ENTRY(CryptModule) entries;    ///< Linked list
 };
 STAILQ_HEAD(CryptModuleList, CryptModule);
 
+/// Linked list of crypto modules, e.g. #CryptModSmimeClassic, #CryptModPgpGpgme
 static struct CryptModuleList CryptModules = STAILQ_HEAD_INITIALIZER(CryptModules);
 
 /**
  * crypto_module_register - Register a new crypto module
  * @param specs API functions
  */
-void crypto_module_register(struct CryptModuleSpecs *specs)
+void crypto_module_register(const struct CryptModuleSpecs *specs)
 {
   struct CryptModule *module = mutt_mem_calloc(1, sizeof(struct CryptModule));
   module->specs = specs;
@@ -62,9 +63,9 @@ void crypto_module_register(struct CryptModuleSpecs *specs)
  *
  * This function is usually used via the CRYPT_MOD_CALL[_CHECK] macros.
  */
-struct CryptModuleSpecs *crypto_module_lookup(int identifier)
+const struct CryptModuleSpecs *crypto_module_lookup(int identifier)
 {
-  struct CryptModule *module = NULL;
+  const struct CryptModule *module = NULL;
   STAILQ_FOREACH(module, &CryptModules, entries)
   {
     if (module->specs->identifier == identifier)

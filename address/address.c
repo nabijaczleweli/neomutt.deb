@@ -30,6 +30,7 @@
 
 #include "config.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include "mutt/lib.h"
@@ -39,32 +40,42 @@
 /**
  * AddressSpecials - Characters with special meaning for email addresses
  */
-const char AddressSpecials[] = "@.,:;<>[]\\\"()";
+const char AddressSpecials[] = "\"(),.:;<>@[\\]";
 
 /**
  * is_special - Is this character special to an email address?
  * @param ch Character
- */
-#define is_special(ch) strchr(AddressSpecials, ch)
-
-/**
- * AddressError - An out-of-band error code
+ * @param mask Bitmask of characters 32-95 that are special (others are always zero)
  *
- * Many of the Address functions set this variable on error.
- * Its values are defined in #AddressError.
- * Text for the errors can be looked up using #AddressErrors.
- */
-int AddressError = 0;
-
-/**
- * AddressErrors - Messages for the error codes in #AddressError
+ * Character bitmasks
  *
- * These must defined in the same order as enum AddressError.
+ * The four bitmasks below are used for matching characters at speed,
+ * instead of using `strchr(3)`.
+ *
+ * To generate them, consider the value of each character, e.g. `,` == 44.
+ * Now set the 44th bit of a `unsigned long long` (presumed to be 64 bits),
+ * i.e., 1ULL << 44. Repeat for each character.
+ *
+ * To test a character, say `(` (40), we check if the 40th bit is set in the mask.
+ *
+ * The characters we want to test, AddressSpecials, range in value between
+ * 34 and 93 (inclusive). This is too large for an integer type, so we subtract
+ * 32 to bring the values down to 2 to 61.
  */
-const char *const AddressErrors[] = {
-  "out of memory",   "mismatched parentheses", "mismatched quotes",
-  "bad route in <>", "bad address in <>",      "bad address spec",
-};
+#define is_special(ch, mask)                                                   \
+  ((ch) >= 32 && (ch) < 96 && ((mask >> ((ch) -32)) & 1))
+
+/** #AddressSpecials, for is_special() */
+#define ADDRESS_SPECIAL_MASK 0x380000015c005304ULL
+
+/** #AddressSpecials except " ( . \ */
+#define USER_SPECIAL_MASK 0x280000015c001200ULL
+
+/** #AddressSpecials except ( . [ \ ] */
+#define DOMAIN_SPECIAL_MASK 0x000000015c001204ULL
+
+/** #AddressSpecials except ( , . [ \ ] */
+#define ROUTE_SPECIAL_MASK 0x000000015c000204ULL
 
 /**
  * parse_comment - Extract a comment (parenthesised string)
@@ -104,7 +115,6 @@ static const char *parse_comment(const char *s, char *comment, size_t *commentle
   }
   if (level != 0)
   {
-    AddressError = ADDR_ERR_MISMATCH_PAREN;
     return NULL;
   }
   return s;
@@ -138,7 +148,6 @@ static const char *parse_quote(const char *s, char *token, size_t *tokenlen, siz
     (*tokenlen)++;
     s++;
   }
-  AddressError = ADDR_ERR_MISMATCH_QUOTE;
   return NULL;
 }
 
@@ -156,7 +165,7 @@ static const char *next_token(const char *s, char *token, size_t *tokenlen, size
     return parse_comment(s + 1, token, tokenlen, tokenmax);
   if (*s == '"')
     return parse_quote(s + 1, token, tokenlen, tokenmax);
-  if (*s && is_special(*s))
+  if (*s && is_special(*s, ADDRESS_SPECIAL_MASK))
   {
     if (*tokenlen < tokenmax)
       token[(*tokenlen)++] = *s;
@@ -164,7 +173,7 @@ static const char *next_token(const char *s, char *token, size_t *tokenlen, size
   }
   while (*s)
   {
-    if (mutt_str_is_email_wsp(*s) || is_special(*s))
+    if (mutt_str_is_email_wsp(*s) || is_special(*s, ADDRESS_SPECIAL_MASK))
       break;
     if (*tokenlen < tokenmax)
       token[(*tokenlen)++] = *s;
@@ -176,7 +185,7 @@ static const char *next_token(const char *s, char *token, size_t *tokenlen, size
 /**
  * parse_mailboxdomain - Extract part of an email address (and a comment)
  * @param[in]  s          String to parse
- * @param[in]  nonspecial Specific characters that are valid
+ * @param[in]  special_mask Characters that are special (see is_special())
  * @param[out] mailbox    Buffer for email address
  * @param[out] mailboxlen Length of saved email address
  * @param[in]  mailboxmax Length of mailbox buffer
@@ -197,7 +206,7 @@ static const char *next_token(const char *s, char *token, size_t *tokenlen, size
  * The first call will return "john.doe" with optional comment, "comment".
  * The second call will return "example.com" with optional comment, "comment".
  */
-static const char *parse_mailboxdomain(const char *s, const char *nonspecial,
+static const char *parse_mailboxdomain(const char *s, uint64_t special_mask,
                                        char *mailbox, size_t *mailboxlen,
                                        size_t mailboxmax, char *comment,
                                        size_t *commentlen, size_t commentmax)
@@ -210,7 +219,7 @@ static const char *parse_mailboxdomain(const char *s, const char *nonspecial,
     if ((*s == '\0'))
       return s;
 
-    if (!strchr(nonspecial, *s) && is_special(*s))
+    if (is_special(*s, special_mask))
       return s;
 
     if (*s == '(')
@@ -248,8 +257,8 @@ static const char *parse_address(const char *s, char *token, size_t *tokenlen,
                                  size_t tokenmax, char *comment, size_t *commentlen,
                                  size_t commentmax, struct Address *addr)
 {
-  s = parse_mailboxdomain(s, ".\"(\\", token, tokenlen, tokenmax, comment,
-                          commentlen, commentmax);
+  s = parse_mailboxdomain(s, USER_SPECIAL_MASK, token, tokenlen, tokenmax,
+                          comment, commentlen, commentmax);
   if (!s)
     return NULL;
 
@@ -257,8 +266,8 @@ static const char *parse_address(const char *s, char *token, size_t *tokenlen,
   {
     if (*tokenlen < tokenmax)
       token[(*tokenlen)++] = '@';
-    s = parse_mailboxdomain(s + 1, ".([]\\", token, tokenlen, tokenmax, comment,
-                            commentlen, commentmax);
+    s = parse_mailboxdomain(s + 1, DOMAIN_SPECIAL_MASK, token, tokenlen,
+                            tokenmax, comment, commentlen, commentmax);
     if (!s)
       return NULL;
   }
@@ -299,12 +308,11 @@ static const char *parse_route_addr(const char *s, char *comment, size_t *commen
     {
       if (tokenlen < (sizeof(token) - 1))
         token[tokenlen++] = '@';
-      s = parse_mailboxdomain(s + 1, ",.\\[](", token, &tokenlen,
+      s = parse_mailboxdomain(s + 1, ROUTE_SPECIAL_MASK, token, &tokenlen,
                               sizeof(token) - 1, comment, commentlen, commentmax);
     }
     if (!s || (*s != ':'))
     {
-      AddressError = ADDR_ERR_BAD_ROUTE;
       return NULL; /* invalid route */
     }
 
@@ -320,7 +328,6 @@ static const char *parse_route_addr(const char *s, char *comment, size_t *commen
 
   if (*s != '>')
   {
-    AddressError = ADDR_ERR_BAD_ROUTE_ADDR;
     return NULL;
   }
 
@@ -350,7 +357,6 @@ static const char *parse_addr_spec(const char *s, char *comment, size_t *comment
                     commentmax, addr);
   if (s && *s && (*s != ',') && (*s != ';'))
   {
-    AddressError = ADDR_ERR_BAD_ADDR_SPEC;
     return NULL;
   }
   return s;
@@ -467,7 +473,6 @@ int mutt_addrlist_parse(struct AddressList *al, const char *s)
   int parsed = 0;
   char comment[1024], phrase[1024];
   size_t phraselen = 0, commentlen = 0;
-  AddressError = 0;
 
   bool ws_pending = mutt_str_is_email_wsp(*s);
 
@@ -1036,34 +1041,34 @@ size_t mutt_addr_write(struct Buffer *buf, struct Address *addr, bool display)
     return 0;
   }
 
-  const size_t initial_len = mutt_buffer_len(buf);
+  const size_t initial_len = buf_len(buf);
 
   if (addr->personal)
   {
     if (strpbrk(addr->personal, AddressSpecials))
     {
-      mutt_buffer_addch(buf, '"');
+      buf_addch(buf, '"');
       for (const char *pc = addr->personal; *pc; pc++)
       {
         if ((*pc == '"') || (*pc == '\\'))
         {
-          mutt_buffer_addch(buf, '\\');
+          buf_addch(buf, '\\');
         }
-        mutt_buffer_addch(buf, *pc);
+        buf_addch(buf, *pc);
       }
-      mutt_buffer_addch(buf, '"');
+      buf_addch(buf, '"');
     }
     else
     {
-      mutt_buffer_addstr(buf, addr->personal);
+      buf_addstr(buf, addr->personal);
     }
 
-    mutt_buffer_addch(buf, ' ');
+    buf_addch(buf, ' ');
   }
 
   if (addr->personal || (addr->mailbox && (*addr->mailbox == '@')))
   {
-    mutt_buffer_addch(buf, '<');
+    buf_addch(buf, '<');
   }
 
   if (addr->mailbox)
@@ -1071,25 +1076,25 @@ size_t mutt_addr_write(struct Buffer *buf, struct Address *addr, bool display)
     if (!mutt_str_equal(addr->mailbox, "@"))
     {
       const char *a = display ? mutt_addr_for_display(addr) : addr->mailbox;
-      mutt_buffer_addstr(buf, a);
+      buf_addstr(buf, a);
     }
 
     if (addr->personal || (addr->mailbox && (*addr->mailbox == '@')))
     {
-      mutt_buffer_addch(buf, '>');
+      buf_addch(buf, '>');
     }
 
     if (addr->group)
     {
-      mutt_buffer_addstr(buf, ": ");
+      buf_addstr(buf, ": ");
     }
   }
   else
   {
-    mutt_buffer_addch(buf, ';');
+    buf_addch(buf, ';');
   }
 
-  return mutt_buffer_len(buf) - initial_len;
+  return buf_len(buf) - initial_len;
 }
 
 /**
@@ -1113,10 +1118,10 @@ static size_t addrlist_write(const struct AddressList *al, struct Buffer *buf,
 
   if (header)
   {
-    mutt_buffer_printf(buf, "%s: ", header);
+    buf_printf(buf, "%s: ", header);
   }
 
-  size_t cur_col = mutt_buffer_len(buf);
+  size_t cur_col = buf_len(buf);
   bool in_group = false;
   struct Address *a = NULL;
   TAILQ_FOREACH(a, al, entries)
@@ -1129,11 +1134,11 @@ static size_t addrlist_write(const struct AddressList *al, struct Buffer *buf,
     }
 
     // wrap if needed
-    const size_t cur_len = mutt_buffer_len(buf);
+    const size_t cur_len = buf_len(buf);
     cur_col += mutt_addr_write(buf, a, display);
     if (cur_col > cols)
     {
-      mutt_buffer_insert(buf, cur_len, "\n\t");
+      buf_insert(buf, cur_len, "\n\t");
       cur_col = 8;
     }
 
@@ -1142,13 +1147,13 @@ static size_t addrlist_write(const struct AddressList *al, struct Buffer *buf,
       // group terminator
       if (in_group && !a->mailbox && !a->personal)
       {
-        mutt_buffer_addch(buf, ';');
+        buf_addch(buf, ';');
         ++cur_col;
         in_group = false;
       }
       if (next && (next->mailbox || next->personal))
       {
-        mutt_buffer_addstr(buf, ", ");
+        buf_addstr(buf, ", ");
         cur_col += 2;
       }
       if (!next)
@@ -1158,7 +1163,7 @@ static size_t addrlist_write(const struct AddressList *al, struct Buffer *buf,
     }
   }
 
-  return mutt_buffer_len(buf);
+  return buf_len(buf);
 }
 
 /**
@@ -1211,10 +1216,10 @@ size_t mutt_addrlist_write_list(const struct AddressList *al, struct ListHead *l
   {
     struct Buffer buf = { 0 };
     mutt_addr_write(&buf, a, true);
-    if (!mutt_buffer_is_empty(&buf))
+    if (!buf_is_empty(&buf))
     {
       /* We're taking the ownership of the buffer string here */
-      mutt_list_insert_tail(list, (char *) mutt_buffer_string(&buf));
+      mutt_list_insert_tail(list, (char *) buf_string(&buf));
       count++;
     }
   }
@@ -1233,10 +1238,10 @@ size_t mutt_addrlist_write_list(const struct AddressList *al, struct ListHead *l
  */
 void mutt_addrlist_write_file(const struct AddressList *al, FILE *fp, const char *header)
 {
-  struct Buffer *buf = mutt_buffer_pool_get();
+  struct Buffer *buf = buf_pool_get();
   mutt_addrlist_write_wrap(al, buf, header);
-  fputs(mutt_buffer_string(buf), fp);
-  mutt_buffer_pool_release(&buf);
+  fputs(buf_string(buf), fp);
+  buf_pool_release(&buf);
   fputc('\n', fp);
 }
 

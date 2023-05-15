@@ -68,11 +68,11 @@
 
 ARRAY_HEAD(KeyEventArray, struct KeyEvent);
 
-/* These are used for macros and exec/push commands.
+/** These are used for macros and exec/push commands.
  * They can be temporarily ignored by setting OptIgnoreMacroEvents */
 static struct KeyEventArray MacroEvents = ARRAY_HEAD_INITIALIZER;
 
-/* These are used in all other "normal" situations, and are not
+/** These are used in all other "normal" situations, and are not
  * ignored when setting OptIgnoreMacroEvents */
 static struct KeyEventArray UngetKeyEvents = ARRAY_HEAD_INITIALIZER;
 
@@ -120,6 +120,8 @@ static void array_to_endcond(struct KeyEventArray *a)
   }
 }
 
+/// Timeout for getting a character from the user.
+/// @sa set_timeout()
 int MuttGetchTimeout = -1;
 
 /**
@@ -310,20 +312,20 @@ struct KeyEvent mutt_getch(void)
  */
 void mutt_edit_file(const char *editor, const char *file)
 {
-  struct Buffer *cmd = mutt_buffer_pool_get();
+  struct Buffer *cmd = buf_pool_get();
 
   mutt_endwin();
-  mutt_buffer_file_expand_fmt_quote(cmd, editor, file);
-  if (mutt_system(mutt_buffer_string(cmd)) != 0)
+  buf_file_expand_fmt_quote(cmd, editor, file);
+  if (mutt_system(buf_string(cmd)) != 0)
   {
-    mutt_error(_("Error running \"%s\""), mutt_buffer_string(cmd));
+    mutt_error(_("Error running \"%s\""), buf_string(cmd));
   }
   /* the terminal may have been resized while the editor owned it */
   mutt_resize_screen();
   keypad(stdscr, true);
   clearok(stdscr, true);
 
-  mutt_buffer_pool_release(&cmd);
+  buf_pool_release(&cmd);
 }
 
 /**
@@ -429,7 +431,7 @@ int mutt_any_key_to_continue(const char *s)
 }
 
 /**
- * mutt_buffer_enter_fname - Ask the user to select a file
+ * buf_enter_fname - Ask the user to select a file
  * @param[in]  prompt   Prompt
  * @param[in]  fname    Buffer for the result
  * @param[in]  mailbox  If true, select mailboxes
@@ -441,9 +443,9 @@ int mutt_any_key_to_continue(const char *s)
  * @retval  0 Success
  * @retval -1 Error
  */
-int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
-                            bool mailbox, struct Mailbox *m, bool multiple,
-                            char ***files, int *numfiles, SelectFileFlags flags)
+int buf_enter_fname(const char *prompt, struct Buffer *fname, bool mailbox,
+                    struct Mailbox *m, bool multiple, char ***files,
+                    int *numfiles, SelectFileFlags flags)
 {
   struct MuttWindow *win = msgwin_get_window();
   if (!win)
@@ -456,8 +458,8 @@ int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
   mutt_window_mvaddstr(win, 0, 0, prompt);
   mutt_window_addstr(win, _(" ('?' for list): "));
   mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
-  if (!mutt_buffer_is_empty(fname))
-    mutt_window_addstr(win, mutt_buffer_string(fname));
+  if (!buf_is_empty(fname))
+    mutt_window_addstr(win, buf_string(fname));
   mutt_window_clrtoeol(win);
   mutt_refresh();
 
@@ -479,7 +481,7 @@ int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
   }
   else if (ch.ch == '?')
   {
-    mutt_buffer_reset(fname);
+    buf_reset(fname);
 
     if (flags == MUTT_SEL_NO_FLAGS)
       flags = MUTT_SEL_FOLDER;
@@ -487,7 +489,7 @@ int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
       flags |= MUTT_SEL_MULTI;
     if (mailbox)
       flags |= MUTT_SEL_MAILBOX;
-    mutt_buffer_select_file(fname, flags, m, files, numfiles);
+    buf_select_file(fname, flags, m, files, numfiles);
   }
   else
   {
@@ -499,11 +501,11 @@ int mutt_buffer_enter_fname(const char *prompt, struct Buffer *fname,
     else
       mutt_unget_op(ch.op);
 
-    mutt_buffer_alloc(fname, 1024);
-    if (mutt_buffer_get_field(pc, fname, (mailbox ? MUTT_COMP_FILE_MBOX : MUTT_COMP_FILE) | MUTT_COMP_CLEAR,
-                              multiple, m, files, numfiles) != 0)
+    buf_alloc(fname, 1024);
+    if (buf_get_field(pc, fname, (mailbox ? MUTT_COMP_FILE_MBOX : MUTT_COMP_FILE) | MUTT_COMP_CLEAR,
+                      multiple, m, files, numfiles) != 0)
     {
-      mutt_buffer_reset(fname);
+      buf_reset(fname);
     }
     FREE(&pc);
   }
@@ -608,8 +610,8 @@ int mutt_addwch(struct MuttWindow *win, wchar_t wc)
   mbstate_t mbstate = { 0 };
   size_t n1, n2;
 
-  if (((n1 = wcrtomb(buf, wc, &mbstate)) == (size_t) (-1)) ||
-      ((n2 = wcrtomb(buf + n1, 0, &mbstate)) == (size_t) (-1)))
+  if (((n1 = wcrtomb(buf, wc, &mbstate)) == ICONV_ILLEGAL_SEQ) ||
+      ((n2 = wcrtomb(buf + n1, 0, &mbstate)) == ICONV_ILLEGAL_SEQ))
   {
     return -1; /* ERR */
   }
@@ -651,12 +653,12 @@ void mutt_simple_format(char *buf, size_t buflen, int min_width, int max_width,
   char *p = buf;
   for (; n && (k = mbrtowc(&wc, s, n, &mbstate1)); s += k, n -= k)
   {
-    if ((k == (size_t) (-1)) || (k == (size_t) (-2)))
+    if ((k == ICONV_ILLEGAL_SEQ) || (k == ICONV_BUF_TOO_SMALL))
     {
-      if ((k == (size_t) (-1)) && (errno == EILSEQ))
+      if ((k == ICONV_ILLEGAL_SEQ) && (errno == EILSEQ))
         memset(&mbstate1, 0, sizeof(mbstate1));
 
-      k = (k == (size_t) (-1)) ? 1 : n;
+      k = (k == ICONV_ILLEGAL_SEQ) ? 1 : n;
       wc = ReplacementChar;
     }
     if (escaped)
@@ -689,7 +691,7 @@ void mutt_simple_format(char *buf, size_t buflen, int min_width, int max_width,
       if (w > max_width)
         continue;
       size_t k2 = wcrtomb(scratch, wc, &mbstate2);
-      if ((k2 == (size_t) -1) || (k2 > buflen))
+      if ((k2 == ICONV_ILLEGAL_SEQ) || (k2 > buflen))
         continue;
 
       min_width -= w;
@@ -823,11 +825,11 @@ void mutt_paddstr(struct MuttWindow *win, int n, const char *s)
 
   for (; len && (k = mbrtowc(&wc, s, len, &mbstate)); s += k, len -= k)
   {
-    if ((k == (size_t) (-1)) || (k == (size_t) (-2)))
+    if ((k == ICONV_ILLEGAL_SEQ) || (k == ICONV_BUF_TOO_SMALL))
     {
-      if (k == (size_t) (-1))
+      if (k == ICONV_ILLEGAL_SEQ)
         memset(&mbstate, 0, sizeof(mbstate));
-      k = (k == (size_t) (-1)) ? 1 : len;
+      k = (k == ICONV_ILLEGAL_SEQ) ? 1 : len;
       wc = ReplacementChar;
     }
     if (!IsWPrint(wc))
@@ -870,11 +872,11 @@ size_t mutt_wstr_trunc(const char *src, size_t maxlen, size_t maxwid, size_t *wi
 
   for (w = 0; n && (cl = mbrtowc(&wc, src, n, &mbstate)); src += cl, n -= cl)
   {
-    if ((cl == (size_t) (-1)) || (cl == (size_t) (-2)))
+    if ((cl == ICONV_ILLEGAL_SEQ) || (cl == ICONV_BUF_TOO_SMALL))
     {
-      if (cl == (size_t) (-1))
+      if (cl == ICONV_ILLEGAL_SEQ)
         memset(&mbstate, 0, sizeof(mbstate));
-      cl = (cl == (size_t) (-1)) ? 1 : n;
+      cl = (cl == ICONV_ILLEGAL_SEQ) ? 1 : n;
       wc = ReplacementChar;
     }
     cw = wcwidth(wc);
@@ -937,11 +939,11 @@ size_t mutt_strnwidth(const char *s, size_t n)
       continue;
     }
 
-    if ((k == (size_t) (-1)) || (k == (size_t) (-2)))
+    if ((k == ICONV_ILLEGAL_SEQ) || (k == ICONV_BUF_TOO_SMALL))
     {
-      if (k == (size_t) (-1))
+      if (k == ICONV_ILLEGAL_SEQ)
         memset(&mbstate, 0, sizeof(mbstate));
-      k = (k == (size_t) (-1)) ? 1 : n;
+      k = (k == ICONV_ILLEGAL_SEQ) ? 1 : n;
       wc = ReplacementChar;
     }
     if (!IsWPrint(wc))
