@@ -187,14 +187,16 @@ void index_adjust_sort_threads(const struct ConfigSubset *sub)
 
 /**
  * config_reply_regex - React to changes to $reply_regex
- * @param m Mailbox
+ * @param mv Mailbox View
  * @retval  0 Successfully handled
  * @retval -1 Error
  */
-static int config_reply_regex(struct Mailbox *m)
+static int config_reply_regex(struct MailboxView *mv)
 {
-  if (!m)
+  if (!mv || !mv->mailbox)
     return 0;
+
+  struct Mailbox *m = mv->mailbox;
 
   regmatch_t pmatch[1];
 
@@ -237,7 +239,7 @@ static int index_altern_observer(struct NotifyCallback *nc)
   struct MuttWindow *dlg = dialog_find(win);
   struct IndexSharedData *shared = dlg->wdata;
 
-  mutt_alternates_reset(shared->mailbox);
+  mutt_alternates_reset(shared->mailbox_view);
   mutt_debug(LL_DEBUG5, "alternates done\n");
   return 0;
 }
@@ -256,7 +258,7 @@ static int index_attach_observer(struct NotifyCallback *nc)
   struct MuttWindow *dlg = dialog_find(win);
   struct IndexSharedData *shared = dlg->wdata;
 
-  mutt_attachments_reset(shared->mailbox);
+  mutt_attachments_reset(shared->mailbox_view);
   mutt_debug(LL_DEBUG5, "attachments done\n");
   return 0;
 }
@@ -347,7 +349,7 @@ static int index_config_observer(struct NotifyCallback *nc)
   {
     struct MuttWindow *dlg = dialog_find(win);
     struct IndexSharedData *shared = dlg->wdata;
-    config_reply_regex(shared->mailbox);
+    config_reply_regex(shared->mailbox_view);
     mutt_debug(LL_DEBUG5, "config done\n");
   }
   else if (mutt_str_equal(ev_c->name, "sort"))
@@ -481,7 +483,7 @@ static int index_subjrx_observer(struct NotifyCallback *nc)
   struct MuttWindow *dlg = dialog_find(win);
   struct IndexSharedData *shared = dlg->wdata;
 
-  subjrx_clear_mods(shared->mailbox);
+  subjrx_clear_mods(shared->mailbox_view);
   mutt_debug(LL_DEBUG5, "subjectrx done\n");
   return 0;
 }
@@ -500,7 +502,8 @@ static int index_window_observer(struct NotifyCallback *nc)
   struct Menu *menu = win->wdata;
   if (nc->event_subtype != NT_WINDOW_DELETE)
   {
-    menu_queue_redraw(menu, MENU_REDRAW_FULL | MENU_REDRAW_INDEX);
+    if (nc->event_subtype != NT_WINDOW_FOCUS)
+      menu_queue_redraw(menu, MENU_REDRAW_FULL | MENU_REDRAW_INDEX);
     return 0;
   }
 
@@ -585,6 +588,7 @@ static int index_repaint(struct MuttWindow *win)
 
 /**
  * index_window_new - Create a new Index Window (list of Emails)
+ * @param priv Private Index data
  * @retval ptr New Window
  */
 struct MuttWindow *index_window_new(struct IndexPrivateData *priv)
@@ -613,13 +617,13 @@ struct MuttWindow *index_window_new(struct IndexPrivateData *priv)
 }
 
 /**
- * get_current_mailbox - Get the current Mailbox
- * @retval ptr Current Mailbox
+ * get_current_mailbox_view - Get the current Mailbox view
+ * @retval ptr Current Mailbox view
  *
  * Search for the last (most recent) dialog that has an Index.
  * Then return the Mailbox from its shared data.
  */
-struct Mailbox *get_current_mailbox(void)
+struct MailboxView *get_current_mailbox_view(void)
 {
   if (!AllDialogsWindow)
     return NULL;
@@ -631,15 +635,31 @@ struct Mailbox *get_current_mailbox(void)
     if (win)
     {
       struct IndexSharedData *shared = win->wdata;
-      return shared->mailbox;
+      return shared->mailbox_view;
     }
 
     win = window_find_child(np, WT_DLG_POSTPONE);
     if (win)
     {
-      return postponed_get_mailbox(win);
+      return postponed_get_mailbox_view(win);
     }
   }
+
+  return NULL;
+}
+
+/**
+ * get_current_mailbox - Get the current Mailbox
+ * @retval ptr Current Mailbox
+ *
+ * Search for the last (most recent) dialog that has an Index.
+ * Then return the Mailbox from its shared data.
+ */
+struct Mailbox *get_current_mailbox(void)
+{
+  struct MailboxView *mv = get_current_mailbox_view();
+  if (mv)
+    return mv->mailbox;
 
   return NULL;
 }

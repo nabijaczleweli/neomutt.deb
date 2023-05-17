@@ -1165,21 +1165,21 @@ static int update_email_flags(struct Mailbox *m, struct Email *e, const char *ta
     {
       tag++;
       if (mutt_str_equal(tag, c_nm_unread_tag))
-        mutt_set_flag(m, e, MUTT_READ, true);
+        mutt_set_flag(m, e, MUTT_READ, true, true);
       else if (mutt_str_equal(tag, c_nm_replied_tag))
-        mutt_set_flag(m, e, MUTT_REPLIED, false);
+        mutt_set_flag(m, e, MUTT_REPLIED, false, true);
       else if (mutt_str_equal(tag, c_nm_flagged_tag))
-        mutt_set_flag(m, e, MUTT_FLAG, false);
+        mutt_set_flag(m, e, MUTT_FLAG, false, true);
     }
     else
     {
       tag = (tag[0] == '+') ? tag + 1 : tag;
       if (mutt_str_equal(tag, c_nm_unread_tag))
-        mutt_set_flag(m, e, MUTT_READ, false);
+        mutt_set_flag(m, e, MUTT_READ, false, true);
       else if (mutt_str_equal(tag, c_nm_replied_tag))
-        mutt_set_flag(m, e, MUTT_REPLIED, true);
+        mutt_set_flag(m, e, MUTT_REPLIED, true, true);
       else if (mutt_str_equal(tag, c_nm_flagged_tag))
-        mutt_set_flag(m, e, MUTT_FLAG, true);
+        mutt_set_flag(m, e, MUTT_FLAG, true, true);
     }
   }
 
@@ -2265,7 +2265,7 @@ static enum MxStatus nm_mbox_sync(struct Mailbox *m)
     buf_strcpy(&m->pathbuf, edata->folder);
     m->type = edata->type;
 
-    bool ok = maildir_sync_mailbox_message(m, i, h);
+    bool ok = maildir_sync_mailbox_message(m, e, h);
     if (!ok)
     {
       // Syncing file failed, query notmuch for new filepath.
@@ -2279,7 +2279,7 @@ static enum MxStatus nm_mbox_sync(struct Mailbox *m)
 
         buf_strcpy(&m->pathbuf, edata->folder);
         m->type = edata->type;
-        ok = maildir_sync_mailbox_message(m, i, h);
+        ok = maildir_sync_mailbox_message(m, e, h);
         m->type = MUTT_NOTMUCH;
       }
       nm_db_release(m);
@@ -2349,12 +2349,8 @@ static enum MxStatus nm_mbox_close(struct Mailbox *m)
 /**
  * nm_msg_open - Open an email message in a Mailbox - Implements MxOps::msg_open() - @ingroup mx_msg_open
  */
-static bool nm_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
+static bool nm_msg_open(struct Mailbox *m, struct Message *msg, struct Email *e)
 {
-  struct Email *e = m->emails[msgno];
-  if (!e)
-    return false;
-
   char path[PATH_MAX] = { 0 };
   char *folder = nm_email_get_folder(e);
 

@@ -642,7 +642,7 @@ static void set_changed_flag(struct Mailbox *m, struct Email *e, int local_chang
 
   /* Local changes have priority */
   if (local_changes == 0)
-    mutt_set_flag(m, e, flag_name, new_hd_flag);
+    mutt_set_flag(m, e, flag_name, new_hd_flag, true);
 }
 
 #ifdef USE_HCACHE
@@ -1807,10 +1807,10 @@ int imap_copy_messages(struct Mailbox *m, struct EmailList *el,
     const bool c_delete_untag = cs_subset_bool(NeoMutt->sub, "delete_untag");
     STAILQ_FOREACH(en, el, entries)
     {
-      mutt_set_flag(m, en->email, MUTT_DELETE, true);
-      mutt_set_flag(m, en->email, MUTT_PURGE, true);
+      mutt_set_flag(m, en->email, MUTT_DELETE, true, true);
+      mutt_set_flag(m, en->email, MUTT_PURGE, true, true);
       if (c_delete_untag)
-        mutt_set_flag(m, en->email, MUTT_TAG, false);
+        mutt_set_flag(m, en->email, MUTT_TAG, false, true);
     }
   }
 
@@ -1913,7 +1913,7 @@ char *imap_set_flags(struct Mailbox *m, struct Email *e, char *s, bool *server_c
   m->readonly = false;
 
   /* This is redundant with the following two checks. Removing:
-   * mutt_set_flag (m, e, MUTT_NEW, !(edata->read || edata->old)); */
+   * mutt_set_flag (m, e, MUTT_NEW, !(edata->read || edata->old), true); */
   set_changed_flag(m, e, local_changes, server_changes, MUTT_OLD, old_edata.old,
                    edata->old, e->old);
   set_changed_flag(m, e, local_changes, server_changes, MUTT_READ,
@@ -1938,7 +1938,7 @@ char *imap_set_flags(struct Mailbox *m, struct Email *e, char *s, bool *server_c
 /**
  * imap_msg_open - Open an email message in a Mailbox - Implements MxOps::msg_open() - @ingroup mx_msg_open
  */
-bool imap_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
+bool imap_msg_open(struct Mailbox *m, struct Message *msg, struct Email *e)
 {
   struct Envelope *newenv = NULL;
   char buf[1024] = { 0 };
@@ -1956,10 +1956,6 @@ bool imap_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
   struct ImapAccountData *adata = imap_adata_get(m);
 
   if (!adata || (adata->mailbox != m))
-    return false;
-
-  struct Email *e = m->emails[msgno];
-  if (!e)
     return false;
 
   msg->fp = msg_cache_get(m, e);
@@ -2097,7 +2093,7 @@ parsemsg:
   if (read != e->read)
   {
     e->read = read;
-    mutt_set_flag(m, e, MUTT_NEW, read);
+    mutt_set_flag(m, e, MUTT_NEW, read, true);
   }
 
   e->lines = 0;

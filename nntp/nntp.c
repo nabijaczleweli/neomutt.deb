@@ -1548,7 +1548,7 @@ static enum MxStatus check_mailbox(struct Mailbox *m)
           /* header marked as deleted, removing from context */
           if (deleted)
           {
-            mutt_set_flag(m, m->emails[i], MUTT_TAG, false);
+            mutt_set_flag(m, m->emails[i], MUTT_TAG, false, true);
             email_free(&m->emails[i]);
             continue;
           }
@@ -2589,13 +2589,9 @@ static enum MxStatus nntp_mbox_close(struct Mailbox *m)
 /**
  * nntp_msg_open - Open an email message in a Mailbox - Implements MxOps::msg_open() - @ingroup mx_msg_open
  */
-static bool nntp_msg_open(struct Mailbox *m, struct Message *msg, int msgno)
+static bool nntp_msg_open(struct Mailbox *m, struct Message *msg, struct Email *e)
 {
   struct NntpMboxData *mdata = m->mdata;
-  struct Email *e = m->emails[msgno];
-  if (!e)
-    return false;
-
   char article[16] = { 0 };
 
   /* try to get article from cache */

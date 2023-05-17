@@ -727,7 +727,7 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
       if (!e)
         break;
       if (!e->deleted && !e->old && !e->read)
-        mutt_set_flag(m, e, MUTT_OLD, true);
+        mutt_set_flag(m, e, MUTT_OLD, true, true);
     }
   }
 
@@ -788,8 +788,8 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
         {
           if (mutt_append_message(m_read, m, e, NULL, MUTT_CM_NO_FLAGS, CH_UPDATE_LEN) == 0)
           {
-            mutt_set_flag(m, e, MUTT_DELETE, true);
-            mutt_set_flag(m, e, MUTT_PURGE, true);
+            mutt_set_flag(m, e, MUTT_DELETE, true, true);
+            mutt_set_flag(m, e, MUTT_PURGE, true, true);
           }
           else
           {
@@ -1144,14 +1144,14 @@ enum MxStatus mx_mbox_check(struct Mailbox *m)
 
 /**
  * mx_msg_open - Return a stream pointer for a message
- * @param m   Mailbox
- * @param msgno Message number
+ * @param m Mailbox
+ * @param e Email
  * @retval ptr  Message
  * @retval NULL Error
  */
-struct Message *mx_msg_open(struct Mailbox *m, int msgno)
+struct Message *mx_msg_open(struct Mailbox *m, struct Email *e)
 {
-  if (!m || !m->emails || (msgno < 0) || (msgno >= m->msg_count))
+  if (!m || !e)
     return NULL;
 
   if (!m->mx_ops || !m->mx_ops->msg_open)
@@ -1161,7 +1161,7 @@ struct Message *mx_msg_open(struct Mailbox *m, int msgno)
   }
 
   struct Message *msg = mutt_mem_calloc(1, sizeof(struct Message));
-  if (!m->mx_ops->msg_open(m, msg, msgno))
+  if (!m->mx_ops->msg_open(m, msg, e))
     FREE(&msg);
 
   return msg;

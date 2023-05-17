@@ -47,6 +47,7 @@
 #include "send/lib.h"
 #include "globals.h" // IWYU pragma: keep
 #include "muttlib.h"
+#include "mview.h"
 
 /**
  * label_ref_dec - Decrease the refcount of a label
@@ -118,14 +119,16 @@ static bool label_message(struct Mailbox *m, struct Email *e, char *new_label)
 
 /**
  * mutt_label_message - Let the user label a message
- * @param m  Mailbox
+ * @param mv Mailbox
  * @param el List of Emails to label
  * @retval num Number of messages changed
  */
-int mutt_label_message(struct Mailbox *m, struct EmailList *el)
+int mutt_label_message(struct MailboxView *mv, struct EmailList *el)
 {
-  if (!m || !el)
+  if (!mv || !mv->mailbox || !el)
     return 0;
+
+  struct Mailbox *m = mv->mailbox;
 
   int changed = 0;
   struct Buffer *buf = buf_pool_get();
@@ -413,7 +416,7 @@ cleanup:
 void mutt_make_label_hash(struct Mailbox *m)
 {
   /* 131 is just a rough prime estimate of how many distinct
-   * labels someone might have in a m.  */
+   * labels someone might have in a mailbox.  */
   m->label_hash = mutt_hash_new(131, MUTT_HASH_STRDUP_KEYS);
 }
 
