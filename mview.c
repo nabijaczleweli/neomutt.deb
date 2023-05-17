@@ -1,6 +1,6 @@
 /**
  * @file
- * The "currently-open" mailbox
+ * View of a Mailbox
  *
  * @authors
  * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
@@ -21,9 +21,9 @@
  */
 
 /**
- * @page neo_mview The "currently-open" mailbox
+ * @page neo_mview View of a Mailbox
  *
- * The "currently-open" mailbox
+ * View of a Mailbox
  */
 
 #include "config.h"
@@ -71,10 +71,11 @@ void mview_free(struct MailboxView **ptr)
 
 /**
  * mview_new - Create a new MailboxView
- * @param m Mailbox
+ * @param m      Mailbox
+ * @param parent Notification parent
  * @retval ptr New MailboxView
  */
-struct MailboxView *mview_new(struct Mailbox *m)
+struct MailboxView *mview_new(struct Mailbox *m, struct Notify *parent)
 {
   if (!m)
     return NULL;
@@ -82,7 +83,7 @@ struct MailboxView *mview_new(struct Mailbox *m)
   struct MailboxView *mv = mutt_mem_calloc(1, sizeof(struct MailboxView));
 
   mv->notify = notify_new();
-  notify_set_parent(mv->notify, NeoMutt->notify);
+  notify_set_parent(mv->notify, parent);
   struct EventMview ev_m = { mv };
   mutt_debug(LL_NOTIFY, "NT_MVIEW_ADD: %p\n", mv);
   notify_send(mv->notify, NT_MVIEW, NT_MVIEW_ADD, &ev_m);
@@ -90,7 +91,7 @@ struct MailboxView *mview_new(struct Mailbox *m)
   notify_observer_add(m->notify, NT_MAILBOX, mview_mailbox_observer, mv);
 
   mv->mailbox = m;
-  mv->threads = mutt_thread_ctx_init(m);
+  mv->threads = mutt_thread_ctx_init(mv);
   mv->msg_in_pager = -1;
   mv->collapsed = false;
   mview_update(mv);
@@ -211,7 +212,7 @@ void mview_update(struct MailboxView *mv)
   }
 
   /* rethread from scratch */
-  mutt_sort_headers(mv->mailbox, mv->threads, true, &mv->vsize);
+  mutt_sort_headers(mv, true);
 }
 
 /**
@@ -332,7 +333,7 @@ int mview_mailbox_observer(struct NotifyCallback *nc)
       update_tables(mv);
       break;
     case NT_MAILBOX_RESORT:
-      mutt_sort_headers(mv->mailbox, mv->threads, true, &mv->vsize);
+      mutt_sort_headers(mv, true);
       break;
     default:
       return 0;

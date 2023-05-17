@@ -36,6 +36,7 @@
 #include "functions.h"
 #include "menu/lib.h"
 #include "pattern/lib.h"
+#include "mview.h"
 #include "opcodes.h"
 #include "protos.h"
 
@@ -47,11 +48,12 @@ struct Email;
 static int op_delete(struct PostponeData *pd, int op)
 {
   struct Menu *menu = pd->menu;
-  struct Mailbox *m = pd->mailbox;
+  struct MailboxView *mv = pd->mailbox_view;
+  struct Mailbox *m = mv->mailbox;
 
   const int index = menu_get_index(menu);
   /* should deleted draft messages be saved in the trash folder? */
-  mutt_set_flag(m, m->emails[index], MUTT_DELETE, (op == OP_DELETE));
+  mutt_set_flag(m, m->emails[index], MUTT_DELETE, (op == OP_DELETE), true);
   PostCount = m->msg_count - m->msg_deleted;
   const bool c_resolve = cs_subset_bool(NeoMutt->sub, "resolve");
   if (c_resolve && (index < (menu->max - 1)))
@@ -86,7 +88,9 @@ static int op_exit(struct PostponeData *pd, int op)
 static int op_generic_select_entry(struct PostponeData *pd, int op)
 {
   int index = menu_get_index(pd->menu);
-  pd->email = pd->mailbox->emails[index];
+  struct MailboxView *mv = pd->mailbox_view;
+  struct Mailbox *m = mv->mailbox;
+  pd->email = m->emails[index];
   pd->done = true;
   return FR_SUCCESS;
 }
@@ -97,7 +101,8 @@ static int op_generic_select_entry(struct PostponeData *pd, int op)
 static int op_search(struct PostponeData *pd, int op)
 {
   int index = menu_get_index(pd->menu);
-  index = mutt_search_command(pd->mailbox, pd->menu, index, op);
+  struct MailboxView *mv = pd->mailbox_view;
+  index = mutt_search_command(mv, pd->menu, index, op);
   if (index != -1)
     menu_set_index(pd->menu, index);
 
@@ -158,11 +163,11 @@ int postpone_function_dispatcher(struct MuttWindow *win, int op)
 }
 
 /**
- * postponed_get_mailbox - Extract the Mailbox from the Postponed Dialog
+ * postponed_get_mailbox_view - Extract the Mailbox from the Postponed Dialog
  * @param dlg Postponed Dialog
- * @retval ptr Mailbox
+ * @retval ptr Mailbox view
  */
-struct Mailbox *postponed_get_mailbox(struct MuttWindow *dlg)
+struct MailboxView *postponed_get_mailbox_view(struct MuttWindow *dlg)
 {
   if (!dlg)
     return NULL;
@@ -171,5 +176,5 @@ struct Mailbox *postponed_get_mailbox(struct MuttWindow *dlg)
   if (!pd)
     return NULL;
 
-  return pd->mailbox;
+  return pd->mailbox_view;
 }
