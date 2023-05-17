@@ -1,3 +1,13 @@
+neomutt (20230517+dfsg-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version 20230517+dfsg
+  * Rebase patches, dropping #3853 included upstream
+  * Update neomutt-test-files to 34f79ee9d91863a97f6e18700aea51157b8610cf
+  * d/rules: libgpgme{11 => }-dev
+
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Wed, 17 May 2023 17:18:56 +0200
+
 neomutt (20230512+dfsg-0.1) unstable; urgency=medium
 
   * Non-maintainer upload.
