@@ -12,10 +12,10 @@ to vi.
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/init.c b/init.c
-index 4bf39df..518977d 100644
+index 228d8d6..29cc7f3 100644
 --- a/init.c
 +++ b/init.c
-@@ -425,7 +425,7 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
+@@ -426,7 +426,7 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
    if (!env_ed)
      env_ed = mutt_str_getenv("EDITOR");
    if (!env_ed)
