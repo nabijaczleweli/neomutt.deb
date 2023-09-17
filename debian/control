@@ -5,6 +5,7 @@ Maintainer: Mutt maintainers <neomutt@packages.debian.org>
 Uploaders:
  Antonio Radici <antonio@debian.org>,
  Faidon Liambotis <paravoid@debian.org>
+Changed-By: наб <nabijaczleweli@nabijaczleweli.xyz>
 Build-Depends: debhelper (>= 10), dh-lua,
  docbook-xml,
  docbook-xsl,
