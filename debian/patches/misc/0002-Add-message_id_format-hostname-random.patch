@@ -1,0 +1,112 @@
+From c8c792b7f43341045d19dfbbd020bb82972a2efe Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=D0=BD=D0=B0=D0=B1?= <nabijaczleweli@nabijaczleweli.xyz>
+Date: Mon, 16 Oct 2023 16:33:27 +0200
+Subject: [PATCH 2/2] Add $message_id_format=hostname|random
+X-Mutt-PGP: OS
+
+random does the new 20230407 format after the @, hostname uses get_fqdn()
+
+The bit before the @ is unchanged
+
+The $message_id_format name mimicks the name it has in mutt; this can be
+extended, if desired, to handle its expando-based parser with just two
+compat streq()s. Or not
+
+Closes #4070
+---
+ docs/config.c  |  9 +++++++++
+ send/config.c  | 19 +++++++++++++++++++
+ send/sendlib.c | 15 ++++++++++++---
+ 3 files changed, 40 insertions(+), 3 deletions(-)
+
+diff --git a/docs/config.c b/docs/config.c
+index 97bb1ce8a..3f75b9891 100644
+--- a/docs/config.c
++++ b/docs/config.c
+@@ -1640,6 +1640,15 @@
+ ** when adding the domain part to addresses.
+ */
+ 
++{ "message_id_format", DT_STRING, "hostname" },
++/*
++** .pp
++** If "hostname", $$hostname, subject to $$hidden_host,
++** is used after the \fB@\fP in generated Message-Ids.
++** .pp
++** If "random", a random 12-byte alphanumeric string is used.
++*/
++
+ { "hidden_tags", DT_SLIST, "unread,draft,flagged,passed,replied,attachment,signed,encrypted" },
+ /*
+ ** .pp
+diff --git a/send/config.c b/send/config.c
+index bc27937b1..8d1a89e57 100644
+--- a/send/config.c
++++ b/send/config.c
+@@ -102,6 +102,22 @@ static int simple_command_validator(const struct ConfigSet *cs, const struct Con
+   return CSR_ERR_INVALID;
+ }
+ 
++/**
++ * message_id_format_validator - validate $message_id_format is in ["hostname", "random"]
++ */
++static int message_id_format_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef, intptr_t value, struct Buffer *err)
++{
++  const char *valstr = (const char *) value;
++  if (!valstr)
++    return CSR_SUCCESS;
++
++  if (mutt_str_equal(valstr, "hostname") || mutt_str_equal(valstr, "random"))
++    return CSR_SUCCESS;
++
++  buf_printf(err, _("Option %s must be one of: hostname, random"), cdef->name);
++  return CSR_ERR_INVALID;
++}
++
+ /**
+  * SendVars - Config definitions for the send library
+  */
+@@ -224,6 +240,9 @@ static struct ConfigDef SendVars[] = {
+   { "hidden_host", DT_BOOL, false, 0, NULL,
+     "Don't use the hostname, just the domain, when generating the message id"
+   },
++  { "message_id_format", DT_STRING, IP "hostname", 0, message_id_format_validator,
++    "'hostname' to use FQDN (subject to $hidden_host), 'random' to use a random string"
++  },
+   { "honor_followup_to", DT_QUAD, MUTT_YES, 0, NULL,
+     "Honour the 'Mail-Followup-To' header when group replying"
+   },
+diff --git a/send/sendlib.c b/send/sendlib.c
+index b2100acc5..776818d40 100644
+--- a/send/sendlib.c
++++ b/send/sendlib.c
+@@ -754,14 +754,23 @@ static char *gen_msgid(void)
+   const int ID_RIGHT_LEN = 12;
+   char rnd_id_left[ID_LEFT_LEN + 1];
+   char rnd_id_right[ID_RIGHT_LEN + 1];
++  const char *right;
++  const char *const c_message_id_format = cs_subset_string(NeoMutt->sub, "message_id_format");
+ 
+   mutt_rand_base32(rnd_id_left, sizeof(rnd_id_left) - 1);
+-  mutt_rand_base32(rnd_id_right, sizeof(rnd_id_right) - 1);
+   rnd_id_left[ID_LEFT_LEN] = 0;
+-  rnd_id_right[ID_RIGHT_LEN] = 0;
++
++  if (mutt_str_equal(c_message_id_format, "random"))
++  {
++    mutt_rand_base32(rnd_id_right, sizeof(rnd_id_right) - 1);
++    rnd_id_right[ID_RIGHT_LEN] = 0;
++    right = rnd_id_right;
++  }
++  else
++    right = mutt_fqdn(true, NeoMutt->sub);
+ 
+   char *ret;
+-  mutt_str_asprintf(&ret, "<%s@%s>", rnd_id_left, rnd_id_right);
++  mutt_str_asprintf(&ret, "<%s@%s>", rnd_id_left, right);
+   return ret;
+ }
+ 
+-- 
+2.39.2
+
