@@ -82,7 +82,6 @@ struct Menu
   int old_current;        ///< For driver use only
   int search_dir;         ///< Direction of search
   int num_tagged;         ///< Number of tagged entries
-  bool custom_search : 1; ///< The menu implements its own non-Menu::search()-compatible search, trickle OP_SEARCH*
 
   /**
    * @defgroup menu_make_entry make_entry()
@@ -131,7 +130,7 @@ struct Menu
    * @retval >0 Colour pair in an integer
    * @retval  0 No colour
    */
-  struct AttrColor *(*color)(struct Menu *menu, int line);
+  const struct AttrColor *(*color)(struct Menu *menu, int line);
 
   struct Notify *notify;  ///< Notifications
 

@@ -40,9 +40,9 @@
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
-#include "core/tmp.h"
+#include "core/lib.h"
 #include "gui/lib.h"
-#include "lib.h"
+#include "sendmail.h"
 #include "pager/lib.h"
 #include "format_flags.h"
 #include "globals.h"
@@ -56,8 +56,6 @@
 #define EX_OK 0
 #endif
 
-struct Mailbox;
-
 /* For execvp environment setting in send_msg() */
 #ifndef __USE_GNU
 extern char **environ;
@@ -65,7 +63,7 @@ extern char **environ;
 
 static SIG_ATOMIC_VOLATILE_T SigAlrm; ///< true after SIGALRM is received
 
-ARRAY_HEAD(SendmailArgs, const char *);
+ARRAY_HEAD(SendmailArgArray, const char *);
 
 /**
  * alarm_handler - Async notification of an alarm signal
@@ -89,7 +87,7 @@ static void alarm_handler(int sig)
  * @retval  0 Success
  * @retval >0 Failure, return code from sendmail
  */
-static int send_msg(const char *path, struct SendmailArgs *args,
+static int send_msg(const char *path, struct SendmailArgArray *args,
                     const char *msg, char **tempfile, int wait_time)
 {
   sigset_t set;
@@ -113,7 +111,8 @@ static int send_msg(const char *path, struct SendmailArgs *args,
   pid_t pid = fork();
   if (pid == 0)
   {
-    struct sigaction act, oldalrm;
+    struct sigaction act = { 0 };
+    struct sigaction oldalrm = { 0 };
 
     /* save parent's ID before setsid() */
     pid_t ppid = getppid();
@@ -197,7 +196,9 @@ static int send_msg(const char *path, struct SendmailArgs *args,
       alarm(wait_time);
     }
     else if (wait_time < 0)
+    {
       _exit(0xff & EX_OK);
+    }
 
     if (waitpid(pid, &st, 0) > 0)
     {
@@ -252,12 +253,12 @@ static int send_msg(const char *path, struct SendmailArgs *args,
  * @param[in, out] args    Array to add to
  * @param[in]  addr    Address to add
  */
-static void add_args_one(struct SendmailArgs *args, const struct Address *addr)
+static void add_args_one(struct SendmailArgArray *args, const struct Address *addr)
 {
   /* weed out group mailboxes, since those are for display only */
   if (addr->mailbox && !addr->group)
   {
-    ARRAY_ADD(args, addr->mailbox);
+    ARRAY_ADD(args, buf_string(addr->mailbox));
   }
 }
 
@@ -266,7 +267,7 @@ static void add_args_one(struct SendmailArgs *args, const struct Address *addr)
  * @param[in, out] args    Array to add to
  * @param[in]  al      Addresses to add
  */
-static void add_args(struct SendmailArgs *args, struct AddressList *al)
+static void add_args(struct SendmailArgArray *args, struct AddressList *al)
 {
   if (!al)
     return;
@@ -299,8 +300,8 @@ int mutt_invoke_sendmail(struct Mailbox *m, struct AddressList *from,
                          bool eightbit, struct ConfigSubset *sub)
 {
   char *ps = NULL, *path = NULL, *s = NULL, *childout = NULL;
-  struct SendmailArgs args = ARRAY_HEAD_INITIALIZER;
-  struct SendmailArgs extra_args = ARRAY_HEAD_INITIALIZER;
+  struct SendmailArgArray args = ARRAY_HEAD_INITIALIZER;
+  struct SendmailArgArray extra_args = ARRAY_HEAD_INITIALIZER;
   int i;
 
 #ifdef USE_NNTP
@@ -327,7 +328,6 @@ int mutt_invoke_sendmail(struct Mailbox *m, struct AddressList *from,
     s = mutt_str_dup(c_sendmail);
   }
 
-  /* ensure that $sendmail is set to avoid a crash. http://dev.mutt.org/trac/ticket/3548 */
   if (!s)
   {
     mutt_error(_("$sendmail must be set in order to send mail"));
@@ -461,7 +461,9 @@ int mutt_invoke_sendmail(struct Mailbox *m, struct AddressList *from,
     }
   }
   else if (childout)
+  {
     unlink(childout);
+  }
 
   FREE(&childout);
   FREE(&path);

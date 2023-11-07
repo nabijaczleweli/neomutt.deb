@@ -30,7 +30,6 @@
 #include "config.h"
 #include <stdbool.h>
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 #include "mutt/lib.h"
 #include "address/lib.h"
@@ -67,7 +66,7 @@ int mix_check_message(struct Email *e)
   struct Address *a = NULL;
   TAILQ_FOREACH(a, &e->env->to, entries)
   {
-    if (!a->group && !strchr(a->mailbox, '@'))
+    if (!a->group && !buf_find_char(a->mailbox, '@'))
     {
       need_hostname = true;
       break;

@@ -48,6 +48,7 @@ struct stat;
 struct MboxAccountData
 {
   FILE *fp;                           ///< Mailbox file
+  struct timespec mtime;              ///< Time Mailbox was last changed
   struct timespec atime;              ///< File's last-access time
   struct timespec stats_last_checked; ///< Mtime of mailbox the last time stats where checked
 
@@ -63,6 +64,5 @@ extern const struct MxOps MxMmdfOps;
 enum MxStatus    mbox_check(struct Mailbox *m, struct stat *st, bool check_stats);
 enum MailboxType mbox_path_probe(const char *path, const struct stat *st);
 void             mbox_reset_atime(struct Mailbox *m, struct stat *st);
-bool             mbox_test_new_folder(const char *path);
 
 #endif /* MUTT_MBOX_LIB_H */

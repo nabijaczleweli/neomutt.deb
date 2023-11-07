@@ -29,9 +29,9 @@
  *
  * ## Windows
  *
- * | Name                       | Type         | See Also               |
- * | :------------------------- | :----------- | :--------------------- |
- * | SMIME Key Selection Dialog | WT_DLG_SMIME | dlg_select_smime_key() |
+ * | Name                       | Type         | See Also    |
+ * | :------------------------- | :----------- | :---------- |
+ * | SMIME Key Selection Dialog | WT_DLG_SMIME | dlg_smime() |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -62,10 +62,9 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
-#include "keymap.h"
 #include "mutt_logging.h"
-#include "opcodes.h"
 #include "smime.h"
 #include "smime_functions.h"
 
@@ -106,7 +105,7 @@ static char *smime_key_flags(KeyFlags flags)
 }
 
 /**
- * smime_make_entry - Format a menu item for the smime key list - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * smime_make_entry - Format an S/MIME Key for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  */
 static void smime_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
 {
@@ -186,12 +185,14 @@ static void smime_key_table_free(struct Menu *menu, void **ptr)
 }
 
 /**
- * dlg_select_smime_key - Get the user to select a key
+ * dlg_smime - Get the user to select a key - @ingroup gui_dlg
  * @param keys  List of keys to select from
  * @param query String to match
  * @retval ptr Key selected by user
+ *
+ * The Select SMIME Key Dialog lets the user select an SMIME Key to use.
  */
-struct SmimeKey *dlg_select_smime_key(struct SmimeKey *keys, const char *query)
+struct SmimeKey *dlg_smime(struct SmimeKey *keys, const char *query)
 {
   struct SmimeKey **table = NULL;
   int table_size = 0;
@@ -228,6 +229,7 @@ struct SmimeKey *dlg_select_smime_key(struct SmimeKey *keys, const char *query)
 
   mutt_clear_error();
 
+  struct MuttWindow *old_focus = window_set_focus(menu->win);
   // ---------------------------------------------------------------------------
   // Event Loop
   int op = OP_NULL;
@@ -236,7 +238,7 @@ struct SmimeKey *dlg_select_smime_key(struct SmimeKey *keys, const char *query)
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(MENU_SMIME);
+    op = km_dokey(MENU_SMIME, GETCH_NO_FLAGS);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
@@ -255,6 +257,7 @@ struct SmimeKey *dlg_select_smime_key(struct SmimeKey *keys, const char *query)
       rc = global_function_dispatcher(NULL, op);
   } while (!sd.done);
 
+  window_set_focus(old_focus);
   simple_dialog_free(&dlg);
   return sd.key;
 }

@@ -40,7 +40,7 @@
  * @param b Child thread
  * @retval true b is a descendent of a (child, grandchild, etc)
  */
-bool is_descendant(struct MuttThread *a, const struct MuttThread *b)
+bool is_descendant(const struct MuttThread *a, const struct MuttThread *b)
 {
   while (a)
   {
@@ -149,7 +149,9 @@ struct Email *find_virtual(struct MuttThread *cur, bool reverse)
         cur = cur->next;
     }
     else if (reverse ? cur->prev : cur->next)
+    {
       cur = reverse ? cur->prev : cur->next;
+    }
     else
     {
       while (!(reverse ? cur->prev : cur->next))

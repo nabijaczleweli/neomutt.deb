@@ -37,12 +37,11 @@
 #include "functions.h"
 #include "lib.h"
 #include "index/lib.h"
-#include "opcodes.h"
 
 /**
  * sb_next - Find the next unhidden Mailbox
  * @param wdata Sidebar data
- * @retval bool true if found
+ * @retval true Mailbox found
  */
 bool sb_next(struct SidebarWindowData *wdata)
 {
@@ -81,7 +80,7 @@ static struct SbEntry **sb_next_new(struct SidebarWindowData *wdata, size_t begi
 /**
  * sb_prev - Find the previous unhidden Mailbox
  * @param wdata Sidebar data
- * @retval bool true if found
+ * @retval true Mailbox found
  */
 bool sb_prev(struct SidebarWindowData *wdata)
 {
@@ -227,7 +226,7 @@ static int op_sidebar_open(struct SidebarWindowData *wdata, int op)
     return FR_NO_ACTION;
 
   struct MuttWindow *dlg = dialog_find(win_sidebar);
-  dlg_change_folder(dlg, sb_get_highlight(win_sidebar));
+  index_change_folder(dlg, sb_get_highlight(win_sidebar));
   return FR_SUCCESS;
 }
 
@@ -392,7 +391,7 @@ int sb_function_dispatcher(struct MuttWindow *win, int op)
   if (rc == FR_UNKNOWN) // Not our function
     return rc;
 
-  const char *result = dispacher_get_retval_name(rc);
+  const char *result = dispatcher_get_retval_name(rc);
   mutt_debug(LL_DEBUG1, "Handled %s (%d) -> %s\n", opcodes_get_name(op), op, NONULL(result));
 
   return FR_SUCCESS; // Whatever the outcome, we handled it

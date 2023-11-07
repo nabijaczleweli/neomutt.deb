@@ -94,14 +94,13 @@ struct Mailbox
   int msg_tagged;                     ///< How many messages are tagged?
 
   struct Email **emails;              ///< Array of Emails
-  int email_max;                      ///< Number of pointers in emails
+  int email_max;                      ///< Size of `emails` array
   int *v2r;                           ///< Mapping from virtual to real msgno
   int vcount;                         ///< The number of virtual messages
 
   bool notified;                      ///< User has been notified
   enum MailboxType type;              ///< Mailbox type
   bool newly_created;                 ///< Mbox or mmdf just popped into existence
-  struct timespec mtime;              ///< Time Mailbox was last changed
   struct timespec last_visited;       ///< Time of last exit from this mailbox
 
   const struct MxOps *mx_ops;         ///< MXAPI callback functions
@@ -109,10 +108,12 @@ struct Mailbox
   bool append                 : 1;    ///< Mailbox is opened in append mode
   bool changed                : 1;    ///< Mailbox has been modified
   bool dontwrite              : 1;    ///< Don't write the mailbox on close
-  bool first_check_stats_done : 1;    ///< True when the check have been done at least on time
+  bool first_check_stats_done : 1;    ///< True when the check have been done at least one time
+  bool notify_user            : 1;    ///< Notify the user of new mail
   bool peekonly               : 1;    ///< Just taking a glance, revert atime
-  bool verbose                : 1;    ///< Display status messages?
+  bool poll_new_mail          : 1;    ///< Check for new mail
   bool readonly               : 1;    ///< Don't allow changes to the mailbox
+  bool verbose                : 1;    ///< Display status messages?
 
   AclFlags rights;                    ///< ACL bits, see #AclFlags
 
@@ -132,6 +133,8 @@ struct Mailbox
   void *mdata;                        ///< Driver specific data
 
   /**
+   * @defgroup mailbox_mdata_free Mailbox Private Data API
+   *
    * mdata_free - Free the private data attached to the Mailbox
    * @param ptr Private data to be freed
    *

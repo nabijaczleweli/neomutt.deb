@@ -109,13 +109,14 @@ void test_mutt_rfc822_read_line(void)
   }
 
   {
-    FILE fp = { 0 };
-    TEST_CHECK(mutt_rfc822_read_line(&fp, NULL) == 0);
+    FILE *fp = fopen("/dev/null", "r");
+    TEST_CHECK(mutt_rfc822_read_line(fp, NULL) == 0);
+    fclose(fp);
   }
 
   {
     char input[] = "Head1: val1.1\n  val1.2\nHead2: val2.1\n val2.2\n";
-    FILE *fp = fmemopen(input, sizeof(input), "r");
+    FILE *fp = test_make_file_with_contents(input, sizeof(input) - 1);
     struct Buffer *buf = buf_pool_get();
 
     const size_t after1 = mutt_rfc822_read_line(fp, buf);
@@ -135,7 +136,8 @@ void test_mutt_rfc822_read_line(void)
 
   for (size_t i = 0; i < mutt_array_size(test_data); ++i)
   {
-    FILE *fp = fmemopen(test_data[i].input, strlen(test_data[i].input) + 1, "r");
+    FILE *fp = test_make_file_with_contents(test_data[i].input,
+                                            strlen(test_data[i].input));
     struct Buffer *buf = buf_pool_get();
     const size_t read = mutt_rfc822_read_line(fp, buf);
     long off = ftell(fp);

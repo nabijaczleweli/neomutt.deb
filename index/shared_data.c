@@ -33,6 +33,7 @@
 #include "core/lib.h"
 #include "shared_data.h"
 #include "lib.h"
+#include "pattern/lib.h"
 #include "mview.h"
 
 /**
@@ -56,7 +57,7 @@ static int index_shared_mview_observer(struct NotifyCallback *nc)
     shared->mailbox_view = NULL;
 
   mutt_debug(LL_NOTIFY, "relay NT_MVIEW to shared data observers\n");
-  notify_send(shared->notify, nc->event_type, nc->event_subtype, shared);
+  notify_send(shared->notify, nc->event_type, nc->event_subtype, nc->event_data);
   return 0;
 }
 
@@ -81,7 +82,7 @@ static int index_shared_account_observer(struct NotifyCallback *nc)
     shared->account = NULL;
 
   mutt_debug(LL_NOTIFY, "relay NT_ACCOUNT to shared data observers\n");
-  notify_send(shared->notify, nc->event_type, nc->event_subtype, shared);
+  notify_send(shared->notify, nc->event_type, nc->event_subtype, nc->event_data);
   return 0;
 }
 
@@ -106,7 +107,7 @@ static int index_shared_mailbox_observer(struct NotifyCallback *nc)
     shared->mailbox = NULL;
 
   mutt_debug(LL_NOTIFY, "relay NT_MAILBOX to shared data observers\n");
-  notify_send(shared->notify, nc->event_type, nc->event_subtype, ev_m);
+  notify_send(shared->notify, nc->event_type, nc->event_subtype, nc->event_data);
   return 0;
 }
 
@@ -140,12 +141,13 @@ static int index_shared_email_observer(struct NotifyCallback *nc)
   if (nc->event_subtype == NT_EMAIL_DELETE)
   {
     shared->email = NULL;
-    mutt_debug(LL_NOTIFY, "NT_INDEX_EMAIL: %p\n", shared->email);
+    mutt_debug(LL_NOTIFY, "NT_INDEX_EMAIL: %p\n", (void *) shared->email);
     notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, shared);
   }
 
-  mutt_debug(LL_NOTIFY, "relay NT_EMAIL %p to shared data observers\n", shared->email);
-  notify_send(shared->notify, nc->event_type, nc->event_subtype, shared);
+  mutt_debug(LL_NOTIFY, "relay NT_EMAIL %p to shared data observers\n",
+             (void *) shared->email);
+  notify_send(shared->notify, nc->event_type, nc->event_subtype, nc->event_data);
   return 0;
 }
 
@@ -219,7 +221,7 @@ void index_shared_data_set_mview(struct IndexSharedData *shared, struct MailboxV
 
   if (subtype != NT_INDEX_NO_FLAGS)
   {
-    mutt_debug(LL_NOTIFY, "NT_INDEX: %p\n", shared);
+    mutt_debug(LL_NOTIFY, "NT_INDEX: %p\n", (void *) shared);
     notify_send(shared->notify, NT_INDEX, subtype, shared);
   }
 }
@@ -246,7 +248,7 @@ void index_shared_data_set_email(struct IndexSharedData *shared, struct Email *e
     if (e)
       notify_observer_add(e->notify, NT_EMAIL, index_shared_email_observer, shared);
 
-    mutt_debug(LL_NOTIFY, "NT_INDEX_EMAIL: %p\n", shared->email);
+    mutt_debug(LL_NOTIFY, "NT_INDEX_EMAIL: %p\n", (void *) shared->email);
     notify_send(shared->notify, NT_INDEX, NT_INDEX_EMAIL, shared);
   }
 }
@@ -279,7 +281,7 @@ void index_shared_data_free(struct MuttWindow *win, void **ptr)
 
   struct IndexSharedData *shared = *ptr;
 
-  mutt_debug(LL_NOTIFY, "NT_INDEX_DELETE: %p\n", shared);
+  mutt_debug(LL_NOTIFY, "NT_INDEX_DELETE: %p\n", (void *) shared);
   notify_send(shared->notify, NT_INDEX, NT_INDEX_DELETE, shared);
   notify_free(&shared->notify);
 
@@ -291,6 +293,8 @@ void index_shared_data_free(struct MuttWindow *win, void **ptr)
     notify_observer_remove(shared->mailbox->notify, index_shared_mailbox_observer, shared);
   if (shared->email)
     notify_observer_remove(shared->email->notify, index_shared_email_observer, shared);
+
+  search_state_free(&shared->search_state);
 
   FREE(ptr);
 }
@@ -305,8 +309,9 @@ struct IndexSharedData *index_shared_data_new(void)
 
   shared->notify = notify_new();
   shared->sub = NeoMutt->sub;
+  shared->search_state = search_state_new();
 
-  mutt_debug(LL_NOTIFY, "NT_INDEX_ADD: %p\n", shared);
+  mutt_debug(LL_NOTIFY, "NT_INDEX_ADD: %p\n", (void *) shared);
   notify_send(shared->notify, NT_INDEX, NT_INDEX_ADD, shared);
 
   return shared;

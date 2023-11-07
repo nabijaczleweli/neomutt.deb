@@ -29,16 +29,17 @@
 #include "config.h"
 #include <stddef.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
+#include "color/lib.h"
 #include "index/lib.h"
-#include "keymap.h"
+#include "key/lib.h"
 #include "mutt_thread.h"
-#include "opcodes.h"
 #include "protos.h"
 
 /**
@@ -67,7 +68,7 @@ void mutt_set_flag(struct Mailbox *m, struct Email *e, enum MessageType flag,
   switch (flag)
   {
     case MUTT_DELETE:
-
+    {
       if (!(m->rights & MUTT_ACL_DELETE))
         return;
 
@@ -117,9 +118,9 @@ void mutt_set_flag(struct Mailbox *m, struct Email *e, enum MessageType flag,
           m->changed = true;
       }
       break;
-
+    }
     case MUTT_PURGE:
-
+    {
       if (!(m->rights & MUTT_ACL_DELETE))
         return;
 
@@ -129,11 +130,13 @@ void mutt_set_flag(struct Mailbox *m, struct Email *e, enum MessageType flag,
           e->purge = true;
       }
       else if (e->purge)
+      {
         e->purge = false;
+      }
       break;
-
+    }
     case MUTT_NEW:
-
+    {
       if (!(m->rights & MUTT_ACL_SEEN))
         return;
 
@@ -170,9 +173,9 @@ void mutt_set_flag(struct Mailbox *m, struct Email *e, enum MessageType flag,
           m->changed = true;
       }
       break;
-
+    }
     case MUTT_OLD:
-
+    {
       if (!(m->rights & MUTT_ACL_SEEN))
         return;
 
@@ -202,9 +205,9 @@ void mutt_set_flag(struct Mailbox *m, struct Email *e, enum MessageType flag,
           m->changed = true;
       }
       break;
-
+    }
     case MUTT_READ:
-
+    {
       if (!(m->rights & MUTT_ACL_SEEN))
         return;
 
@@ -238,9 +241,9 @@ void mutt_set_flag(struct Mailbox *m, struct Email *e, enum MessageType flag,
           m->changed = true;
       }
       break;
-
+    }
     case MUTT_REPLIED:
-
+    {
       if (!(m->rights & MUTT_ACL_WRITE))
         return;
 
@@ -273,9 +276,9 @@ void mutt_set_flag(struct Mailbox *m, struct Email *e, enum MessageType flag,
           m->changed = true;
       }
       break;
-
+    }
     case MUTT_FLAG:
-
+    {
       if (!(m->rights & MUTT_ACL_WRITE))
         return;
 
@@ -303,8 +306,9 @@ void mutt_set_flag(struct Mailbox *m, struct Email *e, enum MessageType flag,
           m->changed = true;
       }
       break;
-
+    }
     case MUTT_TAG:
+    {
       if (bf)
       {
         if (!e->tagged)
@@ -323,9 +327,11 @@ void mutt_set_flag(struct Mailbox *m, struct Email *e, enum MessageType flag,
           m->msg_tagged--;
       }
       break;
-
+    }
     default:
+    {
       break;
+    }
   }
 
   if (update)
@@ -348,20 +354,21 @@ void mutt_set_flag(struct Mailbox *m, struct Email *e, enum MessageType flag,
 /**
  * mutt_emails_set_flag - Set flag on messages
  * @param m    Mailbox
- * @param el   List of Emails to flag
+ * @param ea   Array of Emails to flag
  * @param flag Flag to set, e.g. #MUTT_DELETE
  * @param bf   true: set the flag; false: clear the flag
  */
-void mutt_emails_set_flag(struct Mailbox *m, struct EmailList *el,
+void mutt_emails_set_flag(struct Mailbox *m, struct EmailArray *ea,
                           enum MessageType flag, bool bf)
 {
-  if (!m || !el || STAILQ_EMPTY(el))
+  if (!m || !ea || ARRAY_EMPTY(ea))
     return;
 
-  struct EmailNode *en = NULL;
-  STAILQ_FOREACH(en, el, entries)
+  struct Email **ep = NULL;
+  ARRAY_FOREACH(ep, ea)
   {
-    mutt_set_flag(m, en->email, flag, bf, true);
+    struct Email *e = *ep;
+    mutt_set_flag(m, e, flag, bf, true);
   }
 }
 
@@ -432,50 +439,58 @@ done:
 }
 
 /**
- * mutt_change_flag - Change the flag on a Message
+ * mw_change_flag - Change the flag on a Message - @ingroup gui_mw
  * @param m  Mailbox
- * @param el List of Emails to change
+ * @param ea Array of Emails to change
  * @param bf true: set the flag; false: clear the flag
  * @retval  0 Success
  * @retval -1 Failure
+ *
+ * This function uses the message window.
+ *
+ * Ask the user which flag they'd like to set/clear, e.g.
+ * `Clear flag? (D/N/O/r/!):`
  */
-int mutt_change_flag(struct Mailbox *m, struct EmailList *el, bool bf)
+int mw_change_flag(struct Mailbox *m, struct EmailArray *ea, bool bf)
 {
-  struct MuttWindow *win = msgwin_get_window();
+  if (!m || !ea || ARRAY_EMPTY(ea))
+    return -1;
+
+  // blank window (0, 0)
+  struct MuttWindow *win = msgwin_new(true);
   if (!win)
     return -1;
 
-  if (!m || !el || STAILQ_EMPTY(el))
-    return -1;
+  char prompt[256] = { 0 };
+  snprintf(prompt, sizeof(prompt),
+           "%s? (D/N/O/r/*/!): ", bf ? _("Set flag") : _("Clear flag"));
+  msgwin_set_text(win, prompt, MT_COLOR_PROMPT);
 
-  enum MessageType flag = MUTT_NONE;
-  struct KeyEvent event = { OP_NULL, OP_NULL };
-
+  msgcont_push_window(win);
   struct MuttWindow *old_focus = window_set_focus(win);
+  window_redraw(win);
 
-  mutt_window_mvprintw(win, 0, 0, "%s? (D/N/O/r/*/!): ", bf ? _("Set flag") : _("Clear flag"));
-  mutt_window_clrtoeol(win);
-  window_redraw(NULL);
-
-  enum MuttCursorState cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
+  struct KeyEvent event = { 0, OP_NULL };
   do
   {
-    event = mutt_getch();
-  } while (event.op == OP_TIMEOUT);
-  mutt_curses_set_cursor(cursor);
+    window_redraw(NULL);
+    event = mutt_getch(GETCH_NO_FLAGS);
+  } while ((event.op == OP_TIMEOUT) || (event.op == OP_REPAINT));
 
+  win = msgcont_pop_window();
   window_set_focus(old_focus);
-  msgwin_clear_text();
+  mutt_window_free(&win);
 
   if (event.op == OP_ABORT)
     return -1;
 
+  enum MessageType flag = MUTT_NONE;
   switch (event.ch)
   {
     case 'd':
     case 'D':
       if (!bf)
-        mutt_emails_set_flag(m, el, MUTT_PURGE, bf);
+        mutt_emails_set_flag(m, ea, MUTT_PURGE, bf);
       flag = MUTT_DELETE;
       break;
 
@@ -486,7 +501,7 @@ int mutt_change_flag(struct Mailbox *m, struct EmailList *el, bool bf)
 
     case 'o':
     case 'O':
-      mutt_emails_set_flag(m, el, MUTT_READ, !bf);
+      mutt_emails_set_flag(m, ea, MUTT_READ, !bf);
       flag = MUTT_OLD;
       break;
 
@@ -508,6 +523,6 @@ int mutt_change_flag(struct Mailbox *m, struct EmailList *el, bool bf)
       return -1;
   }
 
-  mutt_emails_set_flag(m, el, flag, bf);
+  mutt_emails_set_flag(m, ea, flag, bf);
   return 0;
 }

@@ -575,7 +575,9 @@ int mutt_prepare_template(FILE *fp, struct Mailbox *m, struct Email *e_new,
       e_new->security |= APPLICATION_PGP;
     }
     else if (WithCrypto & APPLICATION_SMIME)
+    {
       e_new->security |= APPLICATION_SMIME;
+    }
 
     /* destroy the signature */
     mutt_body_free(&e_new->body->parts->next);
@@ -706,7 +708,7 @@ int mutt_get_postponed(struct Mailbox *m_cur, struct Email *hdr,
     /* only one message, so just use that one. */
     e = m->emails[0];
   }
-  else if (!(e = dlg_select_postponed_email(m)))
+  else if (!(e = dlg_postponed(m)))
   {
     rc = -1;
     goto cleanup;
@@ -756,8 +758,7 @@ int mutt_get_postponed(struct Mailbox *m_cur, struct Email *hdr,
 
       /* note that mutt-fcc was present.  we do this because we want to add a
        * default fcc if the header was missing, but preserve the request of the
-       * user to not make a copy if the header field is present, but empty.
-       * see http://dev.mutt.org/trac/ticket/3653 */
+       * user to not make a copy if the header field is present, but empty. */
       rc |= SEND_POSTPONED_FCC;
     }
     // Check for header names: most specific first

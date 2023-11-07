@@ -42,7 +42,7 @@
 #include "queue.h"
 #include "string2.h"
 
-static const char *LevelAbbr = "PEWM12345N"; ///< Abbreviations of logging level names
+const char *LevelAbbr = "PEWM12345N"; ///< Abbreviations of logging level names
 
 /**
  * MuttLogger - The log dispatcher - @ingroup logging_api
@@ -242,8 +242,8 @@ bool log_file_running(void)
  *
  * If stamp is 0, then the current time will be used.
  */
-int log_disp_file(time_t stamp, const char *file, int line,
-                  const char *function, enum LogLevel level, ...)
+int log_disp_file(time_t stamp, const char *file, int line, const char *function,
+                  enum LogLevel level, const char *format, ...)
 {
   if (!LogFileFP || (level < LL_PERROR) || (level > LogFileLevel))
     return 0;
@@ -257,9 +257,8 @@ int log_disp_file(time_t stamp, const char *file, int line,
   rc += fprintf(LogFileFP, "[%s]<%c> %s() ", timestamp(stamp), LevelAbbr[level + 3], function);
 
   va_list ap;
-  va_start(ap, level);
-  const char *fmt = va_arg(ap, const char *);
-  rc += vfprintf(LogFileFP, fmt, ap);
+  va_start(ap, format);
+  rc += vfprintf(LogFileFP, format, ap);
   va_end(ap);
 
   if (level == LL_PERROR)
@@ -393,18 +392,17 @@ int log_queue_save(FILE *fp)
  *
  * @sa log_queue_set_max_size(), log_queue_flush(), log_queue_empty()
  *
- * @warning Log lines are limited to 1024 bytes.
+ * @warning Log lines are limited to LOG_LINE_MAX_LEN bytes
  */
-int log_disp_queue(time_t stamp, const char *file, int line,
-                   const char *function, enum LogLevel level, ...)
+int log_disp_queue(time_t stamp, const char *file, int line, const char *function,
+                   enum LogLevel level, const char *format, ...)
 {
-  char buf[1024] = { 0 };
+  char buf[LOG_LINE_MAX_LEN] = { 0 };
   int err = errno;
 
   va_list ap;
-  va_start(ap, level);
-  const char *fmt = va_arg(ap, const char *);
-  int rc = vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_start(ap, format);
+  int rc = vsnprintf(buf, sizeof(buf), format, ap);
   va_end(ap);
 
   if (level == LL_PERROR)
@@ -434,18 +432,19 @@ int log_disp_queue(time_t stamp, const char *file, int line,
  * The format is:
  * * `[TIMESTAMP]<LEVEL> FUNCTION() FORMATTED-MESSAGE`
  *
+ * @warning Log lines are limited to LOG_LINE_MAX_LEN bytes
+ *
  * @note The output will be coloured using ANSI escape sequences,
  *       unless the output is redirected.
  */
-int log_disp_terminal(time_t stamp, const char *file, int line,
-                      const char *function, enum LogLevel level, ...)
+int log_disp_terminal(time_t stamp, const char *file, int line, const char *function,
+                      enum LogLevel level, const char *format, ...)
 {
-  char buf[1024] = { 0 };
+  char buf[LOG_LINE_MAX_LEN] = { 0 };
 
   va_list ap;
-  va_start(ap, level);
-  const char *fmt = va_arg(ap, const char *);
-  int rc = vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_start(ap, format);
+  int rc = vsnprintf(buf, sizeof(buf), format, ap);
   va_end(ap);
 
   log_disp_file(stamp, file, line, function, level, "%s", buf);
@@ -455,7 +454,7 @@ int log_disp_terminal(time_t stamp, const char *file, int line,
 
   FILE *fp = (level < LL_MESSAGE) ? stderr : stdout;
   int err = errno;
-  int colour = 0;
+  int color = 0;
   bool tty = (isatty(fileno(fp)) == 1);
 
   if (tty)
@@ -464,10 +463,10 @@ int log_disp_terminal(time_t stamp, const char *file, int line,
     {
       case LL_PERROR:
       case LL_ERROR:
-        colour = 31;
+        color = 31;
         break;
       case LL_WARNING:
-        colour = 33;
+        color = 33;
         break;
       case LL_MESSAGE:
       default:
@@ -475,15 +474,15 @@ int log_disp_terminal(time_t stamp, const char *file, int line,
     }
   }
 
-  if (colour > 0)
-    rc += fprintf(fp, "\033[1;%dm", colour); // Escape
+  if (color > 0)
+    rc += fprintf(fp, "\033[1;%dm", color); // Escape
 
   fputs(buf, fp);
 
   if (level == LL_PERROR)
     rc += fprintf(fp, ": %s", strerror(err));
 
-  if (colour > 0)
+  if (color > 0)
     rc += fprintf(fp, "\033[0m"); // Escape
 
   rc += fprintf(fp, "\n");
@@ -494,8 +493,36 @@ int log_disp_terminal(time_t stamp, const char *file, int line,
 /**
  * log_disp_null - Discard log lines - Implements ::log_dispatcher_t - @ingroup logging_api
  */
-int log_disp_null(time_t stamp, const char *file, int line,
-                  const char *function, enum LogLevel level, ...)
+int log_disp_null(time_t stamp, const char *file, int line, const char *function,
+                  enum LogLevel level, const char *format, ...)
 {
   return 0;
+}
+
+/**
+ * log_multiline_full - Helper to dump multiline text to the log
+ * @param level Logging level, e.g. LL_DEBUG1
+ * @param str   Text to save
+ * @param file  Source file
+ * @param line  Source line number
+ * @param func  Source function
+ */
+void log_multiline_full(enum LogLevel level, const char *str, const char *file,
+                        int line, const char *func)
+{
+  while (str && (str[0] != '\0'))
+  {
+    const char *end = strchr(str, '\n');
+    if (end)
+    {
+      int len = end - str;
+      MuttLogger(0, file, line, func, level, "%.*s\n", len, str);
+      str = end + 1;
+    }
+    else
+    {
+      MuttLogger(0, file, line, func, level, "%s\n", str);
+      break;
+    }
+  }
 }

@@ -29,7 +29,6 @@
 #include "config.h"
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include "mutt/lib.h"
 #include "pgppacket.h"
 
@@ -50,23 +49,16 @@ static size_t PacketBufLen = 0;         ///< Length of cached packet
  */
 static int read_material(size_t material, size_t *used, FILE *fp)
 {
-  if (*used + material >= PacketBufLen)
+  if ((*used + material) >= PacketBufLen)
   {
-    size_t nplen = *used + material + CHUNK_SIZE;
+    PacketBufLen = *used + material + CHUNK_SIZE;
 
-    unsigned char *p = realloc(PacketBuf, nplen);
-    if (!p)
-    {
-      perror("realloc");
-      return -1;
-    }
-    PacketBufLen = nplen;
-    PacketBuf = p;
+    mutt_mem_realloc(&PacketBuf, PacketBufLen);
   }
 
   if (fread(PacketBuf + *used, 1, material, fp) < material)
   {
-    perror("fread");
+    mutt_perror("fread");
     return -1;
   }
 
@@ -103,7 +95,7 @@ unsigned char *pgp_read_packet(FILE *fp, size_t *len)
   if (fread(&ctb, 1, 1, fp) < 1)
   {
     if (!feof(fp))
-      perror("fread");
+      mutt_perror("fread");
     goto bail;
   }
 
@@ -122,7 +114,7 @@ unsigned char *pgp_read_packet(FILE *fp, size_t *len)
     {
       if (fread(&b, 1, 1, fp) < 1)
       {
-        perror("fread");
+        mutt_perror("fread");
         goto bail;
       }
 
@@ -136,7 +128,7 @@ unsigned char *pgp_read_packet(FILE *fp, size_t *len)
         material = (b - 192) * 256;
         if (fread(&b, 1, 1, fp) < 1)
         {
-          perror("fread");
+          mutt_perror("fread");
           goto bail;
         }
         material += b + 192;
@@ -147,13 +139,12 @@ unsigned char *pgp_read_packet(FILE *fp, size_t *len)
         material = 1 << (b & 0x1f);
         partial = true;
       }
-      else
-      /* b == 255 */
+      else /* b == 255 */
       {
         unsigned char buf[4];
         if (fread(buf, 4, 1, fp) < 1)
         {
-          perror("fread");
+          mutt_perror("fread");
           goto bail;
         }
         material = (size_t) buf[0] << 24;
@@ -168,8 +159,7 @@ unsigned char *pgp_read_packet(FILE *fp, size_t *len)
 
     } while (partial);
   }
-  else
-  /* Old-Style PGP */
+  else /* Old-Style PGP */
   {
     int bytes = 0;
     PacketBuf[0] = 0x80 | ((ctb >> 2) & 0x0f);
@@ -181,7 +171,7 @@ unsigned char *pgp_read_packet(FILE *fp, size_t *len)
       {
         if (fread(&b, 1, 1, fp) < 1)
         {
-          perror("fread");
+          mutt_perror("fread");
           goto bail;
         }
 
@@ -204,7 +194,7 @@ unsigned char *pgp_read_packet(FILE *fp, size_t *len)
         {
           if (fread(&b, 1, 1, fp) < 1)
           {
-            perror("fread");
+            mutt_perror("fread");
             goto bail;
           }
 

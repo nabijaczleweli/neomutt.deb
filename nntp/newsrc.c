@@ -183,7 +183,7 @@ int nntp_newsrc_parse(struct NntpAccountData *adata)
   adata->fp_newsrc = mutt_file_fopen(adata->newsrc_file, "r");
   if (!adata->fp_newsrc)
   {
-    mutt_perror(adata->newsrc_file);
+    mutt_perror("%s", adata->newsrc_file);
     return -1;
   }
 
@@ -197,7 +197,7 @@ int nntp_newsrc_parse(struct NntpAccountData *adata)
 
   if (stat(adata->newsrc_file, &st) != 0)
   {
-    mutt_perror(adata->newsrc_file);
+    mutt_perror("%s", adata->newsrc_file);
     nntp_newsrc_close(adata);
     return -1;
   }
@@ -349,10 +349,9 @@ void nntp_newsrc_gen_entries(struct Mailbox *m)
         series = false;
       }
     }
-
-    /* search for first read */
     else
     {
+      /* search for first read */
       if (e->deleted || e->read)
       {
         first = last + 1;
@@ -401,25 +400,25 @@ static int update_file(char *filename, char *buf)
     fp = mutt_file_fopen(tmpfile, "w");
     if (!fp)
     {
-      mutt_perror(tmpfile);
+      mutt_perror("%s", tmpfile);
       *tmpfile = '\0';
       break;
     }
     if (fputs(buf, fp) == EOF)
     {
-      mutt_perror(tmpfile);
+      mutt_perror("%s", tmpfile);
       break;
     }
     if (mutt_file_fclose(&fp) == EOF)
     {
-      mutt_perror(tmpfile);
+      mutt_perror("%s", tmpfile);
       fp = NULL;
       break;
     }
     fp = NULL;
     if (rename(tmpfile, filename) < 0)
     {
-      mutt_perror(filename);
+      mutt_perror("%s", filename);
       break;
     }
     *tmpfile = '\0';
@@ -459,7 +458,7 @@ int nntp_newsrc_update(struct NntpAccountData *adata)
       continue;
 
     /* write newsgroup name */
-    if (off + strlen(mdata->group) + 3 > buflen)
+    if ((off + strlen(mdata->group) + 3) > buflen)
     {
       buflen *= 2;
       mutt_mem_realloc(&buf, buflen);
@@ -470,7 +469,7 @@ int nntp_newsrc_update(struct NntpAccountData *adata)
     /* write entries */
     for (unsigned int j = 0; j < mdata->newsrc_len; j++)
     {
-      if (off + 1024 > buflen)
+      if ((off + 1024) > buflen)
       {
         buflen *= 2;
         mutt_mem_realloc(&buf, buflen);
@@ -506,7 +505,7 @@ int nntp_newsrc_update(struct NntpAccountData *adata)
     }
     else
     {
-      mutt_perror(adata->newsrc_file);
+      mutt_perror("%s", adata->newsrc_file);
     }
   }
   FREE(&buf);
@@ -728,7 +727,7 @@ struct HeaderCache *nntp_hcache_open(struct NntpMboxData *mdata)
   url.path = mdata->group;
   url_tostring(&url, file, sizeof(file), U_PATH);
   const char *const c_news_cache_dir = cs_subset_path(NeoMutt->sub, "news_cache_dir");
-  return mutt_hcache_open(c_news_cache_dir, file, nntp_hcache_namer);
+  return hcache_open(c_news_cache_dir, file, nntp_hcache_namer);
 }
 
 /**
@@ -746,10 +745,10 @@ void nntp_hcache_update(struct NntpMboxData *mdata, struct HeaderCache *hc)
   anum_t first = 0, last = 0;
 
   /* fetch previous values of first and last */
-  char *hdata = mutt_hcache_fetch_str(hc, "index", 5);
+  char *hdata = hcache_fetch_str(hc, "index", 5);
   if (hdata)
   {
-    mutt_debug(LL_DEBUG2, "mutt_hcache_fetch index: %s\n", hdata);
+    mutt_debug(LL_DEBUG2, "hcache_fetch index: %s\n", hdata);
     if (sscanf(hdata, ANUM " " ANUM, &first, &last) == 2)
     {
       old = true;
@@ -762,8 +761,8 @@ void nntp_hcache_update(struct NntpMboxData *mdata, struct HeaderCache *hc)
           continue;
 
         snprintf(buf, sizeof(buf), ANUM, current);
-        mutt_debug(LL_DEBUG2, "mutt_hcache_delete_record %s\n", buf);
-        mutt_hcache_delete_record(hc, buf, strlen(buf));
+        mutt_debug(LL_DEBUG2, "hcache_delete_record %s\n", buf);
+        hcache_delete_record(hc, buf, strlen(buf));
       }
     }
     FREE(&hdata);
@@ -773,14 +772,14 @@ void nntp_hcache_update(struct NntpMboxData *mdata, struct HeaderCache *hc)
   if (!old || (mdata->first_message != first) || (mdata->last_message != last))
   {
     snprintf(buf, sizeof(buf), ANUM " " ANUM, mdata->first_message, mdata->last_message);
-    mutt_debug(LL_DEBUG2, "mutt_hcache_store index: %s\n", buf);
-    mutt_hcache_store_raw(hc, "index", 5, buf, strlen(buf) + 1);
+    mutt_debug(LL_DEBUG2, "hcache_store index: %s\n", buf);
+    hcache_store_raw(hc, "index", 5, buf, strlen(buf) + 1);
   }
 }
 #endif
 
 /**
- * nntp_bcache_delete - Remove bcache file - Implements ::bcache_list_t - @ingroup bcache_list_api
+ * nntp_bcache_delete - Delete an entry from the message cache - Implements ::bcache_list_t - @ingroup bcache_list_api
  * @retval 0 Always
  */
 static int nntp_bcache_delete(const char *id, struct BodyCache *bcache, void *data)
@@ -866,7 +865,7 @@ void nntp_clear_cache(struct NntpAccountData *adata)
       char *group = de->d_name;
       struct stat st = { 0 };
       struct NntpMboxData *mdata = NULL;
-      struct NntpMboxData tmp_mdata;
+      struct NntpMboxData tmp_mdata = { 0 };
 
       if (mutt_str_equal(group, ".") || mutt_str_equal(group, ".."))
         continue;
@@ -898,7 +897,9 @@ void nntp_clear_cache(struct NntpAccountData *adata)
         mdata->bcache = NULL;
       }
       else if (mdata->newsrc_ent || mdata->subscribed || c_save_unsubscribed)
+      {
         continue;
+      }
 
       nntp_delete_group_cache(mdata);
       if (S_ISDIR(st.st_mode))
@@ -984,7 +985,7 @@ const char *nntp_format_str(char *buf, size_t buflen, size_t col, int cols, char
 }
 
 /**
- * nntp_get_field - Get connection login credentials - Implements ConnAccount::get_field()
+ * nntp_get_field - Get connection login credentials - Implements ConnAccount::get_field() - @ingroup conn_account_get_field
  */
 static const char *nntp_get_field(enum ConnAccountField field, void *gf_data)
 {
@@ -1079,30 +1080,6 @@ struct NntpAccountData *nntp_select_server(struct Mailbox *m, const char *server
     conn->account.user[0] = '\0';
   }
 
-  /* news server already exists */
-  if (adata)
-  {
-    if (adata->status == NNTP_BYE)
-      adata->status = NNTP_NONE;
-    if (nntp_open_connection(adata) < 0)
-      return NULL;
-
-    rc = nntp_newsrc_parse(adata);
-    if (rc < 0)
-      return NULL;
-
-    /* check for new newsgroups */
-    if (!leave_lock && (nntp_check_new_groups(m, adata) < 0))
-      rc = -1;
-
-    /* .newsrc has been externally modified */
-    if (rc > 0)
-      nntp_clear_cache(adata);
-    if ((rc < 0) || !leave_lock)
-      nntp_newsrc_close(adata);
-    return (rc < 0) ? NULL : adata;
-  }
-
   /* new news server */
   adata = nntp_adata_new(conn);
 
@@ -1135,11 +1112,14 @@ struct NntpAccountData *nntp_select_server(struct Mailbox *m, const char *server
   {
     /* try to load list of newsgroups from cache */
     if (adata->cacheable && (active_get_cache(adata) == 0))
+    {
       rc = nntp_check_new_groups(m, adata);
-
-    /* load list of newsgroups from server */
+    }
     else
+    {
+      /* load list of newsgroups from server */
       rc = nntp_active_fetch(adata, false);
+    }
   }
 
   if (rc >= 0)
@@ -1172,7 +1152,7 @@ struct NntpAccountData *nntp_select_server(struct Mailbox *m, const char *server
           continue;
 
         /* fetch previous values of first and last */
-        char *hdata = mutt_hcache_fetch_str(hc, "index", 5);
+        char *hdata = hcache_fetch_str(hc, "index", 5);
         if (hdata)
         {
           anum_t first, last;
@@ -1192,7 +1172,7 @@ struct NntpAccountData *nntp_select_server(struct Mailbox *m, const char *server
           }
           FREE(&hdata);
         }
-        mutt_hcache_close(hc);
+        hcache_close(&hc);
       }
       closedir(dir);
     }

@@ -41,6 +41,7 @@
  * | ncrypt/dlg_gpgme.c               | @subpage crypt_dlg_gpgme             |
  * | ncrypt/dlg_pgp.c                 | @subpage crypt_dlg_pgp               |
  * | ncrypt/dlg_smime.c               | @subpage crypt_dlg_smime             |
+ * | ncrypt/functions.c               | @subpage crypt_functions             |
  * | ncrypt/gnupgparse.c              | @subpage crypt_gnupg                 |
  * | ncrypt/gpgme_functions.c         | @subpage crypt_gpgme_functions       |
  * | ncrypt/pgp.c                     | @subpage crypt_pgp                   |
@@ -67,7 +68,7 @@ struct Body;
 struct Buffer;
 #endif
 struct Email;
-struct EmailList;
+struct EmailArray;
 struct Envelope;
 struct Mailbox;
 struct Message;
@@ -142,7 +143,7 @@ typedef uint16_t KeyFlags;                  ///< Flags describing PGP/SMIME keys
 #define KEYFLAG_ABILITIES (KEYFLAG_CANSIGN | KEYFLAG_CANENCRYPT | KEYFLAG_PREFER_ENCRYPTION | KEYFLAG_PREFER_SIGNING)
 
 /* crypt.c */
-void          crypt_extract_keys_from_messages         (struct Mailbox *m, struct EmailList *el);
+void          crypt_extract_keys_from_messages         (struct Mailbox *m, struct EmailArray *ea);
 void          crypt_forget_passphrase                  (void);
 int           crypt_get_keys                           (struct Email *e, char **keylist, bool oppenc_mode);
 void          crypt_opportunistic_encrypt              (struct Email *e);
@@ -179,7 +180,7 @@ SecurityFlags crypt_smime_send_menu                    (struct Email *e);
 int           crypt_smime_verify_sender                (struct Email *e, struct Message *msg);
 
 /* crypt_mod.c */
-void          crypto_module_free                       (void);
+void          crypto_module_cleanup                    (void);
 
 #ifdef CRYPT_BACKEND_GPGME
 /* crypt_gpgme.c */

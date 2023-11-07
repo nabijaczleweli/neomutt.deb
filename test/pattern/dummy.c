@@ -29,6 +29,7 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "history/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "mview.h"
 
@@ -40,12 +41,6 @@ struct Keymap;
 struct Pager;
 struct Pattern;
 
-struct KeyEvent
-{
-  int ch; ///< raw key pressed
-  int op; ///< function op
-};
-
 enum WindowType
 {
   // Structural Windows
@@ -54,22 +49,22 @@ enum WindowType
   WT_ALL_DIALOGS, ///< Container for All Dialogs (nested Windows)
 
   // Dialogs (nested Windows) displayed to the user
-  WT_DLG_ALIAS,       ///< Alias Dialog,       dlg_select_alias()
-  WT_DLG_ATTACH,      ///< Attach Dialog,      dlg_select_attachment()
-  WT_DLG_AUTOCRYPT,   ///< Autocrypt Dialog,   dlg_select_autocrypt_account()
-  WT_DLG_BROWSER,     ///< Browser Dialog,     buf_select_file()
-  WT_DLG_CERTIFICATE, ///< Certificate Dialog, dlg_verify_certificate()
-  WT_DLG_COMPOSE,     ///< Compose Dialog,     mutt_compose_menu()
-  WT_DLG_CRYPT_GPGME, ///< Crypt-GPGME Dialog, dlg_select_gpgme_key()
-  WT_DLG_DO_PAGER,    ///< Pager Dialog,       mutt_do_pager()
-  WT_DLG_HISTORY,     ///< History Dialog,     dlg_select_history()
-  WT_DLG_INDEX,       ///< Index Dialog,       index_pager_init()
-  WT_DLG_PATTERN,     ///< Pattern Dialog,     create_pattern_menu()
-  WT_DLG_PGP,         ///< Pgp Dialog,         dlg_select_pgp_key()
-  WT_DLG_POSTPONE,    ///< Postpone Dialog,    dlg_select_postponed_email()
-  WT_DLG_QUERY,       ///< Query Dialog,       dlg_select_query()
-  WT_DLG_REMAILER,    ///< Remailer Dialog,    dlg_mixmaster()
-  WT_DLG_SMIME,       ///< Smime Dialog,       dlg_select_smime_key()
+  WT_DLG_ALIAS,       ///< Alias Dialog,       dlg_alias()
+  WT_DLG_ATTACHMENT,  ///< Attachment Dialog,  dlg_attachment()
+  WT_DLG_AUTOCRYPT,   ///< Autocrypt Dialog,   dlg_autocrypt()
+  WT_DLG_BROWSER,     ///< Browser Dialog,     dlg_browser()
+  WT_DLG_CERTIFICATE, ///< Certificate Dialog, dlg_certificate()
+  WT_DLG_COMPOSE,     ///< Compose Dialog,     dlg_compose()
+  WT_DLG_GPGME,       ///< GPGME Dialog,       dlg_gpgme()
+  WT_DLG_PAGER,       ///< Pager Dialog,       dlg_pager()
+  WT_DLG_HISTORY,     ///< History Dialog,     dlg_history()
+  WT_DLG_INDEX,       ///< Index Dialog,       dlg_index()
+  WT_DLG_PATTERN,     ///< Pattern Dialog,     dlg_pattern()
+  WT_DLG_PGP,         ///< Pgp Dialog,         dlg_pgp()
+  WT_DLG_POSTPONED,   ///< Postponed Dialog,   dlg_postponed()
+  WT_DLG_QUERY,       ///< Query Dialog,       dlg_query()
+  WT_DLG_MIXMASTER,   ///< Mixmaster Dialog,   dlg_mixmaster()
+  WT_DLG_SMIME,       ///< Smime Dialog,       dlg_smime()
 
   // Common Windows
   WT_CUSTOM,     ///< Window with a custom drawing function
@@ -86,13 +81,24 @@ bool g_addr_is_user = false;
 int g_body_parts = 1;
 bool g_is_mail_list = false;
 bool g_is_subscribed_list = false;
-short AbortKey;
 bool OptForceRefresh;
-bool OptIgnoreMacroEvents;
 bool OptKeepQuiet;
 bool OptNoCurses;
-bool OptSearchInvalid;
-bool OptSearchReverse;
+
+const struct MenuFuncOp OpAlias = { 0 };
+const struct MenuFuncOp OpAttachment = { 0 };
+const struct MenuFuncOp OpAutocrypt = { 0 };
+const struct MenuFuncOp OpBrowser = { 0 };
+const struct MenuFuncOp OpCompose = { 0 };
+const struct MenuFuncOp OpDialog = { 0 };
+const struct MenuFuncOp OpGeneric[] = { 0 };
+const struct MenuFuncOp OpIndex = { 0 };
+const struct MenuFuncOp OpMixmaster = { 0 };
+const struct MenuFuncOp OpPager = { 0 };
+const struct MenuFuncOp OpPgp = { 0 };
+const struct MenuFuncOp OpPostponed = { 0 };
+const struct MenuFuncOp OpQuery = { 0 };
+const struct MenuFuncOp OpSmime = { 0 };
 
 typedef uint8_t MuttFormatFlags;
 typedef uint16_t CompletionFlags;
@@ -237,17 +243,7 @@ void menu_push_current(struct Menu *menu)
 {
 }
 
-int km_expand_key(char *s, size_t len, struct Keymap *map)
-{
-  return 0;
-}
-
-struct Keymap *km_find_func(enum MenuType menu, int func)
-{
-  return NULL;
-}
-
-int mutt_pager(const char *banner, const char *fname, PagerFlags flags, struct Pager *extra)
+int dlg_pager(const char *banner, const char *fname, PagerFlags flags, struct Pager *extra)
 {
   return 0;
 }
@@ -262,7 +258,7 @@ int mutt_system(const char *cmd)
   return 0;
 }
 
-void buf_select_file(struct Buffer *file, SelectFileFlags flags, char ***files, int *numfiles)
+void dlg_browser(struct Buffer *file, SelectFileFlags flags, char ***files, int *numfiles)
 {
 }
 
@@ -281,21 +277,6 @@ int global_function_dispatcher(struct MuttWindow *win, int op)
   return 0;
 }
 
-struct KeyEvent km_dokey_event(enum MenuType mtype)
-{
-  struct KeyEvent ke = { 0 };
-  return ke;
-}
-
-void km_error_key(enum MenuType mtype)
-{
-}
-
-int mutt_command_complete(char *buf, size_t buflen, int pos, int numtabs)
-{
-  return 0;
-}
-
 int mutt_complete(char *buf, size_t buflen)
 {
   return 0;
@@ -310,38 +291,14 @@ void mutt_help(enum MenuType menu)
 {
 }
 
-void mutt_hist_complete(char *buf, size_t buflen, enum HistoryClass hclass)
-{
-}
-
-int mutt_label_complete(char *buf, size_t buflen, int numtabs)
-{
-  return 0;
-}
-
 struct Mailbox *mutt_mailbox_next(struct Mailbox *m_cur, struct Buffer *s)
 {
   return NULL;
 }
 
-bool mutt_nm_query_complete(char *buf, size_t buflen, int pos, int numtabs)
-{
-  return false;
-}
-
-bool mutt_nm_tag_complete(char *buf, size_t buflen, int numtabs)
-{
-  return false;
-}
-
 void mutt_select_file(char *file, size_t filelen, SelectFileFlags flags,
                       struct Mailbox *m, char ***files, int *numfiles)
 {
-}
-
-int mutt_var_value_complete(char *buf, size_t buflen, int pos)
-{
-  return 0;
 }
 
 const char *opcodes_get_name(int op)

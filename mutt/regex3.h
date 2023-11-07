@@ -89,7 +89,7 @@ struct Regex
 {
   char *pattern;  ///< printable version
   regex_t *regex; ///< compiled expression
-  bool pat_not;       ///< do not match
+  bool pat_not;   ///< do not match
 };
 
 /**
@@ -116,7 +116,7 @@ STAILQ_HEAD(ReplaceList, Replace);
 
 struct Regex *mutt_regex_compile(const char *str, uint16_t flags);
 struct Regex *mutt_regex_new(const char *str, uint32_t flags, struct Buffer *err);
-void          mutt_regex_free(struct Regex **r);
+void          mutt_regex_free(struct Regex **ptr);
 
 int               mutt_regexlist_add   (struct RegexList *rl, const char *str, uint16_t flags, struct Buffer *err);
 void              mutt_regexlist_free  (struct RegexList *rl);

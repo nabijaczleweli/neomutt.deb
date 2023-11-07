@@ -32,9 +32,9 @@
  *
  * ## Windows
  *
- * | Name                 | Type         | See Also           |
- * | :------------------- | :----------- | :----------------- |
- * | Address Query Dialog | WT_DLG_QUERY | dlg_select_query() |
+ * | Name                 | Type         | See Also    |
+ * | :------------------- | :----------- | :---------- |
+ * | Address Query Dialog | WT_DLG_QUERY | dlg_query() |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -82,17 +82,19 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "lib.h"
-#include "enter/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
+#include "pattern/lib.h"
 #include "send/lib.h"
 #include "alias.h"
 #include "format_flags.h"
 #include "functions.h"
+#include "globals.h" // IWYU pragma: keep
 #include "gui.h"
-#include "keymap.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "opcodes.h"
 
 /// Help Bar for the Address Query dialog
 static const struct Mapping QueryHelp[] = {
@@ -126,7 +128,9 @@ bool alias_to_addrlist(struct AddressList *al, struct Alias *alias)
     struct Address *first = TAILQ_FIRST(al);
     struct Address *second = TAILQ_NEXT(first, entries);
     if (!second && !first->personal)
-      first->personal = mutt_str_dup(alias->name);
+    {
+      first->personal = buf_new(alias->name);
+    }
 
     mutt_addrlist_to_intl(al, NULL);
   }
@@ -213,7 +217,7 @@ static const char *query_format_str(char *buf, size_t buflen, size_t col, int co
 }
 
 /**
- * query_make_entry - Format a menu item for the query list - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * query_make_entry - Format an Alias for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  *
  * @sa $query_format, query_format_str()
  */
@@ -266,7 +270,7 @@ int query_run(const char *s, bool verbose, struct AliasList *al, const struct Co
   const char *const c_query_command = cs_subset_string(sub, "query_command");
   buf_file_expand_fmt_quote(cmd, c_query_command, s);
 
-  pid_t pid = filter_create(buf_string(cmd), NULL, &fp, NULL);
+  pid_t pid = filter_create(buf_string(cmd), NULL, &fp, NULL, EnvList);
   if (pid < 0)
   {
     mutt_debug(LL_DEBUG1, "unable to fork command: %s\n", buf_string(cmd));
@@ -336,7 +340,7 @@ static int query_window_observer(struct NotifyCallback *nc)
 
   struct Menu *menu = win_menu->wdata;
 
-  notify_observer_remove(NeoMutt->notify, alias_config_observer, menu);
+  notify_observer_remove(NeoMutt->sub->notify, alias_config_observer, menu);
   notify_observer_remove(win_menu->notify, query_window_observer, win_menu);
 
   mutt_debug(LL_DEBUG5, "window delete done\n");
@@ -356,7 +360,6 @@ static struct MuttWindow *query_dialog_new(struct AliasMenuData *mdata, const ch
   struct Menu *menu = dlg->wdata;
 
   menu->make_entry = query_make_entry;
-  menu->custom_search = true;
   menu->tag = query_tag;
   menu->max = ARRAY_SIZE(&mdata->ava);
   mdata->title = mutt_str_dup(_("Query"));
@@ -374,19 +377,24 @@ static struct MuttWindow *query_dialog_new(struct AliasMenuData *mdata, const ch
   sbar_set_title(sbar, title);
 
   // NT_COLOR is handled by the SimpleDialog
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, alias_config_observer, menu);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, alias_config_observer, menu);
   notify_observer_add(win_menu->notify, NT_WINDOW, query_window_observer, win_menu);
 
   return dlg;
 }
 
 /**
- * dlg_select_query - Get the user to enter an Address Query
+ * dlg_query - Get the user to enter an Address Query - @ingroup gui_dlg
  * @param buf   Buffer for the query
  * @param mdata Menu data holding Aliases
  * @retval true Selection was made
+ *
+ * The Select Query Dialog is an Address Book.
+ * It is dynamically created from an external source using $query_command.
+ *
+ * The user can select addresses to add to an Email.
  */
-static bool dlg_select_query(struct Buffer *buf, struct AliasMenuData *mdata)
+static bool dlg_query(struct Buffer *buf, struct AliasMenuData *mdata)
 {
   struct MuttWindow *dlg = query_dialog_new(mdata, buf_string(buf));
   struct Menu *menu = dlg->wdata;
@@ -404,6 +412,7 @@ static bool dlg_select_query(struct Buffer *buf, struct AliasMenuData *mdata)
     avp->num = ARRAY_FOREACH_IDX;
   }
 
+  struct MuttWindow *old_focus = window_set_focus(menu->win);
   // ---------------------------------------------------------------------------
   // Event Loop
   int rc = 0;
@@ -413,7 +422,7 @@ static bool dlg_select_query(struct Buffer *buf, struct AliasMenuData *mdata)
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(MENU_QUERY);
+    op = km_dokey(MENU_QUERY, GETCH_NO_FLAGS);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
@@ -432,6 +441,7 @@ static bool dlg_select_query(struct Buffer *buf, struct AliasMenuData *mdata)
   } while ((rc != FR_DONE) && (rc != FR_CONTINUE));
   // ---------------------------------------------------------------------------
 
+  window_set_focus(old_focus);
   simple_dialog_free(&dlg);
   window_redraw(NULL);
   return (rc == FR_CONTINUE); // Was a selection made?
@@ -446,6 +456,7 @@ static bool dlg_select_query(struct Buffer *buf, struct AliasMenuData *mdata)
 int query_complete(struct Buffer *buf, struct ConfigSubset *sub)
 {
   struct AliasMenuData mdata = { ARRAY_HEAD_INITIALIZER, NULL, sub };
+  mdata.search_state = search_state_new();
 
   struct AliasList al = TAILQ_HEAD_INITIALIZER(al);
   const char *const c_query_command = cs_subset_string(sub, "query_command");
@@ -483,7 +494,7 @@ int query_complete(struct Buffer *buf, struct ConfigSubset *sub)
   }
 
   /* multiple results, choose from query menu */
-  if (!dlg_select_query(buf, &mdata))
+  if (!dlg_query(buf, &mdata))
     goto done;
 
   buf_reset(buf);
@@ -514,6 +525,7 @@ done:
   ARRAY_FREE(&mdata.ava);
   FREE(&mdata.title);
   FREE(&mdata.limit);
+  search_state_free(&mdata.search_state);
   aliaslist_free(&al);
   return 0;
 }
@@ -535,9 +547,10 @@ void query_index(struct Mailbox *m, struct ConfigSubset *sub)
   struct AliasList al = TAILQ_HEAD_INITIALIZER(al);
   struct AliasMenuData mdata = { ARRAY_HEAD_INITIALIZER, NULL, sub };
   mdata.al = &al;
+  mdata.search_state = search_state_new();
 
   struct Buffer *buf = buf_pool_get();
-  if ((buf_get_field(_("Query: "), buf, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0) ||
+  if ((mw_get_field(_("Query: "), buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) != 0) ||
       buf_is_empty(buf))
   {
     goto done;
@@ -553,7 +566,7 @@ void query_index(struct Mailbox *m, struct ConfigSubset *sub)
     alias_array_alias_add(&mdata.ava, np);
   }
 
-  if (!dlg_select_query(buf, &mdata))
+  if (!dlg_query(buf, &mdata))
     goto done;
 
   // Prepare the "To:" field of a new email
@@ -580,6 +593,7 @@ done:
   ARRAY_FREE(&mdata.ava);
   FREE(&mdata.title);
   FREE(&mdata.limit);
+  search_state_free(&mdata.search_state);
   aliaslist_free(&al);
   buf_pool_release(&buf);
 }

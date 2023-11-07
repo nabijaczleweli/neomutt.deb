@@ -26,7 +26,6 @@
 #include "config.h"
 #include <stddef.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include "core/lib.h"
 #include "attr.h"
 #include "color.h"
@@ -74,15 +73,16 @@ struct QuoteStyle
   struct QuoteStyle *up, *down;     ///< Parent (less quoted) and child (more quoted) levels
 };
 
-void               quoted_colors_clear(void);
+void               quoted_colors_init(void);
+void               quoted_colors_cleanup(void);
 struct AttrColor * quoted_colors_get(int q);
 int                quoted_colors_num_used(void);
 
-bool               quoted_colors_parse_color  (enum ColorId cid, uint32_t fg, uint32_t bg, int attrs, int q_level, int *rc, struct Buffer *err);
+bool               quoted_colors_parse_color  (enum ColorId cid, struct AttrColor *ac_val, int q_level, int *rc, struct Buffer *err);
 enum CommandResult quoted_colors_parse_uncolor(enum ColorId cid, int q_level, struct Buffer *err);
 
 struct QuoteStyle *qstyle_classify (struct QuoteStyle **quote_list, const char *qptr, size_t length, bool *force_redraw, int *q_level);
 void               qstyle_free_tree(struct QuoteStyle **quote_list);
-void               qstyle_recolour (struct QuoteStyle *quote_list);
+void               qstyle_recolor (struct QuoteStyle *quote_list);
 
 #endif /* MUTT_COLOR_QUOTED_H */

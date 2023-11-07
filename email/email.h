@@ -77,6 +77,8 @@ struct Email
   bool purge           : 1;    ///< Skip trash folder when deleting
 
   /**
+   * @defgroup email_edata_free Email Private Data API
+   *
    * edata_free - Free the private data attached to the Email
    * @param ptr Private data to be freed
    *
@@ -108,7 +110,7 @@ struct Email
 
   int index;                   ///< The absolute (unsorted) message number
   int msgno;                   ///< Number displayed to the user
-  struct AttrColor *attr_color; ///< Color-pair to use when displaying in the index
+  const struct AttrColor *attr_color; ///< Color-pair to use when displaying in the index
   int score;                   ///< Message score
   int vnum;                    ///< Virtual message number
   short attach_total;          ///< Number of qualifying attachments in message, if attach_valid
@@ -123,6 +125,7 @@ struct Email
                                ///< (only valid when collapsed is set)
   char *tree;                  ///< Character string to print thread tree
 };
+ARRAY_HEAD(EmailArray, struct Email *);
 
 /**
  * struct EmailNode - List of Emails
@@ -132,7 +135,6 @@ struct EmailNode
   struct Email *email;             ///< Email in the list
   STAILQ_ENTRY(EmailNode) entries; ///< Linked list
 };
-STAILQ_HEAD(EmailList, EmailNode);
 
 /**
  * enum NotifyEmail - Types of Email Event
@@ -186,9 +188,6 @@ bool          email_cmp_strict(const struct Email *e1, const struct Email *e2);
 void          email_free      (struct Email **ptr);
 struct Email *email_new       (void);
 size_t        email_size      (const struct Email *e);
-
-int  emaillist_add_email(struct EmailList *el, struct Email *e);
-void emaillist_clear    (struct EmailList *el);
 
 struct ListNode *header_add   (struct ListHead *hdrlist, const char *header);
 struct ListNode *header_find  (const struct ListHead *hdrlist, const char *header);

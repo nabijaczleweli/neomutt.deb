@@ -30,9 +30,9 @@
  *
  * ## Windows
  *
- * | Name                        | Type          | See Also                |
- * | :-------------------------- | :------------ | :---------------------- |
- * | Attachment Selection Dialog | WT_DLG_ATTACH | dlg_select_attachment() |
+ * | Name                        | Type              | See Also         |
+ * | :-------------------------- | :---------------- | :--------------- |
+ * | Attachment Selection Dialog | WT_DLG_ATTACHMENT | dlg_attachment() |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -75,6 +75,7 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "attach.h"
 #include "attachments.h"
@@ -82,17 +83,14 @@
 #include "functions.h"
 #include "hdrline.h"
 #include "hook.h"
-#include "keymap.h"
-#include "menu/type.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
 #include "mview.h"
-#include "opcodes.h"
 #include "private_data.h"
 #include "recvattach.h"
 
 /// Help Bar for the Attachment selection dialog
-static const struct Mapping AttachHelp[] = {
+static const struct Mapping AttachmentHelp[] = {
   // clang-format off
   { N_("Exit"),  OP_EXIT },
   { N_("Save"),  OP_ATTACHMENT_SAVE },
@@ -189,7 +187,9 @@ const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols, ch
                  ((aptr->body->type != TYPE_TEXT) || aptr->body->noconv) ? 'n' : 'c');
       }
       else if ((aptr->body->type != TYPE_TEXT) || aptr->body->noconv)
+      {
         optional = false;
+      }
       break;
     case 'd':
     {
@@ -261,7 +261,9 @@ const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols, ch
         }
       }
       else if (!aptr->body->filename)
+      {
         optional = false;
+      }
       break;
     case 'D':
       if (!optional)
@@ -339,7 +341,9 @@ const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols, ch
         mutt_format_s(buf, buflen, prec, tmp);
       }
       else if (l == 0)
+      {
         optional = false;
+      }
 
       break;
     }
@@ -392,7 +396,7 @@ const char *attach_format_str(char *buf, size_t buflen, size_t col, int cols, ch
 }
 
 /**
- * attach_make_entry - Format a menu item for the attachment list - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * attach_make_entry - Format an Attachment for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  *
  * @sa $attach_format, attach_format_str()
  */
@@ -445,7 +449,7 @@ static int attach_window_observer(struct NotifyCallback *nc)
 
   struct Menu *menu = win_menu->wdata;
 
-  notify_observer_remove(NeoMutt->notify, attach_config_observer, menu);
+  notify_observer_remove(NeoMutt->sub->notify, attach_config_observer, menu);
   notify_observer_remove(win_menu->notify, attach_window_observer, win_menu);
 
   mutt_debug(LL_DEBUG5, "window delete done\n");
@@ -453,14 +457,19 @@ static int attach_window_observer(struct NotifyCallback *nc)
 }
 
 /**
- * dlg_select_attachment - Show the attachments in a Menu
- * @param sub Config Subset
- * @param mv  Mailbox view
- * @param e   Email
- * @param fp File with the content of the email, or NULL
+ * dlg_attachment - Show the attachments in a Menu - @ingroup gui_dlg
+ * @param sub        Config Subset
+ * @param mv         Mailbox view
+ * @param e          Email
+ * @param fp         File with the content of the email, or NULL
+ * @param attach_msg Are we in "attach message" mode?
+ *
+ * The Select Attachment dialog shows an Email's attachments.
+ * They can be viewed using the Pager or Mailcap programs.
+ * They can also be saved, printed, deleted, etc.
  */
-void dlg_select_attachment(struct ConfigSubset *sub, struct MailboxView *mv,
-                           struct Email *e, FILE *fp)
+void dlg_attachment(struct ConfigSubset *sub, struct MailboxView *mv,
+                    struct Email *e, FILE *fp, bool attach_msg)
 {
   if (!mv || !mv->mailbox || !e || !fp)
     return;
@@ -471,7 +480,7 @@ void dlg_select_attachment(struct ConfigSubset *sub, struct MailboxView *mv,
   mutt_parse_mime_message(e, fp);
   mutt_message_hook(m, e, MUTT_MESSAGE_HOOK);
 
-  struct MuttWindow *dlg = simple_dialog_new(MENU_ATTACH, WT_DLG_ATTACH, AttachHelp);
+  struct MuttWindow *dlg = simple_dialog_new(MENU_ATTACHMENT, WT_DLG_ATTACHMENT, AttachmentHelp);
   struct Menu *menu = dlg->wdata;
   menu->make_entry = attach_make_entry;
   menu->tag = attach_tag;
@@ -486,16 +495,18 @@ void dlg_select_attachment(struct ConfigSubset *sub, struct MailboxView *mv,
   priv->actx = actx;
   priv->sub = sub;
   priv->mailbox = m;
+  priv->attach_msg = attach_msg;
   menu->mdata = priv;
   menu->mdata_free = attach_private_data_free;
 
   // NT_COLOR is handled by the SimpleDialog
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, attach_config_observer, menu);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, attach_config_observer, menu);
   notify_observer_add(menu->win->notify, NT_WINDOW, attach_window_observer, menu->win);
 
   struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
   sbar_set_title(sbar, _("Attachments"));
 
+  struct MuttWindow *old_focus = window_set_focus(menu->win);
   // ---------------------------------------------------------------------------
   // Event Loop
   int rc = 0;
@@ -505,13 +516,13 @@ void dlg_select_attachment(struct ConfigSubset *sub, struct MailboxView *mv,
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(MENU_ATTACH);
+    op = km_dokey(MENU_ATTACHMENT, GETCH_NO_FLAGS);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
     if (op == OP_NULL)
     {
-      km_error_key(MENU_ATTACH);
+      km_error_key(MENU_ATTACHMENT);
       continue;
     }
     mutt_clear_error();
@@ -530,5 +541,6 @@ void dlg_select_attachment(struct ConfigSubset *sub, struct MailboxView *mv,
   } while (rc != FR_DONE);
   // ---------------------------------------------------------------------------
 
+  window_set_focus(old_focus);
   simple_dialog_free(&dlg);
 }

@@ -134,7 +134,9 @@ static const char *mix_format_str(char *buf, size_t buflen, size_t col, int cols
         snprintf(buf, buflen, fmt, NONULL(remailer->addr));
       }
       else if (!remailer->addr)
+      {
         optional = false;
+      }
       break;
 
     case 'c':
@@ -160,7 +162,9 @@ static const char *mix_format_str(char *buf, size_t buflen, size_t col, int cols
         snprintf(buf, buflen, fmt, NONULL(remailer->shortname));
       }
       else if (!remailer->shortname)
+      {
         optional = false;
+      }
       break;
 
     default:
@@ -183,7 +187,7 @@ static const char *mix_format_str(char *buf, size_t buflen, size_t col, int cols
 }
 
 /**
- * mix_make_entry - Format a menu item for the mixmaster chain list - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * mix_make_entry - Format a Remailer for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  *
  * @sa $mix_entry_format, mix_format_str()
  */
@@ -206,7 +210,7 @@ static void mix_make_entry(struct Menu *menu, char *buf, size_t buflen, int num)
  */
 struct MuttWindow *win_hosts_new(struct RemailerArray *ra)
 {
-  struct MuttWindow *win_hosts = menu_window_new(MENU_MIX, NeoMutt->sub);
+  struct MuttWindow *win_hosts = menu_window_new(MENU_MIXMASTER, NeoMutt->sub);
   win_hosts->focus = win_hosts;
 
   struct Menu *menu = win_hosts->wdata;

@@ -24,9 +24,13 @@
 #define MUTT_CORE_NEOMUTT_H
 
 #include <stddef.h>
+#include <locale.h>
 #include <stdbool.h>
 #include "account.h"
 #include "mailbox.h"
+#ifdef __APPLE__
+#include <xlocale.h>
+#endif
 
 struct ConfigSet;
 
@@ -35,9 +39,12 @@ struct ConfigSet;
  */
 struct NeoMutt
 {
-  struct Notify *notify;       ///< Notifications handler
-  struct ConfigSubset *sub;    ///< Inherited config items
-  struct AccountList accounts; ///< List of all Accounts
+  struct Notify *notify;         ///< Notifications handler
+  struct Notify *notify_resize;  ///< Window resize notifications handler
+  struct Notify *notify_timeout; ///< Timeout notifications handler
+  struct ConfigSubset *sub;      ///< Inherited config items
+  struct AccountList accounts;   ///< List of all Accounts
+  locale_t time_c_locale;        ///< Current locale but LC_TIME=C
 };
 
 extern struct NeoMutt *NeoMutt;
@@ -51,7 +58,6 @@ enum NotifyGlobal
 {
   NT_GLOBAL_STARTUP = 1, ///< NeoMutt is initialised
   NT_GLOBAL_SHUTDOWN,    ///< NeoMutt is about to close
-  NT_GLOBAL_TIMEOUT,     ///< A timer has elapsed
   NT_GLOBAL_COMMAND,     ///< A NeoMutt command
 };
 

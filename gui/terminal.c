@@ -33,7 +33,7 @@
 #include "terminal.h"
 #include "mutt_curses.h"
 #ifdef HAVE_NCURSESW_NCURSES_H
-#include <ncursesw/term.h>
+#include <ncursesw/term.h> // IWYU pragma: keep
 #elif defined(HAVE_NCURSES_NCURSES_H)
 #include <ncurses/term.h>
 #endif
@@ -54,7 +54,7 @@ static const char *FSL = "\007"; // Ctrl-G (BEL)
  */
 bool mutt_ts_capability(void)
 {
-  const char *known[] = {
+  static const char *known[] = {
     "color-xterm", "cygwin", "eterm",  "kterm", "nxterm",
     "putty",       "rxvt",   "screen", "xterm", NULL,
   };
@@ -90,7 +90,6 @@ bool mutt_ts_capability(void)
       return true;
   }
 
-  /* not reached */
   return false;
 }
 

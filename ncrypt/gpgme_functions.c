@@ -46,7 +46,6 @@
 #include "crypt_gpgme.h"
 #include "globals.h"
 #include "mutt_logging.h"
-#include "opcodes.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
@@ -230,7 +229,9 @@ static const char *parse_dn_part(struct DnArray *array, const char *str)
         }
       }
       else if (*s == '\"')
+      {
         return NULL; /* invalid encoding */
+      }
       else if ((*s == ',') || (*s == '=') || (*s == '+') || (*s == '<') ||
                (*s == '>') || (*s == '#') || (*s == ';'))
       {
@@ -255,10 +256,14 @@ static const char *parse_dn_part(struct DnArray *array, const char *str)
           s++;
         }
         else
+        {
           *p++ = *s;
+        }
       }
       else
+      {
         *p++ = *s;
+      }
     }
     *p = '\0';
   }
@@ -346,17 +351,17 @@ static void parse_and_print_user_id(FILE *fp, const char *userid)
       print_utf8(fp, userid + 1, s - userid - 1);
   }
   else if (*userid == '(')
+  {
     fputs(_("[Can't display this user ID (unknown encoding)]"), fp);
+  }
   else if (!isalnum(userid[0]))
+  {
     fputs(_("[Can't display this user ID (invalid encoding)]"), fp);
+  }
   else
   {
     struct DnArray *dn = parse_dn(userid);
-    if (!dn)
-    {
-      fputs(_("[Can't display this user ID (invalid DN)]"), fp);
-    }
-    else
+    if (dn)
     {
       print_dn_parts(fp, dn);
       for (int i = 0; dn[i].key; i++)
@@ -365,6 +370,10 @@ static void parse_and_print_user_id(FILE *fp, const char *userid)
         FREE(&dn[i].value);
       }
       FREE(&dn);
+    }
+    else
+    {
+      fputs(_("[Can't display this user ID (invalid DN)]"), fp);
     }
   }
 }
@@ -763,7 +772,7 @@ static int op_generic_select_entry(struct GpgmeData *gd, int op)
 
     snprintf(buf2, sizeof(buf2), "%s", warn_s);
 
-    if (mutt_yesorno(buf2, MUTT_NO) != MUTT_YES)
+    if (query_yesorno(buf2, MUTT_NO) != MUTT_YES)
     {
       mutt_clear_error();
       return FR_NO_ACTION;
@@ -841,7 +850,7 @@ int gpgme_function_dispatcher(struct MuttWindow *win, int op)
   if (rc == FR_UNKNOWN) // Not our function
     return rc;
 
-  const char *result = dispacher_get_retval_name(rc);
+  const char *result = dispatcher_get_retval_name(rc);
   mutt_debug(LL_DEBUG1, "Handled %s (%d) -> %s\n", opcodes_get_name(op), op, NONULL(result));
 
   return rc;

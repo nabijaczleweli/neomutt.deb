@@ -36,7 +36,7 @@
  *
  * The Simple Bar has many possible parents, e.g.
  *
- * - @ref compose_dialog
+ * - @ref compose_dlg_compose
  * - @ref gui_simple
  * - ...
  *
@@ -62,9 +62,11 @@
 
 #include "config.h"
 #include "mutt/lib.h"
-#include "core/lib.h"
-#include "lib.h"
+#include "sbar.h"
 #include "color/lib.h"
+#include "curs_lib.h"
+#include "mutt_curses.h"
+#include "mutt_window.h"
 
 /**
  * struct SBarPrivateData - Private data for the Simple Bar
@@ -162,7 +164,7 @@ static int sbar_window_observer(struct NotifyCallback *nc)
   }
   else if (nc->event_subtype == NT_WINDOW_DELETE)
   {
-    notify_observer_remove(NeoMutt->notify, sbar_color_observer, win_sbar);
+    mutt_color_observer_remove(sbar_color_observer, win_sbar);
     notify_observer_remove(win_sbar->notify, sbar_window_observer, win_sbar);
     mutt_debug(LL_DEBUG5, "window delete done\n");
   }
@@ -171,10 +173,13 @@ static int sbar_window_observer(struct NotifyCallback *nc)
 }
 
 /**
- * sbar_wdata_free - Free the private data attached to the MuttWindow - Implements MuttWindow::wdata_free() - @ingroup window_wdata_free
+ * sbar_wdata_free - Free the private data of the Simple Bar - Implements MuttWindow::wdata_free() - @ingroup window_wdata_free
  */
 static void sbar_wdata_free(struct MuttWindow *win, void **ptr)
 {
+  if (!ptr || !*ptr)
+    return;
+
   struct SBarPrivateData *priv = *ptr;
 
   FREE(&priv->display);
@@ -183,14 +188,12 @@ static void sbar_wdata_free(struct MuttWindow *win, void **ptr)
 }
 
 /**
- * sbar_data_new - Free the private data attached to the MuttWindow
+ * sbar_data_new - Create the private data for the Simple Bar
  * @retval ptr New SBar
  */
 static struct SBarPrivateData *sbar_data_new(void)
 {
-  struct SBarPrivateData *sbar_data = mutt_mem_calloc(1, sizeof(struct SBarPrivateData));
-
-  return sbar_data;
+  return mutt_mem_calloc(1, sizeof(struct SBarPrivateData));
 }
 
 /**
@@ -208,7 +211,7 @@ struct MuttWindow *sbar_new(void)
   win_sbar->recalc = sbar_recalc;
   win_sbar->repaint = sbar_repaint;
 
-  notify_observer_add(NeoMutt->notify, NT_COLOR, sbar_color_observer, win_sbar);
+  mutt_color_observer_add(sbar_color_observer, win_sbar);
   notify_observer_add(win_sbar->notify, NT_WINDOW, sbar_window_observer, win_sbar);
 
   return win_sbar;

@@ -103,17 +103,17 @@ void test_mutt_str_atoui(void)
     result = UNEXPECTED;
     const char *end = mutt_str_atoui(tests[i].str, &result);
 
-    if (tests[i].retval == 0 && (end == NULL || *end))
+    if ((tests[i].retval == 0) && (!end || *end))
     {
-      TEST_MSG("retval: Expected: \\0, Got: %s\n", end);
+      TEST_MSG("retval: Expected: \\0, Got: %s", end);
     }
-    else if (tests[i].retval == -1 && end)
+    else if ((tests[i].retval == -1) && end)
     {
-      TEST_MSG("retval: Expected: NULL, Got: %s\n", end);
+      TEST_MSG("retval: Expected: NULL, Got: %s", end);
     }
-    else if (tests[i].retval == -2 && end)
+    else if ((tests[i].retval == -2) && end)
     {
-      TEST_MSG("retval: Expected: NULL, Got: %s\n", end);
+      TEST_MSG("retval: Expected: NULL, Got: %s", end);
     }
   }
 }

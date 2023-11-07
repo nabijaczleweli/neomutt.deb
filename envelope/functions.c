@@ -40,13 +40,14 @@
 #include "mutt.h"
 #include "functions.h"
 #include "lib.h"
-#include "enter/lib.h"
+#include "browser/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "ncrypt/lib.h"
 #include "question/lib.h"
 #include "hook.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "opcodes.h"
 #include "wdata.h"
 #ifdef MIXMASTER
 #include "mixmaster/lib.h"
@@ -75,7 +76,7 @@ static void autocrypt_compose_menu(struct Email *e, const struct ConfigSubset *s
      (e)ncrypt, (c)lear, (a)utomatic */
   const char *letters = _("eca");
 
-  int choice = mutt_multi_choice(prompt, letters);
+  int choice = mw_multi_choice(prompt, letters);
   switch (choice)
   {
     case 1:
@@ -117,7 +118,8 @@ static bool edit_address_list(enum HeaderField field, struct AddressList *al)
   mutt_addrlist_write(al, new_list, false);
   buf_fix_dptr(new_list);
   buf_copy(old_list, new_list);
-  if (buf_get_field(_(Prompts[field]), new_list, MUTT_COMP_ALIAS, false, NULL, NULL, NULL) == 0)
+  if (mw_get_field(_(Prompts[field]), new_list, MUTT_COMP_NO_FLAGS, HC_ALIAS,
+                   &CompleteAliasOps, NULL) == 0)
   {
     mutt_addrlist_clear(al);
     mutt_addrlist_parse2(al, buf_string(new_list));
@@ -227,8 +229,9 @@ static int op_envelope_edit_fcc(struct EnvelopeWindowData *wdata, int op)
   struct Buffer *fname = buf_pool_get();
   buf_copy(fname, wdata->fcc);
 
-  if (buf_get_field(Prompts[HDR_FCC], fname, MUTT_COMP_FILE | MUTT_COMP_CLEAR,
-                    false, NULL, NULL, NULL) != 0)
+  struct FileCompletionData cdata = { false, NULL, NULL, NULL };
+  if (mw_get_field(Prompts[HDR_FCC], fname, MUTT_COMP_CLEAR, HC_FILE,
+                   &CompleteMailboxOps, &cdata) != 0)
   {
     goto done; // aborted
   }
@@ -280,8 +283,7 @@ static int op_envelope_edit_subject(struct EnvelopeWindowData *wdata, int op)
   struct Buffer *buf = buf_pool_get();
 
   buf_strcpy(buf, wdata->email->env->subject);
-  if (buf_get_field(Prompts[HDR_SUBJECT], buf, MUTT_COMP_NO_FLAGS, false, NULL,
-                    NULL, NULL) != 0)
+  if (mw_get_field(Prompts[HDR_SUBJECT], buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) != 0)
   {
     goto done; // aborted
   }
@@ -332,7 +334,7 @@ static int op_compose_pgp_menu(struct EnvelopeWindowData *wdata, int op)
   {
     if (wdata->email->security & (SEC_ENCRYPT | SEC_SIGN))
     {
-      if (mutt_yesorno(_("S/MIME already selected. Clear and continue?"), MUTT_YES) != MUTT_YES)
+      if (query_yesorno(_("S/MIME already selected. Clear and continue?"), MUTT_YES) != MUTT_YES)
       {
         mutt_clear_error();
         return FR_NO_ACTION;
@@ -371,7 +373,7 @@ static int op_compose_smime_menu(struct EnvelopeWindowData *wdata, int op)
   {
     if (wdata->email->security & (SEC_ENCRYPT | SEC_SIGN))
     {
-      if (mutt_yesorno(_("PGP already selected. Clear and continue?"), MUTT_YES) != MUTT_YES)
+      if (query_yesorno(_("PGP already selected. Clear and continue?"), MUTT_YES) != MUTT_YES)
       {
         mutt_clear_error();
         return FR_NO_ACTION;
@@ -407,7 +409,7 @@ static int op_compose_autocrypt_menu(struct EnvelopeWindowData *wdata, int op)
   {
     if (wdata->email->security & (SEC_ENCRYPT | SEC_SIGN))
     {
-      if (mutt_yesorno(_("S/MIME already selected. Clear and continue?"), MUTT_YES) != MUTT_YES)
+      if (query_yesorno(_("S/MIME already selected. Clear and continue?"), MUTT_YES) != MUTT_YES)
       {
         mutt_clear_error();
         return FR_NO_ACTION;
@@ -444,8 +446,7 @@ static int op_envelope_edit_followup_to(struct EnvelopeWindowData *wdata, int op
   struct Buffer *buf = buf_pool_get();
 
   buf_strcpy(buf, wdata->email->env->followup_to);
-  if (buf_get_field(Prompts[HDR_FOLLOWUPTO], buf, MUTT_COMP_NO_FLAGS, false,
-                    NULL, NULL, NULL) == 0)
+  if (mw_get_field(Prompts[HDR_FOLLOWUPTO], buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) == 0)
   {
     mutt_str_replace(&wdata->email->env->followup_to, buf_string(buf));
     mutt_env_notify_send(wdata->email, NT_ENVELOPE_FOLLOWUP_TO);
@@ -468,8 +469,7 @@ static int op_envelope_edit_newsgroups(struct EnvelopeWindowData *wdata, int op)
   struct Buffer *buf = buf_pool_get();
 
   buf_strcpy(buf, wdata->email->env->newsgroups);
-  if (buf_get_field(Prompts[HDR_NEWSGROUPS], buf, MUTT_COMP_NO_FLAGS, false,
-                    NULL, NULL, NULL) == 0)
+  if (mw_get_field(Prompts[HDR_NEWSGROUPS], buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) == 0)
   {
     mutt_str_replace(&wdata->email->env->newsgroups, buf_string(buf));
     mutt_env_notify_send(wdata->email, NT_ENVELOPE_NEWSGROUPS);
@@ -493,8 +493,7 @@ static int op_envelope_edit_x_comment_to(struct EnvelopeWindowData *wdata, int o
   struct Buffer *buf = buf_pool_get();
 
   buf_strcpy(buf, wdata->email->env->x_comment_to);
-  if (buf_get_field(Prompts[HDR_XCOMMENTTO], buf, MUTT_COMP_NO_FLAGS, false,
-                    NULL, NULL, NULL) == 0)
+  if (mw_get_field(Prompts[HDR_XCOMMENTTO], buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) == 0)
   {
     mutt_str_replace(&wdata->email->env->x_comment_to, buf_string(buf));
     mutt_env_notify_send(wdata->email, NT_ENVELOPE_X_COMMENT_TO);
@@ -577,7 +576,7 @@ int env_function_dispatcher(struct MuttWindow *win, int op)
   if (rc == FR_UNKNOWN) // Not our function
     return rc;
 
-  const char *result = dispacher_get_retval_name(rc);
+  const char *result = dispatcher_get_retval_name(rc);
   mutt_debug(LL_DEBUG1, "Handled %s (%d) -> %s\n", opcodes_get_name(op), op, NONULL(result));
 
   return rc;

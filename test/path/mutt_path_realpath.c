@@ -25,12 +25,43 @@
 #include "acutest.h"
 #include <stddef.h>
 #include "mutt/lib.h"
+#include "test_common.h"
 
 void test_mutt_path_realpath(void)
 {
-  // size_t mutt_path_realpath(char *buf);
+  // size_t mutt_path_realpath(struct Buffer *path);
 
   {
     TEST_CHECK(mutt_path_realpath(NULL) == 0);
+  }
+
+  {
+    // Working symlink
+    struct Buffer *path = buf_pool_get();
+    char expected[PATH_MAX] = { 0 };
+
+    const char *test_dir = get_test_dir();
+    TEST_CHECK(test_dir != NULL);
+    buf_printf(path, "%s/file/empty_symlink", test_dir);
+    snprintf(expected, sizeof(expected), "%s/file/empty", test_dir);
+
+    TEST_CHECK(mutt_path_realpath(path) > 0);
+    TEST_CHECK_STR_EQ(buf_string(path), expected);
+    buf_pool_release(&path);
+  }
+
+  {
+    // Broken symlink
+    struct Buffer *path = buf_pool_get();
+    char expected[PATH_MAX] = { 0 };
+
+    const char *test_dir = get_test_dir();
+    TEST_CHECK(test_dir != NULL);
+    buf_printf(path, "%s/file/missing_symlink", test_dir);
+    snprintf(expected, sizeof(expected), "%s/file/missing_symlink", test_dir);
+
+    TEST_CHECK(mutt_path_realpath(path) == 0);
+    TEST_CHECK_STR_EQ(buf_string(path), expected);
+    buf_pool_release(&path);
   }
 }

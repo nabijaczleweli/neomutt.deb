@@ -28,6 +28,7 @@
  */
 
 #include "config.h"
+#include <errno.h>
 #include <pwd.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -41,17 +42,20 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "alias/lib.h"
-#include "conn/lib.h"
 #include "gui/lib.h"
 #include "init.h"
 #include "color/lib.h"
 #include "history/lib.h"
+#include "key/lib.h"
 #include "notmuch/lib.h"
 #include "parse/lib.h"
 #include "commands.h"
 #include "globals.h" // IWYU pragma: keep
 #include "hook.h"
-#include "keymap.h"
+#include "mutt_logging.h"
+#ifndef DOMAIN
+#include "conn/lib.h"
+#endif
 #ifdef USE_LUA
 #include "mutt_lua.h"
 #endif
@@ -219,8 +223,7 @@ static bool get_hostname(struct ConfigSet *cs)
     /* now get FQDN.  Use configured domain first, DNS next, then uname */
 #ifdef DOMAIN
     /* we have a compile-time domain name, use that for `$hostname` */
-    fqdn = mutt_mem_malloc(mutt_str_len(DOMAIN) + mutt_str_len(ShortHostname) + 2);
-    sprintf((char *) fqdn, "%s.%s", NONULL(ShortHostname), DOMAIN);
+    mutt_str_asprintf(&fqdn, "%s.%s", NONULL(ShortHostname), DOMAIN);
 #else
     fqdn = getmailname();
     if (!fqdn)
@@ -228,8 +231,7 @@ static bool get_hostname(struct ConfigSet *cs)
       struct Buffer *domain = buf_pool_get();
       if (getdnsdomainname(domain) == 0)
       {
-        fqdn = mutt_mem_malloc(buf_len(domain) + mutt_str_len(ShortHostname) + 2);
-        sprintf((char *) fqdn, "%s.%s", NONULL(ShortHostname), buf_string(domain));
+        mutt_str_asprintf(&fqdn, "%s.%s", NONULL(ShortHostname), buf_string(domain));
       }
       else
       {
@@ -259,15 +261,15 @@ static bool get_hostname(struct ConfigSet *cs)
 }
 
 /**
- * mutt_opts_free - Clean up before quitting
+ * mutt_opts_cleanup - Clean up before quitting
  */
-void mutt_opts_free(void)
+void mutt_opts_cleanup(void)
 {
-  clear_source_stack();
+  source_stack_cleanup();
 
-  alias_shutdown();
+  alias_cleanup();
 #ifdef USE_SIDEBAR
-  sb_shutdown();
+  sb_cleanup();
 #endif
 
   mutt_regexlist_free(&MailLists);
@@ -276,7 +278,7 @@ void mutt_opts_free(void)
   mutt_regexlist_free(&UnMailLists);
   mutt_regexlist_free(&UnSubscribedLists);
 
-  mutt_grouplist_free();
+  mutt_grouplist_cleanup();
   driver_tags_cleanup();
 
   /* Lists of strings */
@@ -302,24 +304,27 @@ void mutt_opts_free(void)
 
   mutt_delete_hooks(MUTT_HOOK_NO_FLAGS);
 
-  mutt_hist_free();
-  mutt_keys_free();
+  mutt_hist_cleanup();
+  mutt_keys_cleanup();
 
   mutt_regexlist_free(&NoSpamList);
-  commands_free();
+  commands_cleanup();
 }
 
 /**
  * mutt_init - Initialise NeoMutt
  * @param cs          Config Set
+ * @param dlevel      Command line debug level
+ * @param dfile       Command line debug file
  * @param skip_sys_rc If true, don't read the system config file
  * @param commands    List of config commands to execute
  * @retval 0 Success
  * @retval 1 Error
  */
-int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
+int mutt_init(struct ConfigSet *cs, const char *dlevel, const char *dfile,
+              bool skip_sys_rc, struct ListHead *commands)
 {
-  int need_pause = 0;
+  bool need_pause = false;
   int rc = 1;
   struct Buffer err = buf_make(256);
   struct Buffer buf = buf_make(256);
@@ -366,7 +371,8 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
     if (env_colorterm && (mutt_str_equal(env_colorterm, "truecolor") ||
                           mutt_str_equal(env_colorterm, "24bit")))
     {
-      cs_subset_str_native_set(NeoMutt->sub, "color_directcolor", true, NULL);
+      cs_str_initial_set(cs, "color_directcolor", "yes", NULL);
+      cs_str_reset(cs, "color_directcolor", NULL);
     }
   }
 #endif
@@ -489,7 +495,7 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
       np->data = buf_strdup(&buf);
       if (access(np->data, F_OK))
       {
-        mutt_perror(np->data);
+        mutt_perror("%s", np->data);
         goto done; // TEST10: neomutt -F missing
       }
     }
@@ -529,7 +535,7 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
       if (source_rc(buf_string(&buf), &err) != 0)
       {
         mutt_error("%s", err.data);
-        need_pause = 1; // TEST11: neomutt (error in /etc/neomuttrc)
+        need_pause = true; // TEST11: neomutt (error in /etc/neomuttrc)
       }
     }
   }
@@ -543,30 +549,40 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
       if (source_rc(np->data, &err) != 0)
       {
         mutt_error("%s", err.data);
-        need_pause = 1; // TEST12: neomutt (error in ~/.neomuttrc)
+        need_pause = true; // TEST12: neomutt (error in ~/.neomuttrc)
       }
     }
   }
 
   if (execute_commands(commands) != 0)
-    need_pause = 1; // TEST13: neomutt -e broken
+    need_pause = true; // TEST13: neomutt -e broken
 
   if (!get_hostname(cs))
     goto done;
 
+  char name[256] = { 0 };
+  const char *c_real_name = cs_subset_string(NeoMutt->sub, "real_name");
+  if (!c_real_name)
   {
-    char name[256] = { 0 };
-    const char *c_real_name = cs_subset_string(NeoMutt->sub, "real_name");
-    if (!c_real_name)
+    struct passwd *pw = getpwuid(getuid());
+    if (pw)
     {
-      struct passwd *pw = getpwuid(getuid());
-      if (pw)
-      {
-        c_real_name = mutt_gecos_name(name, sizeof(name), pw);
-      }
+      c_real_name = mutt_gecos_name(name, sizeof(name), pw);
     }
-    cs_str_initial_set(cs, "real_name", c_real_name, NULL);
-    cs_str_reset(cs, "real_name", NULL);
+  }
+  cs_str_initial_set(cs, "real_name", c_real_name, NULL);
+  cs_str_reset(cs, "real_name", NULL);
+
+  /* The command line overrides the config */
+  if (dlevel)
+    cs_str_reset(cs, "debug_level", NULL);
+  if (dfile)
+    cs_str_reset(cs, "debug_file", NULL);
+
+  if (mutt_log_start() < 0)
+  {
+    mutt_perror("log file");
+    goto done;
   }
 
   if (need_pause && !OptNoCurses)
@@ -577,7 +593,11 @@ int mutt_init(struct ConfigSet *cs, bool skip_sys_rc, struct ListHead *commands)
   }
 
   const char *const c_tmp_dir = cs_subset_path(NeoMutt->sub, "tmp_dir");
-  mutt_file_mkdir(c_tmp_dir, S_IRWXU);
+  if (mutt_file_mkdir(c_tmp_dir, S_IRWXU) < 0)
+  {
+    mutt_error(_("Can't create %s: %s"), c_tmp_dir, strerror(errno));
+    goto done;
+  }
 
   mutt_hist_init();
   mutt_hist_read_file();

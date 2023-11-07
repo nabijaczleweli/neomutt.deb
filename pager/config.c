@@ -28,9 +28,9 @@
 
 #include "config.h"
 #include <stddef.h>
-#include <config/lib.h>
 #include <stdbool.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
 
 /**
  * PagerVars - Config definitions for the Pager
@@ -38,13 +38,13 @@
 static struct ConfigDef PagerVars[] = {
   // clang-format off
   { "allow_ansi", DT_BOOL, false, 0, NULL,
-    "Allow ANSI colour codes in rich text messages"
+    "Allow ANSI color codes in rich text messages"
   },
   { "display_filter", DT_STRING|DT_COMMAND, 0, 0, NULL,
     "External command to pre-process an email before display"
   },
   { "header_color_partial", DT_BOOL, false, 0, NULL,
-    "Only colour the part of the header matching the regex"
+    "Only color the part of the header matching the regex"
   },
   { "pager", DT_STRING|DT_COMMAND, IP "builtin", 0, NULL,
     "External command for viewing messages, or 'builtin' to use NeoMutt's"

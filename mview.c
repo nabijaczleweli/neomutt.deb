@@ -54,19 +54,31 @@ void mview_free(struct MailboxView **ptr)
   struct MailboxView *mv = *ptr;
 
   struct EventMview ev_m = { mv };
-  mutt_debug(LL_NOTIFY, "NT_MVIEW_DELETE: %p\n", mv);
+  mutt_debug(LL_NOTIFY, "NT_MVIEW_DELETE: %p\n", (void *) mv);
   notify_send(mv->notify, NT_MVIEW, NT_MVIEW_DELETE, &ev_m);
 
   if (mv->mailbox)
+  {
     notify_observer_remove(mv->mailbox->notify, mview_mailbox_observer, mv);
+
+    // Disconnect the Emails before freeing the Threads
+    for (int i = 0; i < mv->mailbox->msg_count; i++)
+    {
+      struct Email *e = mv->mailbox->emails[i];
+      if (!e)
+        continue;
+      e->thread = NULL;
+      e->threaded = false;
+    }
+  }
 
   mutt_thread_ctx_free(&mv->threads);
   notify_free(&mv->notify);
   FREE(&mv->pattern);
   mutt_pattern_free(&mv->limit_pattern);
 
-  FREE(&mv);
   *ptr = NULL;
+  FREE(&mv);
 }
 
 /**
@@ -85,7 +97,7 @@ struct MailboxView *mview_new(struct Mailbox *m, struct Notify *parent)
   mv->notify = notify_new();
   notify_set_parent(mv->notify, parent);
   struct EventMview ev_m = { mv };
-  mutt_debug(LL_NOTIFY, "NT_MVIEW_ADD: %p\n", mv);
+  mutt_debug(LL_NOTIFY, "NT_MVIEW_ADD: %p\n", (void *) mv);
   notify_send(mv->notify, NT_MVIEW, NT_MVIEW_ADD, &ev_m);
   // If the Mailbox is closed, mv->mailbox must be set to NULL
   notify_observer_add(m->notify, NT_MAILBOX, mview_mailbox_observer, mv);
@@ -100,10 +112,10 @@ struct MailboxView *mview_new(struct Mailbox *m, struct Notify *parent)
 }
 
 /**
- * ctx_cleanup - Release memory and initialize a MailboxView
+ * mview_clean - Release memory and initialize a MailboxView
  * @param mv MailboxView to cleanup
  */
-static void ctx_cleanup(struct MailboxView *mv)
+static void mview_clean(struct MailboxView *mv)
 {
   FREE(&mv->pattern);
   mutt_pattern_free(&mv->limit_pattern);
@@ -324,7 +336,7 @@ int mview_mailbox_observer(struct NotifyCallback *nc)
   {
     case NT_MAILBOX_DELETE:
       mutt_clear_threads(mv->threads);
-      ctx_cleanup(mv);
+      mview_clean(mv);
       break;
     case NT_MAILBOX_INVALID:
       mview_update(mv);
@@ -356,18 +368,16 @@ bool message_is_tagged(struct Email *e)
 }
 
 /**
- * el_add_tagged - Get a list of the tagged Emails
- * @param el         Empty EmailList to populate
- * @param mv        Current Mailbox
+ * ea_add_tagged - Get an array of the tagged Emails
+ * @param ea         Empty EmailArray to populate
+ * @param mv         Current Mailbox
  * @param e          Current Email
  * @param use_tagged Use tagged Emails
  * @retval num Number of selected emails
  * @retval -1  Error
  */
-int el_add_tagged(struct EmailList *el, struct MailboxView *mv, struct Email *e, bool use_tagged)
+int ea_add_tagged(struct EmailArray *ea, struct MailboxView *mv, struct Email *e, bool use_tagged)
 {
-  int count = 0;
-
   if (use_tagged)
   {
     if (!mv || !mv->mailbox || !mv->mailbox->emails)
@@ -382,10 +392,7 @@ int el_add_tagged(struct EmailList *el, struct MailboxView *mv, struct Email *e,
       if (!message_is_tagged(e))
         continue;
 
-      struct EmailNode *en = mutt_mem_calloc(1, sizeof(*en));
-      en->email = e;
-      STAILQ_INSERT_TAIL(el, en, entries);
-      count++;
+      ARRAY_ADD(ea, e);
     }
   }
   else
@@ -393,13 +400,10 @@ int el_add_tagged(struct EmailList *el, struct MailboxView *mv, struct Email *e,
     if (!e)
       return -1;
 
-    struct EmailNode *en = mutt_mem_calloc(1, sizeof(*en));
-    en->email = e;
-    STAILQ_INSERT_TAIL(el, en, entries);
-    count = 1;
+    ARRAY_ADD(ea, e);
   }
 
-  return count;
+  return ARRAY_SIZE(ea);
 }
 
 /**

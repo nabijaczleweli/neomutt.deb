@@ -24,6 +24,7 @@
 #define MUTT_NNTP_MDATA_H
 
 #include <stdbool.h>
+#include <time.h>
 #include "lib.h"
 
 /**
@@ -47,6 +48,7 @@ struct NntpMboxData
   struct NntpAccountData *adata;
   struct NntpAcache acache[NNTP_ACACHE_LEN];
   struct BodyCache *bcache;
+  struct timespec mtime; ///< Time Mailbox was last changed
 };
 
 void nntp_mdata_free(void **ptr);

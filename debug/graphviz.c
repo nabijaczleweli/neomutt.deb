@@ -1016,7 +1016,7 @@ void dot_attach_ptr(FILE *fp, struct AttachPtr *aptr, struct ListHead *links)
 
   dot_type_file(fp, "fp", aptr->fp);
 
-  dot_type_string(fp, "parent_type", get_content_type(aptr->parent_type), false);
+  dot_type_string(fp, "parent_type", name_content_type(aptr->parent_type), false);
 
   dot_type_number(fp, "level", aptr->level);
   dot_type_number(fp, "num", aptr->num);
@@ -1050,9 +1050,9 @@ void dot_body(FILE *fp, struct Body *b, struct ListHead *links, bool link_next)
   dot_type_string(fp, "subtype", b->subtype, false);
   dot_type_string(fp, "xtype", b->xtype, false);
 
-  dot_type_string(fp, "type", get_content_type(b->type), true);
-  dot_type_string(fp, "encoding", get_content_encoding(b->encoding), true);
-  dot_type_string(fp, "disposition", get_content_disposition(b->disposition), true);
+  dot_type_string(fp, "type", name_content_type(b->type), true);
+  dot_type_string(fp, "encoding", name_content_encoding(b->encoding), true);
+  dot_type_string(fp, "disposition", name_content_disposition(b->disposition), true);
 
   if (b->stamp != 0)
   {
@@ -1406,13 +1406,19 @@ void dump_graphviz_body(struct Body *b)
   mutt_list_free(&links);
 }
 
-void dump_graphviz_email(struct Email *e)
+void dump_graphviz_email(struct Email *e, const char *title)
 {
   char name[256] = { 0 };
   struct ListHead links = STAILQ_HEAD_INITIALIZER(links);
 
+  if (!title)
+    title = "email";
+
+  char format[64];
+  snprintf(format, sizeof(format), "%%T-%s.gv", title);
+
   time_t now = time(NULL);
-  mutt_date_localtime_format(name, sizeof(name), "%T-email.gv", now);
+  mutt_date_localtime_format(name, sizeof(name), format, now);
 
   umask(022);
   FILE *fp = fopen(name, "w");
@@ -1440,7 +1446,7 @@ void dot_attach_ptr2(FILE *fp, struct AttachPtr *aptr, struct ListHead *links)
   dot_ptr(fp, "body", aptr->body, "#2020ff");
   dot_type_file(fp, "fp", aptr->fp);
 
-  dot_type_string(fp, "parent_type", get_content_type(aptr->parent_type), false);
+  dot_type_string(fp, "parent_type", name_content_type(aptr->parent_type), false);
   dot_type_number(fp, "level", aptr->level);
   dot_type_number(fp, "num", aptr->num);
   dot_type_bool(fp, "unowned", aptr->unowned);

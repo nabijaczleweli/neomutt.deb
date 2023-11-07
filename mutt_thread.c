@@ -69,9 +69,9 @@ const struct EnumDef UseThreadsTypeDef = {
 
 /**
  * mutt_thread_style - Which threading style is active?
- * @retval UT_FLAT    No threading in use
- * @retval UT_THREADS Normal threads (root above subthread)
- * @retval UT_REVERSE Reverse threads (subthread above root)
+ * @retval #UT_FLAT    No threading in use
+ * @retval #UT_THREADS Normal threads (root above subthread)
+ * @retval #UT_REVERSE Reverse threads (subthread above root)
  *
  * @note UT_UNSET is never returned; rather, this function considers the
  *       interaction between $use_threads and $sort.
@@ -100,7 +100,7 @@ const char *get_use_threads_str(enum UseThreads value)
 }
 
 /**
- * sort_validator - Validate values of "sort" - Implements ConfigDef::validator() - @ingroup cfg_def_validator
+ * sort_validator - Validate the "sort" config variable - Implements ConfigDef::validator() - @ingroup cfg_def_validator
  */
 int sort_validator(const struct ConfigSet *cs, const struct ConfigDef *cdef,
                    intptr_t value, struct Buffer *err)
@@ -299,7 +299,9 @@ static void calculate_visibility(struct MuttThread *tree, int *max_depth)
         tree = tree->next;
     }
     else if (tree->prev)
+    {
       tree = tree->prev;
+    }
     else
     {
       while (tree && !tree->prev)
@@ -325,9 +327,13 @@ static void calculate_visibility(struct MuttThread *tree, int *max_depth)
         tree->deep = false;
       }
       if (!tree->deep && tree->child && tree->subtree_visible)
+      {
         tree = tree->child;
+      }
       else if (tree->next)
+      {
         tree = tree->next;
+      }
       else
       {
         while (tree && !tree->next)
@@ -358,6 +364,11 @@ struct ThreadsContext *mutt_thread_ctx_init(struct MailboxView *mv)
  */
 void mutt_thread_ctx_free(struct ThreadsContext **ptr)
 {
+  if (!ptr || !*ptr)
+  {
+    return;
+  }
+
   struct ThreadsContext *tctx = *ptr;
 
   mutt_hash_free(&tctx->hash);
@@ -731,19 +742,13 @@ void mutt_clear_threads(struct ThreadsContext *tctx)
 }
 
 /**
- * compare_threads - qsort_r() function for comparing email threads
- * @param a   First thread to compare
- * @param b   Second thread to compare
- * @param arg ThreadsContext for how to compare
- * @retval <0 a precedes b
- * @retval  0 a and b are identical
- * @retval >0 b precedes a
+ * compare_threads - Helper to sort email threads - Implements ::sort_t - @ingroup sort_api
  */
-static int compare_threads(const void *a, const void *b, void *arg)
+static int compare_threads(const void *a, const void *b, void *sdata)
 {
   const struct MuttThread *ta = *(struct MuttThread const *const *) a;
   const struct MuttThread *tb = *(struct MuttThread const *const *) b;
-  const struct ThreadsContext *tctx = arg;
+  const struct ThreadsContext *tctx = sdata;
   assert(ta->parent == tb->parent);
 
   /* If c_sort ties, remember we are building the thread array in
@@ -901,7 +906,9 @@ static void mutt_sort_subthreads(struct ThreadsContext *tctx, bool init)
             }
           }
           else if (!thread->sort_aux_key)
+          {
             thread->sort_aux_key = sort_aux_key;
+          }
 
           /* ...but sort_thread_key may require searching the entire
            * list of siblings */
@@ -1006,7 +1013,7 @@ static void check_subjects(struct MailboxView *mv, bool init)
 }
 
 /**
- * thread_hash_destructor - Hash Destructor callback - Implements ::hash_hdata_free_t - @ingroup hash_hdata_free_api
+ * thread_hash_destructor - Free our hash table data - Implements ::hash_hdata_free_t - @ingroup hash_hdata_free_api
  */
 static void thread_hash_destructor(int type, void *obj, intptr_t data)
 {
@@ -1064,7 +1071,24 @@ void mutt_sort_threads(struct ThreadsContext *tctx, bool init)
     if (!e)
       continue;
 
-    if (!e->thread)
+    if (e->thread)
+    {
+      /* unlink pseudo-threads because they might be children of newly
+       * arrived messages */
+      thread = e->thread;
+      for (tnew = thread->child; tnew;)
+      {
+        tmp = tnew->next;
+        if (tnew->fake_thread)
+        {
+          unlink_message(&thread->child, tnew);
+          insert_message(&top.child, &top, tnew);
+          tnew->fake_thread = false;
+        }
+        tnew = tmp;
+      }
+    }
+    else
     {
       if ((!init || c_duplicate_threads) && e->env->message_id)
         thread = mutt_hash_find(tctx->hash, e->env->message_id);
@@ -1130,23 +1154,6 @@ void mutt_sort_threads(struct ThreadsContext *tctx, bool init)
           thread->duplicate_thread = true;
           thread->message->threaded = true;
         }
-      }
-    }
-    else
-    {
-      /* unlink pseudo-threads because they might be children of newly
-       * arrived messages */
-      thread = e->thread;
-      for (tnew = thread->child; tnew;)
-      {
-        tmp = tnew->next;
-        if (tnew->fake_thread)
-        {
-          unlink_message(&thread->child, tnew);
-          insert_message(&top.child, &top, tnew);
-          tnew->fake_thread = false;
-        }
-        tnew = tmp;
       }
     }
   }
@@ -1272,9 +1279,13 @@ void mutt_sort_threads(struct ThreadsContext *tctx, bool init)
  * @param forwards   Direction to search: 'true' forwards, 'false' backwards
  * @param subthreads Search subthreads: 'true' subthread, 'false' not
  * @retval num Index into the virtual email table
+ * @retval  -1 Error
  */
 int mutt_aside_thread(struct Email *e, bool forwards, bool subthreads)
 {
+  if (!e)
+    return -1;
+
   struct MuttThread *cur = NULL;
   struct Email *e_tmp = NULL;
 
@@ -1385,7 +1396,7 @@ int mutt_parent_message(struct Email *e, bool find_root)
 /**
  * mutt_set_vnum - Set the virtual index number of all the messages in a mailbox
  * @param m       Mailbox
- * @retval mum Size in bytes of all messages shown
+ * @retval num Size in bytes of all messages shown
  */
 off_t mutt_set_vnum(struct Mailbox *m)
 {
@@ -1556,9 +1567,13 @@ int mutt_traverse_thread(struct Email *e_cur, MuttThreadFlags flag)
     }
 
     if (thread->child)
+    {
       thread = thread->child;
+    }
     else if (thread->next)
+    {
       thread = thread->next;
+    }
     else
     {
       bool done = false;
@@ -1590,9 +1605,13 @@ int mutt_traverse_thread(struct Email *e_cur, MuttThreadFlags flag)
         e_cur->num_hidden = num_hidden + 1;
 
       if (thread->child)
+      {
         thread = thread->child;
+      }
       else if (thread->next)
+      {
         thread = thread->next;
+      }
       else
       {
         bool done = false;
@@ -1718,21 +1737,22 @@ static bool link_threads(struct Email *parent, struct Email *child, struct Mailb
 /**
  * mutt_link_threads - Forcibly link threads together
  * @param parent   Parent Email
- * @param children List of children Emails
+ * @param children Array of children Emails
  * @param m        Mailbox
  * @retval true On success
  */
-bool mutt_link_threads(struct Email *parent, struct EmailList *children, struct Mailbox *m)
+bool mutt_link_threads(struct Email *parent, struct EmailArray *children, struct Mailbox *m)
 {
   if (!parent || !children || !m)
     return false;
 
   bool changed = false;
 
-  struct EmailNode *en = NULL;
-  STAILQ_FOREACH(en, children, entries)
+  struct Email **ep = NULL;
+  ARRAY_FOREACH(ep, children)
   {
-    changed |= link_threads(parent, en->email, m);
+    struct Email *e = *ep;
+    changed |= link_threads(parent, e, m);
   }
 
   return changed;

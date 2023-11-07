@@ -48,7 +48,7 @@ void email_free(struct Email **ptr)
 
   struct Email *e = *ptr;
 
-  mutt_debug(LL_NOTIFY, "NT_EMAIL_DELETE: %p\n", e);
+  mutt_debug(LL_NOTIFY, "NT_EMAIL_DELETE: %p\n", (void *) e);
   struct EventEmail ev_e = { 1, &e };
   notify_send(e->notify, NT_EMAIL, NT_EMAIL_DELETE, &ev_e);
 
@@ -130,49 +130,10 @@ size_t email_size(const struct Email *e)
 }
 
 /**
- * emaillist_clear - Drop a private list of Emails
- * @param el EmailList to empty
- *
- * The Emails are not freed.
- */
-void emaillist_clear(struct EmailList *el)
-{
-  if (!el)
-    return;
-
-  struct EmailNode *en = NULL, *tmp = NULL;
-  STAILQ_FOREACH_SAFE(en, el, entries, tmp)
-  {
-    STAILQ_REMOVE(el, en, EmailNode, entries);
-    FREE(&en);
-  }
-  STAILQ_INIT(el);
-}
-
-/**
- * emaillist_add_email - Add an Email to a list
- * @param e  Email to add
- * @param el EmailList to add to
- * @retval  0 Success
- * @retval -1 Error
- */
-int emaillist_add_email(struct EmailList *el, struct Email *e)
-{
-  if (!el || !e)
-    return -1;
-
-  struct EmailNode *en = mutt_mem_calloc(1, sizeof(*en));
-  en->email = e;
-  STAILQ_INSERT_TAIL(el, en, entries);
-
-  return 0;
-}
-
-/**
  * header_find - Find a header, matching on its field, in a list of headers
  * @param hdrlist List of headers to search
  * @param header  The header to search for
- * @retval node   The node in the list matching the header
+ * @retval ptr    The node in the list matching the header
  * @retval NULL   No matching header is found
  *
  * The header should either of the form "X-Header:" or "X-Header: value"
@@ -198,7 +159,7 @@ struct ListNode *header_find(const struct ListHead *hdrlist, const char *header)
  * header_add - Add a header to a list
  * @param hdrlist List of headers to search
  * @param header  String to set as the header
- * @retval node   The created header
+ * @retval ptr    The created header
  */
 struct ListNode *header_add(struct ListHead *hdrlist, const char *header)
 {
@@ -212,7 +173,7 @@ struct ListNode *header_add(struct ListHead *hdrlist, const char *header)
  * header_update - Update an existing header
  * @param hdr     The header to update
  * @param header  String to update the header with
- * @retval node   The updated header
+ * @retval ptr    The updated header
  */
 struct ListNode *header_update(struct ListNode *hdr, const char *header)
 {
@@ -226,7 +187,7 @@ struct ListNode *header_update(struct ListNode *hdr, const char *header)
  * header_set - Set a header value in a list
  * @param hdrlist List of headers to search
  * @param header  String to set the value of the header to
- * @retval node   The updated or created header
+ * @retval ptr    The updated or created header
  *
  * If a header exists with the same field, update it, otherwise add a new header.
  */

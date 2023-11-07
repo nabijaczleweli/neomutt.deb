@@ -36,8 +36,9 @@
 
 #include "config/lib.h"
 
-int             mutt_multi_choice(const char *prompt, const char *letters);
-enum QuadOption mutt_yesorno     (const char *msg, enum QuadOption def);
-enum QuadOption query_quadoption (enum QuadOption opt, const char *prompt);
+int             mw_multi_choice   (const char *prompt, const char *letters);
+enum QuadOption query_yesorno     (const char *prompt, enum QuadOption def);
+enum QuadOption query_yesorno_help(const char *prompt, enum QuadOption def, struct ConfigSubset *sub, const char *name);
+enum QuadOption query_quadoption  (const char *prompt, struct ConfigSubset *sub, const char *name);
 
 #endif /* MUTT_QUESTION_LIB_H */

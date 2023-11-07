@@ -28,19 +28,17 @@
 
 #include "config.h"
 #include "mutt/lib.h"
-#include "core/lib.h"
 #include "cbar_data.h"
-#include "cbar.h"
 
 /**
- * cbar_data_free - Free the private data attached to the MuttWindow - Implements MuttWindow::wdata_free() - @ingroup window_wdata_free
+ * cbar_data_free - Free the private Compose Bar data - Implements MuttWindow::wdata_free() - @ingroup window_wdata_free
  */
 void cbar_data_free(struct MuttWindow *win, void **ptr)
 {
-  struct ComposeBarData *cbar_data = *ptr;
+  if (!ptr || !*ptr)
+    return;
 
-  notify_observer_remove(NeoMutt->notify, cbar_color_observer, win);
-  notify_observer_remove(NeoMutt->notify, cbar_config_observer, win);
+  struct ComposeBarData *cbar_data = *ptr;
 
   FREE(&cbar_data->compose_format);
 
@@ -48,12 +46,10 @@ void cbar_data_free(struct MuttWindow *win, void **ptr)
 }
 
 /**
- * cbar_data_new - Free the private data attached to the MuttWindow
+ * cbar_data_new - Create the private data for the Compose Bar
  * @retval ptr New ComposeBarData
  */
 struct ComposeBarData *cbar_data_new(void)
 {
-  struct ComposeBarData *cbar_data = mutt_mem_calloc(1, sizeof(struct ComposeBarData));
-
-  return cbar_data;
+  return mutt_mem_calloc(1, sizeof(struct ComposeBarData));
 }

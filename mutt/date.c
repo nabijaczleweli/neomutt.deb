@@ -224,7 +224,7 @@ int mutt_date_local_tz(time_t t)
  * @param t     Time to convert
  * @param local Should the local timezone be considered
  * @retval num        Time in Unix format
- * @retval TIME_T_MIN Error
+ * @retval #TIME_T_MIN Error
  *
  * Convert a struct tm to time_t, but don't take the local timezone into
  * account unless "local" is nonzero
@@ -389,7 +389,7 @@ void mutt_date_make_date(struct Buffer *buf, bool local)
   if (!buf)
     return;
 
-  struct tm tm;
+  struct tm tm = { 0 };
   int tz = 0;
 
   time_t t = mutt_date_now();
@@ -450,7 +450,7 @@ time_t mutt_date_now(void)
 
 /**
  * mutt_date_now_ms - Return the number of milliseconds since the Unix epoch
- * @retval ms The number of ms since the Unix epoch, or 0 on failure
+ * @retval num The number of ms since the Unix epoch, or 0 on failure
  */
 uint64_t mutt_date_now_ms(void)
 {
@@ -458,7 +458,7 @@ uint64_t mutt_date_now_ms(void)
   gettimeofday(&tv, NULL);
   /* We assume that gettimeofday doesn't modify its first argument on failure.
    * We also kind of assume that gettimeofday does not fail. */
-  return (uint64_t) tv.tv_sec * 1000 + tv.tv_usec / 1000;
+  return ((uint64_t) tv.tv_sec * 1000) + (tv.tv_usec / 1000);
 }
 
 /**
@@ -836,7 +836,7 @@ time_t mutt_date_parse_imap(const char *s)
   const regmatch_t *mtime = &match[PREX_IMAP_DATE_MATCH_TIME];
   const regmatch_t *mtz = &match[PREX_IMAP_DATE_MATCH_TZ];
 
-  struct tm tm;
+  struct tm tm = { 0 };
 
   sscanf(s + mutt_regmatch_start(mday), " %d", &tm.tm_mday);
   tm.tm_mon = mutt_date_check_month(s + mutt_regmatch_start(mmonth));
@@ -928,6 +928,25 @@ size_t mutt_date_localtime_format(char *buf, size_t buflen, const char *format, 
 
   struct tm tm = mutt_date_localtime(t);
   return strftime(buf, buflen, format, &tm);
+}
+
+/**
+ * mutt_date_localtime_format_locale - Format localtime using a given locale
+ * @param buf    Buffer to store formatted time
+ * @param buflen Buffer size
+ * @param format Format to apply
+ * @param t      Time to format
+ * @param loc    Locale to use
+ * @retval num   Number of Bytes added to buffer, excluding NUL byte
+ */
+size_t mutt_date_localtime_format_locale(char *buf, size_t buflen,
+                                         const char *format, time_t t, locale_t loc)
+{
+  if (!buf || !format)
+    return 0;
+
+  struct tm tm = mutt_date_localtime(t);
+  return strftime_l(buf, buflen, format, &tm, loc);
 }
 
 /**

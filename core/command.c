@@ -35,9 +35,9 @@ ARRAY_HEAD(CommandArray, struct Command);
 static struct CommandArray Commands = ARRAY_HEAD_INITIALIZER;
 
 /**
- * commands_cmp - Compare two commands by name - Implements ::sort_t - @ingroup sort_api
+ * commands_sort - Compare two commands by name - Implements ::sort_t - @ingroup sort_api
  */
-static int commands_cmp(const void *a, const void *b)
+static int commands_sort(const void *a, const void *b, void *sdata)
 {
   struct Command x = *(const struct Command *) a;
   struct Command y = *(const struct Command *) b;
@@ -56,13 +56,13 @@ void commands_register(const struct Command *cmds, const size_t num_cmds)
   {
     ARRAY_ADD(&Commands, cmds[i]);
   }
-  ARRAY_SORT(&Commands, commands_cmp);
+  ARRAY_SORT(&Commands, commands_sort, NULL);
 }
 
 /**
- * commands_free - Free Commands array
+ * commands_cleanup - Free Commands array
  */
-void commands_free(void)
+void commands_cleanup(void)
 {
   ARRAY_FREE(&Commands);
 }

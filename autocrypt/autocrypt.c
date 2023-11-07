@@ -73,7 +73,7 @@ static int autocrypt_dir_init(bool can_create)
      for some reason (e.g. autocrypt, header cache, bcache), but it
      doesn't exist.  The prompt is asking whether to create the directory */
   buf_printf(prompt, _("%s does not exist. Create it?"), c_autocrypt_dir);
-  if (mutt_yesorno(buf_string(prompt), MUTT_YES) == MUTT_YES)
+  if (query_yesorno(buf_string(prompt), MUTT_YES) == MUTT_YES)
   {
     if (mutt_file_mkdir(c_autocrypt_dir, S_IRWXU) < 0)
     {
@@ -104,12 +104,7 @@ int mutt_autocrypt_init(bool can_create)
   if (!c_autocrypt || !c_autocrypt_dir)
     return -1;
 
-  OptIgnoreMacroEvents = true;
-  /* The init process can display menus at various points
-   *(e.g. browser, pgp key selection).  This allows the screen to be
-   * autocleared after each menu, so the subsequent prompts can be
-   * read. */
-  OptMenuPopClearScreen = true;
+  mutt_flushinp();
 
   if (autocrypt_dir_init(can_create))
     goto bail;
@@ -120,14 +115,9 @@ int mutt_autocrypt_init(bool can_create)
   if (mutt_autocrypt_db_init(can_create))
     goto bail;
 
-  OptIgnoreMacroEvents = false;
-  OptMenuPopClearScreen = false;
-
   return 0;
 
 bail:
-  OptIgnoreMacroEvents = false;
-  OptMenuPopClearScreen = false;
   cs_subset_str_native_set(NeoMutt->sub, "autocrypt", false, NULL);
   mutt_autocrypt_db_close();
   return -1;
@@ -163,7 +153,7 @@ int mutt_autocrypt_account_init(bool prompt)
     /* L10N: The first time NeoMutt is started with $autocrypt set, it will
        create $autocrypt_dir and then prompt to create an autocrypt account
        with this message.  */
-    if (mutt_yesorno(_("Create an initial autocrypt account?"), MUTT_YES) != MUTT_YES)
+    if (query_yesorno(_("Create an initial autocrypt account?"), MUTT_YES) != MUTT_YES)
       return 0;
   }
 
@@ -176,7 +166,7 @@ int mutt_autocrypt_account_init(bool prompt)
     addr = mutt_addr_copy(c_from);
     const char *const c_real_name = cs_subset_string(NeoMutt->sub, "real_name");
     if (!addr->personal && c_real_name)
-      addr->personal = mutt_str_dup(c_real_name);
+      addr->personal = buf_new(c_real_name);
   }
 
   struct AddressList al = TAILQ_HEAD_INITIALIZER(al);
@@ -226,7 +216,7 @@ int mutt_autocrypt_account_init(bool prompt)
      enabled.
      Otherwise the UI will show encryption is "available" but the user
      will be required to enable encryption manually.  */
-  if (mutt_yesorno(_("Prefer encryption?"), MUTT_NO) == MUTT_YES)
+  if (query_yesorno(_("Prefer encryption?"), MUTT_NO) == MUTT_YES)
     prefer_encrypt = true;
 
   if (mutt_autocrypt_db_account_insert(addr, buf_string(keyid), buf_string(keydata), prefer_encrypt))
@@ -306,7 +296,7 @@ int mutt_autocrypt_process_autocrypt_header(struct Email *e, struct Envelope *en
     /* NOTE: this assumes the processing is occurring right after
      * mutt_parse_rfc822_line() and the from ADDR is still in the same
      * form (intl) as the autocrypt header addr field */
-    if (!mutt_istr_equal(from->mailbox, ac_hdr->addr))
+    if (!mutt_istr_equal(buf_string(from->mailbox), ac_hdr->addr))
       continue;
 
     /* 1.1 spec says ignore all, if more than one valid header is found. */
@@ -458,7 +448,7 @@ int mutt_autocrypt_process_gossip_header(struct Email *e, struct Envelope *prot_
       continue;
 
     /* normalize for comparison against recipient list */
-    mutt_str_replace(&ac_hdr_addr.mailbox, ac_hdr->addr);
+    buf_strcpy(ac_hdr_addr.mailbox, ac_hdr->addr);
     ac_hdr_addr.is_intl = true;
     ac_hdr_addr.intl_checked = true;
     mutt_autocrypt_db_normalize_addr(&ac_hdr_addr);
@@ -466,7 +456,7 @@ int mutt_autocrypt_process_gossip_header(struct Email *e, struct Envelope *prot_
     /* Check to make sure the address is in the recipient list. */
     TAILQ_FOREACH(peer_addr, &recips, entries)
     {
-      if (mutt_str_equal(peer_addr->mailbox, ac_hdr_addr.mailbox))
+      if (buf_str_equal(peer_addr->mailbox, ac_hdr_addr.mailbox))
         break;
     }
 
@@ -527,7 +517,7 @@ int mutt_autocrypt_process_gossip_header(struct Email *e, struct Envelope *prot_
     if (insert_db_history)
     {
       gossip_hist = mutt_autocrypt_db_gossip_history_new();
-      gossip_hist->sender_email_addr = mutt_str_dup(from->mailbox);
+      gossip_hist->sender_email_addr = buf_strdup(from->mailbox);
       gossip_hist->email_msgid = mutt_str_dup(env->message_id);
       gossip_hist->timestamp = e->date_sent;
       gossip_hist->gossip_keydata = mutt_str_dup(peer->gossip_keydata);
@@ -560,7 +550,7 @@ cleanup:
  * mutt_autocrypt_ui_recommendation - Get the recommended action for an Email
  * @param[in]  e       Email
  * @param[out] keylist List of Autocrypt key ids
- * @retval num Recommendation, e.g. #AUTOCRYPT_REC_AVAILABLE
+ * @retval enum #AutocryptRec Recommendation, e.g. #AUTOCRYPT_REC_AVAILABLE
  *
  * If the recommendataion is > NO and keylist is not NULL, keylist will be
  * populated with the autocrypt keyids.
@@ -611,7 +601,7 @@ enum AutocryptRec mutt_autocrypt_ui_recommendation(const struct Email *e, char *
          email when the account does not exist or is not enabled.
          %s is the From email address used to look up the Autocrypt account.
       */
-      mutt_message(_("Autocrypt is not enabled for %s"), NONULL(from->mailbox));
+      mutt_message(_("Autocrypt is not enabled for %s"), buf_string(from->mailbox));
     }
     goto cleanup;
   }
@@ -636,7 +626,8 @@ enum AutocryptRec mutt_autocrypt_ui_recommendation(const struct Email *e, char *
         /* L10N: s is an email address.  Autocrypt is scanning for the keyids
            to use to encrypt, but it can't find a valid keyid for this address.
            The message is printed and they are returned to the compose menu.  */
-        mutt_message(_("No (valid) autocrypt key found for %s"), recip->mailbox);
+        mutt_message(_("No (valid) autocrypt key found for %s"),
+                     buf_string(recip->mailbox));
       }
       goto cleanup;
     }
@@ -665,7 +656,10 @@ enum AutocryptRec mutt_autocrypt_ui_recommendation(const struct Email *e, char *
     else
     {
       if (keylist)
-        mutt_message(_("No (valid) autocrypt key found for %s"), recip->mailbox);
+      {
+        mutt_message(_("No (valid) autocrypt key found for %s"),
+                     buf_string(recip->mailbox));
+      }
       goto cleanup;
     }
 
@@ -922,7 +916,7 @@ void mutt_autocrypt_scan_mailboxes(void)
 #ifdef USE_HCACHE
   const char *c_header_cache = cs_subset_path(NeoMutt->sub, "header_cache");
   char *old_hdrcache = mutt_str_dup(c_header_cache);
-  c_header_cache = NULL;
+  cs_subset_str_native_set(NeoMutt->sub, "header_cache", 0, NULL);
 #endif
 
   struct Buffer *folderbuf = buf_pool_get();
@@ -931,13 +925,13 @@ void mutt_autocrypt_scan_mailboxes(void)
      through one or more mailboxes for Autocrypt: headers.  Those headers are
      then captured in the database as peer records and used for encryption.
      If this is answered yes, they will be prompted for a mailbox.  */
-  enum QuadOption scan = mutt_yesorno(_("Scan a mailbox for autocrypt headers?"), MUTT_YES);
+  enum QuadOption scan = query_yesorno(_("Scan a mailbox for autocrypt headers?"), MUTT_YES);
   while (scan == MUTT_YES)
   {
     struct Mailbox *m_cur = get_current_mailbox();
     // L10N: The prompt for a mailbox to scan for Autocrypt: headers
-    if ((!buf_enter_fname(_("Scan mailbox"), folderbuf, true, m_cur, false,
-                          NULL, NULL, MUTT_SEL_NO_FLAGS)) &&
+    if ((!mw_enter_fname(_("Scan mailbox"), folderbuf, true, m_cur, false, NULL,
+                         NULL, MUTT_SEL_NO_FLAGS)) &&
         (!buf_is_empty(folderbuf)))
     {
       buf_expand_path_regex(folderbuf, false);
@@ -957,7 +951,7 @@ void mutt_autocrypt_scan_mailboxes(void)
        I'm purposely being extra verbose; asking first then prompting
        for a mailbox.  This is because this is a one-time operation
        and I don't want them to accidentally ctrl-g and abort it.  */
-    scan = mutt_yesorno(_("Scan another mailbox for autocrypt headers?"), MUTT_YES);
+    scan = query_yesorno(_("Scan another mailbox for autocrypt headers?"), MUTT_YES);
   }
 
 #ifdef USE_HCACHE

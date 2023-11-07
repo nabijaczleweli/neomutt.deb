@@ -31,8 +31,8 @@
  * | compose/attach_data.c  | @subpage compose_attach_data   |
  * | compose/cbar.c         | @subpage compose_cbar          |
  * | compose/cbar_data.c    | @subpage compose_cbar_data     |
- * | compose/compose.c      | @subpage compose_dialog        |
  * | compose/config.c       | @subpage compose_config        |
+ * | compose/dlg_compose.c  | @subpage compose_dlg_compose   |
  * | compose/functions.c    | @subpage compose_functions     |
  * | compose/shared_data.c  | @subpage compose_shared_data   |
  */
@@ -46,9 +46,9 @@ struct Buffer;
 struct ConfigSubset;
 struct Email;
 
-/* flags for mutt_compose_menu() */
+/* flags for dlg_compose() */
 #define MUTT_COMPOSE_NOFREEHEADER (1 << 0)
 
-int mutt_compose_menu(struct Email *e, struct Buffer *fcc, uint8_t flags, struct ConfigSubset *sub);
+int dlg_compose(struct Email *e, struct Buffer *fcc, uint8_t flags, struct ConfigSubset *sub);
 
 #endif /* MUTT_COMPOSE_LIB_H */

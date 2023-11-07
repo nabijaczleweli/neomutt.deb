@@ -39,7 +39,7 @@
  * The Menu Window has many possible parents, e.g.
  *
  * - @ref index_dlg_index
- * - @ref compose_dialog
+ * - @ref compose_dlg_compose
  * - ...
  *
  * **Children**
@@ -105,9 +105,15 @@ static int menu_repaint(struct MuttWindow *win)
 
   /* move the cursor out of the way */
   if (c_arrow_cursor)
-    mutt_window_move(menu->win, 2, menu->current - menu->top);
+  {
+    const char *const c_arrow_string = cs_subset_string(menu->sub, "arrow_string");
+    const int arrow_width = mutt_strwidth(c_arrow_string);
+    mutt_window_move(menu->win, arrow_width, menu->current - menu->top);
+  }
   else if (c_braille_friendly)
+  {
     mutt_window_move(menu->win, 0, menu->current - menu->top);
+  }
   else
   {
     mutt_window_move(menu->win, menu->win->state.cols - 1, menu->current - menu->top);
@@ -118,7 +124,7 @@ static int menu_repaint(struct MuttWindow *win)
 }
 
 /**
- * menu_wdata_free - Destroy a Menu Window - Implements MuttWindow::wdata_free() - @ingroup window_wdata_free
+ * menu_wdata_free - Free the Menu - Implements MuttWindow::wdata_free() - @ingroup window_wdata_free
  */
 static void menu_wdata_free(struct MuttWindow *win, void **ptr)
 {

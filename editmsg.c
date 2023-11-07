@@ -139,7 +139,7 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
   if (mtime == (time_t) -1)
   {
     rc = -1;
-    mutt_perror(buf_string(fname));
+    mutt_perror("%s", buf_string(fname));
     goto bail;
   }
 
@@ -239,6 +239,7 @@ static int ev_message(enum EvMessage action, struct Mailbox *m, struct Email *e)
   mx_msg_close(m, &msg);
 
   mx_mbox_close(m);
+  mx_mbox_reset_check();
 
 bail:
   mutt_file_fclose(&fp);
@@ -257,7 +258,9 @@ bail:
       mutt_set_flag(m, e, MUTT_TAG, false, true);
   }
   else if (rc == -1)
+  {
     mutt_message(_("Error. Preserving temporary file: %s"), buf_string(fname));
+  }
 
   m->append = old_append;
 
@@ -268,18 +271,19 @@ bail:
 /**
  * mutt_ev_message - Edit or view a message
  * @param m      Mailbox
- * @param el     List of Emails
+ * @param ea     Array of Emails
  * @param action Action to perform, e.g. #EVM_EDIT
  * @retval 1  Message not modified
  * @retval 0  Message edited successfully
  * @retval -1 Error
  */
-int mutt_ev_message(struct Mailbox *m, struct EmailList *el, enum EvMessage action)
+int mutt_ev_message(struct Mailbox *m, struct EmailArray *ea, enum EvMessage action)
 {
-  struct EmailNode *en = NULL;
-  STAILQ_FOREACH(en, el, entries)
+  struct Email **ep = NULL;
+  ARRAY_FOREACH(ep, ea)
   {
-    if (ev_message(action, m, en->email) == -1)
+    struct Email *e = *ep;
+    if (ev_message(action, m, e) == -1)
       return -1;
   }
 

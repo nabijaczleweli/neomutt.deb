@@ -89,11 +89,10 @@ enum CommandResult mutt_parse_charset_iconv_hook(struct Buffer *buf, struct Buff
   struct Buffer *charset = buf_pool_get();
 
   int rc = MUTT_CMD_ERROR;
-  int retval = 0;
 
-  retval += parse_extract_token(alias, s, TOKEN_NO_FLAGS);
-  retval += parse_extract_token(charset, s, TOKEN_NO_FLAGS);
-  if (retval != 0)
+  if (parse_extract_token(alias, s, TOKEN_NO_FLAGS) < 0)
+    goto done;
+  if (parse_extract_token(charset, s, TOKEN_NO_FLAGS) < 0)
     goto done;
 
   const enum LookupType type = (data & MUTT_ICONV_HOOK) ? MUTT_LOOKUP_ICONV : MUTT_LOOKUP_CHARSET;
@@ -380,7 +379,7 @@ void mutt_delete_hooks(HookFlags type)
 }
 
 /**
- * idxfmt_hashelem_free - Delete an index-format-hook from the Hash Table - Implements ::hash_hdata_free_t - @ingroup hash_hdata_free_api
+ * idxfmt_hashelem_free - Free our hash table data - Implements ::hash_hdata_free_t - @ingroup hash_hdata_free_api
  */
 static void idxfmt_hashelem_free(int type, void *obj, intptr_t data)
 {
@@ -545,7 +544,7 @@ static enum CommandResult mutt_parse_unhook(struct Buffer *buf, struct Buffer *s
     {
       if (CurrentHookType != TOKEN_NO_FLAGS)
       {
-        buf_printf(err, "%s", _("unhook: Can't do unhook * from within a hook"));
+        buf_addstr(err, _("unhook: Can't do unhook * from within a hook"));
         return MUTT_CMD_WARNING;
       }
       mutt_delete_hooks(MUTT_HOOK_NO_FLAGS);
@@ -837,7 +836,7 @@ static void list_hook(struct ListHead *matches, const char *match, HookFlags typ
  */
 void mutt_crypt_hook(struct ListHead *list, struct Address *addr)
 {
-  list_hook(list, addr->mailbox, MUTT_CRYPT_HOOK);
+  list_hook(list, buf_string(addr->mailbox), MUTT_CRYPT_HOOK);
 }
 
 /**
@@ -915,7 +914,7 @@ void mutt_timeout_hook(void)
   }
 
   /* Delete temporary attachment files */
-  mutt_unlink_temp_attachments();
+  mutt_temp_attachments_cleanup();
 }
 
 /**

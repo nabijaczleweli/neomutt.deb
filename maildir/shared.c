@@ -72,7 +72,7 @@ mode_t mh_umask(struct Mailbox *m)
  * @retval num Number of new emails
  * @retval 0   Error
  */
-int maildir_move_to_mailbox(struct Mailbox *m, struct MdEmailArray *mda)
+int maildir_move_to_mailbox(struct Mailbox *m, const struct MdEmailArray *mda)
 {
   if (!m)
     return 0;
@@ -92,8 +92,7 @@ int maildir_move_to_mailbox(struct Mailbox *m, struct MdEmailArray *mda)
                md->email->flagged ? "f" : "", md->email->deleted ? "D" : "",
                md->email->replied ? "r" : "", md->email->old ? "O" : "",
                md->email->read ? "R" : "");
-    if (m->msg_count == m->email_max)
-      mx_alloc_memory(m);
+    mx_alloc_memory(m, m->msg_count);
 
     m->emails[m->msg_count] = md->email;
     m->emails[m->msg_count]->index = m->msg_count;
@@ -107,7 +106,6 @@ int maildir_move_to_mailbox(struct Mailbox *m, struct MdEmailArray *mda)
   if (m->msg_count > oldmsgcount)
     num = m->msg_count - oldmsgcount;
 
-  maildirarray_clear(mda);
   return num;
 }
 

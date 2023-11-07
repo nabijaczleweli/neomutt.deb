@@ -33,11 +33,11 @@
 /**
  * is_leap_year - Is this a Leap Year?
  * @param year Year
- * @retval bool true if it is a leap year
+ * @retval true It's a leap year
  */
 static bool is_leap_year(int year)
 {
-  return (year % 400 == 0) || (year % 4 == 0 && year % 100 != 0);
+  return ((year % 400) == 0) || ((year % 4) == 0) && ((year % 100) != 0);
 }
 
 /**

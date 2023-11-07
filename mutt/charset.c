@@ -36,10 +36,14 @@
 #include <stdio.h>
 #include <string.h>
 #include "charset.h"
-#include "lib.h"
+#include "buffer.h"
+#include "list.h"
+#include "logging2.h"
 #include "memory.h"
 #include "queue.h"
 #include "regex3.h"
+#include "slist.h"
+#include "string2.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
@@ -951,14 +955,14 @@ struct FgetConv *mutt_ch_fgetconv_open(FILE *fp, const char *from, const char *t
 
 /**
  * mutt_ch_fgetconv_close - Close an fgetconv handle
- * @param[out] fc fgetconv handle
+ * @param[out] ptr fgetconv handle
  */
-void mutt_ch_fgetconv_close(struct FgetConv **fc)
+void mutt_ch_fgetconv_close(struct FgetConv **ptr)
 {
-  if (!fc || !*fc)
+  if (!ptr || !*ptr)
     return;
 
-  FREE(fc);
+  FREE(ptr);
 }
 
 /**

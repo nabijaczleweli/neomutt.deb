@@ -27,7 +27,6 @@
  */
 
 #include "config.h"
-#include <stddef.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
@@ -37,7 +36,7 @@
 #include "query.h"
 
 /**
- * nm_mdata_free - Free the private Mailbox data - Implements Mailbox::mdata_free()
+ * nm_mdata_free - Free the private Mailbox data - Implements Mailbox::mdata_free() - @ingroup mailbox_mdata_free
  *
  * The NmMboxData struct stores global Notmuch data, such as the connection to
  * the database.  This function will close the database, free the resources and
@@ -50,7 +49,7 @@ void nm_mdata_free(void **ptr)
 
   struct NmMboxData *mdata = *ptr;
 
-  mutt_debug(LL_DEBUG1, "nm: freeing context data %p\n", mdata);
+  mutt_debug(LL_DEBUG1, "nm: freeing context data %p\n", (void *) mdata);
 
   url_free(&mdata->db_url);
   FREE(&mdata->db_query);

@@ -34,7 +34,6 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include "mutt/lib.h"
@@ -49,13 +48,13 @@
 #include "attach/lib.h"
 #include "color/lib.h"
 #include "imap/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "pager/lib.h"
 #include "parse/lib.h"
 #include "store/lib.h"
 #include "alternates.h"
 #include "globals.h" // IWYU pragma: keep
-#include "keymap.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "score.h"
@@ -72,6 +71,16 @@
 static struct ListHead MuttrcStack = STAILQ_HEAD_INITIALIZER(MuttrcStack);
 
 #define MAX_ERRS 128
+
+/**
+ * enum TriBool - Tri-state boolean
+ */
+enum TriBool
+{
+  TB_UNSET = -1, ///< Value hasn't been set
+  TB_FALSE,      ///< Value is false
+  TB_TRUE,       ///< Value is true
+};
 
 /**
  * enum GroupState - Type of email address group
@@ -267,7 +276,7 @@ int source_rc(const char *rcfile_path, struct Buffer *err)
     line_rc = parse_rc_buffer(linebuf, token, err);
     if (line_rc == MUTT_CMD_ERROR)
     {
-      mutt_error(_("Error in %s, line %d: %s"), rcfile, lineno, err->data);
+      mutt_error("%s:%d: %s", rcfile, lineno, buf_string(err));
       if (--rc < -MAX_ERRS)
       {
         if (conv)
@@ -278,7 +287,7 @@ int source_rc(const char *rcfile_path, struct Buffer *err)
     else if (line_rc == MUTT_CMD_WARNING)
     {
       /* Warning */
-      mutt_warning(_("Warning in %s, line %d: %s"), rcfile, lineno, err->data);
+      mutt_warning("%s:%d: %s", rcfile, lineno, buf_string(err));
       warnings++;
     }
     else if (line_rc == MUTT_CMD_FINISH)
@@ -424,9 +433,13 @@ static enum CommandResult parse_group(struct Buffer *buf, struct Buffer *s,
     }
 
     if (mutt_istr_equal(buf->data, "-rx"))
+    {
       gstate = GS_RX;
+    }
     else if (mutt_istr_equal(buf->data, "-addr"))
+    {
       gstate = GS_ADDR;
+    }
     else
     {
       switch (gstate)
@@ -535,7 +548,7 @@ static enum CommandResult parse_ifdef(struct Buffer *buf, struct Buffer *s,
     enum CommandResult rc = parse_rc_line(buf->data, err);
     if (rc == MUTT_CMD_ERROR)
     {
-      mutt_error(_("Error: %s"), err->data);
+      mutt_error(_("Error: %s"), buf_string(err));
       return MUTT_CMD_ERROR;
     }
     return rc;
@@ -592,6 +605,107 @@ bail:
 }
 
 /**
+ * mailbox_add - Add a new Mailbox
+ */
+static enum CommandResult mailbox_add(const char *folder, const char *mailbox,
+                                      const char *label, enum TriBool poll,
+                                      enum TriBool notify, struct Buffer *err)
+{
+  mutt_debug(LL_DEBUG1, "Adding mailbox: '%s' label '%s', poll %s, notify %s\n",
+             mailbox, label ? label : "[NONE]",
+             (poll == TB_UNSET) ? "[UNSPECIFIED]" :
+             (poll == TB_TRUE)  ? "true" :
+                                  "false",
+             (notify == TB_UNSET) ? "[UNSPECIFIED]" :
+             (notify == TB_TRUE)  ? "true" :
+                                    "false");
+  struct Mailbox *m = mailbox_new();
+
+  buf_strcpy(&m->pathbuf, mailbox);
+  /* int rc = */ mx_path_canon2(m, folder);
+
+  if (m->type <= MUTT_UNKNOWN)
+  {
+    buf_printf(err, "Unknown Mailbox: %s", m->realpath);
+    mailbox_free(&m);
+    return MUTT_CMD_ERROR;
+  }
+
+  bool new_account = false;
+  struct Account *a = mx_ac_find(m);
+  if (!a)
+  {
+    a = account_new(NULL, NeoMutt->sub);
+    a->type = m->type;
+    new_account = true;
+  }
+
+  if (!new_account)
+  {
+    struct Mailbox *m_old = mx_mbox_find(a, m->realpath);
+    if (m_old)
+    {
+      if (!m_old->visible)
+      {
+        m_old->visible = true;
+        m_old->gen = mailbox_gen();
+      }
+
+      if (label)
+        mutt_str_replace(&m_old->name, label);
+
+      if (notify != TB_UNSET)
+        m_old->notify_user = notify;
+
+      if (poll != TB_UNSET)
+        m_old->poll_new_mail = poll;
+
+      struct EventMailbox ev_m = { m_old };
+      notify_send(m_old->notify, NT_MAILBOX, NT_MAILBOX_CHANGE, &ev_m);
+
+      mailbox_free(&m);
+      return MUTT_CMD_SUCCESS;
+    }
+  }
+
+  if (label)
+    m->name = mutt_str_dup(label);
+
+  if (notify != TB_UNSET)
+    m->notify_user = notify;
+
+  if (poll != TB_UNSET)
+    m->poll_new_mail = poll;
+
+  if (!mx_ac_add(a, m))
+  {
+    mailbox_free(&m);
+    if (new_account)
+    {
+      cs_subset_free(&a->sub);
+      FREE(&a->name);
+      notify_free(&a->notify);
+      FREE(&a);
+    }
+    return MUTT_CMD_SUCCESS;
+  }
+
+  if (new_account)
+  {
+    neomutt_account_add(NeoMutt, a);
+  }
+
+  // this is finally a visible mailbox in the sidebar and mailboxes list
+  m->visible = true;
+
+#ifdef USE_INOTIFY
+  mutt_monitor_add(m);
+#endif
+
+  return MUTT_CMD_SUCCESS;
+}
+
+/**
  * parse_mailboxes - Parse the 'mailboxes' command - Implements Command::parse() - @ingroup command_parse
  *
  * This is also used by 'virtual-mailboxes'.
@@ -599,92 +713,94 @@ bail:
 enum CommandResult parse_mailboxes(struct Buffer *buf, struct Buffer *s,
                                    intptr_t data, struct Buffer *err)
 {
+  enum CommandResult rc = MUTT_CMD_WARNING;
+
+  struct Buffer *label = buf_pool_get();
+  struct Buffer *mailbox = buf_pool_get();
+
   const char *const c_folder = cs_subset_string(NeoMutt->sub, "folder");
   while (MoreArgs(s))
   {
-    struct Mailbox *m = mailbox_new();
+    bool label_set = false;
+    enum TriBool notify = TB_UNSET;
+    enum TriBool poll = TB_UNSET;
 
-    if (data & MUTT_NAMED)
+    do
     {
-      // This may be empty, e.g. `named-mailboxes "" +inbox`
+      // Start by handling the options
       parse_extract_token(buf, s, TOKEN_NO_FLAGS);
-      m->name = buf_strdup(buf);
-    }
 
-    parse_extract_token(buf, s, TOKEN_NO_FLAGS);
-    if (buf_is_empty(buf))
-    {
-      /* Skip empty tokens. */
-      mailbox_free(&m);
-      continue;
-    }
-
-    buf_strcpy(&m->pathbuf, buf->data);
-    /* int rc = */ mx_path_canon2(m, c_folder);
-
-    if (m->type <= MUTT_UNKNOWN)
-    {
-      mutt_error("Unknown Mailbox: %s", m->realpath);
-      mailbox_free(&m);
-      return MUTT_CMD_ERROR;
-    }
-
-    bool new_account = false;
-    struct Account *a = mx_ac_find(m);
-    if (!a)
-    {
-      a = account_new(NULL, NeoMutt->sub);
-      a->type = m->type;
-      new_account = true;
-    }
-
-    if (!new_account)
-    {
-      struct Mailbox *m_old = mx_mbox_find(a, m->realpath);
-      if (m_old)
+      if (mutt_str_equal(buf_string(buf), "-label"))
       {
-        if (!m_old->visible)
+        if (!MoreArgs(s))
         {
-          m_old->visible = true;
-          m_old->gen = mailbox_gen();
+          buf_printf(err, _("%s: too few arguments"), "mailboxes -label");
+          goto done;
         }
 
-        const bool rename = (data & MUTT_NAMED) && !mutt_str_equal(m_old->name, m->name);
-        if (rename)
+        parse_extract_token(label, s, TOKEN_NO_FLAGS);
+        label_set = true;
+      }
+      else if (mutt_str_equal(buf_string(buf), "-nolabel"))
+      {
+        buf_reset(label);
+        label_set = true;
+      }
+      else if (mutt_str_equal(buf_string(buf), "-notify"))
+      {
+        notify = TB_TRUE;
+      }
+      else if (mutt_str_equal(buf_string(buf), "-nonotify"))
+      {
+        notify = TB_FALSE;
+      }
+      else if (mutt_str_equal(buf_string(buf), "-poll"))
+      {
+        poll = TB_TRUE;
+      }
+      else if (mutt_str_equal(buf_string(buf), "-nopoll"))
+      {
+        poll = TB_FALSE;
+      }
+      else if ((data & MUTT_NAMED) && !label_set)
+      {
+        if (!MoreArgs(s))
         {
-          mutt_str_replace(&m_old->name, m->name);
+          buf_printf(err, _("%s: too few arguments"), "named-mailboxes");
+          goto done;
         }
 
-        mailbox_free(&m);
-        continue;
+        buf_copy(label, buf);
+        label_set = true;
       }
-    }
-
-    if (!mx_ac_add(a, m))
-    {
-      mailbox_free(&m);
-      if (new_account)
+      else
       {
-        cs_subset_free(&a->sub);
-        FREE(&a->name);
-        notify_free(&a->notify);
-        FREE(&a);
+        buf_copy(mailbox, buf);
+        break;
       }
-      continue;
-    }
-    if (new_account)
+    } while (MoreArgs(s));
+
+    if (buf_is_empty(mailbox))
     {
-      neomutt_account_add(NeoMutt, a);
+      buf_printf(err, _("%s: too few arguments"), "mailboxes");
+      goto done;
     }
 
-    // this is finally a visible mailbox in the sidebar and mailboxes list
-    m->visible = true;
+    rc = mailbox_add(c_folder, buf_string(mailbox),
+                     label_set ? buf_string(label) : NULL, poll, notify, err);
+    if (rc != MUTT_CMD_SUCCESS)
+      goto done;
 
-#ifdef USE_INOTIFY
-    mutt_monitor_add(m);
-#endif
+    buf_reset(label);
+    buf_reset(mailbox);
   }
-  return MUTT_CMD_SUCCESS;
+
+  rc = MUTT_CMD_SUCCESS;
+
+done:
+  buf_pool_release(&label);
+  buf_pool_release(&mailbox);
+  return rc;
 }
 
 /**
@@ -731,14 +847,15 @@ enum CommandResult parse_my_hdr(struct Buffer *buf, struct Buffer *s,
  */
 enum CommandResult set_dump(ConfigDumpFlags flags, struct Buffer *err)
 {
-  char tempfile[PATH_MAX] = { 0 };
-  mutt_mktemp(tempfile, sizeof(tempfile));
+  struct Buffer *tempfile = buf_pool_get();
+  buf_mktemp(tempfile);
 
-  FILE *fp_out = mutt_file_fopen(tempfile, "w");
+  FILE *fp_out = mutt_file_fopen(buf_string(tempfile), "w");
   if (!fp_out)
   {
     // L10N: '%s' is the file name of the temporary file
-    buf_printf(err, _("Could not create temporary file %s"), tempfile);
+    buf_printf(err, _("Could not create temporary file %s"), buf_string(tempfile));
+    buf_pool_release(&tempfile);
     return MUTT_CMD_ERROR;
   }
 
@@ -749,26 +866,22 @@ enum CommandResult set_dump(ConfigDumpFlags flags, struct Buffer *err)
   struct PagerData pdata = { 0 };
   struct PagerView pview = { &pdata };
 
-  pdata.fname = tempfile;
+  pdata.fname = buf_string(tempfile);
 
   pview.banner = "set";
   pview.flags = MUTT_PAGER_NO_FLAGS;
   pview.mode = PAGER_MODE_OTHER;
 
   mutt_do_pager(&pview, NULL);
+  buf_pool_release(&tempfile);
 
   return MUTT_CMD_SUCCESS;
 }
 
 /**
- * envlist_sort - Sort two environment strings
- * @param a First string
- * @param b Second string
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * envlist_sort - Compare two environment strings - Implements ::sort_t - @ingroup sort_api
  */
-static int envlist_sort(const void *a, const void *b)
+static int envlist_sort(const void *a, const void *b, void *sdata)
 {
   return strcmp(*(const char **) a, *(const char **) b);
 }
@@ -793,14 +906,15 @@ static enum CommandResult parse_setenv(struct Buffer *buf, struct Buffer *s,
       return MUTT_CMD_WARNING;
     }
 
-    char tempfile[PATH_MAX] = { 0 };
-    mutt_mktemp(tempfile, sizeof(tempfile));
+    struct Buffer *tempfile = buf_pool_get();
+    buf_mktemp(tempfile);
 
-    FILE *fp_out = mutt_file_fopen(tempfile, "w");
+    FILE *fp_out = mutt_file_fopen(buf_string(tempfile), "w");
     if (!fp_out)
     {
       // L10N: '%s' is the file name of the temporary file
-      buf_printf(err, _("Could not create temporary file %s"), tempfile);
+      buf_printf(err, _("Could not create temporary file %s"), buf_string(tempfile));
+      buf_pool_release(&tempfile);
       return MUTT_CMD_ERROR;
     }
 
@@ -808,7 +922,7 @@ static enum CommandResult parse_setenv(struct Buffer *buf, struct Buffer *s,
     for (char **env = EnvList; *env; env++)
       count++;
 
-    qsort(EnvList, count, sizeof(char *), envlist_sort);
+    mutt_qsort_r(EnvList, count, sizeof(char *), envlist_sort, NULL);
 
     for (char **env = EnvList; *env; env++)
       fprintf(fp_out, "%s\n", *env);
@@ -818,13 +932,15 @@ static enum CommandResult parse_setenv(struct Buffer *buf, struct Buffer *s,
     struct PagerData pdata = { 0 };
     struct PagerView pview = { &pdata };
 
-    pdata.fname = tempfile;
+    pdata.fname = buf_string(tempfile);
 
     pview.banner = "setenv";
     pview.flags = MUTT_PAGER_NO_FLAGS;
     pview.mode = PAGER_MODE_OTHER;
 
     mutt_do_pager(&pview, NULL);
+    buf_pool_release(&tempfile);
+
     return MUTT_CMD_SUCCESS;
   }
 
@@ -953,79 +1069,79 @@ static enum CommandResult parse_source(struct Buffer *buf, struct Buffer *s,
 }
 
 /**
- * parse_spam_list - Parse the 'spam' and 'nospam' commands - Implements Command::parse() - @ingroup command_parse
+ * parse_nospam - Parse the 'nospam' command - Implements Command::parse() - @ingroup command_parse
  */
-static enum CommandResult parse_spam_list(struct Buffer *buf, struct Buffer *s,
-                                          intptr_t data, struct Buffer *err)
+static enum CommandResult parse_nospam(struct Buffer *buf, struct Buffer *s,
+                                       intptr_t data, struct Buffer *err)
 {
-  struct Buffer templ;
-
-  buf_init(&templ);
-
-  /* Insist on at least one parameter */
   if (!MoreArgs(s))
   {
-    if (data == MUTT_SPAM)
-      buf_strcpy(err, _("spam: no matching pattern"));
-    else
-      buf_strcpy(err, _("nospam: no matching pattern"));
+    buf_printf(err, _("%s: too few arguments"), "nospam");
     return MUTT_CMD_ERROR;
   }
 
-  /* Extract the first token, a regex */
+  // Extract the first token, a regex or "*"
   parse_extract_token(buf, s, TOKEN_NO_FLAGS);
 
-  /* data should be either MUTT_SPAM or MUTT_NOSPAM. MUTT_SPAM is for spam commands. */
-  if (data == MUTT_SPAM)
+  if (MoreArgs(s))
   {
-    /* If there's a second parameter, it's a template for the spam tag. */
-    if (MoreArgs(s))
-    {
-      parse_extract_token(&templ, s, TOKEN_NO_FLAGS);
+    buf_printf(err, _("%s: too many arguments"), "finish");
+    return MUTT_CMD_ERROR;
+  }
 
-      /* Add to the spam list. */
-      if (mutt_replacelist_add(&SpamList, buf->data, templ.data, err) != 0)
-      {
-        FREE(&templ.data);
-        return MUTT_CMD_ERROR;
-      }
-      FREE(&templ.data);
-    }
-    /* If not, try to remove from the nospam list. */
-    else
-    {
-      mutt_regexlist_remove(&NoSpamList, buf->data);
-    }
-
+  // "*" is special - clear both spam and nospam lists
+  if (mutt_str_equal(buf_string(buf), "*"))
+  {
+    mutt_replacelist_free(&SpamList);
+    mutt_regexlist_free(&NoSpamList);
     return MUTT_CMD_SUCCESS;
   }
-  /* MUTT_NOSPAM is for nospam commands. */
-  else if (data == MUTT_NOSPAM)
+
+  // If it's on the spam list, just remove it
+  if (mutt_replacelist_remove(&SpamList, buf_string(buf)) != 0)
+    return MUTT_CMD_SUCCESS;
+
+  // Otherwise, add it to the nospam list
+  if (mutt_regexlist_add(&NoSpamList, buf_string(buf), REG_ICASE, err) != 0)
+    return MUTT_CMD_ERROR;
+
+  return MUTT_CMD_SUCCESS;
+}
+
+/**
+ * parse_spam - Parse the 'spam' command - Implements Command::parse() - @ingroup command_parse
+ */
+static enum CommandResult parse_spam(struct Buffer *buf, struct Buffer *s,
+                                     intptr_t data, struct Buffer *err)
+{
+  if (!MoreArgs(s))
   {
-    /* nospam only ever has one parameter. */
+    buf_printf(err, _("%s: too few arguments"), "spam");
+    return MUTT_CMD_ERROR;
+  }
 
-    /* "*" is a special case. */
-    if (mutt_str_equal(buf->data, "*"))
-    {
-      mutt_replacelist_free(&SpamList);
-      mutt_regexlist_free(&NoSpamList);
-      return MUTT_CMD_SUCCESS;
-    }
+  // Extract the first token, a regex
+  parse_extract_token(buf, s, TOKEN_NO_FLAGS);
 
-    /* If it's on the spam list, just remove it. */
-    if (mutt_replacelist_remove(&SpamList, buf->data) != 0)
-      return MUTT_CMD_SUCCESS;
+  // If there's a second parameter, it's a template for the spam tag
+  if (MoreArgs(s))
+  {
+    struct Buffer *templ = buf_pool_get();
+    parse_extract_token(templ, s, TOKEN_NO_FLAGS);
 
-    /* Otherwise, add it to the nospam list. */
-    if (mutt_regexlist_add(&NoSpamList, buf->data, REG_ICASE, err) != 0)
+    // Add to the spam list
+    int rc = mutt_replacelist_add(&SpamList, buf_string(buf), buf_string(templ), err);
+    buf_pool_release(&templ);
+    if (rc != 0)
       return MUTT_CMD_ERROR;
-
-    return MUTT_CMD_SUCCESS;
+  }
+  else
+  {
+    // If not, try to remove from the nospam list
+    mutt_regexlist_remove(&NoSpamList, buf_string(buf));
   }
 
-  /* This should not happen. */
-  buf_strcpy(err, "This is no good at all.");
-  return MUTT_CMD_ERROR;
+  return MUTT_CMD_SUCCESS;
 }
 
 /**
@@ -1105,7 +1221,7 @@ enum CommandResult parse_subscribe_to(struct Buffer *buf, struct Buffer *s,
       return MUTT_CMD_WARNING;
     }
 
-    if (buf->data && (*buf->data != '\0'))
+    if (!buf_is_empty(buf))
     {
       /* Expand and subscribe */
       if (imap_subscribe(mutt_expand_path(buf->data, buf->dsize), true) == 0)
@@ -1261,7 +1377,8 @@ static enum CommandResult parse_unlists(struct Buffer *buf, struct Buffer *s,
 static void do_unmailboxes(struct Mailbox *m)
 {
 #ifdef USE_INOTIFY
-  mutt_monitor_remove(m);
+  if (m->poll_new_mail)
+    mutt_monitor_remove(m);
 #endif
   m->visible = false;
   m->gen = -1;
@@ -1473,14 +1590,15 @@ static enum CommandResult parse_version(struct Buffer *buf, struct Buffer *s,
   if (!StartupComplete)
     return MUTT_CMD_SUCCESS;
 
-  char tempfile[PATH_MAX] = { 0 };
-  mutt_mktemp(tempfile, sizeof(tempfile));
+  struct Buffer *tempfile = buf_pool_get();
+  buf_mktemp(tempfile);
 
-  FILE *fp_out = mutt_file_fopen(tempfile, "w");
+  FILE *fp_out = mutt_file_fopen(buf_string(tempfile), "w");
   if (!fp_out)
   {
     // L10N: '%s' is the file name of the temporary file
-    buf_printf(err, _("Could not create temporary file %s"), tempfile);
+    buf_printf(err, _("Could not create temporary file %s"), buf_string(tempfile));
+    buf_pool_release(&tempfile);
     return MUTT_CMD_ERROR;
   }
 
@@ -1490,20 +1608,22 @@ static enum CommandResult parse_version(struct Buffer *buf, struct Buffer *s,
   struct PagerData pdata = { 0 };
   struct PagerView pview = { &pdata };
 
-  pdata.fname = tempfile;
+  pdata.fname = buf_string(tempfile);
 
   pview.banner = "version";
   pview.flags = MUTT_PAGER_NO_FLAGS;
   pview.mode = PAGER_MODE_OTHER;
 
   mutt_do_pager(&pview, NULL);
+  buf_pool_release(&tempfile);
+
   return MUTT_CMD_SUCCESS;
 }
 
 /**
- * clear_source_stack - Free memory from the stack used for the source command
+ * source_stack_cleanup - Free memory from the stack used for the source command
  */
-void clear_source_stack(void)
+void source_stack_cleanup(void)
 {
   mutt_list_free(&MuttrcStack);
 }
@@ -1537,14 +1657,14 @@ static const struct Command MuttCommands[] = {
   { "mono",                mutt_parse_mono,        0 },
   { "my_hdr",              parse_my_hdr,           0 },
   { "named-mailboxes",     parse_mailboxes,        MUTT_NAMED },
-  { "nospam",              parse_spam_list,        MUTT_NOSPAM },
+  { "nospam",              parse_nospam,           0 },
   { "push",                mutt_parse_push,        0 },
   { "reset",               parse_set,              MUTT_SET_RESET },
   { "score",               mutt_parse_score,       0 },
   { "set",                 parse_set,              MUTT_SET_SET },
   { "setenv",              parse_setenv,           MUTT_SET_SET },
   { "source",              parse_source,           0 },
-  { "spam",                parse_spam_list,        MUTT_SPAM },
+  { "spam",                parse_spam,             0 },
   { "subjectrx",           parse_subjectrx_list,   0 },
   { "subscribe",           parse_subscribe,        0 },
   { "tag-formats",         parse_tag_formats,      0 },

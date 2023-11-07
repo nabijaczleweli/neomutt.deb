@@ -30,7 +30,7 @@
  *
  * | Name                | Type             | Constructor     |
  * | :------------------ | :--------------- | :-------------- |
- * | Simple Pager Dialog | #WT_DLG_DO_PAGER | mutt_do_pager() |
+ * | Simple Pager Dialog | #WT_DLG_PAGER    | mutt_do_pager() |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -106,7 +106,7 @@ static int dopager_window_observer(struct NotifyCallback *nc)
   if (ev_w->win != dlg)
     return 0;
 
-  notify_observer_remove(NeoMutt->notify, dopager_config_observer, dlg);
+  notify_observer_remove(NeoMutt->sub->notify, dopager_config_observer, dlg);
   notify_observer_remove(dlg->notify, dopager_window_observer, dlg);
   mutt_debug(LL_DEBUG5, "window delete done\n");
 
@@ -128,7 +128,7 @@ int mutt_do_pager(struct PagerView *pview, struct Email *e)
   assert((pview->mode == PAGER_MODE_ATTACH) ||
          (pview->mode == PAGER_MODE_HELP) || (pview->mode == PAGER_MODE_OTHER));
 
-  struct MuttWindow *dlg = mutt_window_new(WT_DLG_DO_PAGER, MUTT_WIN_ORIENT_VERTICAL,
+  struct MuttWindow *dlg = mutt_window_new(WT_DLG_PAGER, MUTT_WIN_ORIENT_VERTICAL,
                                            MUTT_WIN_SIZE_MAXIMISE, MUTT_WIN_SIZE_UNLIMITED,
                                            MUTT_WIN_SIZE_UNLIMITED);
 
@@ -145,7 +145,7 @@ int mutt_do_pager(struct PagerView *pview, struct Email *e)
   dlg->focus = panel_pager;
   mutt_window_add_child(dlg, panel_pager);
 
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, dopager_config_observer, dlg);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, dopager_config_observer, dlg);
   notify_observer_add(dlg->notify, NT_WINDOW, dopager_window_observer, dlg);
   dialog_push(dlg);
 
@@ -176,7 +176,7 @@ int mutt_do_pager(struct PagerView *pview, struct Email *e)
   }
   else
   {
-    rc = mutt_pager(pview);
+    rc = dlg_pager(pview);
   }
 
   dialog_pop();

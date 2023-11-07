@@ -30,9 +30,9 @@
  *
  * ## Windows
  *
- * | Name         | Type         | See Also          |
- * | :----------- | :----------- | :---------------- |
- * | Index Dialog | WT_DLG_INDEX | mutt_index_menu() |
+ * | Name         | Type         | See Also    |
+ * | :----------- | :----------- | :---------- |
+ * | Index Dialog | WT_DLG_INDEX | dlg_index() |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -65,6 +65,7 @@
 #include "gui/lib.h"
 #include "lib.h"
 #include "color/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "pager/lib.h"
 #include "pattern/lib.h"
@@ -73,13 +74,11 @@
 #include "globals.h" // IWYU pragma: keep
 #include "hdrline.h"
 #include "hook.h"
-#include "keymap.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
 #include "mutt_thread.h"
 #include "mview.h"
 #include "mx.h"
-#include "opcodes.h"
 #include "private_data.h"
 #include "protos.h"
 #include "shared_data.h"
@@ -234,14 +233,14 @@ static void uncollapse_thread(struct MailboxView *mv, int index)
 }
 
 /**
- * ci_next_undeleted - Find the next undeleted email
+ * find_next_undeleted - Find the next undeleted email
  * @param mv         Mailbox view
  * @param msgno      Message number to start at
  * @param uncollapse Open collapsed threads
  * @retval >=0 Message number of next undeleted email
  * @retval  -1 No more undeleted messages
  */
-int ci_next_undeleted(struct MailboxView *mv, int msgno, bool uncollapse)
+int find_next_undeleted(struct MailboxView *mv, int msgno, bool uncollapse)
 {
   if (!mv || !mv->mailbox)
     return -1;
@@ -268,14 +267,14 @@ int ci_next_undeleted(struct MailboxView *mv, int msgno, bool uncollapse)
 }
 
 /**
- * ci_previous_undeleted - Find the previous undeleted email
+ * find_previous_undeleted - Find the previous undeleted email
  * @param mv         Mailbox View
  * @param msgno      Message number to start at
  * @param uncollapse Open collapsed threads
  * @retval >=0 Message number of next undeleted email
  * @retval  -1 No more undeleted messages
  */
-int ci_previous_undeleted(struct MailboxView *mv, int msgno, bool uncollapse)
+int find_previous_undeleted(struct MailboxView *mv, int msgno, bool uncollapse)
 {
   if (!mv || !mv->mailbox)
     return -1;
@@ -302,14 +301,14 @@ int ci_previous_undeleted(struct MailboxView *mv, int msgno, bool uncollapse)
 }
 
 /**
- * ci_first_message - Get index of first new message
+ * find_first_message - Get index of first new message
  * @param mv Mailbox view
  * @retval num Index of first new message
  *
  * Return the index of the first new message, or failing that, the first
  * unread message.
  */
-int ci_first_message(struct MailboxView *mv)
+int find_first_message(struct MailboxView *mv)
 {
   if (!mv)
     return 0;
@@ -398,7 +397,7 @@ void resort_index(struct MailboxView *mv, struct Menu *menu)
     new_index = mutt_parent_message(e_cur, false);
 
   if (old_index < 0)
-    new_index = ci_first_message(mv);
+    new_index = find_first_message(mv);
 
   menu->max = m->vcount;
   menu_set_index(menu, new_index);
@@ -554,6 +553,7 @@ void update_index(struct Menu *menu, struct MailboxView *mv, enum MxStatus check
   else
     update_index_unthreaded(mv, check);
 
+  menu->max = m->vcount;
   const int old_index = menu_get_index(menu);
   int index = -1;
   if (oldcount)
@@ -574,7 +574,7 @@ void update_index(struct Menu *menu, struct MailboxView *mv, enum MxStatus check
 
   if (index < 0)
   {
-    index = (old_index < m->vcount) ? old_index : ci_first_message(mv);
+    index = (old_index < m->vcount) ? old_index : find_first_message(mv);
   }
   menu_set_index(menu, index);
 }
@@ -656,7 +656,7 @@ void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *oldcount,
         update_index(menu, shared->mailbox_view, check, *oldcount, shared);
 
       FREE(&new_last_folder);
-      OptSearchInvalid = true;
+      mutt_pattern_free(&shared->search_state->pattern);
       menu_queue_redraw(menu, MENU_REDRAW_INDEX);
       return;
     }
@@ -699,7 +699,7 @@ void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *oldcount,
     index_shared_data_set_mview(shared, mv);
 
     menu->max = m->msg_count;
-    menu_set_index(menu, ci_first_message(shared->mailbox_view));
+    menu_set_index(menu, find_first_message(shared->mailbox_view));
 #ifdef USE_INOTIFY
     mutt_monitor_add(NULL);
 #endif
@@ -719,7 +719,7 @@ void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *oldcount,
   struct EventMailbox ev_m = { shared->mailbox };
   mutt_mailbox_check(ev_m.mailbox, MUTT_MAILBOX_CHECK_FORCE);
   menu_queue_redraw(menu, MENU_REDRAW_FULL);
-  OptSearchInvalid = true;
+  mutt_pattern_free(&shared->search_state->pattern);
 }
 
 #ifdef USE_NOTMUCH
@@ -752,49 +752,50 @@ struct Mailbox *change_folder_notmuch(struct Menu *menu, char *buf, int buflen, 
  * change_folder_string - Change to a different Mailbox by string
  * @param menu         Current Menu
  * @param buf          Folder to change to
- * @param buflen       Length of buffer
  * @param oldcount     How many items are currently in the index
  * @param shared       Shared Index data
  * @param read_only    Open Mailbox in read-only mode
  */
-void change_folder_string(struct Menu *menu, char *buf, size_t buflen, int *oldcount,
+void change_folder_string(struct Menu *menu, struct Buffer *buf, int *oldcount,
                           struct IndexSharedData *shared, bool read_only)
 {
 #ifdef USE_NNTP
   if (OptNews)
   {
     OptNews = false;
-    nntp_expand_path(buf, buflen, &CurrentNewsSrv->conn->account);
+    nntp_expand_path(buf->data, buf->dsize, &CurrentNewsSrv->conn->account);
   }
   else
 #endif
   {
     const char *const c_folder = cs_subset_string(shared->sub, "folder");
-    mx_path_canon(buf, buflen, c_folder, NULL);
+    mx_path_canon(buf, c_folder, NULL);
   }
 
-  enum MailboxType type = mx_path_probe(buf);
+  enum MailboxType type = mx_path_probe(buf_string(buf));
   if ((type == MUTT_MAILBOX_ERROR) || (type == MUTT_UNKNOWN))
   {
     // Look for a Mailbox by its description, before failing
-    struct Mailbox *m = mailbox_find_name(buf);
+    struct Mailbox *m = mailbox_find_name(buf_string(buf));
     if (m)
     {
       change_folder_mailbox(menu, m, oldcount, shared, read_only);
     }
     else
     {
-      mutt_error(_("%s is not a mailbox"), buf);
+      mutt_error(_("%s is not a mailbox"), buf_string(buf));
     }
     return;
   }
 
-  struct Mailbox *m = mx_path_resolve(buf);
+  struct Mailbox *m = mx_path_resolve(buf_string(buf));
   change_folder_mailbox(menu, m, oldcount, shared, read_only);
 }
 
 /**
- * index_make_entry - Format a menu item for the index list - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * index_make_entry - Format an Email for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
+ *
+ * @sa $index_format, index_format_str()
  */
 void index_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
 {
@@ -856,7 +857,9 @@ void index_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
           break;
         }
         else if (tmp->message->vnum >= 0)
+        {
           break;
+        }
       }
       if (flags & MUTT_FORMAT_FORCESUBJ)
       {
@@ -889,7 +892,7 @@ void index_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
 /**
  * index_color - Calculate the colour for a line of the index - Implements Menu::color() - @ingroup menu_color
  */
-struct AttrColor *index_color(struct Menu *menu, int line)
+const struct AttrColor *index_color(struct Menu *menu, int line)
 {
   struct IndexPrivateData *priv = menu->mdata;
   struct IndexSharedData *shared = priv->shared;
@@ -937,13 +940,13 @@ void mutt_draw_statusline(struct MuttWindow *win, int cols, const char *buf, siz
    */
   struct StatusSyntax
   {
-    struct AttrColor *attr_color;
+    const struct AttrColor *attr_color;
     int first; ///< First character of that colour
     int last;  ///< Last character of that colour
   } *syntax = NULL;
 
-  struct AttrColor *ac_base = merged_color_overlay(simple_color_get(MT_COLOR_NORMAL),
-                                                   simple_color_get(MT_COLOR_STATUS));
+  const struct AttrColor *ac_base = merged_color_overlay(simple_color_get(MT_COLOR_NORMAL),
+                                                         simple_color_get(MT_COLOR_STATUS));
   do
   {
     struct RegexColor *cl = NULL;
@@ -976,7 +979,7 @@ void mutt_draw_statusline(struct MuttWindow *win, int cols, const char *buf, siz
       if (!found || (first < syntax[i].first) ||
           ((first == syntax[i].first) && (last > syntax[i].last)))
       {
-        struct AttrColor *ac_merge = merged_color_overlay(ac_base, &cl->attr_color);
+        const struct AttrColor *ac_merge = merged_color_overlay(ac_base, &cl->attr_color);
 
         syntax[i].attr_color = ac_merge;
         syntax[i].first = first;
@@ -1052,12 +1055,16 @@ dsl_finish:
 }
 
 /**
- * mutt_index_menu - Display a list of emails
+ * dlg_index - Display a list of emails - @ingroup gui_dlg
  * @param dlg Dialog containing Windows to draw on
  * @param m_init Initial mailbox
- * @retval Mailbox open in the index
+ * @retval ptr Mailbox open in the index
+ *
+ * The Index Dialog is the heart of NeoMutt.
+ * From here, the user can read and reply to emails, organise them into
+ * folders, set labels, etc.
  */
-struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
+struct Mailbox *dlg_index(struct MuttWindow *dlg, struct Mailbox *m_init)
 {
   /* Make sure use_threads/sort/sort_aux are coherent */
   index_adjust_sort_threads(NeoMutt->sub);
@@ -1068,7 +1075,6 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
   struct MuttWindow *panel_index = window_find_child(dlg, WT_INDEX);
 
   struct IndexPrivateData *priv = panel_index->wdata;
-  priv->attach_msg = OptAttachMsg;
   priv->win_index = window_find_child(panel_index, WT_MENU);
 
   int op = OP_NULL;
@@ -1085,10 +1091,12 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
   priv->menu->make_entry = index_make_entry;
   priv->menu->color = index_color;
   priv->menu->max = shared->mailbox ? shared->mailbox->vcount : 0;
-  menu_set_index(priv->menu, ci_first_message(shared->mailbox_view));
+  menu_set_index(priv->menu, find_first_message(shared->mailbox_view));
+
+  struct MuttWindow *old_focus = window_set_focus(priv->menu->win);
   mutt_window_reflow(NULL);
 
-  if (!priv->attach_msg)
+  if (!shared->attach_msg)
   {
     /* force the mailbox check after we enter the folder */
     mutt_mailbox_check(shared->mailbox, MUTT_MAILBOX_CHECK_FORCE);
@@ -1109,9 +1117,10 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
   {
     /* Clear the tag prefix unless we just started it.
      * Don't clear the prefix on a timeout, but do clear on an abort */
-    if (priv->tag && (op != OP_TAG_PREFIX) && (op != OP_TAG_PREFIX_COND) && (op != OP_TIMEOUT))
+    if (priv->tag_prefix && (op != OP_TAG_PREFIX) &&
+        (op != OP_TAG_PREFIX_COND) && (op != OP_TIMEOUT))
     {
-      priv->tag = false;
+      priv->tag_prefix = false;
     }
 
     /* check if we need to resort the index because just about
@@ -1125,15 +1134,6 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
 
     priv->menu->max = shared->mailbox ? shared->mailbox->vcount : 0;
     priv->oldcount = shared->mailbox ? shared->mailbox->msg_count : 0;
-
-    {
-      if (shared->mailbox_view && OptRedrawTree && shared->mailbox &&
-          (shared->mailbox->msg_count != 0) && mutt_using_threads())
-      {
-        mutt_draw_tree(shared->mailbox_view->threads);
-        OptRedrawTree = false;
-      }
-    }
 
     if (shared->mailbox && shared->mailbox_view)
     {
@@ -1154,7 +1154,7 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
           menu_queue_redraw(priv->menu, MENU_REDRAW_FULL);
         }
 
-        OptSearchInvalid = true;
+        mutt_pattern_free(&shared->search_state->pattern);
       }
       else if ((check == MX_STATUS_NEW_MAIL) || (check == MX_STATUS_REOPENED) ||
                (check == MX_STATUS_FLAGS))
@@ -1202,18 +1202,17 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
         shared->mailbox->verbose = verbose;
         priv->menu->max = shared->mailbox->vcount;
         menu_queue_redraw(priv->menu, MENU_REDRAW_FULL);
-        OptSearchInvalid = true;
+        mutt_pattern_free(&shared->search_state->pattern);
       }
 
       index_shared_data_set_email(shared, mutt_get_virt_email(shared->mailbox,
                                                               menu_get_index(priv->menu)));
     }
 
-    if (!priv->attach_msg)
+    if (!shared->attach_msg)
     {
       /* check for new mail in the incoming folders */
-      priv->oldcount = priv->newcount;
-      priv->newcount = mutt_mailbox_check(shared->mailbox, MUTT_MAILBOX_CHECK_NO_FLAGS);
+      mutt_mailbox_check(shared->mailbox, MUTT_MAILBOX_CHECK_NO_FLAGS);
       if (priv->do_mailbox_notify)
       {
         if (mutt_mailbox_notify(shared->mailbox))
@@ -1241,15 +1240,19 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
     window_redraw(NULL);
 
     /* give visual indication that the next command is a tag- command */
-    if (priv->tag)
-      msgwin_set_text(MT_COLOR_NORMAL, "tag-");
+    if (priv->tag_prefix)
+    {
+      msgwin_set_text(NULL, "tag-", MT_COLOR_NORMAL);
+    }
 
     const bool c_arrow_cursor = cs_subset_bool(shared->sub, "arrow_cursor");
     const bool c_braille_friendly = cs_subset_bool(shared->sub, "braille_friendly");
     const int index = menu_get_index(priv->menu);
     if (c_arrow_cursor)
     {
-      mutt_window_move(priv->menu->win, 2, index - priv->menu->top);
+      const char *const c_arrow_string = cs_subset_string(shared->sub, "arrow_string");
+      const int arrow_width = mutt_strwidth(c_arrow_string);
+      mutt_window_move(priv->menu->win, arrow_width, index - priv->menu->top);
     }
     else if (c_braille_friendly)
     {
@@ -1262,28 +1265,24 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
     }
     mutt_refresh();
 
-    if (SigWinch)
+    window_redraw(NULL);
+    op = km_dokey(MENU_INDEX, GETCH_NO_FLAGS);
+
+    if (op == OP_REPAINT)
     {
-      SigWinch = false;
-      window_invalidate_all();
-      mutt_resize_screen();
       priv->menu->top = 0; /* so we scroll the right amount */
       /* force a real complete redraw.  clrtobot() doesn't seem to be able
        * to handle every case without this.  */
-      clearok(stdscr, true);
-      msgwin_clear_text();
+      msgwin_clear_text(NULL);
+      mutt_refresh();
       continue;
     }
-
-    window_redraw(NULL);
-    op = km_dokey(MENU_INDEX);
 
     /* either user abort or timeout */
     if (op < OP_NULL)
     {
-      mutt_timeout_hook();
-      if (priv->tag)
-        msgwin_clear_text();
+      if (priv->tag_prefix)
+        msgwin_clear_text(NULL);
       continue;
     }
 
@@ -1294,10 +1293,10 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
     if ((op == OP_TAG_PREFIX) || (op == OP_TAG_PREFIX_COND))
     {
       /* A second priv->tag-prefix command aborts */
-      if (priv->tag)
+      if (priv->tag_prefix)
       {
-        priv->tag = false;
-        msgwin_clear_text();
+        priv->tag_prefix = false;
+        msgwin_clear_text(NULL);
         continue;
       }
 
@@ -1322,12 +1321,12 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
       }
 
       /* get the real command */
-      priv->tag = true;
+      priv->tag_prefix = true;
       continue;
     }
     else if (c_auto_tag && shared->mailbox && (shared->mailbox->msg_tagged != 0))
     {
-      priv->tag = true;
+      priv->tag_prefix = true;
     }
 
     mutt_clear_error();
@@ -1364,6 +1363,7 @@ struct Mailbox *mutt_index_menu(struct MuttWindow *dlg, struct Mailbox *m_init)
   } while (rc != FR_DONE);
 
   mview_free(&shared->mailbox_view);
+  window_set_focus(old_focus);
 
   return shared->mailbox;
 }
@@ -1381,7 +1381,7 @@ void mutt_set_header_color(struct Mailbox *m, struct Email *e)
   struct RegexColor *color = NULL;
   struct PatternCache cache = { 0 };
 
-  struct AttrColor *ac_merge = NULL;
+  const struct AttrColor *ac_merge = NULL;
   STAILQ_FOREACH(color, regex_colors_get_list(MT_COLOR_INDEX), entries)
   {
     if (mutt_pattern_exec(SLIST_FIRST(color->color_pattern),
@@ -1424,17 +1424,15 @@ struct MuttWindow *index_pager_init(void)
   mutt_window_add_child(dlg, panel_index);
   mutt_window_add_child(dlg, panel_pager);
 
-  dlg->focus = panel_index;
-
   return dlg;
 }
 
 /**
- * dlg_change_folder - Change the current folder, cautiously
+ * index_change_folder - Change the current folder, cautiously
  * @param dlg Dialog holding the Index
  * @param m   Mailbox to change to
  */
-void dlg_change_folder(struct MuttWindow *dlg, struct Mailbox *m)
+void index_change_folder(struct MuttWindow *dlg, struct Mailbox *m)
 {
   if (!dlg || !m)
     return;

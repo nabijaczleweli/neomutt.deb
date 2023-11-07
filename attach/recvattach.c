@@ -41,20 +41,22 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "recvattach.h"
-#include "enter/lib.h"
+#include "browser/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "menu/lib.h"
 #include "ncrypt/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "attach.h"
 #include "external.h"
+#include "globals.h" // IWYU pragma: keep
 #include "handler.h"
 #include "hook.h"
 #include "mailcap.h"
 #include "mutt_attach.h"
 #include "mutt_thread.h"
 #include "muttlib.h"
-#include "opcodes.h"
 #include "rfc3676.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
@@ -300,8 +302,8 @@ static int query_save_attachment(FILE *fp, struct Body *body, struct Email *e, c
   prompt = _("Save to file: ");
   while (prompt)
   {
-    if ((buf_get_field(prompt, buf, MUTT_COMP_FILE | MUTT_COMP_CLEAR, false,
-                       NULL, NULL, NULL) != 0) ||
+    struct FileCompletionData cdata = { false, NULL, NULL, NULL };
+    if ((mw_get_field(prompt, buf, MUTT_COMP_CLEAR, HC_FILE, &CompleteFileOps, &cdata) != 0) ||
         buf_is_empty(buf))
     {
       goto cleanup;
@@ -324,7 +326,9 @@ static int query_save_attachment(FILE *fp, struct Body *body, struct Email *e, c
         continue;
       }
       else if (rc == -1)
+      {
         goto cleanup;
+      }
       buf_copy(tfile, buf);
     }
     else
@@ -346,7 +350,8 @@ static int query_save_attachment(FILE *fp, struct Body *body, struct Email *e, c
                                       (e || !is_message) ? e : body->email) == 0)
     {
       // This uses ngettext to avoid duplication of messages
-      mutt_message(ngettext("Attachment saved", "%d attachments saved", 1), 1);
+      const int num = 1;
+      mutt_message(ngettext("Attachment saved", "%d attachments saved", num), num);
       rc = 0;
       goto cleanup;
     }
@@ -478,8 +483,9 @@ void mutt_save_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag,
           buf_strcpy(buf, mutt_path_basename(NONULL(top->filename)));
           prepend_savedir(buf);
 
-          if ((buf_get_field(_("Save to file: "), buf, MUTT_COMP_FILE | MUTT_COMP_CLEAR,
-                             false, NULL, NULL, NULL) != 0) ||
+          struct FileCompletionData cdata = { false, NULL, NULL, NULL };
+          if ((mw_get_field(_("Save to file: "), buf, MUTT_COMP_CLEAR, HC_FILE,
+                            &CompleteFileOps, &cdata) != 0) ||
               buf_is_empty(buf))
           {
             goto cleanup;
@@ -539,40 +545,38 @@ cleanup:
  */
 static void query_pipe_attachment(const char *command, FILE *fp, struct Body *body, bool filter)
 {
-  char tfile[PATH_MAX] = { 0 };
+  struct Buffer *tfile = buf_pool_get();
 
   if (filter)
   {
     char warning[PATH_MAX + 256];
     snprintf(warning, sizeof(warning),
              _("WARNING!  You are about to overwrite %s, continue?"), body->filename);
-    if (mutt_yesorno(warning, MUTT_NO) != MUTT_YES)
+    if (query_yesorno(warning, MUTT_NO) != MUTT_YES)
     {
-      msgwin_clear_text();
+      msgwin_clear_text(NULL);
+      buf_pool_release(&tfile);
       return;
     }
-    mutt_mktemp(tfile, sizeof(tfile));
-  }
-  else
-  {
-    tfile[0] = '\0';
+    buf_mktemp(tfile);
   }
 
-  if (mutt_pipe_attachment(fp, body, command, tfile))
+  if (mutt_pipe_attachment(fp, body, command, buf_string(tfile)))
   {
     if (filter)
     {
       mutt_file_unlink(body->filename);
-      mutt_file_rename(tfile, body->filename);
+      mutt_file_rename(buf_string(tfile), body->filename);
       mutt_update_encoding(body, NeoMutt->sub);
       mutt_message(_("Attachment filtered"));
     }
   }
   else
   {
-    if (filter && tfile[0])
-      mutt_file_unlink(tfile);
+    if (filter && !buf_is_empty(tfile))
+      mutt_file_unlink(buf_string(tfile));
   }
+  buf_pool_release(&tfile);
 }
 
 /**
@@ -605,7 +609,7 @@ static void pipe_attachment(FILE *fp, struct Body *b, struct State *state)
     if (is_flowed)
     {
       fp_unstuff = mutt_file_fopen(buf_string(unstuff_tempfile), "w");
-      if (fp_unstuff == NULL)
+      if (!fp_unstuff)
       {
         mutt_perror("mutt_file_fopen");
         goto bail;
@@ -619,7 +623,7 @@ static void pipe_attachment(FILE *fp, struct Body *b, struct State *state)
       state->fp_out = filter_fp;
 
       fp_unstuff = mutt_file_fopen(buf_string(unstuff_tempfile), "r");
-      if (fp_unstuff == NULL)
+      if (!fp_unstuff)
       {
         mutt_perror("mutt_file_fopen");
         goto bail;
@@ -727,8 +731,8 @@ void mutt_pipe_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag,
   /* perform charset conversion on text attachments when piping */
   state.flags = STATE_CHARCONV;
 
-  if (buf_get_field((filter ? _("Filter through: ") : _("Pipe to: ")), buf,
-                    MUTT_COMP_FILE_SIMPLE, false, NULL, NULL, NULL) != 0)
+  if (mw_get_field((filter ? _("Filter through: ") : _("Pipe to: ")), buf,
+                   MUTT_COMP_NO_FLAGS, HC_EXT_COMMAND, &CompleteFileOps, NULL) != 0)
   {
     goto cleanup;
   }
@@ -742,7 +746,7 @@ void mutt_pipe_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag,
   if (!filter && !c_attach_split)
   {
     mutt_endwin();
-    pid_t pid = filter_create(buf_string(buf), &state.fp_out, NULL, NULL);
+    pid_t pid = filter_create(buf_string(buf), &state.fp_out, NULL, NULL, EnvList);
     pipe_attachment_list(buf_string(buf), actx, fp, tag, top, filter, &state);
     mutt_file_fclose(&state.fp_out);
     const bool c_wait_key = cs_subset_bool(NeoMutt->sub, "wait_key");
@@ -892,8 +896,7 @@ void mutt_print_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag, stru
            tag ? ngettext("Print tagged attachment?", "Print %d tagged attachments?", tagmsgcount) :
                  _("Print attachment?"),
            tagmsgcount);
-  const enum QuadOption c_print = cs_subset_quad(NeoMutt->sub, "print");
-  if (query_quadoption(c_print, prompt) != MUTT_YES)
+  if (query_quadoption(prompt, NeoMutt->sub, "print") != MUTT_YES)
     return;
 
   const bool c_attach_split = cs_subset_bool(NeoMutt->sub, "attach_split");
@@ -907,7 +910,7 @@ void mutt_print_attachment_list(struct AttachCtx *actx, FILE *fp, bool tag, stru
       return;
     mutt_endwin();
     const char *const c_print_command = cs_subset_string(NeoMutt->sub, "print_command");
-    pid_t pid = filter_create(NONULL(c_print_command), &state.fp_out, NULL, NULL);
+    pid_t pid = filter_create(NONULL(c_print_command), &state.fp_out, NULL, NULL, EnvList);
     print_attachment_list(actx, fp, tag, top, &state);
     mutt_file_fclose(&state.fp_out);
     const bool c_wait_key = cs_subset_bool(NeoMutt->sub, "wait_key");

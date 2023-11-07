@@ -191,7 +191,9 @@ static int fold_one_header(FILE *fp, const char *tag, const char *value, size_t 
       col += 8;
     }
     else if (print_val(fp, pfx, buf, chflags, col) < 0)
+    {
       return -1;
+    }
     col += w;
 
     /* if the current word ends in \n, ignore all its trailing spaces
@@ -245,9 +247,9 @@ static char *unfold_header(char *s)
       p += 3;
       continue;
     }
-    /* remove LF prior to FWSP, turn \t into ' ' */
     else if ((p[0] == '\n') && ((p[1] == ' ') || (p[1] == '\t')))
     {
+      /* remove LF prior to FWSP, turn \t into ' ' */
       *q++ = ' ';
       p += 2;
       continue;
@@ -292,7 +294,7 @@ static int write_one_header(FILE *fp, int pfxw, int max, int wraplen, const char
                             const char *start, const char *end, CopyHeaderFlags chflags)
 {
   const char *t = strchr(start, ':');
-  if (!t || (t > end))
+  if (!t || (t >= end))
   {
     mutt_debug(LL_DEBUG1, "#2 warning: header not in 'key: value' format!\n");
     return 0;
@@ -365,7 +367,7 @@ static struct UserHdrsOverride write_userhdrs(FILE *fp, const struct ListHead *u
   struct ListNode *tmp = NULL;
   STAILQ_FOREACH(tmp, userhdrs, entries)
   {
-    char *const colon = strchr(tmp->data, ':');
+    char *const colon = strchr(NONULL(tmp->data), ':');
     if (!colon)
     {
       continue;
@@ -382,7 +384,7 @@ static struct UserHdrsOverride write_userhdrs(FILE *fp, const struct ListHead *u
     const char *const *idx = bsearch(tmp->data, UserhdrsOverrideHeaders,
                                      mutt_array_size(UserhdrsOverrideHeaders),
                                      sizeof(char *), userhdrs_override_cmp);
-    if (idx != NULL)
+    if (idx)
     {
       cur_override = idx - UserhdrsOverrideHeaders;
       overrides.is_overridden[cur_override] = true;
@@ -667,7 +669,9 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
     }
   }
   else if (mode == MUTT_WRITE_HEADER_EDITHDRS)
+  {
     fputs("Subject:\n", fp);
+  }
 
   /* save message id if the user has set it */
   if (env->message_id && !privacy)
@@ -678,7 +682,9 @@ int mutt_rfc822_write_header(FILE *fp, struct Envelope *env, struct Body *attach
     mutt_addrlist_write_file(&env->reply_to, fp, "Reply-To");
   }
   else if (mode == MUTT_WRITE_HEADER_EDITHDRS)
+  {
     fputs("Reply-To:\n", fp);
+  }
 
   if (!TAILQ_EMPTY(&env->mail_followup_to))
   {
@@ -796,7 +802,7 @@ int mutt_write_mime_header(struct Body *a, FILE *fp, struct ConfigSubset *sub)
           snprintf(buf, sizeof(buf), "\"%s\"", cont->value);
 
         tmplen = mutt_str_len(buf) + mutt_str_len(cont->attribute) + 1;
-        if (len + tmplen + 2 > 76)
+        if ((len + tmplen + 2) > 76)
         {
           fputs("\n\t", fp);
           len = tmplen + 1;
@@ -862,7 +868,7 @@ int mutt_write_mime_header(struct Body *a, FILE *fp, struct ConfigSubset *sub)
             mutt_addr_cat(buf, sizeof(buf), cont->value, MimeSpecials);
 
             tmplen = mutt_str_len(buf) + mutt_str_len(cont->attribute) + 1;
-            if (len + tmplen + 2 > 76)
+            if ((len + tmplen + 2) > 76)
             {
               fputs("\n\t", fp);
               len = tmplen + 1;

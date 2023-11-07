@@ -88,7 +88,7 @@ static const char *get_nm_config_file(void)
   const char *c_nm_config_file = cs_subset_path(NeoMutt->sub, "nm_config_file");
 
   // Workaround the configuration system mapping "" to NULL.
-  if (c_nm_config_file == NULL)
+  if (!c_nm_config_file)
   {
     config_to_use = "";
   }
@@ -172,7 +172,7 @@ notmuch_database_t *nm_db_do_open(const char *filename, bool writable, bool verb
     {
       if (msg)
       {
-        mutt_error(msg);
+        mutt_error("%s", msg);
       }
       else
       {

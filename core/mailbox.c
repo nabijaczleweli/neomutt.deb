@@ -77,6 +77,8 @@ struct Mailbox *mailbox_new(void)
   m->emails = mutt_mem_calloc(m->email_max, sizeof(struct Email *));
   m->v2r = mutt_mem_calloc(m->email_max, sizeof(int));
   m->gen = mailbox_gen();
+  m->notify_user = true;
+  m->poll_new_mail = true;
 
   return m;
 }
@@ -103,7 +105,8 @@ void mailbox_free(struct Mailbox **ptr)
     return;
   }
 
-  mutt_debug(LL_NOTIFY, "NT_MAILBOX_DELETE: %s %p\n", mailbox_get_type_name(m->type), m);
+  mutt_debug(LL_NOTIFY, "NT_MAILBOX_DELETE: %s %p\n",
+             mailbox_get_type_name(m->type), (void *) m);
   struct EventMailbox ev_m = { m };
   notify_send(m->notify, NT_MAILBOX, NT_MAILBOX_DELETE, &ev_m);
 
@@ -225,7 +228,8 @@ void mailbox_changed(struct Mailbox *m, enum NotifyMailbox action)
   if (!m)
     return;
 
-  mutt_debug(LL_NOTIFY, "NT_MAILBOX_CHANGE: %s %p\n", mailbox_get_type_name(m->type), m);
+  mutt_debug(LL_NOTIFY, "NT_MAILBOX_CHANGE: %s %p\n",
+             mailbox_get_type_name(m->type), (void *) m);
   struct EventMailbox ev_m = { m };
   notify_send(m->notify, NT_MAILBOX, action, &ev_m);
 }

@@ -42,6 +42,7 @@
 #include "display.h"
 #include "lib.h"
 #include "color/lib.h"
+#include "private_data.h"
 
 /**
  * check_sig - Check for an email signature
@@ -126,7 +127,7 @@ static void resolve_color(struct MuttWindow *win, struct Line *lines, int line_n
   if (cnt == 0)
   {
     last_color.curses_color = NULL;
-    last_color.attrs = 0;
+    last_color.attrs = A_NORMAL;
   }
 
   if (lines[line_num].cont_line)
@@ -150,7 +151,15 @@ static void resolve_color(struct MuttWindow *win, struct Line *lines, int line_n
   }
   else if (!(flags & MUTT_SHOWCOLOR))
   {
-    def_color = *simple_color_get(MT_COLOR_NORMAL);
+    if (flags & MUTT_PAGER_STRIPES)
+    {
+      def_color = *simple_color_get(((line_num % 2) == 0) ? MT_COLOR_STRIPE_ODD :
+                                                            MT_COLOR_STRIPE_EVEN);
+    }
+    else
+    {
+      def_color = *simple_color_get(MT_COLOR_NORMAL);
+    }
   }
   else if ((lines[m].cid == MT_COLOR_HEADER) && lines[m].syntax[0].attr_color)
   {
@@ -178,7 +187,7 @@ static void resolve_color(struct MuttWindow *win, struct Line *lines, int line_n
   }
 
   color = def_color;
-  if ((flags & MUTT_SHOWCOLOR) && lines[m].syntax_arr_size)
+  if ((flags & MUTT_SHOWCOLOR) && lines[m].syntax)
   {
     matching_chunk = bsearch(&cnt, lines[m].syntax, lines[m].syntax_arr_size,
                              sizeof(struct TextSyntax), comp_syntax_t);
@@ -190,7 +199,7 @@ static void resolve_color(struct MuttWindow *win, struct Line *lines, int line_n
     }
   }
 
-  if ((flags & MUTT_SEARCH) && lines[m].search_arr_size)
+  if ((flags & MUTT_SEARCH) && lines[m].search)
   {
     matching_chunk = bsearch(&cnt, lines[m].search, lines[m].search_arr_size,
                              sizeof(struct TextSyntax), comp_syntax_t);
@@ -231,8 +240,8 @@ static void resolve_color(struct MuttWindow *win, struct Line *lines, int line_n
 
   if (!attr_color_match(&color, &last_color))
   {
-    struct AttrColor *ac_merge = merged_color_overlay(simple_color_get(MT_COLOR_NORMAL),
-                                                      &color);
+    const struct AttrColor *ac_merge = merged_color_overlay(simple_color_get(MT_COLOR_NORMAL),
+                                                            &color);
     mutt_curses_set_color(ac_merge);
     last_color = color;
   }
@@ -250,11 +259,11 @@ static void append_line(struct Line *lines, int line_num, int cnt)
 
   lines[line_num + 1].cid = lines[line_num].cid;
   (lines[line_num + 1].syntax)[0].attr_color = (lines[line_num].syntax)[0].attr_color;
-  lines[line_num + 1].cont_line = 1;
+  lines[line_num + 1].cont_line = true;
 
   /* find the real start of the line */
   for (m = line_num; m >= 0; m--)
-    if (lines[m].cont_line == 0)
+    if (!lines[m].cont_line)
       break;
 
   (lines[line_num + 1].syntax)[0].first = m;
@@ -389,7 +398,7 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw,
         {
           (lines[line_num].syntax)[0].attr_color =
               (lines[line_num - 1].syntax)[0].attr_color;
-          lines[line_num].cont_header = 1;
+          lines[line_num].cont_header = true;
         }
       }
       else
@@ -435,9 +444,13 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw,
     }
   }
   else if (mutt_str_startswith(raw, "\033[0m")) // Escape: a little hack...
+  {
     lines[line_num].cid = MT_COLOR_NORMAL;
+  }
   else if (check_attachment_marker((char *) raw) == 0)
+  {
     lines[line_num].cid = MT_COLOR_ATTACHMENT;
+  }
   else if (mutt_str_equal("-- \n", buf) || mutt_str_equal("-- \r\n", buf))
   {
     i = line_num + 1;
@@ -457,11 +470,12 @@ static void resolve_types(struct MuttWindow *win, char *buf, char *raw,
     }
   }
   else if (check_sig(buf, lines, line_num - 1) == 0)
-    lines[line_num].cid = MT_COLOR_SIGNATURE;
-  else if (mutt_is_quote_line(buf, pmatch))
-
   {
-    if (q_classify && (lines[line_num].quote == NULL))
+    lines[line_num].cid = MT_COLOR_SIGNATURE;
+  }
+  else if (mutt_is_quote_line(buf, pmatch))
+  {
+    if (q_classify && !lines[line_num].quote)
     {
       lines[line_num].quote = qstyle_classify(quote_list, buf + pmatch[0].rm_so,
                                               pmatch[0].rm_eo - pmatch[0].rm_so,
@@ -704,7 +718,9 @@ void buf_strip_formatting(struct Buffer *dest, const char *src, bool strip_marke
         s += 2;
       }
       else /* ^H */
+      {
         buf_addch(dest, *s++);
+      }
       continue;
     }
 
@@ -742,7 +758,7 @@ void buf_strip_formatting(struct Buffer *dest, const char *src, bool strip_marke
 static int fill_buffer(FILE *fp, LOFF_T *bytes_read, LOFF_T offset, unsigned char **buf,
                        unsigned char **fmt, size_t *blen, int *buf_ready)
 {
-  static int b_read;
+  static int b_read = 0;
   struct Buffer stripped;
 
   if (*buf_ready == 0)
@@ -812,7 +828,11 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
   if (check_attachment_marker((char *) buf) == 0)
     wrap_cols = width;
 
-  const bool c_allow_ansi = cs_subset_bool(NeoMutt->sub, "allow_ansi");
+  struct PagerPrivateData *priv = win->parent->wdata;
+  enum PagerMode mode = priv->pview->mode;
+  const bool c_allow_ansi = (mode == PAGER_MODE_OTHER) ||
+                            cs_subset_bool(NeoMutt->sub, "allow_ansi");
+
   for (ch = 0, vch = 0; ch < cnt; ch += k, vch += k)
   {
     /* Handle ANSI sequences */
@@ -908,7 +928,7 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
     }
 
     if (ansi && ((flags & (MUTT_SHOWCOLOR | MUTT_SEARCH | MUTT_PAGER_MARKER)) ||
-                 special || last_special || ansi->attrs))
+                 special || last_special || (ansi->attrs != A_NORMAL)))
     {
       resolve_color(win, *lines, line_num, vch, flags, special, ansi);
       last_special = special;
@@ -929,7 +949,9 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
         mutt_addwch(win, wc);
     }
     else if (wc == '\n')
+    {
       break;
+    }
     else if (wc == '\t')
     {
       space = ch;
@@ -944,7 +966,7 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
     }
     else if ((wc < 0x20) || (wc == 0x7f))
     {
-      if (col + 2 > wrap_cols)
+      if ((col + 2) > wrap_cols)
         break;
       col += 2;
       if (ansi)
@@ -952,7 +974,7 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
     }
     else if (wc < 0x100)
     {
-      if (col + 4 > wrap_cols)
+      if ((col + 4) > wrap_cols)
         break;
       col += 4;
       if (ansi)
@@ -960,7 +982,7 @@ static int format_line(struct MuttWindow *win, struct Line **lines, int line_num
     }
     else
     {
-      if (col + 1 > wrap_cols)
+      if ((col + 1) > wrap_cols)
         break;
       col += k;
       if (ansi)
@@ -1007,11 +1029,14 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
   bool change_last = false;
   int special;
   int offset;
-  struct AttrColor *def_color = NULL;
+  const struct AttrColor *def_color = NULL;
   int m;
   int rc = -1;
-  struct AnsiColor ansi = { NULL, 0, COLOR_DEFAULT, COLOR_DEFAULT };
+  struct AnsiColor ansi = { { COLOR_DEFAULT, 0, 0 }, { COLOR_DEFAULT, 0, 0 }, 0, NULL };
   regmatch_t pmatch[1];
+
+  struct PagerPrivateData *priv = win_pager->parent->wdata;
+  enum PagerMode mode = priv->pview->mode;
 
   if (line_num == *lines_used)
   {
@@ -1069,8 +1094,15 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
         goto out;
       }
 
-      resolve_types(win_pager, (char *) fmt, (char *) buf, *lines, line_num, *lines_used,
-                    quote_list, q_level, force_redraw, flags & MUTT_SHOWCOLOR);
+      if (mode == PAGER_MODE_EMAIL)
+      {
+        resolve_types(win_pager, (char *) fmt, (char *) buf, *lines, line_num, *lines_used,
+                      quote_list, q_level, force_redraw, flags & MUTT_SHOWCOLOR);
+      }
+      else
+      {
+        (*lines)[line_num].cid = MT_COLOR_NORMAL;
+      }
 
       /* avoid race condition for continuation lines when scrolling up */
       for (m = line_num + 1;
@@ -1083,7 +1115,7 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
     /* this also prevents searching through the hidden lines */
     const short c_toggle_quoted_show_levels = cs_subset_number(NeoMutt->sub, "toggle_quoted_show_levels");
     if ((flags & MUTT_HIDE) && (cur_line->cid == MT_COLOR_QUOTED) &&
-        ((cur_line->quote == NULL) || (cur_line->quote->quote_n >= c_toggle_quoted_show_levels)))
+        (!cur_line->quote || (cur_line->quote->quote_n >= c_toggle_quoted_show_levels)))
     {
       flags = 0; /* MUTT_NOSHOW */
     }
@@ -1229,6 +1261,12 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
     goto out;
   }
 
+  if (flags & MUTT_PAGER_STRIPES)
+  {
+    const enum ColorId cid = ((line_num % 2) == 0) ? MT_COLOR_STRIPE_ODD : MT_COLOR_STRIPE_EVEN;
+    mutt_curses_set_color_by_id(cid);
+  }
+
   /* display the line */
   format_line(win_pager, lines, line_num, buf, flags, &ansi, cnt, &ch, &vch,
               &col, &special, win_pager->state.cols, ansi_list);
@@ -1236,13 +1274,18 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
   /* avoid a bug in ncurses... */
   if (col == 0)
   {
-    mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
+    if (flags & MUTT_PAGER_STRIPES)
+    {
+      const enum ColorId cid = ((line_num % 2) == 0) ? MT_COLOR_STRIPE_ODD : MT_COLOR_STRIPE_EVEN;
+      mutt_curses_set_color_by_id(cid);
+    }
+    else
+    {
+      mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
+    }
+
     mutt_window_addch(win_pager, ' ');
   }
-
-  /* end the last color pattern (needed by S-Lang) */
-  if (special || ((col != win_pager->state.cols) && (flags & (MUTT_SHOWCOLOR | MUTT_SEARCH))))
-    resolve_color(win_pager, *lines, line_num, vch, flags, 0, &ansi);
 
   /* Fill the blank space at the end of the line with the prevailing color.
    * ncurses does an implicit clrtoeol() when you do mutt_window_addch('\n') so we have
@@ -1258,8 +1301,8 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
     {
       def_color = simple_color_get((*lines)[m].cid);
     }
-    struct AttrColor *ac_normal = simple_color_get(MT_COLOR_NORMAL);
-    struct AttrColor *ac_eol = NULL;
+    const struct AttrColor *ac_normal = simple_color_get(MT_COLOR_NORMAL);
+    const struct AttrColor *ac_eol = NULL;
     if (def_color)
       ac_eol = merged_color_overlay(ac_normal, def_color);
     else
@@ -1268,7 +1311,14 @@ int display_line(FILE *fp, LOFF_T *bytes_read, struct Line **lines,
   }
 
   if (col < win_pager->state.cols)
+  {
+    if (flags & MUTT_PAGER_STRIPES)
+    {
+      const enum ColorId cid = ((line_num % 2) == 0) ? MT_COLOR_STRIPE_ODD : MT_COLOR_STRIPE_EVEN;
+      mutt_curses_set_color_by_id(cid);
+    }
     mutt_window_clrtoeol(win_pager);
+  }
 
   /* reset the color back to normal.  This *must* come after the
    * clrtoeol, otherwise the color for this line will not be

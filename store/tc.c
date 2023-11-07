@@ -38,9 +38,9 @@
 #include "lib.h"
 
 /**
- * store_tokyocabinet_open - Implements StoreOps::open() - @ingroup store_open
+ * store_tokyocabinet_open - Open a connection to a Store - Implements StoreOps::open() - @ingroup store_open
  */
-static void *store_tokyocabinet_open(const char *path)
+static StoreHandle *store_tokyocabinet_open(const char *path)
 {
   if (!path)
     return NULL;
@@ -48,48 +48,54 @@ static void *store_tokyocabinet_open(const char *path)
   TCBDB *db = tcbdbnew();
   if (!db)
     return NULL;
-  if (tcbdbopen(db, path, BDBOWRITER | BDBOCREAT))
-    return db;
+  if (!tcbdbopen(db, path, BDBOWRITER | BDBOCREAT))
+  {
+    int ecode = tcbdbecode(db);
+    mutt_debug(LL_DEBUG2, "tcbdbopen failed for %s: %s (ecode %d)\n", path,
+               tcbdberrmsg(ecode), ecode);
+    tcbdbdel(db);
+    return NULL;
+  }
 
-  int ecode = tcbdbecode(db);
-  mutt_debug(LL_DEBUG2, "tcbdbopen failed for %s: %s (ecode %d)\n", path,
-             tcbdberrmsg(ecode), ecode);
-  tcbdbdel(db);
-  return NULL;
+  // Return an opaque pointer
+  return (StoreHandle *) db;
 }
 
 /**
- * store_tokyocabinet_fetch - Implements StoreOps::fetch() - @ingroup store_fetch
+ * store_tokyocabinet_fetch - Fetch a Value from the Store - Implements StoreOps::fetch() - @ingroup store_fetch
  */
-static void *store_tokyocabinet_fetch(void *store, const char *key, size_t klen, size_t *vlen)
+static void *store_tokyocabinet_fetch(StoreHandle *store, const char *key,
+                                      size_t klen, size_t *vlen)
 {
   if (!store)
     return NULL;
 
-  int sp = 0;
+  // Decloak an opaque pointer
   TCBDB *db = store;
+  int sp = 0;
   void *rv = tcbdbget(db, key, klen, &sp);
   *vlen = sp;
   return rv;
 }
 
 /**
- * store_tokyocabinet_free - Implements StoreOps::free() - @ingroup store_free
+ * store_tokyocabinet_free - Free a Value returned by fetch() - Implements StoreOps::free() - @ingroup store_free
  */
-static void store_tokyocabinet_free(void *store, void **ptr)
+static void store_tokyocabinet_free(StoreHandle *store, void **ptr)
 {
   FREE(ptr);
 }
 
 /**
- * store_tokyocabinet_store - Implements StoreOps::store() - @ingroup store_store
+ * store_tokyocabinet_store - Write a Value to the Store - Implements StoreOps::store() - @ingroup store_store
  */
-static int store_tokyocabinet_store(void *store, const char *key, size_t klen,
-                                    void *value, size_t vlen)
+static int store_tokyocabinet_store(StoreHandle *store, const char *key,
+                                    size_t klen, void *value, size_t vlen)
 {
   if (!store)
     return -1;
 
+  // Decloak an opaque pointer
   TCBDB *db = store;
   if (!tcbdbput(db, key, klen, value, vlen))
   {
@@ -100,13 +106,14 @@ static int store_tokyocabinet_store(void *store, const char *key, size_t klen,
 }
 
 /**
- * store_tokyocabinet_delete_record - Implements StoreOps::delete_record() - @ingroup store_delete_record
+ * store_tokyocabinet_delete_record - Delete a record from the Store - Implements StoreOps::delete_record() - @ingroup store_delete_record
  */
-static int store_tokyocabinet_delete_record(void *store, const char *key, size_t klen)
+static int store_tokyocabinet_delete_record(StoreHandle *store, const char *key, size_t klen)
 {
   if (!store)
     return -1;
 
+  // Decloak an opaque pointer
   TCBDB *db = store;
   if (!tcbdbout(db, key, klen))
   {
@@ -117,13 +124,14 @@ static int store_tokyocabinet_delete_record(void *store, const char *key, size_t
 }
 
 /**
- * store_tokyocabinet_close - Implements StoreOps::close() - @ingroup store_close
+ * store_tokyocabinet_close - Close a Store connection - Implements StoreOps::close() - @ingroup store_close
  */
-static void store_tokyocabinet_close(void **ptr)
+static void store_tokyocabinet_close(StoreHandle **ptr)
 {
   if (!ptr || !*ptr)
     return;
 
+  // Decloak an opaque pointer
   TCBDB *db = *ptr;
   if (!tcbdbclose(db))
   {
@@ -135,7 +143,7 @@ static void store_tokyocabinet_close(void **ptr)
 }
 
 /**
- * store_tokyocabinet_version - Implements StoreOps::version() - @ingroup store_version
+ * store_tokyocabinet_version - Get a Store version string - Implements StoreOps::version() - @ingroup store_version
  */
 static const char *store_tokyocabinet_version(void)
 {

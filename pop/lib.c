@@ -51,7 +51,7 @@
 struct Progress;
 
 /**
- * pop_get_field - Get connection login credentials - Implements ConnAccount::get_field()
+ * pop_get_field - Get connection login credentials - Implements ConnAccount::get_field() - @ingroup conn_account_get_field
  */
 const char *pop_get_field(enum ConnAccountField field, void *gf_data)
 {
@@ -138,7 +138,7 @@ static void pop_error(struct PopAccountData *adata, char *msg)
 }
 
 /**
- * fetch_capa - Parse CAPA output - Implements ::pop_fetch_t - @ingroup pop_fetch_api
+ * fetch_capa - Parse CAPA response - Implements ::pop_fetch_t - @ingroup pop_fetch_api
  * @param line List of capabilities
  * @param data POP data
  * @retval 0 (always)
@@ -153,19 +153,27 @@ static int fetch_capa(const char *line, void *data)
     buf_strcpy(&adata->auth_list, c);
   }
   else if (mutt_istr_startswith(line, "STLS"))
+  {
     adata->cmd_stls = true;
+  }
   else if (mutt_istr_startswith(line, "USER"))
+  {
     adata->cmd_user = 1;
+  }
   else if (mutt_istr_startswith(line, "UIDL"))
+  {
     adata->cmd_uidl = 1;
+  }
   else if (mutt_istr_startswith(line, "TOP"))
+  {
     adata->cmd_top = 1;
+  }
 
   return 0;
 }
 
 /**
- * fetch_auth - Fetch list of the authentication mechanisms - Implements ::pop_fetch_t - @ingroup pop_fetch_api
+ * fetch_auth - Parse AUTH response - Implements ::pop_fetch_t - @ingroup pop_fetch_api
  * @param line List of authentication methods
  * @param data POP data
  * @retval 0 (always)
@@ -254,7 +262,7 @@ static int pop_capabilities(struct PopAccountData *adata, int mode)
       msg = _("Command UIDL is not supported by server");
     if (msg && adata->cmd_capa)
     {
-      mutt_error(msg);
+      mutt_error("%s", msg);
       return -2;
     }
     adata->capabilities = true;
@@ -328,8 +336,8 @@ int pop_open_connection(struct PopAccountData *adata)
       adata->use_stls = 2;
     if (adata->use_stls == 0)
     {
-      const enum QuadOption c_ssl_starttls = cs_subset_quad(NeoMutt->sub, "ssl_starttls");
-      enum QuadOption ans = query_quadoption(c_ssl_starttls, _("Secure connection with TLS?"));
+      enum QuadOption ans = query_quadoption(_("Secure connection with TLS?"),
+                                             NeoMutt->sub, "ssl_starttls");
       if (ans == MUTT_ABORT)
         return -2;
       adata->use_stls = 1;
@@ -541,8 +549,7 @@ int pop_fetch_data(struct PopAccountData *adata, const char *query,
     }
     else
     {
-      if (progress)
-        progress_update(progress, pos, -1);
+      progress_update(progress, pos, -1);
       if ((rc == 0) && (callback(inbuf, data) < 0))
         rc = -3;
       lenbuf = 0;
@@ -556,11 +563,13 @@ int pop_fetch_data(struct PopAccountData *adata, const char *query,
 }
 
 /**
- * check_uidl - Find message with this UIDL and set refno - Implements ::pop_fetch_t - @ingroup pop_fetch_api
+ * check_uidl - Parse UIDL response - Implements ::pop_fetch_t - @ingroup pop_fetch_api
  * @param line String containing UIDL
  * @param data POP data
  * @retval  0 Success
  * @retval -1 Error
+ *
+ * Find message with this UIDL and set refno.
  */
 static int check_uidl(const char *line, void *data)
 {
@@ -635,8 +644,8 @@ int pop_reconnect(struct Mailbox *m)
     if (rc < -1)
       return -1;
 
-    const enum QuadOption c_pop_reconnect = cs_subset_quad(NeoMutt->sub, "pop_reconnect");
-    if (query_quadoption(c_pop_reconnect, _("Connection lost. Reconnect to POP server?")) != MUTT_YES)
+    if (query_quadoption(_("Connection lost. Reconnect to POP server?"),
+                         NeoMutt->sub, "pop_reconnect") != MUTT_YES)
     {
       return -1;
     }

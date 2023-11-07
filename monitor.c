@@ -39,7 +39,6 @@
 #include <unistd.h>
 #include "mutt/lib.h"
 #include "core/lib.h"
-#include "gui/lib.h"
 #include "monitor.h"
 #include "index/lib.h"
 #ifndef HAVE_INOTIFY_INIT1
@@ -192,9 +191,9 @@ static int monitor_init(void)
 }
 
 /**
- * monitor_check_free - Close down file monitoring
+ * monitor_check_cleanup - Close down file monitoring
  */
-static void monitor_check_free(void)
+static void monitor_check_cleanup(void)
 {
   if (!Monitor && (INotifyFd != -1))
   {
@@ -225,15 +224,6 @@ static struct Monitor *monitor_new(struct MonitorInfo *info, int descriptor)
   Monitor = monitor;
 
   return monitor;
-}
-
-/**
- * monitor_info_init - Set up a file monitor
- * @param info Monitor to initialise
- */
-static void monitor_info_init(struct MonitorInfo *info)
-{
-  memset(info, 0, sizeof(*info));
 }
 
 /**
@@ -316,7 +306,7 @@ static int monitor_handle_ignore(int desc)
     if (new_desc == -1)
     {
       monitor_delete(iter);
-      monitor_check_free();
+      monitor_check_cleanup();
     }
   }
 
@@ -407,13 +397,14 @@ static enum ResolveResult monitor_resolve(struct MonitorInfo *info, struct Mailb
 int mutt_monitor_poll(void)
 {
   int rc = 0;
-  char buf[EVENT_BUFLEN] __attribute__((aligned(__alignof__(struct inotify_event))));
+  char buf[EVENT_BUFLEN]
+      __attribute__((aligned(__alignof__(struct inotify_event)))) = { 0 };
 
   MonitorFilesChanged = false;
 
   if (INotifyFd != -1)
   {
-    int fds = poll(PollFds, PollFdsCount, MuttGetchTimeout);
+    int fds = poll(PollFds, PollFdsCount, 1000); // 1 Second
 
     if (fds == -1)
     {
@@ -488,8 +479,7 @@ int mutt_monitor_poll(void)
  */
 int mutt_monitor_add(struct Mailbox *m)
 {
-  struct MonitorInfo info;
-  monitor_info_init(&info);
+  struct MonitorInfo info = { 0 };
 
   int rc = 0;
   enum ResolveResult desc = monitor_resolve(&info, m);
@@ -533,11 +523,9 @@ cleanup:
  */
 int mutt_monitor_remove(struct Mailbox *m)
 {
-  struct MonitorInfo info, info2;
+  struct MonitorInfo info = { 0 };
+  struct MonitorInfo info2 = { 0 };
   int rc = 0;
-
-  monitor_info_init(&info);
-  monitor_info_init(&info2);
 
   if (!m)
   {
@@ -578,7 +566,7 @@ int mutt_monitor_remove(struct Mailbox *m)
              info.monitor->desc);
 
   monitor_delete(info.monitor);
-  monitor_check_free();
+  monitor_check_cleanup();
 
 cleanup:
   monitor_info_free(&info);

@@ -281,7 +281,7 @@ static void enriched_putwc(wchar_t c, struct EnrichedState *enriched)
   {
     if (enriched->tag_level[RICH_COLOR])
     {
-      if (enriched->param_used + 1 >= enriched->param_len)
+      if ((enriched->param_used + 1) >= enriched->param_len)
         mutt_mem_realloc(&enriched->param, (enriched->param_len += 256) * sizeof(wchar_t));
 
       enriched->param[enriched->param_used++] = c;
@@ -558,9 +558,13 @@ int text_enriched_handler(struct Body *a, struct State *state)
           text_state = TEXT;
         }
         else if (tag_len < 1024) /* ignore overly long tags */
+        {
           tag[tag_len++] = wc;
+        }
         else
+        {
           text_state = BOGUS_TAG;
+        }
         break;
 
       case BOGUS_TAG:

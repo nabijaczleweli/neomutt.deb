@@ -28,6 +28,9 @@
 #include <time.h>
 #include "queue.h"
 
+/// Log lines longer than this will be truncated
+#define LOG_LINE_MAX_LEN 10240
+
 /**
  * enum LogLevel - Names for the Logging Levels
  */
@@ -57,12 +60,14 @@ enum LogLevel
  * @param line     Source line
  * @param function Source function
  * @param level    Logging level, e.g. #LL_WARNING
+ * @param format   printf()-style formatting string
  * @param ...      Format string and parameters, like printf()
  * @retval -1 Error
  * @retval  0 Success, filtered
  * @retval >0 Success, number of characters written
  */
-typedef int (*log_dispatcher_t)(time_t stamp, const char *file, int line, const char *function, enum LogLevel level, ...);
+typedef int (*log_dispatcher_t)(time_t stamp, const char *file, int line, const char *function, enum LogLevel level, const char *format, ...)
+__attribute__((__format__(__printf__, 6, 7)));
 
 extern log_dispatcher_t MuttLogger;
 
@@ -87,10 +92,17 @@ STAILQ_HEAD(LogLineList, LogLine);
 #define mutt_error(...)        MuttLogger(0, __FILE__, __LINE__, __func__, LL_ERROR,   __VA_ARGS__) ///< @ingroup logging_api
 #define mutt_perror(...)       MuttLogger(0, __FILE__, __LINE__, __func__, LL_PERROR,  __VA_ARGS__) ///< @ingroup logging_api
 
-int  log_disp_file    (time_t stamp, const char *file, int line, const char *function, enum LogLevel level, ...);
-int  log_disp_null    (time_t stamp, const char *file, int line, const char *function, enum LogLevel level, ...);
-int  log_disp_queue   (time_t stamp, const char *file, int line, const char *function, enum LogLevel level, ...);
-int  log_disp_terminal(time_t stamp, const char *file, int line, const char *function, enum LogLevel level, ...);
+void log_multiline_full(enum LogLevel level, const char *str, const char *file, int line, const char *func);
+#define log_multiline(LEVEL, STRING) log_multiline_full(LEVEL, STRING, __FILE__, __LINE__, __func__)
+
+int  log_disp_file    (time_t stamp, const char *file, int line, const char *function, enum LogLevel level, const char *format, ...)
+                       __attribute__((__format__(__printf__, 6, 7)));
+int  log_disp_null    (time_t stamp, const char *file, int line, const char *function, enum LogLevel level, const char *format, ...)
+                       __attribute__((__format__(__printf__, 6, 7)));
+int  log_disp_queue   (time_t stamp, const char *file, int line, const char *function, enum LogLevel level, const char *format, ...)
+                       __attribute__((__format__(__printf__, 6, 7)));
+int  log_disp_terminal(time_t stamp, const char *file, int line, const char *function, enum LogLevel level, const char *format, ...)
+                       __attribute__((__format__(__printf__, 6, 7)));
 
 int  log_queue_add(struct LogLine *ll);
 void log_queue_empty(void);

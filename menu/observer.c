@@ -27,12 +27,13 @@
  */
 
 #include "config.h"
+#include <stddef.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
+#include "lib.h"
 #include "color/lib.h"
-#include "menu/lib.h"
 
 /**
  * menu_color_observer - Notification that a Color has changed - Implements ::observer_t - @ingroup observer_api
@@ -116,10 +117,10 @@ static int menu_window_observer(struct NotifyCallback *nc)
   }
   else if (nc->event_subtype == NT_WINDOW_DELETE)
   {
-    notify_observer_remove(NeoMutt->notify, menu_config_observer, menu);
+    notify_observer_remove(NeoMutt->sub->notify, menu_config_observer, menu);
     notify_observer_remove(win->notify, menu_window_observer, menu);
     mutt_color_observer_remove(menu_color_observer, menu);
-    msgwin_clear_text();
+    msgwin_clear_text(NULL);
     mutt_debug(LL_DEBUG5, "window delete done\n");
   }
 
@@ -134,7 +135,7 @@ void menu_add_observers(struct Menu *menu)
 {
   struct MuttWindow *win = menu->win;
 
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, menu_config_observer, menu);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, menu_config_observer, menu);
   notify_observer_add(win->notify, NT_WINDOW, menu_window_observer, menu);
   mutt_color_observer_add(menu_color_observer, menu);
 }

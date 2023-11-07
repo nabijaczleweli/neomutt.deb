@@ -33,7 +33,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "mutt/lib.h"
-#include "email/content.h"
+#include "email/lib.h"
 #include "lib.h"
 
 /**
@@ -166,7 +166,9 @@ size_t mutt_convert_file_to(FILE *fp, const char *fromcode, struct Slist const *
         break;
       }
       else if (!iconv_t_valid(cd[i]) || (score[i] == ICONV_ILLEGAL_SEQ))
+      {
         continue;
+      }
       else if ((rc == ICONV_ILLEGAL_SEQ) || (score[i] < rc))
       {
         *tocode = i;

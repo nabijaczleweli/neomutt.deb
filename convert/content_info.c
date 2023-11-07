@@ -35,7 +35,8 @@
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "email/lib.h"
-#include "convert/lib.h"
+#include "core/lib.h"
+#include "lib.h"
 
 /**
  * mutt_update_content_info - Cache some info about an email
@@ -109,7 +110,9 @@ void mutt_update_content_info(struct Content *info, struct ContentState *s,
       continue;
     }
     else if (ch & 0x80)
+    {
       info->hibin++;
+    }
     else if ((ch == '\t') || (ch == '\f'))
     {
       info->ascii++;
@@ -121,7 +124,9 @@ void mutt_update_content_info(struct Content *info, struct ContentState *s,
       info->lobin++;
     }
     else if ((ch < 32) || (ch == 127))
+    {
       info->lobin++;
+    }
     else
     {
       if (linelen == 1)
@@ -138,9 +143,13 @@ void mutt_update_content_info(struct Content *info, struct ContentState *s,
       else if (from)
       {
         if ((linelen == 2) && (ch != 'r'))
+        {
           from = false;
+        }
         else if ((linelen == 3) && (ch != 'o'))
+        {
           from = false;
+        }
         else if (linelen == 4)
         {
           if (ch == 'm')

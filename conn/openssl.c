@@ -52,7 +52,9 @@
 #include "address/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
-#include "lib.h"
+#include "connaccount.h"
+#include "connection.h"
+#include "globals.h"
 #include "mutt_logging.h"
 #include "ssl.h"
 #ifdef HAVE_RAND_EGD
@@ -939,7 +941,7 @@ static bool interactive_check_cert(X509 *cert, int idx, size_t len, SSL *ssl, bo
   allow_always = allow_always && c_certificate_file &&
                  check_certificate_expiration(cert, true);
 
-  int rc = dlg_verify_certificate(title, &carr, allow_always, allow_skip);
+  int rc = dlg_certificate(title, &carr, allow_always, allow_skip);
   if ((rc == 3) && !allow_always)
     rc = 4;
 
@@ -1151,9 +1153,14 @@ static int ssl_negotiate(struct Connection *conn, struct SslSockData *ssldata)
 
   ERR_clear_error();
 
+retry:
   err = SSL_connect(ssldata->ssl);
   if (err != 1)
   {
+    // Temporary failure, e.g. signal received
+    if (BIO_should_retry(SSL_get_rbio(ssldata->ssl)))
+      goto retry;
+
     switch (SSL_get_error(ssldata->ssl, err))
     {
       case SSL_ERROR_SYSCALL:
@@ -1291,7 +1298,7 @@ free_ssldata:
 }
 
 /**
- * ssl_socket_poll - Check whether a socket read would block - Implements Connection::poll() - @ingroup connection_poll
+ * ssl_socket_poll - Check if any data is waiting on a socket - Implements Connection::poll() - @ingroup connection_poll
  */
 static int ssl_socket_poll(struct Connection *conn, time_t wait_secs)
 {
@@ -1327,17 +1334,24 @@ static int ssl_socket_read(struct Connection *conn, char *buf, size_t count)
   struct SslSockData *data = sockdata(conn);
   int rc;
 
+retry:
   rc = SSL_read(data->ssl, buf, count);
-  if ((rc <= 0) || (errno == EINTR))
+  if (rc > 0)
+    return rc;
+
+  // User hit Ctrl-C
+  if (SigInt && (errno == EINTR))
   {
-    if (errno == EINTR)
-    {
-      rc = -1;
-    }
-    data->isopen = 0;
-    ssl_err(data, rc);
+    rc = -1;
+  }
+  else if (BIO_should_retry(SSL_get_rbio(data->ssl)))
+  {
+    // Temporary failure, e.g. signal received
+    goto retry;
   }
 
+  data->isopen = 0;
+  ssl_err(data, rc);
   return rc;
 }
 
@@ -1349,16 +1363,26 @@ static int ssl_socket_write(struct Connection *conn, const char *buf, size_t cou
   if (!conn || !conn->sockdata || !buf || (count == 0))
     return -1;
 
-  int rc = SSL_write(sockdata(conn)->ssl, buf, count);
-  if ((rc <= 0) || (errno == EINTR))
+  struct SslSockData *data = sockdata(conn);
+  int rc;
+
+retry:
+  rc = SSL_write(data->ssl, buf, count);
+  if (rc > 0)
+    return rc;
+
+  // User hit Ctrl-C
+  if (SigInt && (errno == EINTR))
   {
-    if (errno == EINTR)
-    {
-      rc = -1;
-    }
-    ssl_err(sockdata(conn), rc);
+    rc = -1;
+  }
+  else if (BIO_should_retry(SSL_get_wbio(data->ssl)))
+  {
+    // Temporary failure, e.g. signal received
+    goto retry;
   }
 
+  ssl_err(data, rc);
   return rc;
 }
 

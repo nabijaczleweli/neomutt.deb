@@ -52,9 +52,9 @@
 int mutt_system(const char *cmd)
 {
   int rc = -1;
-  struct sigaction act;
-  struct sigaction oldtstp;
-  struct sigaction oldcont;
+  struct sigaction act = { 0 };
+  struct sigaction oldtstp = { 0 };
+  struct sigaction oldcont = { 0 };
   pid_t pid;
 
   if (!cmd || (*cmd == '\0'))
@@ -93,7 +93,7 @@ int mutt_system(const char *cmd)
   else if (pid != -1)
   {
 #ifdef USE_IMAP
-    rc = imap_wait_keepalive(pid);
+    rc = imap_wait_keep_alive(pid);
 #endif
   }
 

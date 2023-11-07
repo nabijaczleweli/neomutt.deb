@@ -27,9 +27,9 @@
  *
  * ## Windows
  *
- * | Name                      | Type            | See Also        |
- * | :------------------------ | :-------------- | :-------------- |
- * | Mixmaster Remailer Dialog | WT_DLG_REMAILER | dlg_mixmaster() |
+ * | Name                      | Type             | See Also        |
+ * | :------------------------ | :--------------- | :-------------- |
+ * | Mixmaster Remailer Dialog | WT_DLG_MIXMASTER | dlg_mixmaster() |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -66,11 +66,10 @@
 #include "config/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "functions.h"
-#include "keymap.h"
 #include "mutt_logging.h"
-#include "opcodes.h"
 #include "private_data.h"
 #include "remailer.h"
 #include "win_chain.h"
@@ -125,7 +124,7 @@ static int remailer_window_observer(struct NotifyCallback *nc)
   if (ev_w->win != dlg)
     return 0;
 
-  notify_observer_remove(NeoMutt->notify, remailer_config_observer, dlg);
+  notify_observer_remove(NeoMutt->sub->notify, remailer_config_observer, dlg);
   notify_observer_remove(dlg->notify, remailer_window_observer, dlg);
   mutt_debug(LL_DEBUG5, "window delete done\n");
 
@@ -141,10 +140,10 @@ static int remailer_window_observer(struct NotifyCallback *nc)
 static struct MuttWindow *mix_dlg_new(struct MixmasterPrivateData *priv,
                                       struct RemailerArray *ra)
 {
-  struct MuttWindow *dlg = mutt_window_new(WT_DLG_REMAILER, MUTT_WIN_ORIENT_VERTICAL,
+  struct MuttWindow *dlg = mutt_window_new(WT_DLG_MIXMASTER, MUTT_WIN_ORIENT_VERTICAL,
                                            MUTT_WIN_SIZE_MAXIMISE, MUTT_WIN_SIZE_UNLIMITED,
                                            MUTT_WIN_SIZE_UNLIMITED);
-  dlg->help_menu = MENU_MIX;
+  dlg->help_menu = MENU_MIXMASTER;
   dlg->help_data = RemailerHelp;
   dlg->wdata = priv;
 
@@ -171,17 +170,18 @@ static struct MuttWindow *mix_dlg_new(struct MixmasterPrivateData *priv,
     mutt_window_add_child(dlg, win_rbar);
   }
 
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, remailer_config_observer, dlg);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, remailer_config_observer, dlg);
   notify_observer_add(dlg->notify, NT_WINDOW, remailer_window_observer, dlg);
 
   return dlg;
 }
 
 /**
- * dlg_mixmaster - Create a Mixmaster chain
+ * dlg_mixmaster - Create a Mixmaster chain - @ingroup gui_dlg
  * @param chainhead List of chain links
  *
- * Ask the user to select Mixmaster hosts to create a chain.
+ * The Mixmaster Dialogs allows the user to create a chain of anonymous
+ * remailers.  The user can add/delete/reorder the hostss.
  */
 void dlg_mixmaster(struct ListHead *chainhead)
 {
@@ -200,6 +200,7 @@ void dlg_mixmaster(struct ListHead *chainhead)
   mutt_list_free(chainhead);
 
   dialog_push(dlg);
+  struct MuttWindow *old_focus = window_set_focus(priv.win_hosts);
 
   // ---------------------------------------------------------------------------
   // Event Loop
@@ -210,13 +211,13 @@ void dlg_mixmaster(struct ListHead *chainhead)
     menu_tagging_dispatcher(priv.win_hosts, op);
     window_redraw(NULL);
 
-    op = km_dokey(MENU_MIX);
+    op = km_dokey(MENU_MIXMASTER, GETCH_NO_FLAGS);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
     if (op == OP_NULL)
     {
-      km_error_key(MENU_MIX);
+      km_error_key(MENU_MIXMASTER);
       continue;
     }
     mutt_clear_error();
@@ -234,6 +235,7 @@ void dlg_mixmaster(struct ListHead *chainhead)
   if (rc == FR_DONE)
     win_chain_extract(priv.win_chain, chainhead);
 
+  window_set_focus(old_focus);
   dialog_pop();
   mutt_window_free(&dlg);
 

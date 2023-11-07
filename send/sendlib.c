@@ -44,22 +44,26 @@
 #include "core/lib.h"
 #include "mutt.h"
 #include "sendlib.h"
-#include "lib.h"
 #include "attach/lib.h"
 #include "convert/lib.h"
 #include "ncrypt/lib.h"
+#include "body.h"
 #include "copy.h"
 #include "globals.h" // IWYU pragma: keep
 #include "handler.h"
+#include "header.h"
 #include "mutt_mailbox.h"
 #include "muttlib.h"
 #include "mx.h"
+#include "send.h"
+#include "sendmail.h"
+#include "smtp.h"
 
 /**
  * mutt_lookup_mime_type - Find the MIME type for an attachment
  * @param att  Email with attachment
  * @param path Path to attachment
- * @retval num MIME type, e.g. #TYPE_IMAGE
+ * @retval enum #ContentType, e.g. #TYPE_IMAGE
  *
  * Given a file at 'path', see if there is a registered MIME type.
  * Returns the major MIME type, and copies the subtype to "d".  First look
@@ -569,7 +573,7 @@ static void run_mime_type_query(struct Body *att, struct ConfigSubset *sub)
 
   buf_file_expand_fmt_quote(cmd, c_mime_type_query_command, att->filename);
 
-  pid = filter_create(buf_string(cmd), NULL, &fp, &fp_err);
+  pid = filter_create(buf_string(cmd), NULL, &fp, &fp_err, EnvList);
   if (pid < 0)
   {
     mutt_error(_("Error running \"%s\""), buf_string(cmd));
@@ -669,7 +673,7 @@ static void encode_headers(struct ListHead *h, struct ConfigSubset *sub)
   struct ListNode *np = NULL;
   STAILQ_FOREACH(np, h, entries)
   {
-    p = strchr(np->data, ':');
+    p = strchr(NONULL(np->data), ':');
     if (!p)
       continue;
 
@@ -789,7 +793,7 @@ void mutt_prepare_envelope(struct Envelope *env, bool final, struct ConfigSubset
       buf[0] = '\0';
       mutt_addr_cat(buf, sizeof(buf), "undisclosed-recipients", AddressSpecials);
 
-      to->mailbox = mutt_str_dup(buf);
+      buf_strcpy(to->mailbox, buf);
     }
 
     mutt_set_followup_to(env, sub);
@@ -877,7 +881,7 @@ static int bounce_message(FILE *fp, struct Mailbox *m, struct Email *e,
     mutt_file_copy_bytes(fp, fp_tmp, e->body->length);
     if (mutt_file_fclose(&fp_tmp) != 0)
     {
-      mutt_perror(buf_string(tempfile));
+      mutt_perror("%s", buf_string(tempfile));
       unlink(buf_string(tempfile));
       return -1;
     }
@@ -931,7 +935,8 @@ int mutt_bounce_message(FILE *fp, struct Mailbox *m, struct Email *e,
   if (!from->personal)
   {
     const char *const c_real_name = cs_subset_string(sub, "real_name");
-    from->personal = mutt_str_dup(c_real_name);
+    if (c_real_name)
+      from->personal = buf_new(c_real_name);
   }
 
   mutt_addrlist_qualify(&from_list, fqdn);
@@ -1081,7 +1086,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
     fp_tmp = mutt_file_fopen(buf_string(tempfile), "w+");
     if (!fp_tmp)
     {
-      mutt_perror(buf_string(tempfile));
+      mutt_perror("%s", buf_string(tempfile));
       mx_mbox_close(m_fcc);
       goto done;
     }
@@ -1258,7 +1263,7 @@ int mutt_write_fcc(const char *path, struct Email *e, const char *msgid, bool po
   mx_mbox_close(m_fcc);
 
   if (!post && need_mailbox_cleanup)
-    mutt_mailbox_cleanup(path, &st);
+    mailbox_restore_timestamp(path, &st);
 
   if (post)
     set_noconv_flags(e->body, false);

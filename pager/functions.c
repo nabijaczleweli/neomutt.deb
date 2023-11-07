@@ -27,9 +27,13 @@
  */
 
 #include "config.h"
+#ifdef _MAKEDOC
+#include "docs/makedoc_defs.h"
+#else
 #include <stddef.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <sys/stat.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
@@ -37,23 +41,306 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
-#include "functions.h"
 #include "lib.h"
 #include "attach/lib.h"
+#include "browser/lib.h"
 #include "color/lib.h"
-#include "enter/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "index/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
+#include "pattern/lib.h"
 #include "display.h"
-#include "opcodes.h"
+#include "functions.h"
+#include "muttlib.h"
 #include "private_data.h"
 #include "protos.h"
+#endif
 
 /// Error message for unavailable functions
 static const char *Not_available_in_this_menu = N_("Not available in this menu");
 
 static int op_pager_search_next(struct IndexSharedData *shared,
                                 struct PagerPrivateData *priv, int op);
+
+// clang-format off
+/**
+ * OpPager - Functions for the Pager Menu
+ */
+const struct MenuFuncOp OpPager[] = { /* map: pager */
+  { "bottom",                        OP_PAGER_BOTTOM },
+  { "bounce-message",                OP_BOUNCE_MESSAGE },
+  { "break-thread",                  OP_MAIN_BREAK_THREAD },
+  { "change-folder",                 OP_MAIN_CHANGE_FOLDER },
+  { "change-folder-readonly",        OP_MAIN_CHANGE_FOLDER_READONLY },
+#ifdef USE_NNTP
+  { "change-newsgroup",              OP_MAIN_CHANGE_GROUP },
+  { "change-newsgroup-readonly",     OP_MAIN_CHANGE_GROUP_READONLY },
+#endif
+#ifdef USE_NOTMUCH
+  { "change-vfolder",                OP_MAIN_CHANGE_VFOLDER },
+#endif
+  { "check-stats",                   OP_CHECK_STATS },
+  { "check-traditional-pgp",         OP_CHECK_TRADITIONAL },
+  { "clear-flag",                    OP_MAIN_CLEAR_FLAG },
+  { "compose-to-sender",             OP_COMPOSE_TO_SENDER },
+  { "copy-message",                  OP_COPY_MESSAGE },
+  { "create-alias",                  OP_CREATE_ALIAS },
+  { "decode-copy",                   OP_DECODE_COPY },
+  { "decode-save",                   OP_DECODE_SAVE },
+  { "decrypt-copy",                  OP_DECRYPT_COPY },
+  { "decrypt-save",                  OP_DECRYPT_SAVE },
+  { "delete-message",                OP_DELETE },
+  { "delete-subthread",              OP_DELETE_SUBTHREAD },
+  { "delete-thread",                 OP_DELETE_THREAD },
+  { "display-address",               OP_DISPLAY_ADDRESS },
+  { "display-toggle-weed",           OP_DISPLAY_HEADERS },
+  { "edit",                          OP_EDIT_RAW_MESSAGE },
+  { "edit-label",                    OP_EDIT_LABEL },
+  { "edit-or-view-raw-message",      OP_EDIT_OR_VIEW_RAW_MESSAGE },
+  { "edit-raw-message",              OP_EDIT_RAW_MESSAGE },
+  { "edit-type",                     OP_ATTACHMENT_EDIT_TYPE },
+  { "enter-command",                 OP_ENTER_COMMAND },
+#ifdef USE_NOTMUCH
+  { "entire-thread",                 OP_MAIN_ENTIRE_THREAD },
+#endif
+  { "exit",                          OP_EXIT },
+  { "extract-keys",                  OP_EXTRACT_KEYS },
+  { "flag-message",                  OP_FLAG_MESSAGE },
+#ifdef USE_NNTP
+  { "followup-message",              OP_FOLLOWUP },
+#endif
+  { "forget-passphrase",             OP_FORGET_PASSPHRASE },
+  { "forward-message",               OP_FORWARD_MESSAGE },
+#ifdef USE_NNTP
+  { "forward-to-group",              OP_FORWARD_TO_GROUP },
+#endif
+  { "group-chat-reply",              OP_GROUP_CHAT_REPLY },
+  { "group-reply",                   OP_GROUP_REPLY },
+  { "half-down",                     OP_HALF_DOWN },
+  { "half-up",                       OP_HALF_UP },
+  { "help",                          OP_HELP },
+#ifdef USE_IMAP
+  { "imap-fetch-mail",               OP_MAIN_IMAP_FETCH },
+  { "imap-logout-all",               OP_MAIN_IMAP_LOGOUT_ALL },
+#endif
+  { "jump",                          OP_JUMP },
+  { "jump",                          OP_JUMP_1 },
+  { "jump",                          OP_JUMP_2 },
+  { "jump",                          OP_JUMP_3 },
+  { "jump",                          OP_JUMP_4 },
+  { "jump",                          OP_JUMP_5 },
+  { "jump",                          OP_JUMP_6 },
+  { "jump",                          OP_JUMP_7 },
+  { "jump",                          OP_JUMP_8 },
+  { "jump",                          OP_JUMP_9 },
+  { "link-threads",                  OP_MAIN_LINK_THREADS },
+  { "list-reply",                    OP_LIST_REPLY },
+  { "list-subscribe",                OP_LIST_SUBSCRIBE },
+  { "list-unsubscribe",              OP_LIST_UNSUBSCRIBE },
+  { "mail",                          OP_MAIL },
+  { "mail-key",                      OP_MAIL_KEY },
+  { "mailbox-list",                  OP_MAILBOX_LIST },
+  { "mark-as-new",                   OP_TOGGLE_NEW },
+  { "modify-labels",                 OP_MAIN_MODIFY_TAGS },
+  { "modify-labels-then-hide",       OP_MAIN_MODIFY_TAGS_THEN_HIDE },
+  { "modify-tags",                   OP_MAIN_MODIFY_TAGS },
+  { "modify-tags-then-hide",         OP_MAIN_MODIFY_TAGS_THEN_HIDE },
+  { "next-entry",                    OP_NEXT_ENTRY },
+  { "next-line",                     OP_NEXT_LINE },
+  { "next-new",                      OP_MAIN_NEXT_NEW },
+  { "next-new-then-unread",          OP_MAIN_NEXT_NEW_THEN_UNREAD },
+  { "next-page",                     OP_NEXT_PAGE },
+  { "next-subthread",                OP_MAIN_NEXT_SUBTHREAD },
+  { "next-thread",                   OP_MAIN_NEXT_THREAD },
+  { "next-undeleted",                OP_MAIN_NEXT_UNDELETED },
+  { "next-unread",                   OP_MAIN_NEXT_UNREAD },
+  { "next-unread-mailbox",           OP_MAIN_NEXT_UNREAD_MAILBOX },
+  { "parent-message",                OP_MAIN_PARENT_MESSAGE },
+  { "pipe-entry",                    OP_PIPE },
+  { "pipe-message",                  OP_PIPE },
+#ifdef USE_NNTP
+  { "post-message",                  OP_POST },
+#endif
+  { "previous-entry",                OP_PREV_ENTRY },
+  { "previous-line",                 OP_PREV_LINE },
+  { "previous-new",                  OP_MAIN_PREV_NEW },
+  { "previous-new-then-unread",      OP_MAIN_PREV_NEW_THEN_UNREAD },
+  { "previous-page",                 OP_PREV_PAGE },
+  { "previous-subthread",            OP_MAIN_PREV_SUBTHREAD },
+  { "previous-thread",               OP_MAIN_PREV_THREAD },
+  { "previous-undeleted",            OP_MAIN_PREV_UNDELETED },
+  { "previous-unread",               OP_MAIN_PREV_UNREAD },
+  { "print-entry",                   OP_ATTACHMENT_PRINT },
+  { "print-message",                 OP_PRINT },
+  { "purge-message",                 OP_PURGE_MESSAGE },
+  { "purge-thread",                  OP_PURGE_THREAD },
+  { "quasi-delete",                  OP_MAIN_QUASI_DELETE },
+  { "quit",                          OP_QUIT },
+  { "read-subthread",                OP_MAIN_READ_SUBTHREAD },
+  { "read-thread",                   OP_MAIN_READ_THREAD },
+  { "recall-message",                OP_RECALL_MESSAGE },
+#ifdef USE_NNTP
+  { "reconstruct-thread",            OP_RECONSTRUCT_THREAD },
+#endif
+  { "redraw-screen",                 OP_REDRAW },
+  { "reply",                         OP_REPLY },
+  { "resend-message",                OP_RESEND },
+  { "root-message",                  OP_MAIN_ROOT_MESSAGE },
+  { "save-entry",                    OP_ATTACHMENT_SAVE },
+  { "save-message",                  OP_SAVE },
+  { "search",                        OP_SEARCH },
+  { "search-next",                   OP_SEARCH_NEXT },
+  { "search-opposite",               OP_SEARCH_OPPOSITE },
+  { "search-reverse",                OP_SEARCH_REVERSE },
+  { "search-toggle",                 OP_SEARCH_TOGGLE },
+  { "set-flag",                      OP_MAIN_SET_FLAG },
+  { "shell-escape",                  OP_SHELL_ESCAPE },
+  { "show-log-messages",             OP_SHOW_LOG_MESSAGES },
+  { "show-version",                  OP_VERSION },
+#ifdef USE_SIDEBAR
+  { "sidebar-first",                 OP_SIDEBAR_FIRST },
+  { "sidebar-last",                  OP_SIDEBAR_LAST },
+  { "sidebar-next",                  OP_SIDEBAR_NEXT },
+  { "sidebar-next-new",              OP_SIDEBAR_NEXT_NEW },
+  { "sidebar-open",                  OP_SIDEBAR_OPEN },
+  { "sidebar-page-down",             OP_SIDEBAR_PAGE_DOWN },
+  { "sidebar-page-up",               OP_SIDEBAR_PAGE_UP },
+  { "sidebar-prev",                  OP_SIDEBAR_PREV },
+  { "sidebar-prev-new",              OP_SIDEBAR_PREV_NEW },
+  { "sidebar-toggle-virtual",        OP_SIDEBAR_TOGGLE_VIRTUAL },
+  { "sidebar-toggle-visible",        OP_SIDEBAR_TOGGLE_VISIBLE },
+#endif
+  { "skip-headers",                  OP_PAGER_SKIP_HEADERS },
+  { "skip-quoted",                   OP_PAGER_SKIP_QUOTED },
+  { "sort-mailbox",                  OP_SORT },
+  { "sort-reverse",                  OP_SORT_REVERSE },
+  { "sync-mailbox",                  OP_MAIN_SYNC_FOLDER },
+  { "tag-message",                   OP_TAG },
+  { "toggle-quoted",                 OP_PAGER_HIDE_QUOTED },
+  { "toggle-write",                  OP_TOGGLE_WRITE },
+  { "top",                           OP_PAGER_TOP },
+  { "undelete-message",              OP_UNDELETE },
+  { "undelete-subthread",            OP_UNDELETE_SUBTHREAD },
+  { "undelete-thread",               OP_UNDELETE_THREAD },
+#ifdef USE_NOTMUCH
+  { "vfolder-from-query",            OP_MAIN_VFOLDER_FROM_QUERY },
+  { "vfolder-from-query-readonly",   OP_MAIN_VFOLDER_FROM_QUERY_READONLY },
+#endif
+  { "view-attachments",              OP_VIEW_ATTACHMENTS },
+  { "view-raw-message",              OP_VIEW_RAW_MESSAGE },
+  { "what-key",                      OP_WHAT_KEY },
+  // Deprecated
+  { "buffy-list",                    OP_MAILBOX_LIST },
+  { "error-history",                 OP_SHOW_LOG_MESSAGES },
+  { NULL, 0 },
+};
+
+/**
+ * PagerDefaultBindings - Key bindings for the Pager Menu
+ */
+const struct MenuOpSeq PagerDefaultBindings[] = { /* map: pager */
+  { OP_ATTACHMENT_EDIT_TYPE,               "\005" },           // <Ctrl-E>
+  { OP_BOUNCE_MESSAGE,                     "b" },
+  { OP_CHECK_TRADITIONAL,                  "\033P" },          // <Alt-P>
+  { OP_COPY_MESSAGE,                       "C" },
+  { OP_CREATE_ALIAS,                       "a" },
+  { OP_DECODE_COPY,                        "\033C" },          // <Alt-C>
+  { OP_DECODE_SAVE,                        "\033s" },          // <Alt-s>
+  { OP_DELETE,                             "d" },
+  { OP_DELETE_SUBTHREAD,                   "\033d" },          // <Alt-d>
+  { OP_DELETE_THREAD,                      "\004" },           // <Ctrl-D>
+  { OP_DISPLAY_ADDRESS,                    "@" },
+  { OP_DISPLAY_HEADERS,                    "h" },
+  { OP_EDIT_LABEL,                         "Y" },
+  { OP_EDIT_OR_VIEW_RAW_MESSAGE,           "e" },
+  { OP_ENTER_COMMAND,                      ":" },
+  { OP_EXIT,                               "i" },
+  { OP_EXIT,                               "q" },
+  { OP_EXIT,                               "x" },
+  { OP_EXTRACT_KEYS,                       "\013" },           // <Ctrl-K>
+  { OP_FLAG_MESSAGE,                       "F" },
+  { OP_FORGET_PASSPHRASE,                  "\006" },           // <Ctrl-F>
+  { OP_FORWARD_MESSAGE,                    "f" },
+  { OP_GROUP_REPLY,                        "g" },
+  { OP_HELP,                               "?" },
+  { OP_JUMP_1,                             "1" },
+  { OP_JUMP_2,                             "2" },
+  { OP_JUMP_3,                             "3" },
+  { OP_JUMP_4,                             "4" },
+  { OP_JUMP_5,                             "5" },
+  { OP_JUMP_6,                             "6" },
+  { OP_JUMP_7,                             "7" },
+  { OP_JUMP_8,                             "8" },
+  { OP_JUMP_9,                             "9" },
+  { OP_LIST_REPLY,                         "L" },
+  { OP_MAIL,                               "m" },
+  { OP_MAILBOX_LIST,                       "." },
+  { OP_MAIL_KEY,                           "\033k" },          // <Alt-k>
+  { OP_MAIN_BREAK_THREAD,                  "#" },
+  { OP_MAIN_CHANGE_FOLDER,                 "c" },
+  { OP_MAIN_CHANGE_FOLDER_READONLY,        "\033c" },          // <Alt-c>
+  { OP_MAIN_CLEAR_FLAG,                    "W" },
+  { OP_MAIN_LINK_THREADS,                  "&" },
+  { OP_MAIN_NEXT_NEW_THEN_UNREAD,          "\t" },             // <Tab>
+  { OP_MAIN_NEXT_SUBTHREAD,                "\033n" },          // <Alt-n>
+  { OP_MAIN_NEXT_THREAD,                   "\016" },           // <Ctrl-N>
+  { OP_MAIN_NEXT_UNDELETED,                "<down>" },
+  { OP_MAIN_NEXT_UNDELETED,                "<right>" },
+  { OP_MAIN_NEXT_UNDELETED,                "j" },
+  { OP_MAIN_PARENT_MESSAGE,                "P" },
+  { OP_MAIN_PREV_SUBTHREAD,                "\033p" },          // <Alt-p>
+  { OP_MAIN_PREV_THREAD,                   "\020" },           // <Ctrl-P>
+  { OP_MAIN_PREV_UNDELETED,                "<left>" },
+  { OP_MAIN_PREV_UNDELETED,                "<up>" },
+  { OP_MAIN_PREV_UNDELETED,                "k" },
+  { OP_MAIN_READ_SUBTHREAD,                "\033r" },          // <Alt-r>
+  { OP_MAIN_READ_THREAD,                   "\022" },           // <Ctrl-R>
+  { OP_MAIN_SET_FLAG,                      "w" },
+  { OP_MAIN_SYNC_FOLDER,                   "$" },
+  { OP_NEXT_ENTRY,                         "J" },
+  { OP_NEXT_LINE,                          "<keypadenter>" },
+  { OP_NEXT_LINE,                          "\n" },             // <Enter>
+  { OP_NEXT_LINE,                          "\r" },             // <Return>
+  { OP_NEXT_PAGE,                          " " },              // <Space>
+  { OP_NEXT_PAGE,                          "<pagedown>" },
+  { OP_PAGER_BOTTOM,                       "<end>" },
+  { OP_PAGER_HIDE_QUOTED,                  "T" },
+  { OP_PAGER_SKIP_HEADERS,                 "H" },
+  { OP_PAGER_SKIP_QUOTED,                  "S" },
+  { OP_PAGER_TOP,                          "<home>" },
+  { OP_PAGER_TOP,                          "^" },
+  { OP_PIPE,                               "|" },
+  { OP_PREV_ENTRY,                         "K" },
+  { OP_PREV_LINE,                          "<backspace>" },
+  { OP_PREV_PAGE,                          "-" },
+  { OP_PREV_PAGE,                          "<pageup>" },
+  { OP_PRINT,                              "p" },
+  { OP_QUIT,                               "Q" },
+  { OP_RECALL_MESSAGE,                     "R" },
+  { OP_REDRAW,                             "\014" },           // <Ctrl-L>
+  { OP_REPLY,                              "r" },
+  { OP_RESEND,                             "\033e" },          // <Alt-e>
+  { OP_SAVE,                               "s" },
+  { OP_SEARCH,                             "/" },
+  { OP_SEARCH_NEXT,                        "n" },
+  { OP_SEARCH_REVERSE,                     "\033/" },          // <Alt-/>
+  { OP_SEARCH_TOGGLE,                      "\\" },             // <Backslash>
+  { OP_SHELL_ESCAPE,                       "!" },
+  { OP_SORT,                               "o" },
+  { OP_SORT_REVERSE,                       "O" },
+  { OP_TAG,                                "t" },
+  { OP_TOGGLE_NEW,                         "N" },
+  { OP_TOGGLE_WRITE,                       "%" },
+  { OP_UNDELETE,                           "u" },
+  { OP_UNDELETE_SUBTHREAD,                 "\033u" },          // <Alt-u>
+  { OP_UNDELETE_THREAD,                    "\025" },           // <Ctrl-U>
+  { OP_VERSION,                            "V" },
+  { OP_VIEW_ATTACHMENTS,                   "v" },
+  { 0, NULL },
+};
+// clang-format on
 
 /**
  * assert_pager_mode - Check that pager is in correct mode
@@ -69,7 +356,7 @@ static inline bool assert_pager_mode(bool test)
     return true;
 
   mutt_flushinp();
-  mutt_error(_(Not_available_in_this_menu));
+  mutt_error("%s", _(Not_available_in_this_menu));
   return false;
 }
 
@@ -311,9 +598,8 @@ static int op_pager_search(struct IndexSharedData *shared,
   struct Buffer *buf = buf_pool_get();
 
   buf_strcpy(buf, priv->search_str);
-  if (buf_get_field(((op == OP_SEARCH) || (op == OP_SEARCH_NEXT)) ? _("Search for: ") :
-                                                                    _("Reverse search for: "),
-                    buf, MUTT_COMP_CLEAR | MUTT_COMP_PATTERN, false, NULL, NULL, NULL) != 0)
+  if (mw_get_field(((op == OP_SEARCH) || (op == OP_SEARCH_NEXT)) ? _("Search for: ") : _("Reverse search for: "),
+                   buf, MUTT_COMP_CLEAR, HC_PATTERN, &CompletePatternOps, NULL) != 0)
   {
     goto done;
   }
@@ -384,23 +670,7 @@ static int op_pager_search(struct IndexSharedData *shared,
       line_num++;
     }
 
-    if (!priv->search_back)
-    {
-      /* searching forward */
-      int i;
-      for (i = priv->top_line; i < priv->lines_used; i++)
-      {
-        if ((!priv->hide_quoted || (priv->lines[i].cid != MT_COLOR_QUOTED)) &&
-            !priv->lines[i].cont_line && (priv->lines[i].search_arr_size > 0))
-        {
-          break;
-        }
-      }
-
-      if (i < priv->lines_used)
-        priv->top_line = i;
-    }
-    else
+    if (priv->search_back)
     {
       /* searching backward */
       int i;
@@ -414,6 +684,22 @@ static int op_pager_search(struct IndexSharedData *shared,
       }
 
       if (i >= 0)
+        priv->top_line = i;
+    }
+    else
+    {
+      /* searching forward */
+      int i;
+      for (i = priv->top_line; i < priv->lines_used; i++)
+      {
+        if ((!priv->hide_quoted || (priv->lines[i].cid != MT_COLOR_QUOTED)) &&
+            !priv->lines[i].cont_line && (priv->lines[i].search_arr_size > 0))
+        {
+          break;
+        }
+      }
+
+      if (i < priv->lines_used)
         priv->top_line = i;
     }
 
@@ -482,9 +768,13 @@ static int op_pager_search_next(struct IndexSharedData *shared,
 
       const bool c_wrap_search = cs_subset_bool(NeoMutt->sub, "wrap_search");
       if (i < priv->lines_used)
+      {
         priv->top_line = i;
+      }
       else if (priv->wrapped || !c_wrap_search)
+      {
         mutt_error(_("Not found"));
+      }
       else
       {
         mutt_message(_("Search wrapped to top"));
@@ -508,9 +798,13 @@ static int op_pager_search_next(struct IndexSharedData *shared,
 
       const bool c_wrap_search = cs_subset_bool(NeoMutt->sub, "wrap_search");
       if (i >= 0)
+      {
         priv->top_line = i;
+      }
       else if (priv->wrapped || !c_wrap_search)
+      {
         mutt_error(_("Not found"));
+      }
       else
       {
         mutt_message(_("Search wrapped to bottom"));
@@ -546,22 +840,21 @@ static int op_pager_skip_headers(struct IndexSharedData *shared,
   if (!priv->has_types)
     return FR_NO_ACTION;
 
-  int dretval = 0;
+  int rc = 0;
   int new_topline = 0;
 
   while (((new_topline < priv->lines_used) ||
-          (0 == (dretval = display_line(priv->fp, &priv->bytes_read, &priv->lines,
-                                        new_topline, &priv->lines_used, &priv->lines_max,
-                                        MUTT_TYPES | (pview->flags & MUTT_PAGER_NOWRAP),
-                                        &priv->quote_list, &priv->q_level,
-                                        &priv->force_redraw, &priv->search_re,
-                                        priv->pview->win_pager, &priv->ansi_list)))) &&
+          (0 == (rc = display_line(priv->fp, &priv->bytes_read, &priv->lines,
+                                   new_topline, &priv->lines_used, &priv->lines_max,
+                                   MUTT_TYPES | (pview->flags & MUTT_PAGER_NOWRAP), &priv->quote_list,
+                                   &priv->q_level, &priv->force_redraw, &priv->search_re,
+                                   priv->pview->win_pager, &priv->ansi_list)))) &&
          simple_color_is_header(priv->lines[new_topline].cid))
   {
     new_topline++;
   }
 
-  if (dretval < 0)
+  if (rc < 0)
   {
     /* L10N: Displayed if <skip-headers> is invoked in the pager, but
        there is no text past the headers.
@@ -587,7 +880,7 @@ static int op_pager_skip_quoted(struct IndexSharedData *shared,
     return FR_NO_ACTION;
 
   const short c_pager_skip_quoted_context = cs_subset_number(NeoMutt->sub, "pager_skip_quoted_context");
-  int dretval = 0;
+  int rc = 0;
   int new_topline = priv->top_line;
   int num_quoted = 0;
 
@@ -595,11 +888,11 @@ static int op_pager_skip_quoted(struct IndexSharedData *shared,
   if (simple_color_is_header(priv->lines[new_topline].cid))
   {
     while (((new_topline < priv->lines_used) ||
-            (0 == (dretval = display_line(
-                       priv->fp, &priv->bytes_read, &priv->lines, new_topline, &priv->lines_used,
-                       &priv->lines_max, MUTT_TYPES | (pview->flags & MUTT_PAGER_NOWRAP),
-                       &priv->quote_list, &priv->q_level, &priv->force_redraw,
-                       &priv->search_re, priv->pview->win_pager, &priv->ansi_list)))) &&
+            (0 == (rc = display_line(priv->fp, &priv->bytes_read, &priv->lines,
+                                     new_topline, &priv->lines_used, &priv->lines_max,
+                                     MUTT_TYPES | (pview->flags & MUTT_PAGER_NOWRAP), &priv->quote_list,
+                                     &priv->q_level, &priv->force_redraw, &priv->search_re,
+                                     priv->pview->win_pager, &priv->ansi_list)))) &&
            simple_color_is_header(priv->lines[new_topline].cid))
     {
       new_topline++;
@@ -613,18 +906,18 @@ static int op_pager_skip_quoted(struct IndexSharedData *shared,
   if (c_pager_skip_quoted_context > 0)
   {
     while (((new_topline < priv->lines_used) ||
-            (0 == (dretval = display_line(
-                       priv->fp, &priv->bytes_read, &priv->lines, new_topline, &priv->lines_used,
-                       &priv->lines_max, MUTT_TYPES | (pview->flags & MUTT_PAGER_NOWRAP),
-                       &priv->quote_list, &priv->q_level, &priv->force_redraw,
-                       &priv->search_re, priv->pview->win_pager, &priv->ansi_list)))) &&
+            (0 == (rc = display_line(priv->fp, &priv->bytes_read, &priv->lines,
+                                     new_topline, &priv->lines_used, &priv->lines_max,
+                                     MUTT_TYPES | (pview->flags & MUTT_PAGER_NOWRAP), &priv->quote_list,
+                                     &priv->q_level, &priv->force_redraw, &priv->search_re,
+                                     priv->pview->win_pager, &priv->ansi_list)))) &&
            (priv->lines[new_topline].cid == MT_COLOR_QUOTED))
     {
       new_topline++;
       num_quoted++;
     }
 
-    if (dretval < 0)
+    if (rc < 0)
     {
       mutt_error(_("No more unquoted text after quoted text"));
       return FR_NO_ACTION;
@@ -636,35 +929,35 @@ static int op_pager_skip_quoted(struct IndexSharedData *shared,
     num_quoted = 0;
 
     while (((new_topline < priv->lines_used) ||
-            (0 == (dretval = display_line(
-                       priv->fp, &priv->bytes_read, &priv->lines, new_topline, &priv->lines_used,
-                       &priv->lines_max, MUTT_TYPES | (pview->flags & MUTT_PAGER_NOWRAP),
-                       &priv->quote_list, &priv->q_level, &priv->force_redraw,
-                       &priv->search_re, priv->pview->win_pager, &priv->ansi_list)))) &&
+            (0 == (rc = display_line(priv->fp, &priv->bytes_read, &priv->lines,
+                                     new_topline, &priv->lines_used, &priv->lines_max,
+                                     MUTT_TYPES | (pview->flags & MUTT_PAGER_NOWRAP), &priv->quote_list,
+                                     &priv->q_level, &priv->force_redraw, &priv->search_re,
+                                     priv->pview->win_pager, &priv->ansi_list)))) &&
            (priv->lines[new_topline].cid != MT_COLOR_QUOTED))
     {
       new_topline++;
     }
 
-    if (dretval < 0)
+    if (rc < 0)
     {
       mutt_error(_("No more quoted text"));
       return FR_NO_ACTION;
     }
 
     while (((new_topline < priv->lines_used) ||
-            (0 == (dretval = display_line(
-                       priv->fp, &priv->bytes_read, &priv->lines, new_topline, &priv->lines_used,
-                       &priv->lines_max, MUTT_TYPES | (pview->flags & MUTT_PAGER_NOWRAP),
-                       &priv->quote_list, &priv->q_level, &priv->force_redraw,
-                       &priv->search_re, priv->pview->win_pager, &priv->ansi_list)))) &&
+            (0 == (rc = display_line(priv->fp, &priv->bytes_read, &priv->lines,
+                                     new_topline, &priv->lines_used, &priv->lines_max,
+                                     MUTT_TYPES | (pview->flags & MUTT_PAGER_NOWRAP), &priv->quote_list,
+                                     &priv->q_level, &priv->force_redraw, &priv->search_re,
+                                     priv->pview->win_pager, &priv->ansi_list)))) &&
            (priv->lines[new_topline].cid == MT_COLOR_QUOTED))
     {
       new_topline++;
       num_quoted++;
     }
 
-    if (dretval < 0)
+    if (rc < 0)
     {
       mutt_error(_("No more unquoted text after quoted text"));
       return FR_NO_ACTION;
@@ -716,6 +1009,64 @@ static int op_help(struct IndexSharedData *shared, struct PagerPrivateData *priv
 }
 
 /**
+ * op_save - Save the Pager text - Implements ::pager_function_t - @ingroup pager_function_api
+ */
+static int op_save(struct IndexSharedData *shared, struct PagerPrivateData *priv, int op)
+{
+  struct PagerView *pview = priv->pview;
+  if (pview->mode != PAGER_MODE_OTHER)
+    return FR_UNKNOWN;
+
+  if (!priv->fp)
+    return FR_UNKNOWN;
+
+  int rc = FR_ERROR;
+  FILE *fp_save = NULL;
+  struct Buffer *buf = buf_pool_get();
+
+  // Save the current read position
+  long pos = ftell(priv->fp);
+  rewind(priv->fp);
+
+  struct FileCompletionData cdata = { false, NULL, NULL, NULL };
+  if ((mw_get_field(_("Save to file: "), buf, MUTT_COMP_CLEAR, HC_FILE,
+                    &CompleteFileOps, &cdata) != 0) ||
+      buf_is_empty(buf))
+  {
+    rc = FR_SUCCESS;
+    goto done;
+  }
+
+  buf_expand_path(buf);
+  fp_save = mutt_file_fopen(buf_string(buf), "a+");
+  if (!fp_save)
+  {
+    mutt_perror("%s", buf_string(buf));
+    goto done;
+  }
+
+  int bytes = mutt_file_copy_stream(priv->fp, fp_save);
+  if (bytes == -1)
+  {
+    mutt_perror("%s", buf_string(buf));
+    goto done;
+  }
+
+  // Restore the read position
+  if (pos >= 0)
+    mutt_file_seek(priv->fp, pos, SEEK_CUR);
+
+  mutt_message(_("Saved to: %s"), buf_string(buf));
+  rc = FR_SUCCESS;
+
+done:
+  mutt_file_fclose(&fp_save);
+  buf_pool_release(&buf);
+
+  return rc;
+}
+
+/**
  * op_search_toggle - Toggle search pattern coloring - Implements ::pager_function_t - @ingroup pager_function_api
  */
 static int op_search_toggle(struct IndexSharedData *shared,
@@ -743,8 +1094,8 @@ static int op_view_attachments(struct IndexSharedData *shared,
 
   if (!assert_pager_mode(pview->mode == PAGER_MODE_EMAIL))
     return FR_NOT_IMPL;
-  dlg_select_attachment(NeoMutt->sub, shared->mailbox_view, shared->email,
-                        pview->pdata->fp);
+  dlg_attachment(NeoMutt->sub, shared->mailbox_view, shared->email,
+                 pview->pdata->fp, shared->attach_msg);
   if (shared->email->attach_del)
     shared->mailbox->changed = true;
   pager_queue_redraw(priv, PAGER_REDRAW_PAGER);
@@ -771,6 +1122,7 @@ static const struct PagerFunction PagerFunctions[] = {
   { OP_PAGER_TOP,              op_pager_top },
   { OP_PREV_LINE,              op_pager_prev_line },
   { OP_PREV_PAGE,              op_pager_prev_page },
+  { OP_SAVE,                   op_save },
   { OP_SEARCH,                 op_pager_search },
   { OP_SEARCH_REVERSE,         op_pager_search },
   { OP_SEARCH_NEXT,            op_pager_search_next },
@@ -788,7 +1140,7 @@ int pager_function_dispatcher(struct MuttWindow *win, int op)
 {
   if (!win)
   {
-    mutt_error(_(Not_available_in_this_menu));
+    mutt_error("%s", _(Not_available_in_this_menu));
     return FR_ERROR;
   }
 
@@ -815,7 +1167,7 @@ int pager_function_dispatcher(struct MuttWindow *win, int op)
   if (rc == FR_UNKNOWN) // Not our function
     return rc;
 
-  const char *result = dispacher_get_retval_name(rc);
+  const char *result = dispatcher_get_retval_name(rc);
   mutt_debug(LL_DEBUG1, "Handled %s (%d) -> %s\n", opcodes_get_name(op), op, NONULL(result));
 
   return rc;

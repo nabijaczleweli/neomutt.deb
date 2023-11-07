@@ -58,10 +58,9 @@ int mutt_mb_charlen(const char *s, int *width)
 
   wchar_t wc = 0;
   mbstate_t mbstate = { 0 };
-  size_t k, n;
 
-  n = mutt_str_len(s);
-  k = mbrtowc(&wc, s, n, &mbstate);
+  size_t n = mutt_str_len(s);
+  size_t k = mbrtowc(&wc, s, n, &mbstate);
   if (width)
     *width = wcwidth(wc);
   return ((k == ICONV_ILLEGAL_SEQ) || (k == ICONV_BUF_TOO_SMALL)) ? -1 : k;
@@ -129,45 +128,65 @@ bool mutt_mb_get_initials(const char *name, char *buf, size_t buflen)
  * mutt_mb_width - Measure a string's display width (in screen columns)
  * @param str     String to measure
  * @param col     Display column (used for expanding tabs)
- * @param display will this be displayed to the user?
- * @retval num Strings width in screen columns
+ * @param indent  If true, newline-space will be indented 8 chars
+ * @retval num String's width in screen columns
  *
  * This is like wcwidth(), but gets const char* not wchar_t*.
  */
-int mutt_mb_width(const char *str, int col, bool display)
+int mutt_mb_width(const char *str, int col, bool indent)
 {
-  wchar_t wc = 0;
-  int l, w = 0, nl = 0;
-  const char *p = str;
+  if (!str || !*str)
+    return 0;
 
-  while (p && *p)
+  bool nl = false;
+  int total_width = 0;
+  mbstate_t mbstate = { 0 };
+
+  size_t str_len = mutt_str_len(str);
+
+  while (*str && (str_len > 0))
   {
-    if (mbtowc(&wc, p, MB_CUR_MAX) >= 0)
+    wchar_t wc = L'\0';
+    size_t consumed = mbrtowc(&wc, str, str_len, &mbstate);
+    if (consumed == 0)
+      break;
+
+    if (consumed == ICONV_ILLEGAL_SEQ)
     {
-      l = wcwidth(wc);
-      if (l < 0)
-        l = 1;
-      /* correctly calc tab stop, even for sending as the
-       * line should look pretty on the receiving end */
-      if ((wc == L'\t') || (nl && (wc == L' ')))
-      {
-        nl = 0;
-        l = 8 - (col % 8);
-      }
-      /* track newlines for display-case: if we have a space
-       * after a newline, assume 8 spaces as for display we
-       * always tab-fold */
-      else if (display && (wc == '\n'))
-        nl = 1;
+      memset(&mbstate, 0, sizeof(mbstate));
+      wc = ReplacementChar;
+      consumed = 1;
     }
-    else
+    else if (consumed == ICONV_BUF_TOO_SMALL)
     {
-      l = 1;
+      wc = ReplacementChar;
+      consumed = str_len;
     }
-    w += l;
-    p++;
+
+    int wchar_width = wcwidth(wc);
+    if (wchar_width < 0)
+      wchar_width = 1;
+
+    if ((wc == L'\t') || (nl && (wc == L' ')))
+    {
+      /* correctly calc tab stop, even for sending as the line should look
+       * pretty on the receiving end */
+      nl = false;
+      wchar_width = 8 - (col % 8);
+    }
+    else if (indent && (wc == '\n'))
+    {
+      /* track newlines for display-case: if we have a space after a newline,
+       * assume 8 spaces as for display we always tab-fold */
+      nl = true;
+    }
+
+    total_width += wchar_width;
+    str += consumed;
+    str_len -= consumed;
   }
-  return w;
+
+  return total_width;
 }
 
 /**
@@ -228,59 +247,36 @@ size_t mutt_mb_width_ceiling(const wchar_t *s, size_t n, int w1)
 }
 
 /**
- * mutt_mb_wcstombs - Convert a string from wide to multibyte characters
+ * buf_mb_wcstombs - Convert a string from wide to multibyte characters
  * @param dest Buffer for the result
- * @param dlen Length of the result buffer
- * @param src Source string to convert
- * @param slen Length of the source string
+ * @param wstr Source wide string to convert
+ * @param wlen Length of the wide string
  */
-void mutt_mb_wcstombs(char *dest, size_t dlen, const wchar_t *src, size_t slen)
+void buf_mb_wcstombs(struct Buffer *dest, const wchar_t *wstr, size_t wlen)
 {
-  if (!dest || !src)
+  if (!dest || !wstr)
     return;
 
-  mbstate_t mbstate = { 0 };
-  size_t k;
+  // Give ourselves 4 utf-8 bytes per wide character
+  buf_alloc(dest, 4 * wlen);
 
-  /* First convert directly into the destination buffer */
-  for (; slen && (dlen >= MB_LEN_MAX); dest += k, dlen -= k, src++, slen--)
+  mbstate_t mbstate = { 0 };
+  size_t k = 0;
+
+  char *buf = dest->data;
+  size_t buflen = dest->dsize;
+
+  for (; (wlen > 0) && (buflen >= MB_LEN_MAX); buf += k, buflen -= k, wstr++, wlen--)
   {
-    k = wcrtomb(dest, *src, &mbstate);
+    k = wcrtomb(buf, *wstr, &mbstate);
     if (k == ICONV_ILLEGAL_SEQ)
+      break;
+    if (*wstr == L'\0')
       break;
   }
 
-  /* If this works, we can stop now */
-  if (dlen >= MB_LEN_MAX)
-  {
-    dest += wcrtomb(dest, 0, &mbstate);
-    return;
-  }
-
-  /* Otherwise convert any remaining data into a local buffer */
-  {
-    char buf[3 * MB_LEN_MAX];
-    char *p = buf;
-
-    for (; slen && p - buf < dlen; p += k, src++, slen--)
-    {
-      k = wcrtomb(p, *src, &mbstate);
-      if (k == ICONV_ILLEGAL_SEQ)
-        break;
-    }
-    p += wcrtomb(p, 0, &mbstate);
-
-    /* If it fits into the destination buffer, we can stop now */
-    if (p - buf <= dlen)
-    {
-      memcpy(dest, buf, p - buf);
-      return;
-    }
-
-    /* Otherwise we truncate the string in an ugly fashion */
-    memcpy(dest, buf, dlen);
-    dest[dlen - 1] = '\0'; /* assume original dlen > 0 */
-  }
+  *buf = '\0';
+  buf_fix_dptr(dest);
 }
 
 /**

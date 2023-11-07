@@ -33,11 +33,9 @@ struct MuttWindow;
  */
 struct IndexPrivateData
 {
-  bool tag;                      ///< tag-prefix has been pressed
-  int  oldcount;                 ///< Old count of Emails in the Mailbox
-  int  newcount;                 ///< New count of Emails in the Mailbox
+  bool tag_prefix;               ///< tag-prefix has been pressed
+  int  oldcount;                 ///< Old count of mails in the mailbox
   bool do_mailbox_notify;        ///< Do we need to notify the user of new mail?
-  bool attach_msg;               ///< Are we in "attach message" mode?
 
   struct IndexSharedData *shared; ///< Shared Index data
   struct Menu *menu;              ///< Menu controlling the index

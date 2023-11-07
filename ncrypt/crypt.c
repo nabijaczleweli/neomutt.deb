@@ -79,7 +79,9 @@ void crypt_current_time(struct State *state, const char *app_name)
     mutt_date_localtime_format(p, sizeof(p), _(" (current time: %c)"), mutt_date_now());
   }
   else
+  {
     *p = '\0';
+  }
 
   snprintf(tmp, sizeof(tmp), _("[-- %s output follows%s --]\n"), NONULL(app_name), p);
   state_attach_puts(state, tmp);
@@ -182,11 +184,10 @@ int mutt_protect(struct Email *e, char *keylist, bool postpone)
   if (((WithCrypto & APPLICATION_PGP) != 0) && !(security & SEC_AUTOCRYPT) &&
       ((security & PGP_INLINE) == PGP_INLINE))
   {
-    const enum QuadOption c_pgp_mime_auto = cs_subset_quad(NeoMutt->sub, "pgp_mime_auto");
     if ((e->body->type != TYPE_TEXT) || !mutt_istr_equal(e->body->subtype, "plain"))
     {
-      if (query_quadoption(c_pgp_mime_auto, _("Inline PGP can't be used with attachments.  Revert to PGP/MIME?")) !=
-          MUTT_YES)
+      if (query_quadoption(_("Inline PGP can't be used with attachments.  Revert to PGP/MIME?"),
+                           NeoMutt->sub, "pgp_mime_auto") != MUTT_YES)
       {
         mutt_error(_("Mail not sent: inline PGP can't be used with attachments"));
         return -1;
@@ -194,8 +195,8 @@ int mutt_protect(struct Email *e, char *keylist, bool postpone)
     }
     else if (mutt_istr_equal("flowed", mutt_param_get(&e->body->parameter, "format")))
     {
-      if ((query_quadoption(c_pgp_mime_auto, _("Inline PGP can't be used with format=flowed.  Revert to PGP/MIME?"))) !=
-          MUTT_YES)
+      if ((query_quadoption(_("Inline PGP can't be used with format=flowed.  Revert to PGP/MIME?"),
+                            NeoMutt->sub, "pgp_mime_auto")) != MUTT_YES)
       {
         mutt_error(_("Mail not sent: inline PGP can't be used with format=flowed"));
         return -1;
@@ -217,8 +218,8 @@ int mutt_protect(struct Email *e, char *keylist, bool postpone)
       }
 
       /* otherwise inline won't work...ask for revert */
-      if (query_quadoption(c_pgp_mime_auto,
-                           _("Message can't be sent inline.  Revert to using PGP/MIME?")) != MUTT_YES)
+      if (query_quadoption(_("Message can't be sent inline.  Revert to using PGP/MIME?"),
+                           NeoMutt->sub, "pgp_mime_auto") != MUTT_YES)
       {
         mutt_error(_("Mail not sent"));
         return -1;
@@ -254,10 +255,10 @@ int mutt_protect(struct Email *e, char *keylist, bool postpone)
       from = mutt_default_from(NeoMutt->sub);
     }
 
-    mailbox = from->mailbox;
+    mailbox = buf_string(from->mailbox);
     const struct Address *c_envelope_from_address = cs_subset_address(NeoMutt->sub, "envelope_from_address");
     if (!mailbox && c_envelope_from_address)
-      mailbox = c_envelope_from_address->mailbox;
+      mailbox = buf_string(c_envelope_from_address->mailbox);
 
     if (((WithCrypto & APPLICATION_SMIME) != 0) && (security & APPLICATION_SMIME))
       crypt_smime_set_sender(mailbox);
@@ -574,9 +575,13 @@ SecurityFlags mutt_is_application_pgp(struct Body *b)
       t |= PGP_SIGN;
     }
     else if (p && mutt_istr_startswith(p, "pgp-encrypt"))
+    {
       t |= PGP_ENCRYPT;
+    }
     else if (p && mutt_istr_startswith(p, "pgp-keys"))
+    {
       t |= PGP_KEY;
+    }
   }
   if (t)
     t |= PGP_INLINE;
@@ -620,7 +625,9 @@ SecurityFlags mutt_is_application_smime(struct Body *b)
     complain = true;
   }
   else if (!mutt_istr_equal(b->subtype, "octet-stream"))
+  {
     return SEC_NO_FLAGS;
+  }
 
   t = mutt_param_get(&b->parameter, "name");
 
@@ -650,7 +657,9 @@ SecurityFlags mutt_is_application_smime(struct Body *b)
       return SMIME_SIGN | SMIME_OPAQUE;
     }
     else if (mutt_istr_equal((t + len), "p7s"))
+    {
       return SMIME_SIGN | SMIME_OPAQUE;
+    }
   }
 
   return SEC_NO_FLAGS;
@@ -744,7 +753,7 @@ int crypt_write_signed(struct Body *a, struct State *state, const char *tempfile
   FILE *fp = mutt_file_fopen(tempfile, "w");
   if (!fp)
   {
-    mutt_perror(tempfile);
+    mutt_perror("%s", tempfile);
     return -1;
   }
 
@@ -802,7 +811,9 @@ void crypt_convert_to_7bit(struct Body *a)
         crypt_convert_to_7bit(a->parts);
       }
       else if (((WithCrypto & APPLICATION_PGP) != 0) && c_pgp_strict_enc)
+      {
         crypt_convert_to_7bit(a->parts);
+      }
     }
     else if ((a->type == TYPE_MESSAGE) && !mutt_istr_equal(a->subtype, "delivery-status"))
     {
@@ -810,9 +821,13 @@ void crypt_convert_to_7bit(struct Body *a)
         mutt_message_to_7bit(a, NULL, NeoMutt->sub);
     }
     else if (a->encoding == ENC_8BIT)
+    {
       a->encoding = ENC_QUOTED_PRINTABLE;
+    }
     else if (a->encoding == ENC_BINARY)
+    {
       a->encoding = ENC_BASE64;
+    }
     else if (a->content && (a->encoding != ENC_BASE64) &&
              (a->content->from || (a->content->space && c_pgp_strict_enc)))
     {
@@ -825,11 +840,11 @@ void crypt_convert_to_7bit(struct Body *a)
 /**
  * crypt_extract_keys_from_messages - Extract keys from a message
  * @param m  Mailbox
- * @param el List of Emails to process
+ * @param ea Array of Emails to process
  *
  * The extracted keys will be added to the user's keyring.
  */
-void crypt_extract_keys_from_messages(struct Mailbox *m, struct EmailList *el)
+void crypt_extract_keys_from_messages(struct Mailbox *m, struct EmailArray *ea)
 {
   if (!WithCrypto)
     return;
@@ -839,17 +854,17 @@ void crypt_extract_keys_from_messages(struct Mailbox *m, struct EmailList *el)
   FILE *fp_out = mutt_file_fopen(buf_string(tempfname), "w");
   if (!fp_out)
   {
-    mutt_perror(buf_string(tempfname));
+    mutt_perror("%s", buf_string(tempfname));
     goto cleanup;
   }
 
   if (WithCrypto & APPLICATION_PGP)
     OptDontHandlePgpKeys = true;
 
-  struct EmailNode *en = NULL;
-  STAILQ_FOREACH(en, el, entries)
+  struct Email **ep = NULL;
+  ARRAY_FOREACH(ep, ea)
   {
-    struct Email *e = en->email;
+    struct Email *e = *ep;
     struct Message *msg = mx_msg_open(m, e);
     if (!msg)
     {
@@ -882,16 +897,16 @@ void crypt_extract_keys_from_messages(struct Mailbox *m, struct EmailList *el)
                         CH_NO_FLAGS, 0);
       fflush(fp_out);
 
-      char *mbox = NULL;
+      const char *mbox = NULL;
       if (!TAILQ_EMPTY(&e->env->from))
       {
         mutt_expand_aliases(&e->env->from);
-        mbox = TAILQ_FIRST(&e->env->from)->mailbox;
+        mbox = buf_string(TAILQ_FIRST(&e->env->from)->mailbox);
       }
       else if (!TAILQ_EMPTY(&e->env->sender))
       {
         mutt_expand_aliases(&e->env->sender);
-        mbox = TAILQ_FIRST(&e->env->sender)->mailbox;
+        mbox = buf_string(TAILQ_FIRST(&e->env->sender)->mailbox);
       }
       if (mbox)
       {
@@ -1086,7 +1101,7 @@ bool mutt_should_hide_protected_subject(struct Email *e)
 }
 
 /**
- * mutt_protected_headers_handler - Process a protected header - Implements ::handler_t - @ingroup handler_api
+ * mutt_protected_headers_handler - Handler for protected headers - Implements ::handler_t - @ingroup handler_api
  */
 int mutt_protected_headers_handler(struct Body *b, struct State *state)
 {
@@ -1116,7 +1131,7 @@ int mutt_protected_headers_handler(struct Body *b, struct State *state)
 }
 
 /**
- * mutt_signed_handler - Verify a "multipart/signed" body - Implements ::handler_t - @ingroup handler_api
+ * mutt_signed_handler - Handler for "multipart/signed" - Implements ::handler_t - @ingroup handler_api
  */
 int mutt_signed_handler(struct Body *b, struct State *state)
 {

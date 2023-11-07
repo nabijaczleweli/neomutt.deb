@@ -66,8 +66,11 @@
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
-#include "lib.h"
+#include "simple.h"
 #include "menu/lib.h"
+#include "dialog.h"
+#include "mutt_window.h"
+#include "sbar.h"
 
 /**
  * simple_config_observer - Notification that a Config Variable has changed - Implements ::observer_t - @ingroup observer_api
@@ -112,7 +115,7 @@ static int simple_window_observer(struct NotifyCallback *nc)
   if (ev_w->win != dlg)
     return 0;
 
-  notify_observer_remove(NeoMutt->notify, simple_config_observer, dlg);
+  notify_observer_remove(NeoMutt->sub->notify, simple_config_observer, dlg);
   notify_observer_remove(dlg->notify, simple_window_observer, dlg);
 
   mutt_debug(LL_DEBUG5, "window delete done\n");
@@ -136,7 +139,6 @@ struct MuttWindow *simple_dialog_new(enum MenuType mtype, enum WindowType wtype,
   dlg->help_data = help_data;
 
   struct MuttWindow *win_menu = menu_window_new(mtype, NeoMutt->sub);
-  dlg->focus = win_menu;
   dlg->wdata = win_menu->wdata;
 
   struct MuttWindow *win_sbar = sbar_new();
@@ -152,7 +154,7 @@ struct MuttWindow *simple_dialog_new(enum MenuType mtype, enum WindowType wtype,
     mutt_window_add_child(dlg, win_sbar);
   }
 
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, simple_config_observer, dlg);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, simple_config_observer, dlg);
   notify_observer_add(dlg->notify, NT_WINDOW, simple_window_observer, dlg);
   dialog_push(dlg);
 

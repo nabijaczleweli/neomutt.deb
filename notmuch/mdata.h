@@ -23,6 +23,7 @@
 #ifndef MUTT_NOTMUCH_MDATA_H
 #define MUTT_NOTMUCH_MDATA_H
 
+#include <time.h>
 #include "query.h"
 
 struct Mailbox;
@@ -40,6 +41,7 @@ struct NmMboxData
   struct Progress *progress;   ///< A progress bar
   int oldmsgcount;
   int ignmsgcount;             ///< Ignored messages
+  struct timespec mtime;       ///< Time Mailbox was last changed
 };
 
 void                  nm_mdata_free(void **ptr);

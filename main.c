@@ -51,14 +51,14 @@
  * @ref lib_address, @ref lib_alias, @ref lib_attach, @ref lib_autocrypt,
  * @ref lib_bcache, @ref lib_browser, @ref lib_color, @ref lib_complete,
  * @ref lib_compmbox, @ref lib_compose, @ref lib_compress, @ref lib_config,
- * @ref lib_conn, @ref lib_convert, @ref lib_core, @ref lib_email,
- * @ref lib_enter, @ref lib_envelope, @ref lib_gui, @ref lib_hcache,
+ * @ref lib_conn, @ref lib_convert, @ref lib_core, @ref lib_editor,
+ * @ref lib_email, @ref lib_envelope, @ref lib_gui, @ref lib_hcache,
  * @ref lib_helpbar, @ref lib_history, @ref lib_imap, @ref lib_index,
- * @ref lib_maildir, @ref lib_mbox, @ref lib_menu, @ref lib_mixmaster,
- * @ref lib_mutt, @ref lib_ncrypt, @ref lib_nntp, @ref lib_notmuch,
- * @ref lib_pager, @ref lib_parse, @ref lib_pattern, @ref lib_pop,
- * @ref lib_postpone, @ref lib_progress, @ref lib_question, @ref lib_send,
- * @ref lib_sidebar, @ref lib_store.
+ * @ref lib_key, @ref lib_maildir, @ref lib_mbox, @ref lib_menu,
+ * @ref lib_mixmaster, @ref lib_mutt, @ref lib_ncrypt, @ref lib_nntp,
+ * @ref lib_notmuch, @ref lib_pager, @ref lib_parse, @ref lib_pattern,
+ * @ref lib_pop, @ref lib_postpone, @ref lib_progress, @ref lib_question,
+ * @ref lib_send, @ref lib_sidebar, @ref lib_store.
  *
  * ## Miscellaneous files
  *
@@ -73,14 +73,12 @@
  * | enriched.c      | @subpage neo_enriched      |
  * | external.c      | @subpage neo_external      |
  * | flags.c         | @subpage neo_flags         |
- * | functions.c     | @subpage neo_functions     |
  * | globals.c       | @subpage neo_globals       |
  * | handler.c       | @subpage neo_handler       |
  * | hdrline.c       | @subpage neo_hdrline       |
  * | help.c          | @subpage neo_help          |
  * | hook.c          | @subpage neo_hook          |
  * | init.c          | @subpage neo_init          |
- * | keymap.c        | @subpage neo_keymap        |
  * | mailcap.c       | @subpage neo_mailcap       |
  * | maillist.c      | @subpage neo_maillist      |
  * | main.c          | @subpage neo_main          |
@@ -90,7 +88,6 @@
  * | mutt_body.c     | @subpage neo_mutt_body     |
  * | mutt_config.c   | @subpage neo_mutt_config   |
  * | mutt_header.c   | @subpage neo_mutt_header   |
- * | mutt_history.c  | @subpage neo_mutt_history  |
  * | mutt_logging.c  | @subpage neo_mutt_logging  |
  * | mutt_lua.c      | @subpage neo_mutt_lua      |
  * | mutt_mailbox.c  | @subpage neo_mutt_mailbox  |
@@ -99,9 +96,7 @@
  * | mutt_thread.c   | @subpage neo_mutt_thread   |
  * | mview.c         | @subpage neo_mview         |
  * | mx.c            | @subpage neo_mx            |
- * | opcodes.c       | @subpage neo_opcode        |
  * | recvcmd.c       | @subpage neo_recvcmd       |
- * | resize.c        | @subpage neo_resize        |
  * | rfc3676.c       | @subpage neo_rfc3676       |
  * | score.c         | @subpage neo_score         |
  * | sort.c          | @subpage neo_sort          |
@@ -156,7 +151,9 @@
 #include "attach/lib.h"
 #include "browser/lib.h"
 #include "color/lib.h"
+#include "history/lib.h"
 #include "index/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "ncrypt/lib.h"
 #include "postpone/lib.h"
@@ -167,8 +164,6 @@
 #include "globals.h" // IWYU pragma: keep
 #include "hook.h"
 #include "init.h"
-#include "keymap.h"
-#include "mutt_history.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
 #include "muttlib.h"
@@ -192,7 +187,7 @@
 #ifdef USE_AUTOCRYPT
 #include "autocrypt/lib.h"
 #endif
-#if defined(USE_DEBUG_NOTIFY) || defined(HAVE_LIBUNWIND)
+#if defined(USE_DEBUG_NOTIFY) || defined(USE_DEBUG_BACKTRACE)
 #include "debug/lib.h"
 #endif
 
@@ -241,7 +236,7 @@ static void reset_tilde(struct ConfigSet *cs)
 void mutt_exit(int code)
 {
   mutt_endwin();
-#ifdef HAVE_LIBUNWIND
+#ifdef USE_DEBUG_BACKTRACE
   if (code != 0)
     show_backtrace();
 #endif
@@ -451,6 +446,61 @@ static void log_translation(void)
   }
 
   mutt_debug(LL_DEBUG1, "Translation: %.*s\n", len, lang);
+}
+
+/**
+ * log_gui - Log info about the GUI
+ */
+static void log_gui(void)
+{
+  const char *term = mutt_str_getenv("TERM");
+  const char *color_term = mutt_str_getenv("COLORTERM");
+  bool true_color = false;
+#ifdef NEOMUTT_DIRECT_COLORS
+  true_color = true;
+#endif
+
+  mutt_debug(LL_DEBUG1, "GUI:\n");
+  mutt_debug(LL_DEBUG1, "    Curses: %s\n", curses_version());
+  mutt_debug(LL_DEBUG1, "    COLORS=%d\n", COLORS);
+  mutt_debug(LL_DEBUG1, "    COLOR_PAIRS=%d\n", COLOR_PAIRS);
+  mutt_debug(LL_DEBUG1, "    TERM=%s\n", NONULL(term));
+  mutt_debug(LL_DEBUG1, "    COLORTERM=%s\n", NONULL(color_term));
+  mutt_debug(LL_DEBUG1, "    True color support: %s\n", true_color ? "YES" : "NO");
+  mutt_debug(LL_DEBUG1, "    Screen: %dx%d\n", RootWindow->state.cols,
+             RootWindow->state.rows);
+}
+
+/**
+ * main_timeout_observer - Notification that a timeout has occurred - Implements ::observer_t - @ingroup observer_api
+ */
+int main_timeout_observer(struct NotifyCallback *nc)
+{
+  static time_t last_run = 0;
+
+  if (nc->event_type != NT_TIMEOUT)
+    return 0;
+
+  const short c_timeout = cs_subset_number(NeoMutt->sub, "timeout");
+  if (c_timeout <= 0)
+    goto done;
+
+  time_t now = mutt_date_now();
+  if (now < (last_run + c_timeout))
+    goto done;
+
+  // Limit hook to running under the Index or Pager
+  struct MuttWindow *focus = window_get_focus();
+  struct MuttWindow *dlg = dialog_find(focus);
+  if (!dlg || (dlg->type != WT_DLG_INDEX))
+    goto done;
+
+  last_run = now;
+  mutt_timeout_hook();
+
+done:
+  mutt_debug(LL_DEBUG5, "timeout done\n");
+  return 0;
 }
 
 /**
@@ -755,27 +805,16 @@ main
 
     /* check whether terminal status is supported (must follow curses init) */
     TsSupported = mutt_ts_capability();
-    rootwin_set_size(COLS, LINES);
+    mutt_resize_screen();
+    log_gui();
   }
 
   /* set defaults and read init files */
-  int rc2 = mutt_init(cs, flags & MUTT_CLI_NOSYSRC, &commands);
+  int rc2 = mutt_init(cs, dlevel, dfile, flags & MUTT_CLI_NOSYSRC, &commands);
   if (rc2 != 0)
     goto main_curses;
 
   mutt_init_abort_key();
-
-  /* The command line overrides the config */
-  if (dlevel)
-    cs_str_reset(cs, "debug_level", NULL);
-  if (dfile)
-    cs_str_reset(cs, "debug_file", NULL);
-
-  if (mutt_log_start() < 0)
-  {
-    mutt_perror("log file");
-    goto main_exit;
-  }
 
 #ifdef USE_NNTP
   {
@@ -809,7 +848,7 @@ main
     int r = cs_str_initial_set(cs, "mbox_type", new_type, &err);
     if (CSR_RESULT(r) != CSR_SUCCESS)
     {
-      mutt_error(err.data);
+      mutt_error("%s", err.data);
       buf_dealloc(&err);
       goto main_curses;
     }
@@ -902,7 +941,7 @@ main
     {
       char msg2[256];
       snprintf(msg2, sizeof(msg2), _("%s does not exist. Create it?"), c_folder);
-      if (mutt_yesorno(msg2, MUTT_YES) == MUTT_YES)
+      if (query_yesorno(msg2, MUTT_YES) == MUTT_YES)
       {
         if ((mkdir(buf_string(fpath), 0700) == -1) && (errno != EEXIST))
           mutt_error(_("Can't create %s: %s"), c_folder, strerror(errno)); // TEST21: neomutt -n -F /dev/null (and ~/Mail doesn't exist)
@@ -917,9 +956,10 @@ main
   }
   StartupComplete = true;
 
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, main_hist_observer, NULL);
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, main_log_observer, NULL);
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, main_config_observer, NULL);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, main_hist_observer, NULL);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, main_log_observer, NULL);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, main_config_observer, NULL);
+  notify_observer_add(NeoMutt->notify, NT_TIMEOUT, main_timeout_observer, NULL);
 
   if (sendflags & SEND_POSTPONED)
   {
@@ -988,9 +1028,13 @@ main
       include_file = NULL;
     }
     else if (include_file)
+    {
       infile = include_file;
+    }
     else
+    {
       edit_infile = false;
+    }
 
     if (infile || bodytext)
     {
@@ -1014,25 +1058,31 @@ main
           fp_in = fopen(buf_string(&expanded_infile), "r");
           if (!fp_in)
           {
-            mutt_perror(buf_string(&expanded_infile));
+            mutt_perror("%s", buf_string(&expanded_infile));
             email_free(&e);
             goto main_curses; // TEST28: neomutt -E -H missing
           }
         }
       }
 
-      /* Copy input to a tempfile, and re-point fp_in to the tempfile.
-       * Note: stdin is always copied to a tempfile, ensuring draft_file
-       * can stat and get the correct st_size below.  */
-      if (!edit_infile)
+      if (edit_infile)
       {
+        /* If editing the infile, keep it around afterwards so
+         * it doesn't get unlinked, and we can rebuild the draft_file */
+        sendflags |= SEND_NO_FREE_HEADER;
+      }
+      else
+      {
+        /* Copy input to a tempfile, and re-point fp_in to the tempfile.
+         * Note: stdin is always copied to a tempfile, ensuring draft_file
+         * can stat and get the correct st_size below.  */
         buf_mktemp(&tempfile);
 
         fp_out = mutt_file_fopen(buf_string(&tempfile), "w");
         if (!fp_out)
         {
           mutt_file_fclose(&fp_in);
-          mutt_perror(buf_string(&tempfile));
+          mutt_perror("%s", buf_string(&tempfile));
           email_free(&e);
           goto main_curses; // TEST29: neomutt -H existing-file (where tmpdir=/path/to/FILE blocking tmpdir)
         }
@@ -1043,21 +1093,19 @@ main
             mutt_file_fclose(&fp_in);
         }
         else if (bodytext)
+        {
           fputs(bodytext, fp_out);
+        }
         mutt_file_fclose(&fp_out);
 
         fp_in = fopen(buf_string(&tempfile), "r");
         if (!fp_in)
         {
-          mutt_perror(buf_string(&tempfile));
+          mutt_perror("%s", buf_string(&tempfile));
           email_free(&e);
           goto main_curses; // TEST30: can't test
         }
       }
-      /* If editing the infile, keep it around afterwards so
-       * it doesn't get unlinked, and we can rebuild the draft_file */
-      else
-        sendflags |= SEND_NO_FREE_HEADER;
 
       /* Parse the draft_file into the full Email/Body structure.
        * Set SEND_DRAFT_FILE so mutt_send_message doesn't overwrite
@@ -1076,7 +1124,7 @@ main
         e_tmp->body = mutt_body_new();
         if (fstat(fileno(fp_in), &st) != 0)
         {
-          mutt_perror(draft_file);
+          mutt_perror("%s", draft_file);
           email_free(&e);
           email_free(&e_tmp);
           goto main_curses; // TEST31: can't test
@@ -1172,14 +1220,14 @@ main
       {
         if (truncate(buf_string(&expanded_infile), 0) == -1)
         {
-          mutt_perror(buf_string(&expanded_infile));
+          mutt_perror("%s", buf_string(&expanded_infile));
           email_free(&e);
           goto main_curses; // TEST33: neomutt -H read-only -s test john@example.com -E
         }
         fp_out = mutt_file_fopen(buf_string(&expanded_infile), "a");
         if (!fp_out)
         {
-          mutt_perror(buf_string(&expanded_infile));
+          mutt_perror("%s", buf_string(&expanded_infile));
           email_free(&e);
           goto main_curses; // TEST34: can't test
         }
@@ -1220,7 +1268,7 @@ main
     if (!buf_is_empty(&tempfile))
       unlink(buf_string(&tempfile));
 
-    rootwin_free();
+    rootwin_cleanup();
 
     if (rv != 0)
       goto main_curses; // TEST36: neomutt -H existing -s test john@example.com -E (cancel sending)
@@ -1273,7 +1321,7 @@ main
       }
       buf_reset(&folder);
       struct Mailbox *m_cur = get_current_mailbox();
-      buf_select_file(&folder, MUTT_SEL_FOLDER | MUTT_SEL_MAILBOX, m_cur, NULL, NULL);
+      dlg_browser(&folder, MUTT_SEL_FOLDER | MUTT_SEL_MAILBOX, m_cur, NULL, NULL);
       if (buf_is_empty(&folder))
       {
         goto main_ok; // TEST40: neomutt -y (quit selection)
@@ -1293,7 +1341,9 @@ main
           buf_strcpy(&folder, c_spool_file);
       }
       else if (c_folder)
+      {
         buf_strcpy(&folder, c_folder);
+      }
       /* else no folder */
     }
 
@@ -1314,10 +1364,10 @@ main
     if (flags & MUTT_CLI_IGNORE)
     {
       /* check to see if there are any messages in the folder */
-      switch (mx_path_is_empty(buf_string(&folder)))
+      switch (mx_path_is_empty(&folder))
       {
         case -1:
-          mutt_perror(buf_string(&folder));
+          mutt_perror("%s", buf_string(&folder));
           goto main_curses; // TEST41: neomutt -z -f missing
         case 1:
           mutt_error(_("Mailbox is empty"));
@@ -1329,6 +1379,9 @@ main
     mutt_startup_shutdown_hook(MUTT_STARTUP_HOOK);
     mutt_debug(LL_NOTIFY, "NT_GLOBAL_STARTUP\n");
     notify_send(NeoMutt->notify, NT_GLOBAL, NT_GLOBAL_STARTUP, NULL);
+
+    notify_send(NeoMutt->notify_resize, NT_RESIZE, 0, NULL);
+    window_redraw(NULL);
 
     repeat_error = true;
     struct Mailbox *m = mx_resolve(buf_string(&folder));
@@ -1348,7 +1401,7 @@ main
       dialog_push(dlg);
 
       mutt_curses_set_cursor(MUTT_CURSOR_INVISIBLE);
-      m = mutt_index_menu(dlg, m);
+      m = dlg_index(dlg, m);
       mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
       mailbox_free(&m);
 
@@ -1361,10 +1414,10 @@ main
     imap_logout_all();
 #endif
 #ifdef USE_SASL_CYRUS
-    mutt_sasl_done();
+    mutt_sasl_cleanup();
 #endif
 #ifdef USE_SASL_GNU
-    mutt_gsasl_done();
+    mutt_gsasl_cleanup();
 #endif
 #ifdef USE_AUTOCRYPT
     mutt_autocrypt_cleanup();
@@ -1377,37 +1430,43 @@ main_ok:
   rc = 0;
 main_curses:
   mutt_endwin();
-  mutt_unlink_temp_attachments();
+  mutt_temp_attachments_cleanup();
   /* Repeat the last message to the user */
   if (repeat_error && ErrorBufMessage)
     puts(ErrorBuf);
 main_exit:
+  if (NeoMutt && NeoMutt->sub)
+  {
+    notify_observer_remove(NeoMutt->sub->notify, main_hist_observer, NULL);
+    notify_observer_remove(NeoMutt->sub->notify, main_log_observer, NULL);
+    notify_observer_remove(NeoMutt->sub->notify, main_config_observer, NULL);
+    notify_observer_remove(NeoMutt->notify, main_timeout_observer, NULL);
+  }
   mutt_list_free(&commands);
   MuttLogger = log_disp_queue;
   buf_dealloc(&folder);
   buf_dealloc(&expanded_infile);
   buf_dealloc(&tempfile);
   mutt_list_free(&queries);
-  crypto_module_free();
-  rootwin_free();
-  buf_pool_free();
+  crypto_module_cleanup();
+  rootwin_cleanup();
+  buf_pool_cleanup();
   envlist_free(&EnvList);
   mutt_browser_cleanup();
-  commands_cleanup();
+  external_cleanup();
   menu_cleanup();
   crypt_cleanup();
   mutt_ch_cache_cleanup();
-  mutt_opts_free();
-  subjrx_free();
-  attach_free();
-  alternates_free();
-  mutt_keys_free();
-  mutt_prex_free();
-  config_cache_free();
+  mutt_opts_cleanup();
+  subjrx_cleanup();
+  attach_cleanup();
+  alternates_cleanup();
+  mutt_keys_cleanup();
+  mutt_prex_cleanup();
+  config_cache_cleanup();
   neomutt_free(&NeoMutt);
   cs_free(&cs);
   log_queue_flush(log_disp_terminal);
-  log_queue_empty();
   mutt_log_stop();
   return rc;
 }

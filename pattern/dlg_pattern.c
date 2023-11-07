@@ -30,9 +30,9 @@
  *
  * ## Windows
  *
- * | Name                     | Type           | See Also             |
- * | :----------------------- | :------------- | :------------------- |
- * | Pattern Selection Dialog | WT_DLG_PATTERN | dlg_select_pattern() |
+ * | Name                     | Type           | See Also      |
+ * | :----------------------- | :------------- | :------------ |
+ * | Pattern Selection Dialog | WT_DLG_PATTERN | dlg_pattern() |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -77,13 +77,12 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "format_flags.h"
 #include "functions.h"
-#include "keymap.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "opcodes.h"
 
 /// Help Bar for the Pattern selection dialog
 static const struct Mapping PatternHelp[] = {
@@ -132,7 +131,7 @@ static const char *pattern_format_str(char *buf, size_t buflen, size_t col, int 
 }
 
 /**
- * make_pattern_entry - Create a line for the Pattern Completion menu - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * make_pattern_entry - Create a Pattern for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  *
  * @sa $pattern_format, pattern_format_str()
  */
@@ -319,7 +318,7 @@ static int pattern_window_observer(struct NotifyCallback *nc)
 
   struct Menu *menu = win_menu->wdata;
 
-  notify_observer_remove(NeoMutt->notify, pattern_config_observer, menu);
+  notify_observer_remove(NeoMutt->sub->notify, pattern_config_observer, menu);
   notify_observer_remove(win_menu->notify, pattern_window_observer, win_menu);
 
   mutt_debug(LL_DEBUG5, "window delete done\n");
@@ -327,12 +326,15 @@ static int pattern_window_observer(struct NotifyCallback *nc)
 }
 
 /**
- * dlg_select_pattern - Show menu to select a Pattern
+ * dlg_pattern - Show menu to select a Pattern - @ingroup gui_dlg
  * @param buf    Buffer for the selected Pattern
  * @param buflen Length of buffer
  * @retval true A selection was made
+ *
+ * The Select Pattern Dialog shows the user a help page of Patterns.
+ * They can select one to auto-complete some functions, e.g. `<limit>`
  */
-bool dlg_select_pattern(char *buf, size_t buflen)
+bool dlg_pattern(char *buf, size_t buflen)
 {
   struct MuttWindow *dlg = simple_dialog_new(MENU_GENERIC, WT_DLG_PATTERN, PatternHelp);
   struct Menu *menu = create_pattern_menu(dlg);
@@ -341,9 +343,10 @@ bool dlg_select_pattern(char *buf, size_t buflen)
   dlg->wdata = &pd;
 
   // NT_COLOR is handled by the SimpleDialog
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, pattern_config_observer, menu);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, pattern_config_observer, menu);
   notify_observer_add(menu->win->notify, NT_WINDOW, pattern_window_observer, menu->win);
 
+  struct MuttWindow *old_focus = window_set_focus(menu->win);
   // ---------------------------------------------------------------------------
   // Event Loop
   int op = OP_NULL;
@@ -352,12 +355,7 @@ bool dlg_select_pattern(char *buf, size_t buflen)
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    struct KeyEvent event = km_dokey_event(MENU_GENERIC);
-    if (event.ch == 'q')
-      op = OP_EXIT;
-    else
-      op = event.op;
-
+    op = km_dokey(MENU_DIALOG, GETCH_NO_FLAGS);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
@@ -369,7 +367,6 @@ bool dlg_select_pattern(char *buf, size_t buflen)
     mutt_clear_error();
 
     int rc = pattern_function_dispatcher(dlg, op);
-
     if (rc == FR_UNKNOWN)
       rc = menu_function_dispatcher(menu->win, op);
     if (rc == FR_UNKNOWN)
@@ -377,6 +374,7 @@ bool dlg_select_pattern(char *buf, size_t buflen)
   } while (!pd.done);
   // ---------------------------------------------------------------------------
 
+  window_set_focus(old_focus);
   simple_dialog_free(&dlg);
   return pd.selection;
 }

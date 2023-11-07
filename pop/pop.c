@@ -88,11 +88,13 @@ static const char *cache_id(const char *id)
 }
 
 /**
- * fetch_message - Write line to file - Implements ::pop_fetch_t - @ingroup pop_fetch_api
+ * fetch_message - Parse a Message response - Implements ::pop_fetch_t - @ingroup pop_fetch_api
  * @param line String to write
  * @param data FILE pointer to write to
  * @retval  0 Success
  * @retval -1 Failure
+ *
+ * Save a Message to a file.
  */
 static int fetch_message(const char *line, void *data)
 {
@@ -191,7 +193,7 @@ static int pop_read_header(struct PopAccountData *adata, struct Email *e)
 }
 
 /**
- * fetch_uidl - Parse UIDL - Implements ::pop_fetch_t - @ingroup pop_fetch_api
+ * fetch_uidl - Parse UIDL response - Implements ::pop_fetch_t - @ingroup pop_fetch_api
  * @param line String to parse
  * @param data Mailbox
  * @retval  0 Success
@@ -227,8 +229,7 @@ static int fetch_uidl(const char *line, void *data)
   {
     mutt_debug(LL_DEBUG1, "new header %d %s\n", index, line);
 
-    if (i >= m->email_max)
-      mx_alloc_memory(m);
+    mx_alloc_memory(m, i);
 
     m->msg_count++;
     m->emails[i] = email_new();
@@ -237,7 +238,9 @@ static int fetch_uidl(const char *line, void *data)
     m->emails[i]->edata_free = pop_edata_free;
   }
   else if (m->emails[i]->index != index - 1)
+  {
     adata->clear_cache = true;
+  }
 
   m->emails[i]->index = index - 1;
 
@@ -248,9 +251,9 @@ static int fetch_uidl(const char *line, void *data)
 }
 
 /**
- * msg_cache_check - Check the Body Cache for an ID - Implements ::bcache_list_t - @ingroup bcache_list_api
+ * pop_bcache_delete - Delete an entry from the message cache - Implements ::bcache_list_t - @ingroup bcache_list_api
  */
-static int msg_cache_check(const char *id, struct BodyCache *bcache, void *data)
+static int pop_bcache_delete(const char *id, struct BodyCache *bcache, void *data)
 {
   struct Mailbox *m = data;
   if (!m)
@@ -298,7 +301,7 @@ static struct HeaderCache *pop_hcache_open(struct PopAccountData *adata, const c
 {
   const char *const c_header_cache = cs_subset_path(NeoMutt->sub, "header_cache");
   if (!adata || !adata->conn)
-    return mutt_hcache_open(c_header_cache, path, NULL);
+    return hcache_open(c_header_cache, path, NULL);
 
   struct Url url = { 0 };
   char p[1024] = { 0 };
@@ -306,7 +309,7 @@ static struct HeaderCache *pop_hcache_open(struct PopAccountData *adata, const c
   mutt_account_tourl(&adata->conn->account, &url);
   url.path = HC_FNAME;
   url_tostring(&url, p, sizeof(p), U_PATH);
-  return mutt_hcache_open(c_header_cache, p, pop_hcache_namer);
+  return hcache_open(c_header_cache, p, pop_hcache_namer);
 }
 #endif
 
@@ -391,11 +394,10 @@ static int pop_fetch_headers(struct Mailbox *m)
     bool hcached = false;
     for (i = old_count; i < new_count; i++)
     {
-      if (m->verbose)
-        progress_update(progress, i + 1 - old_count, -1);
+      progress_update(progress, i + 1 - old_count, -1);
       struct PopEmailData *edata = pop_edata_get(m->emails[i]);
 #ifdef USE_HCACHE
-      struct HCacheEntry hce = mutt_hcache_fetch(hc, edata->uid, strlen(edata->uid), 0);
+      struct HCacheEntry hce = hcache_fetch(hc, edata->uid, strlen(edata->uid), 0);
       if (hce.email)
       {
         /* Detach the private data */
@@ -426,7 +428,7 @@ static int pop_fetch_headers(struct Mailbox *m)
 #ifdef USE_HCACHE
       else
       {
-        mutt_hcache_store(hc, edata->uid, strlen(edata->uid), m->emails[i], 0);
+        hcache_store(hc, edata->uid, strlen(edata->uid), m->emails[i], 0);
       }
 #endif
 
@@ -463,7 +465,7 @@ static int pop_fetch_headers(struct Mailbox *m)
   progress_free(&progress);
 
 #ifdef USE_HCACHE
-  mutt_hcache_close(hc);
+  hcache_close(&hc);
 #endif
 
   if (rc < 0)
@@ -478,7 +480,7 @@ static int pop_fetch_headers(struct Mailbox *m)
    * the availability of our cache */
   const bool c_message_cache_clean = cs_subset_bool(NeoMutt->sub, "message_cache_clean");
   if (c_message_cache_clean)
-    mutt_bcache_list(adata->bcache, msg_cache_check, m);
+    mutt_bcache_list(adata->bcache, pop_bcache_delete, m);
 
   mutt_clear_error();
   return new_count - old_count;
@@ -596,8 +598,8 @@ void pop_fetch_mail(void)
   bool old_append = m_spool->append;
   m_spool->append = true;
 
-  const enum QuadOption c_pop_delete = cs_subset_quad(NeoMutt->sub, "pop_delete");
-  enum QuadOption delanswer = query_quadoption(c_pop_delete, _("Delete messages from server?"));
+  enum QuadOption delanswer = query_quadoption(_("Delete messages from server?"),
+                                               NeoMutt->sub, "pop_delete");
 
   snprintf(msgbuf, sizeof(msgbuf),
            ngettext("Reading new messages (%d byte)...",
@@ -895,15 +897,14 @@ static enum MxStatus pop_mbox_sync(struct Mailbox *m)
       if (m->emails[i]->deleted && (edata->refno != -1))
       {
         j++;
-        if (m->verbose)
-          progress_update(progress, j, -1);
+        progress_update(progress, j, -1);
         snprintf(buf, sizeof(buf), "DELE %d\r\n", edata->refno);
         rc = pop_query(adata, buf, sizeof(buf));
         if (rc == 0)
         {
           mutt_bcache_del(adata->bcache, cache_id(edata->uid));
 #ifdef USE_HCACHE
-          mutt_hcache_delete_record(hc, edata->uid, strlen(edata->uid));
+          hcache_delete_record(hc, edata->uid, strlen(edata->uid));
 #endif
         }
       }
@@ -911,14 +912,14 @@ static enum MxStatus pop_mbox_sync(struct Mailbox *m)
 #ifdef USE_HCACHE
       if (m->emails[i]->changed)
       {
-        mutt_hcache_store(hc, edata->uid, strlen(edata->uid), m->emails[i], 0);
+        hcache_store(hc, edata->uid, strlen(edata->uid), m->emails[i], 0);
       }
 #endif
     }
     progress_free(&progress);
 
 #ifdef USE_HCACHE
-    mutt_hcache_close(hc);
+    hcache_close(&hc);
 #endif
 
     if (rc == 0)
@@ -999,7 +1000,7 @@ static bool pop_msg_open(struct Mailbox *m, struct Message *msg, struct Email *e
       if (msg->fp)
         return true;
 
-      mutt_perror(cache->path);
+      mutt_perror("%s", cache->path);
       return false;
     }
     else
@@ -1034,7 +1035,7 @@ static bool pop_msg_open(struct Mailbox *m, struct Message *msg, struct Email *e
       msg->fp = mutt_file_fopen(buf_string(path), "w+");
       if (!msg->fp)
       {
-        mutt_perror(buf_string(path));
+        mutt_perror("%s", buf_string(path));
         goto cleanup;
       }
     }
@@ -1142,8 +1143,8 @@ static int pop_msg_save_hcache(struct Mailbox *m, struct Email *e)
   struct PopAccountData *adata = pop_adata_get(m);
   struct PopEmailData *edata = e->edata;
   struct HeaderCache *hc = pop_hcache_open(adata, mailbox_path(m));
-  rc = mutt_hcache_store(hc, edata->uid, strlen(edata->uid), e, 0);
-  mutt_hcache_close(hc);
+  rc = hcache_store(hc, edata->uid, strlen(edata->uid), e, 0);
+  hcache_close(&hc);
 #endif
 
   return rc;
@@ -1166,24 +1167,15 @@ enum MailboxType pop_path_probe(const char *path, const struct stat *st)
 /**
  * pop_path_canon - Canonicalise a Mailbox path - Implements MxOps::path_canon() - @ingroup mx_path_canon
  */
-static int pop_path_canon(char *buf, size_t buflen)
+static int pop_path_canon(struct Buffer *path)
 {
-  return 0;
-}
-
-/**
- * pop_path_pretty - Abbreviate a Mailbox path - Implements MxOps::path_pretty() - @ingroup mx_path_pretty
- */
-static int pop_path_pretty(char *buf, size_t buflen, const char *folder)
-{
-  /* Succeed, but don't do anything, for now */
   return 0;
 }
 
 /**
  * pop_path_parent - Find the parent of a Mailbox path - Implements MxOps::path_parent() - @ingroup mx_path_parent
  */
-static int pop_path_parent(char *buf, size_t buflen)
+static int pop_path_parent(struct Buffer *path)
 {
   /* Succeed, but don't do anything, for now */
   return 0;
@@ -1215,7 +1207,6 @@ const struct MxOps MxPopOps = {
   .tags_commit      = NULL,
   .path_probe       = pop_path_probe,
   .path_canon       = pop_path_canon,
-  .path_pretty      = pop_path_pretty,
   .path_parent      = pop_path_parent,
   .path_is_empty    = NULL,
   // clang-format on

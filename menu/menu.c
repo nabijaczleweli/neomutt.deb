@@ -32,8 +32,8 @@
 #include "private.h"
 #include "mutt/lib.h"
 #include "gui/lib.h"
+#include "lib.h"
 #include "color/lib.h"
-#include "menu/lib.h"
 #include "type.h"
 
 struct ConfigSubset;
@@ -44,7 +44,7 @@ char *SearchBuffers[MENU_MAX];
 /**
  * default_color - Get the default colour for a line of the menu - Implements Menu::color() - @ingroup menu_color
  */
-static struct AttrColor *default_color(struct Menu *menu, int line)
+static const struct AttrColor *default_color(struct Menu *menu, int line)
 {
   return simple_color_get(MT_COLOR_NORMAL);
 }
@@ -84,9 +84,7 @@ void menu_init(void)
  */
 enum MenuType menu_get_current_type(void)
 {
-  struct MuttWindow *win = alldialogs_get_current();
-  while (win && win->focus)
-    win = win->focus;
+  struct MuttWindow *win = window_get_focus();
 
   // This should only happen before the first window is created
   if (!win)
@@ -111,6 +109,9 @@ enum MenuType menu_get_current_type(void)
  */
 void menu_free(struct Menu **ptr)
 {
+  if (!ptr || !*ptr)
+    return;
+
   struct Menu *menu = *ptr;
 
   notify_free(&menu->notify);
@@ -164,7 +165,7 @@ int menu_get_index(struct Menu *menu)
  * menu_set_index - Set the current selection in the Menu
  * @param menu  Menu
  * @param index Item to select
- * @retval num #MenuRedrawFlags, e.g. #MENU_REDRAW_INDEX
+ * @retval enum #MenuRedrawFlags, e.g. #MENU_REDRAW_INDEX
  */
 MenuRedrawFlags menu_set_index(struct Menu *menu, int index)
 {

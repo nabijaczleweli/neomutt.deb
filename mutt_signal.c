@@ -38,7 +38,7 @@
 #include "attach/lib.h"
 #include "globals.h"
 #include "protos.h"
-#if defined(USE_DEBUG_GRAPHVIZ) || defined(HAVE_LIBUNWIND)
+#if defined(USE_DEBUG_GRAPHVIZ) || defined(USE_DEBUG_BACKTRACE)
 #include "debug/lib.h"
 #endif
 
@@ -52,7 +52,7 @@ static int IsEndwin = 0;
 static void curses_signal_handler(int sig)
 {
   int save_errno = errno;
-  enum MuttCursorState cursor = MUTT_CURSOR_VISIBLE;
+  enum MuttCursorState old_cursor = MUTT_CURSOR_VISIBLE;
 
   switch (sig)
   {
@@ -62,7 +62,7 @@ static void curses_signal_handler(int sig)
       if (!c_suspend)
         break;
       IsEndwin = isendwin();
-      cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
+      old_cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
       if (!IsEndwin)
         endwin();
       kill(0, SIGSTOP);
@@ -72,7 +72,7 @@ static void curses_signal_handler(int sig)
     case SIGCONT:
       if (!IsEndwin)
         refresh();
-      mutt_curses_set_cursor(cursor);
+      mutt_curses_set_cursor(old_cursor);
       /* We don't receive SIGWINCH when suspended; however, no harm is done by
        * just assuming we received one, and triggering the 'resize' anyway. */
       SigWinch = true;
@@ -97,7 +97,7 @@ static void curses_exit_handler(int sig)
 {
   mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
   endwin(); /* just to be safe */
-  mutt_unlink_temp_attachments();
+  mutt_temp_attachments_cleanup();
   mutt_sig_exit_handler(sig); /* DOES NOT RETURN */
 }
 
@@ -109,14 +109,14 @@ static void curses_segv_handler(int sig)
 {
   mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
   endwin(); /* just to be safe */
-#ifdef HAVE_LIBUNWIND
+#ifdef USE_DEBUG_BACKTRACE
   show_backtrace();
 #endif
 #ifdef USE_DEBUG_GRAPHVIZ
   dump_graphviz("segfault", NULL);
 #endif
 
-  struct sigaction act;
+  struct sigaction act = { 0 };
   sigemptyset(&act.sa_mask);
   act.sa_flags = 0;
   act.sa_handler = SIG_DFL;

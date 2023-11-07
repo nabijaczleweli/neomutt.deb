@@ -37,16 +37,17 @@
 const struct Mapping MenuNames[] = {
   // clang-format off
   { "alias",            MENU_ALIAS },
-  { "attach",           MENU_ATTACH },
+  { "attach",           MENU_ATTACHMENT },
 #ifdef USE_AUTOCRYPT
-  { "autocrypt",        MENU_AUTOCRYPT_ACCT },
+  { "autocrypt",        MENU_AUTOCRYPT },
 #endif
   { "browser",          MENU_FOLDER },
   { "compose",          MENU_COMPOSE },
+  { "dialog",           MENU_DIALOG },
   { "editor",           MENU_EDITOR },
   { "index",            MENU_INDEX },
   { "pager",            MENU_PAGER },
-  { "postpone",         MENU_POSTPONE },
+  { "postpone",         MENU_POSTPONED },
   { "pgp",              MENU_PGP },
   { "smime",            MENU_SMIME },
 #ifdef CRYPT_BACKEND_GPGME
@@ -54,7 +55,7 @@ const struct Mapping MenuNames[] = {
   { "key_select_smime", MENU_KEY_SELECT_SMIME },
 #endif
 #ifdef MIXMASTER
-  { "mix",              MENU_MIX },
+  { "mix",              MENU_MIXMASTER },
 #endif
   { "query",            MENU_QUERY },
   { "generic",          MENU_GENERIC },

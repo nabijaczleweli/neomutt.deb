@@ -30,11 +30,10 @@
 
 void test_mutt_path_tidy(void)
 {
-  // bool mutt_path_tidy(char *buf);
+  // bool mutt_path_tidy(struct Buffer *path);
 
-  // clang-format off
-  static const char *tests[][2] =
-  {
+  static const char *tests[][2] = {
+    // clang-format off
     // This struct is VERY wide, keep reading...
     { "/..apple/./../////./banana/banana/./banana/..apple/./banana/..apple/banana///banana/..apple/banana/..apple/banana/banana/..apple",                                     "/banana/banana/banana/..apple/banana/..apple/banana/banana/..apple/banana/..apple/banana/banana/..apple",                                      },
     { "/../../banana///..apple///..apple///banana///banana/banana/banana/..apple/banana/banana/banana/./banana/banana/banana/..apple/banana",                                 "/banana/..apple/..apple/banana/banana/banana/banana/..apple/banana/banana/banana/banana/banana/banana/..apple/banana",                         },
@@ -136,22 +135,23 @@ void test_mutt_path_tidy(void)
     { "/..apple/banana/banana/.././banana/..apple/banana/..apple/..apple/../..///..apple///banana/banana/banana///banana/..apple/banana/banana",                              "/..apple/banana/banana/..apple/banana/..apple/banana/banana/banana/banana/..apple/banana/banana",                                              },
     { "/./banana///../banana/banana/./../..apple/banana/../../banana///banana/..apple/..apple/////..",                                                                        "/banana/banana/banana/..apple",                                                                                                                },
     { "/banana/..apple/banana///banana///./..apple/banana/banana/banana/..apple/banana/banana//",                                                                             "/banana/..apple/banana/banana/..apple/banana/banana/banana/..apple/banana/banana",                                                             },
+    // clang-format on
   };
-  // clang-format on
 
   {
     TEST_CHECK(!mutt_path_tidy(NULL, true));
   }
 
   {
-    char buf[192];
+    struct Buffer *path = buf_pool_get();
     for (size_t i = 0; i < mutt_array_size(tests); i++)
     {
       TEST_CASE(tests[i][0]);
 
-      mutt_str_copy(buf, tests[i][0], sizeof(buf));
-      mutt_path_tidy(buf, true);
-      TEST_CHECK_STR_EQ(buf, tests[i][1]);
+      buf_strcpy(path, tests[i][0]);
+      mutt_path_tidy(path, true);
+      TEST_CHECK_STR_EQ(buf_string(path), tests[i][1]);
     }
+    buf_pool_release(&path);
   }
 }

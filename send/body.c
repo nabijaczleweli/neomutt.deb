@@ -28,13 +28,12 @@
 
 #include "config.h"
 #include <stdbool.h>
-#include <string.h>
 #include "mutt/lib.h"
 #include "email/lib.h"
 #include "body.h"
-#include "lib.h"
 #include "ncrypt/lib.h"
 #include "globals.h"
+#include "header.h"
 #include "muttlib.h"
 
 /**
@@ -46,20 +45,6 @@ struct B64Context
   short size;
   short linelen;
 };
-
-/**
- * b64_init - Set up the base64 conversion
- * @param bctx Cursor for the base64 conversion
- * @retval 0 Always
- */
-static int b64_init(struct B64Context *bctx)
-{
-  memset(bctx->buffer, '\0', sizeof(bctx->buffer));
-  bctx->size = 0;
-  bctx->linelen = 0;
-
-  return 0;
-}
 
 /**
  * b64_flush - Save the bytes to the file
@@ -117,10 +102,8 @@ static void b64_putc(struct B64Context *bctx, char c, FILE *fp_out)
  */
 static void encode_base64(struct FgetConv *fc, FILE *fp_out, int istext)
 {
-  struct B64Context bctx;
+  struct B64Context bctx = { 0 };
   int ch, ch1 = EOF;
-
-  b64_init(&bctx);
 
   while ((ch = mutt_ch_fgetconv(fc)) != EOF)
   {
@@ -285,7 +268,7 @@ static void encode_quoted(struct FgetConv *fc, FILE *fp_out, bool istext)
         line[linelen] = 0;
         fputs(line, fp_out);
         fputc('\n', fp_out);
-        sprintf(line, "=%2.2X", (unsigned char) savechar);
+        snprintf(line, sizeof(line), "=%2.2X", (unsigned char) savechar);
       }
     }
     else

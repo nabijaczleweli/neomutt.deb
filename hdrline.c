@@ -30,7 +30,6 @@
  */
 
 #include "config.h"
-#include <locale.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -69,36 +68,6 @@ struct HdrFormatInfo
   int msg_in_pager;           ///< Index of Email displayed in the Pager
   struct Email *email;        ///< Current Email
   const char *pager_progress; ///< String representing Pager position through Email
-};
-
-/**
- * enum FlagChars - Index into the `$flag_chars` variable ($flag_chars)
- */
-enum FlagChars
-{
-  FLAG_CHAR_TAGGED,         ///< Character denoting a tagged email
-  FLAG_CHAR_IMPORTANT,      ///< Character denoting a important (flagged) email
-  FLAG_CHAR_DELETED,        ///< Character denoting a deleted email
-  FLAG_CHAR_DELETED_ATTACH, ///< Character denoting a deleted attachment
-  FLAG_CHAR_REPLIED, ///< Character denoting an email that has been replied to
-  FLAG_CHAR_OLD,     ///< Character denoting an email that has been read
-  FLAG_CHAR_NEW,     ///< Character denoting an unread email
-  FLAG_CHAR_OLD_THREAD, ///< Character denoting a thread of emails that has been read
-  FLAG_CHAR_NEW_THREAD, ///< Character denoting a thread containing at least one new email
-  FLAG_CHAR_SEMPTY, ///< Character denoting a read email, $index_format %S expando
-  FLAG_CHAR_ZEMPTY, ///< Character denoting a read email, $index_format %Z expando
-};
-
-/**
- * enum CryptChars - Index into the `$crypt_chars` variable ($crypt_chars)
- */
-enum CryptChars
-{
-  FLAG_CHAR_CRYPT_GOOD_SIGN, ///< Character denoting a message signed with a verified key
-  FLAG_CHAR_CRYPT_ENCRYPTED, ///< Character denoting a message is PGP-encrypted
-  FLAG_CHAR_CRYPT_SIGNED,    ///< Character denoting a message is signed
-  FLAG_CHAR_CRYPT_CONTAINS_KEY, ///< Character denoting a message contains a PGP key
-  FLAG_CHAR_CRYPT_NO_CRYPTO, ///< Character denoting a message has no cryptography information
 };
 
 /**
@@ -154,27 +123,6 @@ static size_t add_index_color(char *buf, size_t buflen, MuttFormatFlags flags, e
 }
 
 /**
- * get_nth_wchar - Extract one char from a multi-byte table
- * @param table  Multi-byte table
- * @param index  Select this character
- * @retval ptr String pointer to the character
- *
- * Extract one multi-byte character from a string table.
- * If the index is invalid, then a space character will be returned.
- * If the character selected is '\n' (Ctrl-M), then "" will be returned.
- */
-static const char *get_nth_wchar(const struct MbTable *table, int index)
-{
-  if (!table || !table->chars || (index < 0) || (index >= table->len))
-    return " ";
-
-  if (table->chars[index][0] == '\r')
-    return "";
-
-  return table->chars[index];
-}
-
-/**
  * make_from_prefix - Create a prefix for an author field
  * @param disp   Type of field
  * @retval ptr Prefix string (do not free it)
@@ -196,7 +144,7 @@ static const char *make_from_prefix(enum FieldType disp)
   if (!c_from_chars || !c_from_chars->chars || (c_from_chars->len == 0))
     return long_prefixes[disp];
 
-  const char *pchar = get_nth_wchar(c_from_chars, disp);
+  const char *pchar = mbtable_get_nth_wchar(c_from_chars, disp);
   if (mutt_str_len(pchar) == 0)
     return "";
 
@@ -290,11 +238,11 @@ static void make_from_addr(struct Envelope *env, char *buf, size_t buflen, bool 
   }
 
   if (me && !TAILQ_EMPTY(&env->to))
-    snprintf(buf, buflen, "%s", TAILQ_FIRST(&env->to)->mailbox);
+    snprintf(buf, buflen, "%s", buf_string(TAILQ_FIRST(&env->to)->mailbox));
   else if (me && !TAILQ_EMPTY(&env->cc))
-    snprintf(buf, buflen, "%s", TAILQ_FIRST(&env->cc)->mailbox);
+    snprintf(buf, buflen, "%s", buf_string(TAILQ_FIRST(&env->cc)->mailbox));
   else if (!TAILQ_EMPTY(&env->from))
-    mutt_str_copy(buf, TAILQ_FIRST(&env->from)->mailbox, buflen);
+    mutt_str_copy(buf, buf_string(TAILQ_FIRST(&env->from)->mailbox), buflen);
   else
     *buf = '\0';
 }
@@ -316,18 +264,12 @@ static bool user_in_addr(struct AddressList *al)
 /**
  * user_is_recipient - Is the user a recipient of the message
  * @param e Email to test
- * @retval 0 User is not in list
- * @retval 1 User is unique recipient
- * @retval 2 User is in the TO list
- * @retval 3 User is in the CC list
- * @retval 4 User is originator
- * @retval 5 Sent to a subscribed mailinglist
- * @retval 6 User is in the Reply-To list
+ * @retval enum Character index into the `$to_chars` config variable
  */
-static int user_is_recipient(struct Email *e)
+static enum ToChars user_is_recipient(struct Email *e)
 {
   if (!e || !e->env)
-    return 0;
+    return FLAG_CHAR_TO_NOT_IN_THE_LIST;
 
   struct Envelope *env = e->env;
 
@@ -337,25 +279,35 @@ static int user_is_recipient(struct Email *e)
 
     if (mutt_addr_is_user(TAILQ_FIRST(&env->from)))
     {
-      e->recipient = 4;
+      e->recipient = FLAG_CHAR_TO_ORIGINATOR;
     }
     else if (user_in_addr(&env->to))
     {
       if (TAILQ_NEXT(TAILQ_FIRST(&env->to), entries) || !TAILQ_EMPTY(&env->cc))
-        e->recipient = 2; /* non-unique recipient */
+        e->recipient = FLAG_CHAR_TO_TO; /* non-unique recipient */
       else
-        e->recipient = 1; /* unique recipient */
+        e->recipient = FLAG_CHAR_TO_UNIQUE; /* unique recipient */
     }
     else if (user_in_addr(&env->cc))
-      e->recipient = 3;
+    {
+      e->recipient = FLAG_CHAR_TO_CC;
+    }
     else if (check_for_mailing_list(&env->to, NULL, NULL, 0))
-      e->recipient = 5;
+    {
+      e->recipient = FLAG_CHAR_TO_SUBSCRIBED_LIST;
+    }
     else if (check_for_mailing_list(&env->cc, NULL, NULL, 0))
-      e->recipient = 5;
+    {
+      e->recipient = FLAG_CHAR_TO_SUBSCRIBED_LIST;
+    }
     else if (user_in_addr(&env->reply_to))
-      e->recipient = 6;
+    {
+      e->recipient = FLAG_CHAR_TO_REPLY_TO;
+    }
     else
-      e->recipient = 0;
+    {
+      e->recipient = FLAG_CHAR_TO_NOT_IN_THE_LIST;
+    }
   }
 
   return e->recipient;
@@ -677,15 +629,11 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         p = buf;
 
         cp = ((op == 'd') || (op == 'D')) ? (NONULL(c_date_format)) : src;
-        bool do_locales;
+        bool use_c_locale = false;
         if (*cp == '!')
         {
-          do_locales = false;
+          use_c_locale = true;
           cp++;
-        }
-        else
-        {
-          do_locales = true;
         }
 
         size_t len = buflen - 1;
@@ -733,11 +681,15 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         }
         *p = '\0';
 
-        struct tm tm;
+        struct tm tm = { 0 };
         if ((op == '[') || (op == 'D'))
+        {
           tm = mutt_date_localtime(e->date_sent);
+        }
         else if (op == '(')
+        {
           tm = mutt_date_localtime(e->received);
+        }
         else if (op == '<')
         {
           tm = mutt_date_localtime(mutt_date_now());
@@ -753,11 +705,10 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
           tm = mutt_date_gmtime(now);
         }
 
-        if (!do_locales)
-          setlocale(LC_TIME, "C");
-        strftime(tmp, sizeof(tmp), buf, &tm);
-        if (!do_locales)
-          setlocale(LC_TIME, "");
+        if (use_c_locale)
+          strftime_l(tmp, sizeof(tmp), buf, &tm, NeoMutt->time_c_locale);
+        else
+          strftime(tmp, sizeof(tmp), buf, &tm);
 
         colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_DATE);
         mutt_format_s(buf + colorlen, buflen - colorlen, prec, tmp);
@@ -780,7 +731,9 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         snprintf(buf, buflen, fmt, mutt_messages_in_thread(m, e, MIT_NUM_MESSAGES));
       }
       else if (mutt_messages_in_thread(m, e, MIT_NUM_MESSAGES) <= 1)
+      {
         optional = false;
+      }
       break;
 
     case 'f':
@@ -821,7 +774,9 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       }
       else if (!tags)
+      {
         optional = false;
+      }
       FREE(&tags);
       break;
 
@@ -927,7 +882,9 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       }
       else if (e->lines <= 0)
+      {
         optional = false;
+      }
       break;
 
     case 'L':
@@ -979,7 +936,9 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
           add_index_color(buf, buflen - colorlen, flags, MT_COLOR_INDEX);
         }
         else
+        {
           *buf = '\0';
+        }
       }
       else
       {
@@ -1087,21 +1046,21 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
     {
       const char *wch = NULL;
       if (e->deleted)
-        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED);
+        wch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED);
       else if (e->attach_del)
-        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED_ATTACH);
+        wch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED_ATTACH);
       else if (e->tagged)
-        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_TAGGED);
+        wch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_TAGGED);
       else if (e->flagged)
-        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_IMPORTANT);
+        wch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_IMPORTANT);
       else if (e->replied)
-        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_REPLIED);
+        wch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_REPLIED);
       else if (e->read && (msg_in_pager != e->msgno))
-        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_SEMPTY);
+        wch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_SEMPTY);
       else if (e->old)
-        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD);
+        wch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD);
       else
-        wch = get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW);
+        wch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW);
 
       snprintf(tmp, sizeof(tmp), "%s", wch);
       colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_FLAGS);
@@ -1175,7 +1134,9 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         mutt_format_s(buf, buflen, prec, e->env->organization ? e->env->organization : "");
       }
       else if (!e->env->organization)
+      {
         optional = false;
+      }
       break;
 
 #ifdef USE_NNTP
@@ -1185,7 +1146,9 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         mutt_format_s(buf, buflen, prec, e->env->x_comment_to ? e->env->x_comment_to : "");
       }
       else if (!e->env->x_comment_to)
+      {
         optional = false;
+      }
       break;
 #endif
 
@@ -1258,26 +1221,34 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       {
         const char *ch = NULL;
         if (e->deleted)
-          ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED);
+        {
+          ch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED);
+        }
         else if (e->attach_del)
-          ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED_ATTACH);
+        {
+          ch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED_ATTACH);
+        }
         else if (threads && thread_is_new(e))
-          ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW_THREAD);
+        {
+          ch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW_THREAD);
+        }
         else if (threads && thread_is_old(e))
-          ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD_THREAD);
+        {
+          ch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD_THREAD);
+        }
         else if (e->read && (msg_in_pager != e->msgno))
         {
           if (e->replied)
-            ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_REPLIED);
+            ch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_REPLIED);
           else
-            ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_ZEMPTY);
+            ch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_ZEMPTY);
         }
         else
         {
           if (e->old)
-            ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD);
+            ch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD);
           else
-            ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW);
+            ch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW);
         }
 
         snprintf(tmp, sizeof(tmp), "%s", ch);
@@ -1287,18 +1258,24 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       {
         const char *ch = NULL;
         if ((WithCrypto != 0) && (e->security & SEC_GOODSIGN))
-          ch = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_GOOD_SIGN);
+        {
+          ch = mbtable_get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_GOOD_SIGN);
+        }
         else if ((WithCrypto != 0) && (e->security & SEC_ENCRYPT))
-          ch = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_ENCRYPTED);
+        {
+          ch = mbtable_get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_ENCRYPTED);
+        }
         else if ((WithCrypto != 0) && (e->security & SEC_SIGN))
-          ch = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_SIGNED);
+        {
+          ch = mbtable_get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_SIGNED);
+        }
         else if (((WithCrypto & APPLICATION_PGP) != 0) && ((e->security & PGP_KEY) == PGP_KEY))
         {
-          ch = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_CONTAINS_KEY);
+          ch = mbtable_get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_CONTAINS_KEY);
         }
         else
         {
-          ch = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_NO_CRYPTO);
+          ch = mbtable_get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_NO_CRYPTO);
         }
 
         snprintf(tmp, sizeof(tmp), "%s", ch);
@@ -1308,17 +1285,19 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       {
         const char *ch = NULL;
         if (e->tagged)
-          ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_TAGGED);
+          ch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_TAGGED);
         else if (e->flagged)
-          ch = get_nth_wchar(c_flag_chars, FLAG_CHAR_IMPORTANT);
+          ch = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_IMPORTANT);
         else
-          ch = get_nth_wchar(c_to_chars, user_is_recipient(e));
+          ch = mbtable_get_nth_wchar(c_to_chars, user_is_recipient(e));
 
         snprintf(tmp, sizeof(tmp), "%s", ch);
         src++;
       }
       else /* fallthrough */
+      {
         break;
+      }
 
       colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_FLAGS);
       mutt_format_s(buf + colorlen, buflen - colorlen, prec, tmp);
@@ -1330,49 +1309,53 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       /* New/Old for threads; replied; New/Old for messages */
       const char *first = NULL;
       if (threads && thread_is_new(e))
-        first = get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW_THREAD);
+      {
+        first = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW_THREAD);
+      }
       else if (threads && thread_is_old(e))
-        first = get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD_THREAD);
+      {
+        first = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD_THREAD);
+      }
       else if (e->read && (msg_in_pager != e->msgno))
       {
         if (e->replied)
-          first = get_nth_wchar(c_flag_chars, FLAG_CHAR_REPLIED);
+          first = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_REPLIED);
         else
-          first = get_nth_wchar(c_flag_chars, FLAG_CHAR_ZEMPTY);
+          first = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_ZEMPTY);
       }
       else
       {
         if (e->old)
-          first = get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD);
+          first = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_OLD);
         else
-          first = get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW);
+          first = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_NEW);
       }
 
       /* Marked for deletion; deleted attachments; crypto */
       const char *second = NULL;
       if (e->deleted)
-        second = get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED);
+        second = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED);
       else if (e->attach_del)
-        second = get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED_ATTACH);
+        second = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_DELETED_ATTACH);
       else if ((WithCrypto != 0) && (e->security & SEC_GOODSIGN))
-        second = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_GOOD_SIGN);
+        second = mbtable_get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_GOOD_SIGN);
       else if ((WithCrypto != 0) && (e->security & SEC_ENCRYPT))
-        second = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_ENCRYPTED);
+        second = mbtable_get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_ENCRYPTED);
       else if ((WithCrypto != 0) && (e->security & SEC_SIGN))
-        second = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_SIGNED);
+        second = mbtable_get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_SIGNED);
       else if (((WithCrypto & APPLICATION_PGP) != 0) && (e->security & PGP_KEY))
-        second = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_CONTAINS_KEY);
+        second = mbtable_get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_CONTAINS_KEY);
       else
-        second = get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_NO_CRYPTO);
+        second = mbtable_get_nth_wchar(c_crypt_chars, FLAG_CHAR_CRYPT_NO_CRYPTO);
 
       /* Tagged, flagged and recipient flag */
       const char *third = NULL;
       if (e->tagged)
-        third = get_nth_wchar(c_flag_chars, FLAG_CHAR_TAGGED);
+        third = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_TAGGED);
       else if (e->flagged)
-        third = get_nth_wchar(c_flag_chars, FLAG_CHAR_IMPORTANT);
+        third = mbtable_get_nth_wchar(c_flag_chars, FLAG_CHAR_IMPORTANT);
       else
-        third = get_nth_wchar(c_to_chars, user_is_recipient(e));
+        third = mbtable_get_nth_wchar(c_to_chars, user_is_recipient(e));
 
       snprintf(tmp, sizeof(tmp), "%s%s%s", first, second, third);
     }

@@ -27,8 +27,9 @@
  *
  * | File                   | Description                   |
  * | :--------------------- | :---------------------------- |
- * | browser/browser.c      | @subpage browser_browser      |
+ * | browser/complete.c     | @subpage browser_complete     |
  * | browser/config.c       | @subpage browser_config       |
+ * | browser/dlg_browser.c  | @subpage browser_dlg_browser  |
  * | browser/functions.c    | @subpage browser_functions    |
  * | browser/private_data.c | @subpage browser_private_data |
  * | browser/sort.c         | @subpage browser_sorting      |
@@ -42,6 +43,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 #include "mutt/lib.h"
+#include "complete/lib.h"
 
 struct Mailbox;
 struct Menu;
@@ -56,6 +58,9 @@ typedef uint8_t SelectFileFlags;  ///< Flags for mutt_select_file(), e.g. #MUTT_
 #define MUTT_SEL_MAILBOX (1 << 0) ///< Select a mailbox
 #define MUTT_SEL_MULTI   (1 << 1) ///< Multi-selection is enabled
 #define MUTT_SEL_FOLDER  (1 << 2) ///< Select a local directory
+
+extern const struct CompleteOps CompleteFileOps;
+extern const struct CompleteOps CompleteMailboxOps;
 
 /**
  * struct Folder - A folder/dir in the browser
@@ -88,13 +93,15 @@ struct FolderFile
 #ifdef USE_IMAP
   char delim;              ///< Path delimiter
 
-  bool imap        : 1;    ///< This is an IMAP folder
-  bool selectable  : 1;    ///< Folder can be selected
-  bool inferiors   : 1;    ///< Folder has children
+  bool imap          : 1;  ///< This is an IMAP folder
+  bool selectable    : 1;  ///< Folder can be selected
+  bool inferiors     : 1;  ///< Folder has children
 #endif
-  bool has_mailbox : 1;    ///< This is a mailbox
-  bool local       : 1;    ///< Folder is on local filesystem
-  bool tagged      : 1;    ///< Folder is tagged
+  bool has_mailbox   : 1;  ///< This is a mailbox
+  bool local         : 1;  ///< Folder is on local filesystem
+  bool notify_user   : 1;  ///< User will be notified of new mail
+  bool poll_new_mail : 1;  ///< Check mailbox for new mail
+  bool tagged        : 1;  ///< Folder is tagged
 #ifdef USE_NNTP
   struct NntpMboxData *nd; ///< Extra NNTP data
 #endif
@@ -102,14 +109,14 @@ struct FolderFile
   int gen;                 ///< Unique id, used for (un)sorting
 };
 
-ARRAY_HEAD(BrowserStateEntry, struct FolderFile);
+ARRAY_HEAD(BrowserEntryArray, struct FolderFile);
 
 /**
  * struct BrowserState - State of the file/mailbox browser
  */
 struct BrowserState
 {
-  struct BrowserStateEntry entry; ///< Array of files / dirs / mailboxes
+  struct BrowserEntryArray entry; ///< Array of files / dirs / mailboxes
 #ifdef USE_IMAP
   bool imap_browse; ///< IMAP folder
   char *folder;     ///< Folder name
@@ -117,8 +124,7 @@ struct BrowserState
   bool is_mailbox_list; ///< Viewing mailboxes
 };
 
-void mutt_select_file(char *file, size_t filelen, SelectFileFlags flags, struct Mailbox *m, char ***files, int *numfiles);
-void buf_select_file(struct Buffer *file, SelectFileFlags flags, struct Mailbox *m, char ***files, int *numfiles);
+void dlg_browser(struct Buffer *file, SelectFileFlags flags, struct Mailbox *m, char ***files, int *numfiles);
 void mutt_browser_select_dir(const char *f);
 void mutt_browser_cleanup(void);
 

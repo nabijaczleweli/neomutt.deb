@@ -28,6 +28,7 @@
 
 #include "config.h"
 #include <stddef.h>
+#include <stdbool.h>
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
@@ -35,20 +36,16 @@
 #include "alias.h"
 #include "gui.h"
 
-#define RSORT(num) ((SortAlias & SORT_REVERSE) ? -num : num)
-
-/// Current value of $sort_alias used by the sorting functions
-static short SortAlias = 0;
-
 /**
  * alias_sort_name - Compare two Aliases by their short names - Implements ::sort_t - @ingroup sort_api
  *
  * @note Non-visible Aliases are sorted to the end
  */
-static int alias_sort_name(const void *a, const void *b)
+static int alias_sort_name(const void *a, const void *b, void *sdata)
 {
   const struct AliasView *av_a = a;
   const struct AliasView *av_b = b;
+  const bool sort_reverse = *(bool *) sdata;
 
   if (av_a->is_visible != av_b->is_visible)
     return av_a->is_visible ? -1 : 1;
@@ -56,9 +53,8 @@ static int alias_sort_name(const void *a, const void *b)
   if (!av_a->is_visible)
     return 0;
 
-  int r = mutt_str_coll(av_a->alias->name, av_b->alias->name);
-
-  return RSORT(r);
+  int rc = mutt_str_coll(av_a->alias->name, av_b->alias->name);
+  return sort_reverse ? -rc : rc;
 }
 
 /**
@@ -66,10 +62,11 @@ static int alias_sort_name(const void *a, const void *b)
  *
  * @note Non-visible Aliases are sorted to the end
  */
-static int alias_sort_address(const void *a, const void *b)
+static int alias_sort_address(const void *a, const void *b, void *sdata)
 {
   const struct AliasView *av_a = a;
   const struct AliasView *av_b = b;
+  const bool sort_reverse = *(bool *) sdata;
 
   const struct AddressList *al_a = &av_a->alias->addr;
   const struct AddressList *al_b = &av_b->alias->addr;
@@ -80,13 +77,19 @@ static int alias_sort_address(const void *a, const void *b)
   if (!av_a->is_visible)
     return 0;
 
-  int r;
+  int rc;
   if (al_a == al_b)
-    r = 0;
+  {
+    rc = 0;
+  }
   else if (!al_a)
-    r = -1;
+  {
+    rc = -1;
+  }
   else if (!al_b)
-    r = 1;
+  {
+    rc = 1;
+  }
   else
   {
     const struct Address *addr_a = TAILQ_FIRST(al_a);
@@ -94,19 +97,25 @@ static int alias_sort_address(const void *a, const void *b)
     if (addr_a && addr_a->personal)
     {
       if (addr_b && addr_b->personal)
-        r = mutt_str_coll(addr_a->personal, addr_b->personal);
+        rc = buf_coll(addr_a->personal, addr_b->personal);
       else
-        r = 1;
+        rc = 1;
     }
     else if (addr_b && addr_b->personal)
-      r = -1;
+    {
+      rc = -1;
+    }
     else if (addr_a && addr_b)
-      r = mutt_str_coll(addr_a->mailbox, addr_b->mailbox);
+    {
+      rc = buf_coll(addr_a->mailbox, addr_b->mailbox);
+    }
     else
-      r = 0;
+    {
+      rc = 0;
+    }
   }
 
-  return RSORT(r);
+  return sort_reverse ? -rc : rc;
 }
 
 /**
@@ -114,10 +123,11 @@ static int alias_sort_address(const void *a, const void *b)
  *
  * @note Non-visible Aliases are sorted to the end
  */
-static int alias_sort_unsort(const void *a, const void *b)
+static int alias_sort_unsort(const void *a, const void *b, void *sdata)
 {
   const struct AliasView *av_a = a;
   const struct AliasView *av_b = b;
+  const bool sort_reverse = *(bool *) sdata;
 
   if (av_a->is_visible != av_b->is_visible)
     return av_a->is_visible ? -1 : 1;
@@ -125,9 +135,8 @@ static int alias_sort_unsort(const void *a, const void *b)
   if (!av_a->is_visible)
     return 0;
 
-  int r = (av_a->orig_seq - av_b->orig_seq);
-
-  return RSORT(r);
+  int rc = mutt_numeric_cmp(av_a->orig_seq, av_b->orig_seq);
+  return sort_reverse ? -rc : rc;
 }
 
 /**
@@ -159,8 +168,9 @@ void alias_array_sort(struct AliasViewArray *ava, const struct ConfigSubset *sub
   if (!ava || ARRAY_EMPTY(ava))
     return;
 
-  SortAlias = cs_subset_sort(sub, "sort_alias");
-  ARRAY_SORT(ava, alias_get_sort_function(SortAlias));
+  const short c_sort_alias = cs_subset_sort(sub, "sort_alias");
+  bool sort_reverse = (c_sort_alias & SORT_REVERSE);
+  ARRAY_SORT(ava, alias_get_sort_function(c_sort_alias), &sort_reverse);
 
   struct AliasView *avp = NULL;
   ARRAY_FOREACH(avp, ava)

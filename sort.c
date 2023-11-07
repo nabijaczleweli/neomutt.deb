@@ -59,19 +59,13 @@ struct EmailCompare
 };
 
 /**
- * compare_email_shim - qsort_r() comparator to drive mutt_compare_emails
- * @param a   Pointer to first email
- * @param b   Pointer to second email
- * @param arg EmailCompare with needed context
- * @retval <0 a precedes b
- * @retval  0 a identical to b (should not happen in practice)
- * @retval >0 b precedes a
+ * compare_email_shim - Helper to sort emails - Implements ::sort_t - @ingroup sort_api
  */
-static int compare_email_shim(const void *a, const void *b, void *arg)
+static int compare_email_shim(const void *a, const void *b, void *sdata)
 {
   const struct Email *ea = *(struct Email const *const *) a;
   const struct Email *eb = *(struct Email const *const *) b;
-  const struct EmailCompare *cmp = arg;
+  const struct EmailCompare *cmp = sdata;
   return mutt_compare_emails(ea, eb, cmp->type, cmp->sort, cmp->sort_aux);
 }
 
@@ -117,9 +111,13 @@ static int compare_subject(const struct Email *a, const struct Email *b, bool re
       rc = -1;
   }
   else if (!b->env->real_subj)
+  {
     rc = 1;
+  }
   else
+  {
     rc = mutt_istr_cmp(a->env->real_subj, b->env->real_subj);
+  }
   return reverse ? -rc : rc;
 }
 
@@ -141,9 +139,9 @@ const char *mutt_get_name(const struct Address *a)
   {
     const bool c_reverse_alias = cs_subset_bool(NeoMutt->sub, "reverse_alias");
     if (c_reverse_alias && (ali = alias_reverse_lookup(a)) && ali->personal)
-      return ali->personal;
+      return buf_string(ali->personal);
     if (a->personal)
-      return a->personal;
+      return buf_string(a->personal);
     if (a->mailbox)
       return mutt_addr_for_display(a);
   }
@@ -315,7 +313,7 @@ static sort_mail_t get_sort_func(enum SortType method, enum MailboxType type)
 }
 
 /**
- * mutt_compare_emails - Compare two emails using up to two sort methods
+ * mutt_compare_emails - Compare two emails using up to two sort methods - @ingroup sort_api
  * @param a        First email
  * @param b        Second email
  * @param type     Mailbox type
@@ -329,21 +327,21 @@ int mutt_compare_emails(const struct Email *a, const struct Email *b,
                         enum MailboxType type, short sort, short sort_aux)
 {
   sort_mail_t func = get_sort_func(sort & SORT_MASK, type);
-  int retval = func(a, b, (sort & SORT_REVERSE) != 0);
-  if (retval == 0)
+  int rc = func(a, b, (sort & SORT_REVERSE) != 0);
+  if (rc == 0)
   {
     func = get_sort_func(sort_aux & SORT_MASK, type);
-    retval = func(a, b, (sort_aux & SORT_REVERSE) != 0);
+    rc = func(a, b, (sort_aux & SORT_REVERSE) != 0);
   }
-  if (retval == 0)
+  if (rc == 0)
   {
     /* Fallback of last resort to preserve stable order; will only
      * return 0 if a and b have the same index, which is probably a
      * bug in the code. */
     func = compare_order;
-    retval = func(a, b, false);
+    rc = func(a, b, false);
   }
-  return retval;
+  return rc;
 }
 
 /**
@@ -405,7 +403,7 @@ void mutt_sort_headers(struct MailboxView *mv, bool init)
   }
   else
   {
-    struct EmailCompare cmp;
+    struct EmailCompare cmp = { 0 };
     cmp.type = mx_type(m);
     cmp.sort = cs_subset_sort(NeoMutt->sub, "sort");
     cmp.sort_aux = cs_subset_sort(NeoMutt->sub, "sort_aux");

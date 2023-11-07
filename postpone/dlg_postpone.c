@@ -22,7 +22,7 @@
  */
 
 /**
- * @page postpone_dialog Postponed Email Selection Dialog
+ * @page postpone_dlg_postpone Postponed Email Selection Dialog
  *
  * The Postponed Email Selection Dialog lets the user set a postponed (draft)
  * email.
@@ -31,9 +31,9 @@
  *
  * ## Windows
  *
- * | Name                             | Type            | See Also                     |
- * | :------------------------------- | :-------------- | :--------------------------- |
- * | Postponed Email Selection Dialog | WT_DLG_POSTPONE | dlg_select_postponed_email() |
+ * | Name                             | Type             | See Also        |
+ * | :------------------------------- | :--------------- | :-------------- |
+ * | Postponed Email Selection Dialog | WT_DLG_POSTPONED | dlg_postponed() |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -76,17 +76,17 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "index/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
+#include "pattern/lib.h"
 #include "format_flags.h"
 #include "functions.h"
 #include "hdrline.h"
-#include "keymap.h"
 #include "mutt_logging.h"
 #include "mview.h"
-#include "opcodes.h"
 
 /// Help Bar for the Postponed email selection dialog
-static const struct Mapping PostponeHelp[] = {
+static const struct Mapping PostponedHelp[] = {
   // clang-format off
   { N_("Exit"),  OP_EXIT },
   { N_("Del"),   OP_DELETE },
@@ -97,7 +97,9 @@ static const struct Mapping PostponeHelp[] = {
 };
 
 /**
- * post_make_entry - Format a menu item for the email list - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * post_make_entry - Format an Email for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
+ *
+ * @sa $index_format, index_format_str()
  */
 static void post_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
 {
@@ -156,7 +158,7 @@ static int postponed_window_observer(struct NotifyCallback *nc)
 
   struct Menu *menu = win_menu->wdata;
 
-  notify_observer_remove(NeoMutt->notify, postponed_config_observer, menu);
+  notify_observer_remove(NeoMutt->sub->notify, postponed_config_observer, menu);
   notify_observer_remove(win_menu->notify, postponed_window_observer, win_menu);
 
   mutt_debug(LL_DEBUG5, "window delete done\n");
@@ -166,7 +168,7 @@ static int postponed_window_observer(struct NotifyCallback *nc)
 /**
  * post_color - Calculate the colour for a line of the postpone index - Implements Menu::color() - @ingroup menu_color
  */
-static struct AttrColor *post_color(struct Menu *menu, int line)
+static const struct AttrColor *post_color(struct Menu *menu, int line)
 {
   struct MailboxView *mv = menu->mdata;
   if (!mv || (line < 0))
@@ -188,13 +190,18 @@ static struct AttrColor *post_color(struct Menu *menu, int line)
 }
 
 /**
- * dlg_select_postponed_email - Create a Menu to select a postponed message
+ * dlg_postponed - Create a Menu to select a postponed message - @ingroup gui_dlg
  * @param m Mailbox
  * @retval ptr Email
+ *
+ * The Select Postponed Email Dialog shows the user a list of draft emails.
+ * They can select one to use in the Compose Dialog.
+ *
+ * This dialog is only shown if there are two or more postponed emails.
  */
-struct Email *dlg_select_postponed_email(struct Mailbox *m)
+struct Email *dlg_postponed(struct Mailbox *m)
 {
-  struct MuttWindow *dlg = simple_dialog_new(MENU_POSTPONE, WT_DLG_POSTPONE, PostponeHelp);
+  struct MuttWindow *dlg = simple_dialog_new(MENU_POSTPONED, WT_DLG_POSTPONED, PostponedHelp);
   // Required to number the emails
   struct MailboxView *mv = mview_new(m, NeoMutt->notify);
 
@@ -204,13 +211,12 @@ struct Email *dlg_select_postponed_email(struct Mailbox *m)
   menu->max = m->msg_count;
   menu->mdata = mv;
   menu->mdata_free = NULL; // Menu doesn't own the data
-  menu->custom_search = true;
 
-  struct PostponeData pd = { mv, menu, NULL, false };
+  struct PostponeData pd = { mv, menu, NULL, false, search_state_new() };
   dlg->wdata = &pd;
 
   // NT_COLOR is handled by the SimpleDialog
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, postponed_config_observer, menu);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, postponed_config_observer, menu);
   notify_observer_add(menu->win->notify, NT_WINDOW, postponed_window_observer, menu->win);
 
   struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
@@ -222,6 +228,7 @@ struct Email *dlg_select_postponed_email(struct Mailbox *m)
   const enum SortType c_sort = cs_subset_sort(NeoMutt->sub, "sort");
   cs_subset_str_native_set(NeoMutt->sub, "sort", SORT_ORDER, NULL);
 
+  struct MuttWindow *old_focus = window_set_focus(menu->win);
   // ---------------------------------------------------------------------------
   // Event Loop
   int op = OP_NULL;
@@ -230,13 +237,13 @@ struct Email *dlg_select_postponed_email(struct Mailbox *m)
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(MENU_POSTPONE);
+    op = km_dokey(MENU_POSTPONED, GETCH_NO_FLAGS);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
     if (op == OP_NULL)
     {
-      km_error_key(MENU_POSTPONE);
+      km_error_key(MENU_POSTPONED);
       continue;
     }
     mutt_clear_error();
@@ -252,6 +259,8 @@ struct Email *dlg_select_postponed_email(struct Mailbox *m)
 
   mview_free(&mv);
   cs_subset_str_native_set(NeoMutt->sub, "sort", c_sort, NULL);
+  search_state_free(&pd.search_state);
+  window_set_focus(old_focus);
   simple_dialog_free(&dlg);
 
   return pd.email;

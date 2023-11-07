@@ -29,6 +29,7 @@
 
 #include "config.h"
 #include <ctype.h>
+#include <errno.h>
 #include <string.h>
 #include <time.h>
 #include "mutt/lib.h"
@@ -81,7 +82,7 @@ void mutt_auto_subscribe(const char *mailto)
 
   if (mutt_parse_mailto(lpenv, NULL, mailto) && !TAILQ_EMPTY(&lpenv->to))
   {
-    const char *mailbox = TAILQ_FIRST(&lpenv->to)->mailbox;
+    const char *mailbox = buf_string(TAILQ_FIRST(&lpenv->to)->mailbox);
     if (mailbox && !mutt_regexlist_match(&SubscribedLists, mailbox) &&
         !mutt_regexlist_match(&UnMailLists, mailbox) &&
         !mutt_regexlist_match(&UnSubscribedLists, mailbox))
@@ -319,7 +320,7 @@ bool mutt_matches_ignore(const char *s)
 /**
  * mutt_check_mime_type - Check a MIME type string
  * @param s String to check
- * @retval num MIME type, e.g. #TYPE_TEXT
+ * @retval enum ContentType, e.g. #TYPE_TEXT
  */
 enum ContentType mutt_check_mime_type(const char *s)
 {
@@ -392,7 +393,7 @@ char *mutt_extract_message_id(const char *s, size_t *len)
 /**
  * mutt_check_encoding - Check the encoding type
  * @param c String to check
- * @retval num Encoding type, e.g. #ENC_QUOTED_PRINTABLE
+ * @retval enum ContentEncoding, e.g. #ENC_QUOTED_PRINTABLE
  */
 int mutt_check_encoding(const char *c)
 {
@@ -484,11 +485,17 @@ void mutt_parse_content_type(const char *s, struct Body *ct)
     /* Some older non-MIME mailers (i.e., mailtool, elm) have a content-type
      * field, so we can attempt to convert the type to Body here.  */
     if (ct->type == TYPE_TEXT)
+    {
       ct->subtype = mutt_str_dup("plain");
+    }
     else if (ct->type == TYPE_AUDIO)
+    {
       ct->subtype = mutt_str_dup("basic");
+    }
     else if (ct->type == TYPE_MESSAGE)
+    {
       ct->subtype = mutt_str_dup("rfc822");
+    }
     else if (ct->type == TYPE_OTHER)
     {
       char buf[128] = { 0 };
@@ -750,7 +757,7 @@ int mutt_rfc822_parse_line(struct Envelope *env, struct Email *e,
       mutt_str_replace(&env->date, body);
       if (e)
       {
-        struct Tz tz;
+        struct Tz tz = { 0 };
         e->date_sent = mutt_date_parse_date(body, &tz);
         if (e->date_sent > 0)
         {
@@ -1120,7 +1127,7 @@ size_t mutt_rfc822_read_line(FILE *fp, struct Buffer *buf)
       } while (off && isspace(line[--off]));
 
       /* check to see if the next line is a continuation line */
-      char ch = fgetc(fp);
+      int ch = fgetc(fp);
       if ((ch != ' ') && (ch != '\t'))
       {
         /* next line is a separate header field or EOH */
@@ -1128,12 +1135,12 @@ size_t mutt_rfc822_read_line(FILE *fp, struct Buffer *buf)
         buf_addstr(buf, line);
         break;
       }
-      ++read;
+      read++;
 
       /* eat tabs and spaces from the beginning of the continuation line */
       while (((ch = fgetc(fp)) == ' ') || (ch == '\t'))
       {
-        ++read;
+        read++;
       }
 
       ungetc(ch, fp);
@@ -1168,6 +1175,12 @@ struct Envelope *mutt_rfc822_read_header(FILE *fp, struct Email *e, bool user_hd
   struct Envelope *env = mutt_env_new();
   char *p = NULL;
   LOFF_T loc = e ? e->offset : ftello(fp);
+  if (loc < 0)
+  {
+    mutt_debug(LL_DEBUG1, "ftello: %s (errno %d)\n", strerror(errno), errno);
+    loc = 0;
+  }
+
   struct Buffer *line = buf_pool_get();
 
   if (e)
@@ -1245,16 +1258,14 @@ struct Envelope *mutt_rfc822_read_header(FILE *fp, struct Email *e, bool user_hd
             buf_addstr(&env->spam, buf);
           }
         }
-
-        /* spam tag is new, and match expr is non-empty; copy */
         else if (buf_is_empty(&env->spam) && (*buf != '\0'))
         {
+          /* spam tag is new, and match expr is non-empty; copy */
           buf_addstr(&env->spam, buf);
         }
-
-        /* match expr is empty; plug in null string if no existing tag */
         else if (buf_is_empty(&env->spam))
         {
+          /* match expr is empty; plug in null string if no existing tag */
           buf_addstr(&env->spam, "");
         }
 
@@ -1372,13 +1383,21 @@ struct Body *mutt_read_mime_header(FILE *fp, bool digest)
     if (plen != 0)
     {
       if (mutt_istr_equal("type", line + plen))
+      {
         mutt_parse_content_type(c, p);
+      }
       else if (mutt_istr_equal("language", line + plen))
+      {
         parse_content_language(c, p);
+      }
       else if (mutt_istr_equal("transfer-encoding", line + plen))
+      {
         p->encoding = mutt_check_encoding(c);
+      }
       else if (mutt_istr_equal("disposition", line + plen))
+      {
         parse_content_disposition(c, p);
+      }
       else if (mutt_istr_equal("description", line + plen))
       {
         mutt_str_replace(&p->description, c);
@@ -1406,11 +1425,17 @@ struct Body *mutt_read_mime_header(FILE *fp, bool digest)
     else if ((plen = mutt_istr_startswith(line, "x-sun-")))
     {
       if (mutt_istr_equal("data-type", line + plen))
+      {
         mutt_parse_content_type(c, p);
+      }
       else if (mutt_istr_equal("encoding-info", line + plen))
+      {
         p->encoding = mutt_check_encoding(c);
+      }
       else if (mutt_istr_equal("content-lines", line + plen))
+      {
         mutt_param_set(&p->parameter, "content-lines", c);
+      }
       else if (mutt_istr_equal("data-description", line + plen))
       {
         mutt_str_replace(&p->description, c);

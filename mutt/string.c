@@ -79,7 +79,7 @@ static char *strcasestr(const char *haystack, const char *needle)
  */
 static char *strsep(char **stringp, const char *delim)
 {
-  if (*stringp == NULL)
+  if (!*stringp)
     return NULL;
 
   char *start = *stringp;
@@ -574,9 +574,9 @@ size_t mutt_str_len(const char *a)
  * mutt_str_coll - Collate two strings (compare using locale), safely
  * @param a First string to compare
  * @param b Second string to compare
- * @retval -1 a precedes b
+ * @retval <0 a precedes b
  * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * @retval >0 b precedes a
  */
 int mutt_str_coll(const char *a, const char *b)
 {
@@ -1010,7 +1010,7 @@ int mutt_str_asprintf(char **strp, const char *fmt, ...)
   if (n == 0)
   {
     /* NeoMutt convention is to use NULL for 0-length strings */
-    FREE(strp);
+    FREE(strp); /* LCOV_EXCL_LINE */
   }
 
   return n;
@@ -1056,3 +1056,24 @@ int mutt_str_asprintf(char **strp, const char *fmt, ...)
   /* not reached */
 }
 #endif /* HAVE_ASPRINTF */
+
+/**
+ * mutt_str_hyphenate - Hyphenate a snake-case string
+ * @param buf    Buffer for the result
+ * @param buflen Length of the buffer
+ * @param str    String to convert
+ *
+ * Replace underscores (`_`) with hyphens -`).
+ */
+void mutt_str_hyphenate(char *buf, size_t buflen, const char *str)
+{
+  if (!buf || (buflen == 0) || !str)
+    return;
+
+  mutt_str_copy(buf, str, buflen);
+  for (; *buf != '\0'; buf++)
+  {
+    if (*buf == '_')
+      *buf = '-';
+  }
+}

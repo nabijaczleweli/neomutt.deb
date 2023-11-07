@@ -32,7 +32,7 @@
  * | Compose Attachments Window | WT_MENU   | attach_new() |
  *
  * **Parent**
- * - @ref compose_dialog
+ * - @ref compose_dlg_compose
  *
  * **Children**
  *
@@ -188,7 +188,7 @@ static int attach_window_observer(struct NotifyCallback *nc)
     struct ComposeAttachData *adata = menu->mdata;
     struct AttachCtx *actx = adata->actx;
     notify_observer_remove(actx->email->notify, attach_email_observer, win_attach);
-    notify_observer_remove(NeoMutt->notify, attach_config_observer, win_attach);
+    notify_observer_remove(NeoMutt->sub->notify, attach_config_observer, win_attach);
     notify_observer_remove(win_attach->notify, attach_window_observer, win_attach);
     mutt_debug(LL_DEBUG5, "window delete done\n");
   }
@@ -211,7 +211,7 @@ static int compose_attach_tag(struct Menu *menu, int sel, int act)
 }
 
 /**
- * compose_make_entry - Format a menu item for the attachment list - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * compose_make_entry - Format an Attachment for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  *
  * @sa $attach_format, attach_format_str()
  */
@@ -242,7 +242,7 @@ struct MuttWindow *attach_new(struct MuttWindow *parent, struct ComposeSharedDat
   shared->adata = adata;
 
   // NT_COLOR is handled by the Menu Window
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, attach_config_observer, win_attach);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, attach_config_observer, win_attach);
   notify_observer_add(shared->email->notify, NT_EMAIL, attach_email_observer, win_attach);
   notify_observer_add(win_attach->notify, NT_WINDOW, attach_window_observer, win_attach);
 

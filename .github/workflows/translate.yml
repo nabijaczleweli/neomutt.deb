@@ -21,20 +21,20 @@ jobs:
         sudo apt install -y gettext
 
     - name: Checkout NeoMutt
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: neomutt/neomutt
         path: neomutt
         fetch-depth: 3
 
     - name: Checkout Translate Scripts
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: neomutt/action-translate
         path: scripts
 
     - name: Checkout Website
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: neomutt/neomutt.github.io
         path: website
@@ -61,7 +61,7 @@ jobs:
         scripts/commit.sh neomutt website translate.html
 
     - name: Push to Website
-      uses: ad-m/github-push-action@v0.6.0
+      uses: ad-m/github-push-action@master
       with:
         github_token: ${{ secrets.TRANSLATE_DEPLOY_KEY }}
         branch: main

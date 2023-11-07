@@ -513,10 +513,10 @@ static int index_window_observer(struct NotifyCallback *nc)
 
   struct IndexPrivateData *priv = menu->mdata;
 
+  mutt_color_observer_remove(index_color_observer, win);
   notify_observer_remove(NeoMutt->notify, index_altern_observer, win);
   notify_observer_remove(NeoMutt->notify, index_attach_observer, win);
-  notify_observer_remove(NeoMutt->notify, index_color_observer, win);
-  notify_observer_remove(NeoMutt->notify, index_config_observer, win);
+  notify_observer_remove(NeoMutt->sub->notify, index_config_observer, win);
   notify_observer_remove(NeoMutt->notify, index_global_observer, win);
   notify_observer_remove(priv->shared->notify, index_index_observer, win);
   notify_observer_remove(menu->notify, index_menu_observer, win);
@@ -576,9 +576,13 @@ static int index_repaint(struct MuttWindow *win)
       menu_redraw_index(menu);
     }
     else if (menu->redraw & MENU_REDRAW_MOTION)
+    {
       menu_redraw_motion(menu);
+    }
     else if (menu->redraw & MENU_REDRAW_CURRENT)
+    {
       menu_redraw_current(menu);
+    }
   }
 
   menu->redraw = MENU_REDRAW_NO_FLAGS;
@@ -602,10 +606,10 @@ struct MuttWindow *index_window_new(struct IndexPrivateData *priv)
   menu->mdata_free = NULL; // Menu doesn't own the data
   priv->menu = menu;
 
+  mutt_color_observer_add(index_color_observer, win);
   notify_observer_add(NeoMutt->notify, NT_ALTERN, index_altern_observer, win);
   notify_observer_add(NeoMutt->notify, NT_ATTACH, index_attach_observer, win);
-  notify_observer_add(NeoMutt->notify, NT_COLOR, index_color_observer, win);
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, index_config_observer, win);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, index_config_observer, win);
   notify_observer_add(NeoMutt->notify, NT_GLOBAL, index_global_observer, win);
   notify_observer_add(priv->shared->notify, NT_ALL, index_index_observer, win);
   notify_observer_add(menu->notify, NT_MENU, index_menu_observer, win);
@@ -638,7 +642,7 @@ struct MailboxView *get_current_mailbox_view(void)
       return shared->mailbox_view;
     }
 
-    win = window_find_child(np, WT_DLG_POSTPONE);
+    win = window_find_child(np, WT_DLG_POSTPONED);
     if (win)
     {
       return postponed_get_mailbox_view(win);

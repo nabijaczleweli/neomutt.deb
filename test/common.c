@@ -32,6 +32,9 @@
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
+#include "complete/lib.h"
+#include "copy.h"
+#include "mx.h"
 
 struct MuttWindow;
 struct PagerView;
@@ -42,13 +45,17 @@ char *HomeDir = NULL;
 int SigInt = 0;
 int SigWinch = 0;
 char *ShortHostname = "example";
+bool MonitorContextChanged = false;
 
 #define TEST_DIR "NEOMUTT_TEST_DIR"
+
+const struct CompleteOps CompleteMailboxOps = { 0 };
 
 static struct ConfigDef Vars[] = {
   // clang-format off
   { "assumed_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY, 0, 0, NULL, },
   { "charset", DT_STRING|DT_NOT_EMPTY|DT_CHARSET_SINGLE, IP "utf-8", 0, NULL, },
+  { "maildir_field_delimiter", DT_STRING, IP ":", 0, NULL, },
   { "tmp_dir", DT_PATH|DT_PATH_DIR|DT_NOT_EMPTY, IP TMPDIR, 0, NULL, },
   { NULL },
   // clang-format on
@@ -58,7 +65,7 @@ static struct ConfigDef Vars[] = {
   extern const struct ConfigSetType Cst##NAME;                                 \
   cs_register_type(CS, &Cst##NAME)
 
-static const char *get_test_dir(void)
+const char *get_test_dir(void)
 {
   return mutt_str_getenv(TEST_DIR);
 }
@@ -120,14 +127,14 @@ void test_init(void)
   TEST_CASE("Common setup");
   if (!TEST_CHECK(path != NULL))
   {
-    TEST_MSG("Environment variable '%s' isn't set\n", TEST_DIR);
+    TEST_MSG("Environment variable '%s' isn't set", TEST_DIR);
     goto done;
   }
 
   size_t len = strlen(path);
   if (!TEST_CHECK(path[len - 1] != '/'))
   {
-    TEST_MSG("Environment variable '%s' mustn't end with a '/'\n", TEST_DIR);
+    TEST_MSG("Environment variable '%s' mustn't end with a '/'", TEST_DIR);
     goto done;
   }
 
@@ -135,13 +142,13 @@ void test_init(void)
 
   if (!TEST_CHECK(stat(path, &st) == 0))
   {
-    TEST_MSG("Test dir '%s' doesn't exist\n", path);
+    TEST_MSG("Test dir '%s' doesn't exist", path);
     goto done;
   }
 
   if (!TEST_CHECK(S_ISDIR(st.st_mode) == true))
   {
-    TEST_MSG("Test dir '%s' isn't a directory\n", path);
+    TEST_MSG("Test dir '%s' isn't a directory", path);
     goto done;
   }
 
@@ -156,14 +163,14 @@ void test_init(void)
   success = true;
 done:
   if (!success)
-    TEST_MSG("See: https://github.com/neomutt/neomutt-test-files#test-files\n");
+    TEST_MSG("See: https://github.com/neomutt/neomutt-test-files#test-files");
 }
 
 void test_fini(void)
 {
-  config_cache_free();
+  config_cache_cleanup();
   test_neomutt_destroy();
-  buf_pool_free();
+  buf_pool_cleanup();
 }
 
 struct IndexSharedData *index_shared_data_new(void)
@@ -176,7 +183,7 @@ struct MuttWindow *add_panel_pager(struct MuttWindow *parent, bool status_on_top
   return NULL;
 }
 
-enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
+enum QuadOption query_yesorno(const char *msg, enum QuadOption def)
 {
   return MUTT_YES;
 }
@@ -197,6 +204,64 @@ struct Menu *get_current_menu(void)
 }
 
 int mutt_do_pager(struct PagerView *pview, struct Email *e)
+{
+  return 0;
+}
+
+void buf_pretty_mailbox(struct Buffer *buf)
+{
+}
+
+void buf_expand_path_regex(struct Buffer *buf, bool regex)
+{
+}
+
+struct HashTable *mutt_make_id_hash(struct Mailbox *m)
+{
+  return NULL;
+}
+
+void mx_alloc_memory(struct Mailbox *m, int req_size)
+{
+}
+
+struct Mailbox *mx_path_resolve(const char *path)
+{
+  return NULL;
+}
+
+bool mx_mbox_ac_link(struct Mailbox *m)
+{
+  return false;
+}
+
+void mutt_encode_path(struct Buffer *buf, const char *src)
+{
+}
+
+void mutt_set_header_color(struct Mailbox *m, struct Email *e)
+{
+}
+
+enum CommandResult parse_unmailboxes(struct Buffer *buf, struct Buffer *s,
+                                     intptr_t data, struct Buffer *err)
+{
+  return MUTT_CMD_SUCCESS;
+}
+
+enum CommandResult parse_mailboxes(struct Buffer *buf, struct Buffer *s,
+                                   intptr_t data, struct Buffer *err)
+{
+  return MUTT_CMD_SUCCESS;
+}
+
+struct Message *mx_msg_open_new(struct Mailbox *m, const struct Email *e, MsgOpenFlags flags)
+{
+  return NULL;
+}
+
+int mutt_copy_message(FILE *fp_out, struct Email *e, struct Message *msg,
+                      CopyMessageFlags cmflags, CopyHeaderFlags chflags, int wraplen)
 {
   return 0;
 }

@@ -30,7 +30,7 @@
 #include "menu/lib.h"
 
 extern bool ErrorBufMessage; ///< true if the last message was an error
-extern char ErrorBuf[256];   ///< Copy of the last error message
+extern char ErrorBuf[1024];  ///< Copy of the last error message
 
 extern char *HomeDir;        ///< User's home directory
 extern char *ShortHostname;  ///< Short version of the hostname
@@ -58,15 +58,12 @@ extern SIG_ATOMIC_VOLATILE_T SigWinch; ///< true after SIGWINCH is received
 extern enum MenuType CurrentMenu; ///< Current Menu, e.g. #MENU_PAGER
 
 /* pseudo options */
-extern bool OptAttachMsg;           ///< (pseudo) used by attach-message
 #ifdef USE_AUTOCRYPT
 extern bool OptAutocryptGpgme;      ///< (pseudo) use Autocrypt context inside ncrypt/crypt_gpgme.c
 #endif
 extern bool OptDontHandlePgpKeys;   ///< (pseudo) used to extract PGP keys
 extern bool OptForceRefresh;        ///< (pseudo) refresh even during macros
-extern bool OptIgnoreMacroEvents;   ///< (pseudo) don't process macro/push/exec events while set
 extern bool OptKeepQuiet;           ///< (pseudo) shut up the message and refresh functions while we are executing an external program
-extern bool OptMenuPopClearScreen;  ///< (pseudo) clear the screen when popping the last menu
 extern bool OptMsgErr;              ///< (pseudo) used by mutt_error/mutt_message
 extern bool OptNeedRescore;         ///< (pseudo) set when the 'score' command is used
 extern bool OptNeedResort;          ///< (pseudo) used to force a re-sort
@@ -75,11 +72,8 @@ extern bool OptNews;                ///< (pseudo) used to change reader mode
 extern bool OptNewsSend;            ///< (pseudo) used to change behavior when posting
 #endif
 extern bool OptNoCurses;            ///< (pseudo) when sending in batch mode
-extern bool OptPgpCheckTrust;       ///< (pseudo) used by dlg_select_pgp_key()
-extern bool OptRedrawTree;          ///< (pseudo) redraw the thread tree
+extern bool OptPgpCheckTrust;       ///< (pseudo) used by dlg_pgp()
 extern bool OptResortInit;          ///< (pseudo) used to force the next resort to be from scratch
-extern bool OptSearchInvalid;       ///< (pseudo) used to invalidate the search pattern
-extern bool OptSearchReverse;       ///< (pseudo) used by ci_search_command
 extern bool OptSortSubthreads;      ///< (pseudo) used when $sort_aux changes
 
 extern char **EnvList;              ///< Private copy of the environment variables

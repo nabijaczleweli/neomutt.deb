@@ -28,19 +28,20 @@
 
 #include "config.h"
 #include <stddef.h>
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include "mutt/lib.h"
 #include "core/lib.h"
 #include "global.h"
-#include "lib.h"
 #include "index/lib.h"
+#include "key/lib.h"
 #include "pager/lib.h"
 #include "external.h"
-#include "keymap.h"
+#include "mutt_curses.h"
 #include "mutt_mailbox.h"
+#include "mutt_window.h"
 #include "muttlib.h"
+#include "mx.h"
 #include "opcodes.h"
 
 /**
@@ -84,6 +85,8 @@ static int op_shell_escape(int op)
   {
     struct Mailbox *m_cur = get_current_mailbox();
     mutt_mailbox_check(m_cur, MUTT_MAILBOX_CHECK_FORCE);
+    /* This forces a refresh on the next mx_mbox_check() call. */
+    mx_mbox_reset_check();
   }
   return FR_SUCCESS;
 }
@@ -93,13 +96,14 @@ static int op_shell_escape(int op)
  */
 static int op_show_log_messages(int op)
 {
-  char tempfile[PATH_MAX] = { 0 };
-  mutt_mktemp(tempfile, sizeof(tempfile));
+  struct Buffer *tempfile = buf_pool_get();
+  buf_mktemp(tempfile);
 
-  FILE *fp = mutt_file_fopen(tempfile, "a+");
+  FILE *fp = mutt_file_fopen(buf_string(tempfile), "a+");
   if (!fp)
   {
     mutt_perror("fopen");
+    buf_pool_release(&tempfile);
     return FR_ERROR;
   }
 
@@ -109,13 +113,14 @@ static int op_show_log_messages(int op)
   struct PagerData pdata = { 0 };
   struct PagerView pview = { &pdata };
 
-  pdata.fname = tempfile;
+  pdata.fname = buf_string(tempfile);
 
   pview.banner = "messages";
   pview.flags = MUTT_PAGER_LOGS | MUTT_PAGER_BOTTOM;
   pview.mode = PAGER_MODE_OTHER;
 
   mutt_do_pager(&pview, NULL);
+  buf_pool_release(&tempfile);
 
   return FR_SUCCESS;
 }
@@ -125,7 +130,7 @@ static int op_show_log_messages(int op)
  */
 static int op_version(int op)
 {
-  mutt_message(mutt_make_version());
+  mutt_message("%s", mutt_make_version());
   return FR_SUCCESS;
 }
 
@@ -134,7 +139,7 @@ static int op_version(int op)
  */
 static int op_what_key(int op)
 {
-  mutt_what_key();
+  mw_what_key();
   return FR_SUCCESS;
 }
 
@@ -177,7 +182,7 @@ int global_function_dispatcher(struct MuttWindow *win, int op)
   if (rc == FR_UNKNOWN) // Not our function
     return rc;
 
-  const char *result = dispacher_get_retval_name(rc);
+  const char *result = dispatcher_get_retval_name(rc);
   mutt_debug(LL_DEBUG1, "Handled %s (%d) -> %s\n", opcodes_get_name(op), op, NONULL(result));
 
   return FR_SUCCESS; // Whatever the outcome, we handled it

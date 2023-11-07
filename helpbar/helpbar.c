@@ -75,8 +75,8 @@
 #include "gui/lib.h"
 #include "lib.h"
 #include "color/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
-#include "keymap.h"
 
 /**
  * make_help - Create one entry for the Help Bar
@@ -314,9 +314,9 @@ static int helpbar_window_observer(struct NotifyCallback *nc)
   }
   else if (nc->event_subtype == NT_WINDOW_DELETE)
   {
+    mutt_color_observer_remove(helpbar_color_observer, win_helpbar);
     notify_observer_remove(NeoMutt->notify, helpbar_binding_observer, win_helpbar);
-    notify_observer_remove(NeoMutt->notify, helpbar_color_observer, win_helpbar);
-    notify_observer_remove(NeoMutt->notify, helpbar_config_observer, win_helpbar);
+    notify_observer_remove(NeoMutt->sub->notify, helpbar_config_observer, win_helpbar);
     notify_observer_remove(RootWindow->notify, helpbar_window_observer, win_helpbar);
     mutt_debug(LL_DEBUG5, "window delete done\n");
   }
@@ -343,9 +343,9 @@ struct MuttWindow *helpbar_new(void)
   win->wdata = helpbar_wdata_new();
   win->wdata_free = helpbar_wdata_free;
 
+  mutt_color_observer_add(helpbar_color_observer, win);
   notify_observer_add(NeoMutt->notify, NT_BINDING, helpbar_binding_observer, win);
-  notify_observer_add(NeoMutt->notify, NT_COLOR, helpbar_color_observer, win);
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, helpbar_config_observer, win);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, helpbar_config_observer, win);
   notify_observer_add(RootWindow->notify, NT_WINDOW, helpbar_window_observer, win);
   return win;
 }

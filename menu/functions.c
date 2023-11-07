@@ -37,8 +37,8 @@
 #include "mutt.h"
 #include "functions.h"
 #include "lib.h"
-#include "enter/lib.h"
-#include "opcodes.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "protos.h"
 #include "type.h"
 
@@ -67,8 +67,8 @@ static int search(struct Menu *menu, int op)
   if (!(search_buf && *search_buf) || ((op != OP_SEARCH_NEXT) && (op != OP_SEARCH_OPPOSITE)))
   {
     buf_strcpy(buf, search_buf && (search_buf[0] != '\0') ? search_buf : "");
-    if ((buf_get_field(((op == OP_SEARCH) || (op == OP_SEARCH_NEXT)) ? _("Search for: ") : _("Reverse search for: "),
-                       buf, MUTT_COMP_CLEAR, false, NULL, NULL, NULL) != 0) ||
+    if ((mw_get_field(((op == OP_SEARCH) || (op == OP_SEARCH_NEXT)) ? _("Search for: ") : _("Reverse search for: "),
+                      buf, MUTT_COMP_CLEAR, HC_OTHER, NULL, NULL) != 0) ||
         buf_is_empty(buf))
     {
       goto done;
@@ -245,13 +245,13 @@ static int op_jump(struct Menu *menu, int op)
   }
 
   const int digit = op - OP_JUMP;
-  if (digit > 0 && digit < 10)
+  if ((digit > 0) && (digit < 10))
   {
     mutt_unget_ch('0' + digit);
   }
 
   struct Buffer *buf = buf_pool_get();
-  if ((buf_get_field(_("Jump to: "), buf, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) == 0) &&
+  if ((mw_get_field(_("Jump to: "), buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) == 0) &&
       !buf_is_empty(buf))
   {
     int n = 0;
@@ -335,7 +335,7 @@ int menu_function_dispatcher(struct MuttWindow *win, int op)
   if (rc == FR_UNKNOWN) // Not our function
     return rc;
 
-  const char *result = dispacher_get_retval_name(rc);
+  const char *result = dispatcher_get_retval_name(rc);
   mutt_debug(LL_DEBUG1, "Handled %s (%d) -> %s\n", opcodes_get_name(op), op, NONULL(result));
 
   return rc;

@@ -45,31 +45,6 @@ static const size_t BufferPoolInitialBufferSize = 1024;
 static struct Buffer **BufferPool = NULL;
 
 /**
- * pool_new - Allocate a new Buffer on the heap
- * @retval buf A newly allocated Buffer
- * @note call pool_free to release the memory
- */
-static struct Buffer *pool_new(void)
-{
-  struct Buffer *buf = mutt_mem_malloc(sizeof(struct Buffer));
-  buf_init(buf);
-  return buf;
-}
-
-/**
- * pool_free - Release a Buffer and its contents
- * @param[out] p Buffer pointer to free and NULL
- */
-static void pool_free(struct Buffer **p)
-{
-  if (!p || !*p)
-    return; // LCOV_EXCL_LINE
-
-  buf_dealloc(*p);
-  FREE(p);
-}
-
-/**
  * pool_increase_size - Increase the size of the Buffer pool
  */
 static void pool_increase_size(void)
@@ -80,21 +55,21 @@ static void pool_increase_size(void)
   mutt_mem_realloc(&BufferPool, BufferPoolLen * sizeof(struct Buffer *));
   while (BufferPoolCount < BufferPoolIncrement)
   {
-    struct Buffer *newbuf = pool_new();
+    struct Buffer *newbuf = buf_new(NULL);
     buf_alloc(newbuf, BufferPoolInitialBufferSize);
     BufferPool[BufferPoolCount++] = newbuf;
   }
 }
 
 /**
- * buf_pool_free - Release the Buffer pool
+ * buf_pool_cleanup - Release the Buffer pool
  */
-void buf_pool_free(void)
+void buf_pool_cleanup(void)
 {
   mutt_debug(LL_DEBUG1, "%zu of %zu returned to pool\n", BufferPoolCount, BufferPoolLen);
 
   while (BufferPoolCount)
-    pool_free(&BufferPool[--BufferPoolCount]);
+    buf_free(&BufferPool[--BufferPoolCount]);
   FREE(&BufferPool);
   BufferPoolLen = 0;
 }
@@ -111,24 +86,27 @@ struct Buffer *buf_pool_get(void)
 }
 
 /**
- * buf_pool_release - Free a Buffer from the pool
- * @param[out] pbuf Buffer to free
+ * buf_pool_release - Return a Buffer to the pool
+ * @param[out] ptr Buffer to release
+ *
+ * @note The pointer will be NULL'd
  */
-void buf_pool_release(struct Buffer **pbuf)
+void buf_pool_release(struct Buffer **ptr)
 {
-  if (!pbuf || !*pbuf)
+  if (!ptr || !*ptr)
     return;
 
   if (BufferPoolCount >= BufferPoolLen)
   {
     // LCOV_EXCL_START
     mutt_debug(LL_DEBUG1, "Internal buffer pool error\n");
-    pool_free(pbuf);
+    buf_free(ptr);
     return;
     // LCOV_EXCL_STOP
   }
 
-  struct Buffer *buf = *pbuf;
+  // Reset the size if it's too big or too small
+  struct Buffer *buf = *ptr;
   if ((buf->dsize > (2 * BufferPoolInitialBufferSize)) ||
       (buf->dsize < BufferPoolInitialBufferSize))
   {
@@ -138,5 +116,5 @@ void buf_pool_release(struct Buffer **pbuf)
   buf_reset(buf);
   BufferPool[BufferPoolCount++] = buf;
 
-  *pbuf = NULL;
+  *ptr = NULL;
 }
