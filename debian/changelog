@@ -1,3 +1,14 @@
+neomutt (20231103+dfsg-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version 20231103+dfsg
+  * Rebase patches
+  * Import upstream commits a39a752f3d97d6fff132bd0d3dd20b93a0220a56,
+                            24f8644c28e602206a63fae53c4eb3d32426ce0c, and
+                            992c7938e32d9ca1cb55eb68dd8f655a6cf89144
+
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Tue, 07 Nov 2023 20:39:11 +0100
+
 neomutt (20230517+dfsg-0.3) unstable; urgency=medium
 
   * Fix msgid generation to have $hostname after the @
