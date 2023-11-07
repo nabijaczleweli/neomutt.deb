@@ -20,10 +20,10 @@ Closes #4070
  3 files changed, 40 insertions(+), 3 deletions(-)
 
 diff --git a/docs/config.c b/docs/config.c
-index 97bb1ce8a..3f75b9891 100644
+index 64a6814..48df02a 100644
 --- a/docs/config.c
 +++ b/docs/config.c
-@@ -1640,6 +1640,15 @@
+@@ -1643,6 +1643,15 @@
  ** when adding the domain part to addresses.
  */
  

@@ -2,7 +2,5 @@ debian-specific/neomuttrc.patch
 debian-specific/use_usr_bin_editor.patch
 debian-specific/document_debian_defaults.patch
 misc/fix_ALL_FILES.patch
-Add-bool-browser_sort_dirs_first-always-putting-directori.patch
-mutt_file_sanitize_filename-actually-replace-characters.patch
 misc/0001-gen_msgid-snprintf-mutt_str_dup-mutt_str_asprintf.patch
 misc/0002-Add-message_id_format-hostname-random.patch
