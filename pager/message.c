@@ -37,18 +37,18 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
+#include "lib.h"
 #include "attach/lib.h"
 #include "index/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "ncrypt/lib.h"
-#include "pager/lib.h"
 #include "question/lib.h"
 #include "copy.h"
 #include "format_flags.h"
 #include "globals.h" // IWYU pragma: keep
 #include "hdrline.h"
 #include "hook.h"
-#include "keymap.h"
 #include "mview.h"
 #include "mx.h"
 #include "protos.h"
@@ -203,8 +203,7 @@ static int email_to_file(struct Message *msg, struct Buffer *tempfile,
     {
       /* find out whether or not the verify signature */
       /* L10N: Used for the $crypt_verify_sig prompt */
-      const enum QuadOption c_crypt_verify_sig = cs_subset_quad(NeoMutt->sub, "crypt_verify_sig");
-      if (query_quadoption(c_crypt_verify_sig, _("Verify signature?")) == MUTT_YES)
+      if (query_quadoption(_("Verify signature?"), NeoMutt->sub, "crypt_verify_sig") == MUTT_YES)
       {
         *cmflags |= MUTT_CM_VERIFY;
       }
@@ -240,7 +239,7 @@ static int email_to_file(struct Message *msg, struct Buffer *tempfile,
     fp_filter_out = fp_out;
     fp_out = NULL;
     filterpid = filter_create_fd(c_display_filter, &fp_out, NULL, NULL, -1,
-                                 fileno(fp_filter_out), -1);
+                                 fileno(fp_filter_out), -1, EnvList);
     if (filterpid < 0)
     {
       mutt_error(_("Can't create display filter"));
@@ -350,7 +349,7 @@ int external_pager(struct MailboxView *mv, struct Email *e, const char *command)
   if ((r != -1) && c_prompt_after)
   {
     mutt_unget_ch(mutt_any_key_to_continue(_("Command: ")));
-    rc = km_dokey(MENU_PAGER);
+    rc = km_dokey(MENU_PAGER, GETCH_NO_FLAGS);
   }
   else
   {
@@ -381,9 +380,13 @@ static void notify_crypto(struct Email *e, struct Message *msg, CopyMessageFlags
         mutt_error(_("S/MIME certificate owner does not match sender"));
     }
     else if (e->security & SEC_PARTSIGN)
+    {
       mutt_message(_("Warning: Part of this message has not been signed"));
+    }
     else if (e->security & SEC_SIGN || e->security & SEC_BADSIGN)
+    {
       mutt_error(_("S/MIME signature could NOT be verified"));
+    }
   }
 
   if ((WithCrypto != 0) && (e->security & APPLICATION_PGP) && (cmflags & MUTT_CM_VERIFY))
@@ -494,7 +497,7 @@ int mutt_display_message(struct MuttWindow *win_index, struct IndexSharedData *s
     pview.win_pbar = win_pbar;
     pview.win_pager = win_pager;
 
-    rc = mutt_pager(&pview);
+    rc = dlg_pager(&pview);
     mx_msg_close(shared->mailbox, &msg);
   } while (rc == PAGER_LOOP_RELOAD);
 

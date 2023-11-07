@@ -27,15 +27,14 @@
  *
  * | File                | Description                |
  * | :------------------ | :------------------------- |
- * | config/address.c    | @subpage config_address    |
  * | config/bool.c       | @subpage config_bool       |
- * | config/cache.c      | @subpage config_cache      |
  * | config/charset.c    | @subpage config_charset    |
  * | config/dump.c       | @subpage config_dump       |
  * | config/enum.c       | @subpage config_enum       |
  * | config/helpers.c    | @subpage config_helpers    |
  * | config/long.c       | @subpage config_long       |
  * | config/mbtable.c    | @subpage config_mbtable    |
+ * | config/myvar.c      | @subpage config_myvar      |
  * | config/number.c     | @subpage config_number     |
  * | config/path.c       | @subpage config_path       |
  * | config/quad.c       | @subpage config_quad       |
@@ -51,10 +50,8 @@
 #define MUTT_CONFIG_LIB_H
 
 #include <stdbool.h>
-// IWYU pragma: begin_exports
-#include "address.h"
+// IWYU pragma: begin_keep
 #include "bool.h"
-#include "cache.h"
 #include "charset.h"
 #include "dump.h"
 #include "enum.h"
@@ -67,7 +64,7 @@
 #include "sort2.h"
 #include "subset.h"
 #include "types.h"
-// IWYU pragma: end_exports
+// IWYU pragma: end_keep
 
 /**
  * @defgroup cfg_module_api Config Module API

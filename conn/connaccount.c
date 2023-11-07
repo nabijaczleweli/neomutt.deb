@@ -36,7 +36,8 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "connaccount.h"
-#include "enter/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "accountcmd.h"
 #include "globals.h"
 
@@ -78,7 +79,7 @@ int mutt_account_getuser(struct ConnAccount *cac)
     mutt_str_copy(cac->user, Username, sizeof(cac->user));
 
     struct Buffer *buf = buf_pool_get();
-    const int rc = buf_get_field(prompt, buf, MUTT_COMP_UNBUFFERED, false, NULL, NULL, NULL);
+    const int rc = mw_get_field(prompt, buf, MUTT_COMP_UNBUFFERED, HC_OTHER, NULL, NULL);
     mutt_str_copy(cac->user, buf_string(buf), sizeof(cac->user));
     buf_pool_release(&buf);
     if (rc != 0)
@@ -156,8 +157,8 @@ int mutt_account_getpass(struct ConnAccount *cac)
     cac->pass[0] = '\0';
 
     struct Buffer *buf = buf_pool_get();
-    const int rc = buf_get_field(prompt, buf, MUTT_COMP_PASS | MUTT_COMP_UNBUFFERED,
-                                 false, NULL, NULL, NULL);
+    const int rc = mw_get_field(prompt, buf, MUTT_COMP_PASS | MUTT_COMP_UNBUFFERED,
+                                HC_OTHER, NULL, NULL);
     mutt_str_copy(cac->pass, buf_string(buf), sizeof(cac->pass));
     buf_pool_release(&buf);
     if (rc != 0)
@@ -211,7 +212,7 @@ char *mutt_account_getoauthbearer(struct ConnAccount *cac, bool xoauth2)
   }
 
   FILE *fp = NULL;
-  pid_t pid = filter_create(cmd, NULL, &fp, NULL);
+  pid_t pid = filter_create(cmd, NULL, &fp, NULL, EnvList);
   if (pid < 0)
   {
     mutt_perror(_("Unable to run refresh command"));

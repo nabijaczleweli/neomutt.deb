@@ -34,19 +34,6 @@ struct MailboxView;
 #define mutt_numeric_cmp(a,b) ((a) < (b) ? -1 : ((a) > (b) ? 1 : 0))
 
 /**
- * @defgroup sort_api Sorting API
- *
- * Prototype for generic comparison function, compatible with qsort()
- *
- * @param a First item
- * @param b Second item
- * @retval <0 a precedes b
- * @retval  0 a and b are identical
- * @retval >0 b precedes a
- */
-typedef int (*sort_t)(const void *a, const void *b);
-
-/**
  * @defgroup sort_mail_api Mail Sorting API
  *
  * Prototype for an email comparison function

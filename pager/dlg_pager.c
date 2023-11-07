@@ -48,17 +48,16 @@
 #include "lib.h"
 #include "color/lib.h"
 #include "index/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
+#include "pattern/lib.h"
 #include "display.h"
 #include "functions.h"
 #include "globals.h" // IWYU pragma: keep
-#include "hook.h"
-#include "keymap.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
 #include "mview.h"
 #include "mx.h"
-#include "opcodes.h"
 #include "private_data.h"
 #include "protos.h"
 #include "status.h"
@@ -66,23 +65,10 @@
 #include "sidebar/lib.h"
 #endif
 
-/**
- * struct Resize - Keep track of screen resizing
- */
-struct Resize
-{
-  int line;
-  bool search_compiled;
-  bool search_back;
-};
-
 /// Braille display: row to leave the cursor
 int BrailleRow = -1;
 /// Braille display: column to leave the cursor
 int BrailleCol = -1;
-
-/// Data to keep track of screen resizes
-static struct Resize *Resize = NULL;
 
 /// Help Bar for the Pager's Help Page
 static const struct Mapping PagerHelp[] = {
@@ -202,10 +188,18 @@ static bool check_read_delay(uint64_t *timestamp)
 }
 
 /**
- * mutt_pager - Display an email, attachment, or help, in a window
+ * dlg_pager - Display an email, attachment, or help, in a window - @ingroup gui_dlg
  * @param pview Pager view settings
  * @retval  0 Success
  * @retval -1 Error
+ *
+ * The Pager Dialog displays an Email to the user.
+ *
+ * They can navigate through the Email, search through it and user `color`
+ * commands to highlight it.
+ *
+ * From the Pager, the user can also use some Index functions, such as
+ * `<next-entry>` or `<delete>`.
  *
  * This pager is actually not so simple as it once was. But it will be again.
  * Currently it operates in 3 modes:
@@ -222,7 +216,7 @@ static bool check_read_delay(uint64_t *timestamp)
  *   it is recognized by presence of data->fp and data->body->email
  * - PAGER_MODE_OTHER does not expect data->email or data->body
  */
-int mutt_pager(struct PagerView *pview)
+int dlg_pager(struct PagerView *pview)
 {
   //===========================================================================
   // ACT 1 - Ensure sanity of the caller and determine the mode
@@ -295,15 +289,13 @@ int mutt_pager(struct PagerView *pview)
   priv->delay_read_timestamp = 0;
   priv->pager_redraw = false;
 
-  {
-    // Wipe any previous state info
-    struct Notify *notify = priv->notify;
-    int rc = priv->rc;
-    memset(priv, 0, sizeof(*priv));
-    priv->rc = rc;
-    priv->notify = notify;
-    TAILQ_INIT(&priv->ansi_list);
-  }
+  // Wipe any previous state info
+  struct Notify *notify = priv->notify;
+  int prc = priv->rc;
+  memset(priv, 0, sizeof(*priv));
+  priv->rc = prc;
+  priv->notify = notify;
+  TAILQ_INIT(&priv->ansi_list);
 
   //---------- setup flags ----------------------------------------------------
   if (!(pview->flags & MUTT_SHOWCOLOR))
@@ -348,13 +340,13 @@ int mutt_pager(struct PagerView *pview)
   // ---------- try to open the pdata file -------------------------------------
   if (!priv->fp)
   {
-    mutt_perror(pview->pdata->fname);
+    mutt_perror("%s", pview->pdata->fname);
     return -1;
   }
 
   if (stat(pview->pdata->fname, &priv->st) != 0)
   {
-    mutt_perror(pview->pdata->fname);
+    mutt_perror("%s", pview->pdata->fname);
     mutt_file_fclose(&priv->fp);
     return -1;
   }
@@ -366,7 +358,7 @@ int mutt_pager(struct PagerView *pview)
   mutt_window_reflow(dlg);
   window_invalidate_all();
 
-  window_set_focus(pview->win_pager);
+  struct MuttWindow *old_focus = window_set_focus(pview->win_pager);
 
   //---------- jump to the bottom if requested ------------------------------
   if (pview->flags & MUTT_PAGER_BOTTOM)
@@ -413,7 +405,7 @@ int mutt_pager(struct PagerView *pview)
     // tries to emulate concurrency.
     //-------------------------------------------------------------------------
     bool do_new_mail = false;
-    if (shared->mailbox && !OptAttachMsg)
+    if (shared->mailbox && !shared->attach_msg)
     {
       int oldcount = shared->mailbox->msg_count;
       /* check for new mail */
@@ -449,7 +441,7 @@ int mutt_pager(struct PagerView *pview)
         if ((check == MX_STATUS_NEW_MAIL) || (check == MX_STATUS_REOPENED))
         {
           pager_queue_redraw(priv, PAGER_REDRAW_PAGER);
-          OptSearchInvalid = true;
+          mutt_pattern_free(&shared->search_state->pattern);
         }
       }
 
@@ -476,7 +468,7 @@ int mutt_pager(struct PagerView *pview)
       priv->pager_redraw = false;
       mutt_resize_screen();
       clearok(stdscr, true); /* force complete redraw */
-      msgwin_clear_text();
+      msgwin_clear_text(NULL);
 
       pager_queue_redraw(priv, PAGER_REDRAW_FLOW);
       if (pview->flags & MUTT_PAGER_RETWINCH)
@@ -486,12 +478,6 @@ int mutt_pager(struct PagerView *pview)
         for (size_t i = 0; i <= priv->top_line; i++)
           if (!priv->lines[i].cont_line)
             priv->win_height++;
-
-        Resize = mutt_mem_malloc(sizeof(struct Resize));
-
-        Resize->line = priv->win_height;
-        Resize->search_compiled = priv->search_compiled;
-        Resize->search_back = priv->search_back;
 
         op = OP_ABORT;
         priv->rc = OP_REFORMAT_WINCH;
@@ -506,9 +492,7 @@ int mutt_pager(struct PagerView *pview)
       continue;
     }
 
-#ifdef USE_DEBUG_COLOR
     dump_pager(priv);
-#endif
 
     //-------------------------------------------------------------------------
     // Finally, read user's key press
@@ -520,7 +504,7 @@ int mutt_pager(struct PagerView *pview)
     // One of such functions is `mutt_enter_command()`
     // Some OP codes are not handled by pager, they cause pager to quit returning
     // OP code to index. Index handles the operation and then restarts pager
-    op = km_dokey(MENU_PAGER);
+    op = km_dokey(MENU_PAGER, GETCH_NO_FLAGS);
 
     // km_dokey() can block, so recheck the timer.
     // Note: This check must occur before handling the operations of the index
@@ -542,7 +526,6 @@ int mutt_pager(struct PagerView *pview)
     if (op < OP_NULL)
     {
       op = OP_NULL;
-      mutt_timeout_hook();
       continue;
     }
 
@@ -578,6 +561,7 @@ int mutt_pager(struct PagerView *pview)
       mutt_flushinp();
 
   } while (priv->loop == PAGER_LOOP_CONTINUE);
+  window_set_focus(old_focus);
 
   //-------------------------------------------------------------------------
   // END OF ACT 3: Read user input loop - while (op != OP_ABORT)

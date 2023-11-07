@@ -27,6 +27,9 @@
  */
 
 #include "config.h"
+#ifdef _MAKEDOC
+#include "docs/makedoc_defs.h"
+#else
 #include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -42,18 +45,20 @@
 #include "conn/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
-#include "functions.h"
 #include "lib.h"
 #include "attach/lib.h"
 #include "browser/lib.h"
-#include "enter/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "index/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "ncrypt/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "attach_data.h"
 #include "external.h"
+#include "functions.h"
 #include "globals.h" // IWYU pragma: keep
 #include "hook.h"
 #include "mutt_header.h"
@@ -61,7 +66,6 @@
 #include "muttlib.h"
 #include "mview.h"
 #include "mx.h"
-#include "opcodes.h"
 #include "protos.h"
 #include "rfc3676.h"
 #include "shared_data.h"
@@ -81,6 +85,149 @@
 #ifdef USE_IMAP
 #include "imap/lib.h"
 #endif
+#endif
+
+// clang-format off
+/**
+ * OpCompose - Functions for the Compose Menu
+ */
+const struct MenuFuncOp OpCompose[] = { /* map: compose */
+  { "attach-file",                   OP_ATTACHMENT_ATTACH_FILE },
+  { "attach-key",                    OP_ATTACHMENT_ATTACH_KEY },
+  { "attach-message",                OP_ATTACHMENT_ATTACH_MESSAGE },
+#ifdef USE_NNTP
+  { "attach-news-message",           OP_ATTACHMENT_ATTACH_NEWS_MESSAGE },
+#endif
+#ifdef USE_AUTOCRYPT
+  { "autocrypt-menu",                OP_COMPOSE_AUTOCRYPT_MENU },
+#endif
+  { "copy-file",                     OP_ATTACHMENT_SAVE },
+  { "detach-file",                   OP_ATTACHMENT_DETACH },
+  { "display-toggle-weed",           OP_DISPLAY_HEADERS },
+  { "edit-bcc",                      OP_ENVELOPE_EDIT_BCC },
+  { "edit-cc",                       OP_ENVELOPE_EDIT_CC },
+  { "edit-content-id",               OP_ATTACHMENT_EDIT_CONTENT_ID },
+  { "edit-description",              OP_ATTACHMENT_EDIT_DESCRIPTION },
+  { "edit-encoding",                 OP_ATTACHMENT_EDIT_ENCODING },
+  { "edit-fcc",                      OP_ENVELOPE_EDIT_FCC },
+  { "edit-file",                     OP_COMPOSE_EDIT_FILE },
+#ifdef USE_NNTP
+  { "edit-followup-to",              OP_ENVELOPE_EDIT_FOLLOWUP_TO },
+#endif
+  { "edit-from",                     OP_ENVELOPE_EDIT_FROM },
+  { "edit-headers",                  OP_ENVELOPE_EDIT_HEADERS },
+  { "edit-language",                 OP_ATTACHMENT_EDIT_LANGUAGE },
+  { "edit-message",                  OP_COMPOSE_EDIT_MESSAGE },
+  { "edit-mime",                     OP_ATTACHMENT_EDIT_MIME },
+#ifdef USE_NNTP
+  { "edit-newsgroups",               OP_ENVELOPE_EDIT_NEWSGROUPS },
+#endif
+  { "edit-reply-to",                 OP_ENVELOPE_EDIT_REPLY_TO },
+  { "edit-subject",                  OP_ENVELOPE_EDIT_SUBJECT },
+  { "edit-to",                       OP_ENVELOPE_EDIT_TO },
+  { "edit-type",                     OP_ATTACHMENT_EDIT_TYPE },
+#ifdef USE_NNTP
+  { "edit-x-comment-to",             OP_ENVELOPE_EDIT_X_COMMENT_TO },
+#endif
+  { "exit",                          OP_EXIT },
+  { "filter-entry",                  OP_ATTACHMENT_FILTER },
+  { "forget-passphrase",             OP_FORGET_PASSPHRASE },
+  { "get-attachment",                OP_ATTACHMENT_GET_ATTACHMENT },
+  { "group-alternatives",            OP_ATTACHMENT_GROUP_ALTS },
+  { "group-multilingual",            OP_ATTACHMENT_GROUP_LINGUAL },
+  { "group-related",                 OP_ATTACHMENT_GROUP_RELATED },
+  { "ispell",                        OP_COMPOSE_ISPELL },
+#ifdef MIXMASTER
+  { "mix",                           OP_COMPOSE_MIX },
+#endif
+  { "move-down",                     OP_ATTACHMENT_MOVE_DOWN },
+  { "move-up",                       OP_ATTACHMENT_MOVE_UP },
+  { "new-mime",                      OP_ATTACHMENT_NEW_MIME },
+  { "pgp-menu",                      OP_COMPOSE_PGP_MENU },
+  { "pipe-entry",                    OP_PIPE },
+  { "pipe-message",                  OP_PIPE },
+  { "postpone-message",              OP_COMPOSE_POSTPONE_MESSAGE },
+  { "print-entry",                   OP_ATTACHMENT_PRINT },
+  { "rename-attachment",             OP_ATTACHMENT_RENAME_ATTACHMENT },
+  { "rename-file",                   OP_COMPOSE_RENAME_FILE },
+  { "send-message",                  OP_COMPOSE_SEND_MESSAGE },
+  { "smime-menu",                    OP_COMPOSE_SMIME_MENU },
+  { "toggle-disposition",            OP_ATTACHMENT_TOGGLE_DISPOSITION },
+  { "toggle-recode",                 OP_ATTACHMENT_TOGGLE_RECODE },
+  { "toggle-unlink",                 OP_ATTACHMENT_TOGGLE_UNLINK },
+  { "ungroup-attachment",            OP_ATTACHMENT_UNGROUP },
+  { "update-encoding",               OP_ATTACHMENT_UPDATE_ENCODING },
+  { "view-attach",                   OP_ATTACHMENT_VIEW },
+  { "view-mailcap",                  OP_ATTACHMENT_VIEW_MAILCAP },
+  { "view-pager",                    OP_ATTACHMENT_VIEW_PAGER },
+  { "view-text",                     OP_ATTACHMENT_VIEW_TEXT },
+  { "write-fcc",                     OP_COMPOSE_WRITE_MESSAGE },
+  { NULL, 0 },
+};
+
+/**
+ * ComposeDefaultBindings - Key bindings for the Compose Menu
+ */
+const struct MenuOpSeq ComposeDefaultBindings[] = { /* map: compose */
+  { OP_ATTACHMENT_ATTACH_FILE,             "a" },
+  { OP_ATTACHMENT_ATTACH_KEY,              "\033k" },          // <Alt-k>
+  { OP_ATTACHMENT_ATTACH_MESSAGE,          "A" },
+  { OP_ATTACHMENT_DETACH,                  "D" },
+  { OP_ATTACHMENT_EDIT_CONTENT_ID,         "\033i" },          // <Alt-i>
+  { OP_ATTACHMENT_EDIT_DESCRIPTION,        "d" },
+  { OP_ATTACHMENT_EDIT_ENCODING,           "\005" },           // <Ctrl-E>
+  { OP_ATTACHMENT_EDIT_LANGUAGE,           "\014" },           // <Ctrl-L>
+  { OP_ATTACHMENT_EDIT_MIME,               "m" },
+  { OP_ATTACHMENT_EDIT_TYPE,               "\024" },           // <Ctrl-T>
+  { OP_ATTACHMENT_FILTER,                  "F" },
+  { OP_ATTACHMENT_GET_ATTACHMENT,          "G" },
+  { OP_ATTACHMENT_GROUP_ALTS,              "&" },
+  { OP_ATTACHMENT_GROUP_LINGUAL,           "^" },
+  { OP_ATTACHMENT_GROUP_RELATED,           "%" },
+  { OP_ATTACHMENT_MOVE_DOWN,               "+" },
+  { OP_ATTACHMENT_MOVE_UP,                 "-" },
+  { OP_ATTACHMENT_NEW_MIME,                "n" },
+  { OP_EXIT,                               "q" },
+  { OP_PIPE,                               "|" },
+  { OP_ATTACHMENT_PRINT,                   "l" },
+  { OP_ATTACHMENT_RENAME_ATTACHMENT,       "\017" },           // <Ctrl-O>
+  { OP_ATTACHMENT_SAVE,                    "C" },
+  { OP_ATTACHMENT_TOGGLE_DISPOSITION,      "\004" },           // <Ctrl-D>
+  { OP_ATTACHMENT_TOGGLE_UNLINK,           "u" },
+  { OP_ATTACHMENT_UNGROUP,                 "#" },
+  { OP_ATTACHMENT_UPDATE_ENCODING,         "U" },
+  { OP_ATTACHMENT_VIEW,                    "<keypadenter>" },
+  { OP_ATTACHMENT_VIEW,                    "\n" },             // <Enter>
+  { OP_ATTACHMENT_VIEW,                    "\r" },             // <Return>
+#ifdef USE_AUTOCRYPT
+  { OP_COMPOSE_AUTOCRYPT_MENU,             "o" },
+#endif
+  { OP_COMPOSE_EDIT_FILE,                  "\033e" },          // <Alt-e>
+  { OP_COMPOSE_EDIT_MESSAGE,               "e" },
+  { OP_COMPOSE_ISPELL,                     "i" },
+#ifdef MIXMASTER
+  { OP_COMPOSE_MIX,                        "M" },
+#endif
+  { OP_COMPOSE_PGP_MENU,                   "p" },
+  { OP_COMPOSE_POSTPONE_MESSAGE,           "P" },
+  { OP_COMPOSE_RENAME_FILE,                "R" },
+  { OP_COMPOSE_SEND_MESSAGE,               "y" },
+  { OP_COMPOSE_SMIME_MENU,                 "S" },
+  { OP_COMPOSE_WRITE_MESSAGE,              "w" },
+  { OP_DISPLAY_HEADERS,                    "h" },
+  { OP_ENVELOPE_EDIT_BCC,                  "b" },
+  { OP_ENVELOPE_EDIT_CC,                   "c" },
+  { OP_ENVELOPE_EDIT_FCC,                  "f" },
+  { OP_ENVELOPE_EDIT_FROM,                 "\033f" },          // <Alt-f>
+  { OP_ENVELOPE_EDIT_HEADERS,              "E" },
+  { OP_ENVELOPE_EDIT_REPLY_TO,             "r" },
+  { OP_ENVELOPE_EDIT_SUBJECT,              "s" },
+  { OP_ENVELOPE_EDIT_TO,                   "t" },
+  { OP_FORGET_PASSPHRASE,                  "\006" },           // <Ctrl-F>
+  { OP_TAG,                                "T" },
+  { 0, NULL },
+};
+// clang-format on
 
 /**
  * check_count - Check if there are any attachments
@@ -180,7 +327,7 @@ static int check_attachments(struct AttachCtx *actx, struct ConfigSubset *sub)
       buf_printf(msg, _("Attachment #%d modified. Update encoding for %s?"),
                  i + 1, buf_string(pretty));
 
-      enum QuadOption ans = mutt_yesorno(buf_string(msg), MUTT_YES);
+      enum QuadOption ans = query_yesorno(buf_string(msg), MUTT_YES);
       if (ans == MUTT_YES)
         mutt_update_encoding(actx->idx[i]->body, sub);
       else if (ans == MUTT_ABORT)
@@ -593,8 +740,8 @@ static int op_attachment_attach_file(struct ComposeSharedData *shared, int op)
   char **files = NULL;
 
   struct Buffer *fname = buf_pool_get();
-  if ((buf_enter_fname(prompt, fname, false, NULL, true, &files, &numfiles,
-                       MUTT_SEL_MULTI) == -1) ||
+  if ((mw_enter_fname(prompt, fname, false, NULL, true, &files, &numfiles,
+                      MUTT_SEL_MULTI) == -1) ||
       buf_is_empty(fname))
   {
     for (int i = 0; i < numfiles; i++)
@@ -709,8 +856,8 @@ static int op_attachment_attach_message(struct ComposeSharedData *shared, int op
     }
   }
 
-  if ((buf_enter_fname(prompt, fname, true, shared->mailbox, false, NULL, NULL,
-                       MUTT_SEL_NO_FLAGS) == -1) ||
+  if ((mw_enter_fname(prompt, fname, true, shared->mailbox, false, NULL, NULL,
+                      MUTT_SEL_NO_FLAGS) == -1) ||
       buf_is_empty(fname))
   {
     buf_pool_release(&fname);
@@ -737,7 +884,7 @@ static int op_attachment_attach_message(struct ComposeSharedData *shared, int op
           /* check to make sure the file exists and is readable */
           if (access(buf_string(fname), R_OK) == -1)
           {
-            mutt_perror(buf_string(fname));
+            mutt_perror("%s", buf_string(fname));
             buf_pool_release(&fname);
             return FR_ERROR;
           }
@@ -764,19 +911,19 @@ static int op_attachment_attach_message(struct ComposeSharedData *shared, int op
     return FR_NO_ACTION;
   }
 
-  /* `$sort`, `$sort_aux`, `$use_threads` could be changed in mutt_index_menu() */
+  /* `$sort`, `$sort_aux`, `$use_threads` could be changed in dlg_index() */
   const enum SortType old_sort = cs_subset_sort(shared->sub, "sort");
   const enum SortType old_sort_aux = cs_subset_sort(shared->sub, "sort_aux");
   const unsigned char old_use_threads = cs_subset_enum(shared->sub, "use_threads");
 
-  OptAttachMsg = true;
   mutt_message(_("Tag the messages you want to attach"));
-  struct MuttWindow *dlg_index = index_pager_init();
-  dialog_push(dlg_index);
-  struct Mailbox *m_attach_new = mutt_index_menu(dlg_index, m_attach);
+  struct MuttWindow *dlg = index_pager_init();
+  struct IndexSharedData *index_shared = dlg->wdata;
+  index_shared->attach_msg = true;
+  dialog_push(dlg);
+  struct Mailbox *m_attach_new = dlg_index(dlg, m_attach);
   dialog_pop();
-  mutt_window_free(&dlg_index);
-  OptAttachMsg = false;
+  mutt_window_free(&dlg);
 
   if (!shared->mailbox)
   {
@@ -890,7 +1037,7 @@ static int op_attachment_edit_content_id(struct ComposeSharedData *shared, int o
     FREE(&id);
   }
 
-  if (buf_get_field("Content-ID: ", buf, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) == 0)
+  if (mw_get_field("Content-ID: ", buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) == 0)
   {
     if (!mutt_str_equal(id, buf_string(buf)))
     {
@@ -934,7 +1081,7 @@ static int op_attachment_edit_description(struct ComposeSharedData *shared, int 
   buf_strcpy(buf, cur_att->body->description);
 
   /* header names should not be translated */
-  if (buf_get_field("Description: ", buf, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) == 0)
+  if (mw_get_field("Description: ", buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) == 0)
   {
     if (!mutt_str_equal(cur_att->body->description, buf_string(buf)))
     {
@@ -964,8 +1111,8 @@ static int op_attachment_edit_encoding(struct ComposeSharedData *shared, int op)
                                                  shared->adata->menu);
   buf_strcpy(buf, ENCODING(cur_att->body->encoding));
 
-  if ((buf_get_field("Content-Transfer-Encoding: ", buf, MUTT_COMP_NO_FLAGS,
-                     false, NULL, NULL, NULL) == 0) &&
+  if ((mw_get_field("Content-Transfer-Encoding: ", buf, MUTT_COMP_NO_FLAGS,
+                    HC_OTHER, NULL, NULL) == 0) &&
       !buf_is_empty(buf))
   {
     int enc = mutt_check_encoding(buf_string(buf));
@@ -1006,8 +1153,7 @@ static int op_attachment_edit_language(struct ComposeSharedData *shared, int op)
                                                  shared->adata->menu);
 
   buf_strcpy(buf, cur_att->body->language);
-  if (buf_get_field("Content-Language: ", buf, MUTT_COMP_NO_FLAGS, false, NULL,
-                    NULL, NULL) == 0)
+  if (mw_get_field("Content-Language: ", buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) == 0)
   {
     if (!mutt_str_equal(cur_att->body->language, buf_string(buf)))
     {
@@ -1167,7 +1313,8 @@ static int op_attachment_group_lingual(struct ComposeSharedData *shared, int op)
 
   if (shared->adata->menu->num_tagged != tagged_with_lang_num)
   {
-    if (mutt_yesorno(_("Not all parts have 'Content-Language' set, continue?"), MUTT_YES) != MUTT_YES)
+    if (query_yesorno(_("Not all parts have 'Content-Language' set, continue?"),
+                      MUTT_YES) != MUTT_YES)
     {
       mutt_message(_("Not sending this message"));
       return FR_ERROR;
@@ -1308,7 +1455,9 @@ static int op_attachment_new_mime(struct ComposeSharedData *shared, int op)
   struct Buffer *type = NULL;
   struct AttachPtr *ap = NULL;
 
-  if ((buf_get_field(_("New file: "), fname, MUTT_COMP_FILE, false, NULL, NULL, NULL) != 0) ||
+  struct FileCompletionData cdata = { false, shared->mailbox, NULL, NULL };
+  if ((mw_get_field(_("New file: "), fname, MUTT_COMP_NO_FLAGS, HC_FILE,
+                    &CompleteFileOps, &cdata) != 0) ||
       buf_is_empty(fname))
   {
     goto done;
@@ -1317,7 +1466,7 @@ static int op_attachment_new_mime(struct ComposeSharedData *shared, int op)
 
   /* Call to lookup_mime_type () ?  maybe later */
   type = buf_pool_get();
-  if ((buf_get_field("Content-Type: ", type, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0) ||
+  if ((mw_get_field("Content-Type: ", type, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) != 0) ||
       buf_is_empty(type))
   {
     goto done;
@@ -1351,7 +1500,7 @@ static int op_attachment_new_mime(struct ComposeSharedData *shared, int op)
   ap->body = mutt_make_file_attach(buf_string(fname), shared->sub);
   if (!ap->body)
   {
-    mutt_error(_("What we have here is a failure to make an attachment"));
+    mutt_error(_("Error attaching file"));
     goto done;
   }
   update_idx(shared->adata->menu, shared->adata->actx, ap);
@@ -1418,8 +1567,9 @@ static int op_attachment_rename_attachment(struct ComposeSharedData *shared, int
     src = cur_att->body->filename;
   struct Buffer *fname = buf_pool_get();
   buf_strcpy(fname, mutt_path_basename(NONULL(src)));
-  int rc = buf_get_field(_("Send attachment with name: "), fname,
-                         MUTT_COMP_FILE, false, NULL, NULL, NULL);
+  struct FileCompletionData cdata = { false, shared->mailbox, NULL, NULL };
+  int rc = mw_get_field(_("Send attachment with name: "), fname,
+                        MUTT_COMP_NO_FLAGS, HC_FILE, &CompleteFileOps, &cdata);
   if (rc == 0)
   {
     // It's valid to set an empty string here, to erase what was set
@@ -1750,7 +1900,9 @@ static int op_compose_rename_file(struct ComposeSharedData *shared, int op)
   struct Buffer *fname = buf_pool_get();
   buf_strcpy(fname, cur_att->body->filename);
   buf_pretty_mailbox(fname);
-  if ((buf_get_field(_("Rename to: "), fname, MUTT_COMP_FILE, false, NULL, NULL, NULL) == 0) &&
+  struct FileCompletionData cdata = { false, shared->mailbox, NULL, NULL };
+  if ((mw_get_field(_("Rename to: "), fname, MUTT_COMP_NO_FLAGS, HC_FILE,
+                    &CompleteFileOps, &cdata) == 0) &&
       !buf_is_empty(fname))
   {
     struct stat st = { 0 };
@@ -1800,8 +1952,8 @@ static int op_compose_send_message(struct ComposeSharedData *shared, int op)
 
   if (!shared->fcc_set && !buf_is_empty(shared->fcc))
   {
-    const enum QuadOption c_copy = cs_subset_quad(shared->sub, "copy");
-    enum QuadOption ans = query_quadoption(c_copy, _("Save a copy of this message?"));
+    enum QuadOption ans = query_quadoption(_("Save a copy of this message?"),
+                                           shared->sub, "copy");
     if (ans == MUTT_ABORT)
       return FR_NO_ACTION;
     else if (ans == MUTT_NO)
@@ -1826,8 +1978,8 @@ static int op_compose_write_message(struct ComposeSharedData *shared, int op)
   }
   if (shared->adata->actx->idxlen)
     shared->email->body = shared->adata->actx->idx[0]->body;
-  if ((buf_enter_fname(_("Write message to mailbox"), fname, true, shared->mailbox,
-                       false, NULL, NULL, MUTT_SEL_NO_FLAGS) != -1) &&
+  if ((mw_enter_fname(_("Write message to mailbox"), fname, true, shared->mailbox,
+                      false, NULL, NULL, MUTT_SEL_NO_FLAGS) != -1) &&
       !buf_is_empty(fname))
   {
     mutt_message(_("Writing message to %s ..."), buf_string(fname));
@@ -1870,8 +2022,8 @@ static int op_display_headers(struct ComposeSharedData *shared, int op)
  */
 static int op_exit(struct ComposeSharedData *shared, int op)
 {
-  const enum QuadOption c_postpone = cs_subset_quad(shared->sub, "postpone");
-  enum QuadOption ans = query_quadoption(c_postpone, _("Save (postpone) draft message?"));
+  enum QuadOption ans = query_quadoption(_("Save (postpone) draft message?"),
+                                         shared->sub, "postpone");
   if (ans == MUTT_NO)
   {
     for (int i = 0; i < shared->adata->actx->idxlen; i++)
@@ -1893,7 +2045,9 @@ static int op_exit(struct ComposeSharedData *shared, int op)
     return FR_DONE;
   }
   else if (ans == MUTT_ABORT)
+  {
     return FR_NO_ACTION;
+  }
 
   return op_compose_postpone_message(shared, op);
 }
@@ -1985,7 +2139,7 @@ int compose_function_dispatcher(struct MuttWindow *win, int op)
   if (rc == FR_UNKNOWN) // Not our function
     return rc;
 
-  const char *result = dispacher_get_retval_name(rc);
+  const char *result = dispatcher_get_retval_name(rc);
   mutt_debug(LL_DEBUG1, "Handled %s (%d) -> %s\n", opcodes_get_name(op), op, NONULL(result));
 
   return rc;

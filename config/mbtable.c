@@ -274,17 +274,40 @@ static int mbtable_reset(const struct ConfigSet *cs, void *var,
 
 /**
  * mbtable_free - Free an MbTable object
- * @param[out] table MbTable to free
+ * @param[out] ptr MbTable to free
  */
-void mbtable_free(struct MbTable **table)
+void mbtable_free(struct MbTable **ptr)
 {
-  if (!table || !*table)
+  if (!ptr || !*ptr)
     return;
 
-  FREE(&(*table)->orig_str);
-  FREE(&(*table)->chars);
-  FREE(&(*table)->segmented_str);
-  FREE(table);
+  struct MbTable *table = *ptr;
+  FREE(&table->orig_str);
+  FREE(&table->chars);
+  FREE(&table->segmented_str);
+
+  FREE(ptr);
+}
+
+/**
+ * mbtable_get_nth_wchar - Extract one char from a multi-byte table
+ * @param table  Multi-byte table
+ * @param index  Select this character
+ * @retval ptr String pointer to the character
+ *
+ * Extract one multi-byte character from a string table.
+ * If the index is invalid, then a space character will be returned.
+ * If the character selected is '\n' (Ctrl-M), then "" will be returned.
+ */
+const char *mbtable_get_nth_wchar(const struct MbTable *table, int index)
+{
+  if (!table || !table->chars || (index < 0) || (index >= table->len))
+    return " ";
+
+  if (table->chars[index][0] == '\r')
+    return "";
+
+  return table->chars[index];
 }
 
 /**

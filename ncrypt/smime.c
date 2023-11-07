@@ -47,13 +47,15 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "lib.h"
-#include "enter/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "copy.h"
 #include "crypt.h"
 #include "cryptglue.h"
 #include "format_flags.h"
+#include "globals.h" // IWYU pragma: keep
 #include "handler.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
@@ -159,7 +161,7 @@ static struct SmimeKey *smime_copy_key(struct SmimeKey *key)
  */
 
 /**
- * smime_class_void_passphrase - Implements CryptModuleSpecs::void_passphrase() - @ingroup crypto_void_passphrase
+ * smime_class_void_passphrase - Forget the cached passphrase - Implements CryptModuleSpecs::void_passphrase() - @ingroup crypto_void_passphrase
  */
 void smime_class_void_passphrase(void)
 {
@@ -168,7 +170,7 @@ void smime_class_void_passphrase(void)
 }
 
 /**
- * smime_class_valid_passphrase - Implements CryptModuleSpecs::valid_passphrase() - @ingroup crypto_valid_passphrase
+ * smime_class_valid_passphrase - Ensure we have a valid passphrase - Implements CryptModuleSpecs::valid_passphrase() - @ingroup crypto_valid_passphrase
  */
 bool smime_class_valid_passphrase(void)
 {
@@ -182,9 +184,8 @@ bool smime_class_valid_passphrase(void)
   smime_class_void_passphrase();
 
   struct Buffer *buf = buf_pool_get();
-  const int rc = buf_get_field(_("Enter S/MIME passphrase:"), buf,
-                               MUTT_COMP_PASS | MUTT_COMP_UNBUFFERED, false,
-                               NULL, NULL, NULL);
+  const int rc = mw_get_field(_("Enter S/MIME passphrase:"), buf,
+                              MUTT_COMP_PASS | MUTT_COMP_UNBUFFERED, HC_OTHER, NULL, NULL);
   mutt_str_copy(SmimePass, buf_string(buf), sizeof(SmimePass));
   buf_pool_release(&buf);
 
@@ -259,7 +260,9 @@ static const char *smime_command_format_str(char *buf, size_t buflen, size_t col
         buf_pool_release(&buf2);
       }
       else if (!c_smime_ca_location)
+      {
         optional = false;
+      }
       break;
     }
 
@@ -271,7 +274,9 @@ static const char *smime_command_format_str(char *buf, size_t buflen, size_t col
         snprintf(buf, buflen, fmt, NONULL(cctx->certificates));
       }
       else if (!cctx->certificates)
+      {
         optional = false;
+      }
       break;
     }
 
@@ -283,7 +288,9 @@ static const char *smime_command_format_str(char *buf, size_t buflen, size_t col
         snprintf(buf, buflen, fmt, NONULL(cctx->intermediates));
       }
       else if (!cctx->intermediates)
+      {
         optional = false;
+      }
       break;
     }
 
@@ -295,7 +302,9 @@ static const char *smime_command_format_str(char *buf, size_t buflen, size_t col
         snprintf(buf, buflen, fmt, NONULL(cctx->sig_fname));
       }
       else if (!cctx->sig_fname)
+      {
         optional = false;
+      }
       break;
     }
 
@@ -307,7 +316,9 @@ static const char *smime_command_format_str(char *buf, size_t buflen, size_t col
         snprintf(buf, buflen, fmt, NONULL(cctx->key));
       }
       else if (!cctx->key)
+      {
         optional = false;
+      }
       break;
     }
 
@@ -319,7 +330,9 @@ static const char *smime_command_format_str(char *buf, size_t buflen, size_t col
         snprintf(buf, buflen, fmt, NONULL(cctx->cryptalg));
       }
       else if (!cctx->key)
+      {
         optional = false;
+      }
       break;
     }
 
@@ -331,7 +344,9 @@ static const char *smime_command_format_str(char *buf, size_t buflen, size_t col
         snprintf(buf, buflen, fmt, NONULL(cctx->fname));
       }
       else if (!cctx->fname)
+      {
         optional = false;
+      }
       break;
     }
 
@@ -343,7 +358,9 @@ static const char *smime_command_format_str(char *buf, size_t buflen, size_t col
         snprintf(buf, buflen, fmt, NONULL(cctx->digestalg));
       }
       else if (!cctx->key)
+      {
         optional = false;
+      }
       break;
     }
 
@@ -429,7 +446,7 @@ static pid_t smime_invoke(FILE **fp_smime_in, FILE **fp_smime_out, FILE **fp_smi
   smime_command(cmd, sizeof(cmd), &cctx, format);
 
   return filter_create_fd(cmd, fp_smime_in, fp_smime_out, fp_smime_err,
-                          fp_smime_infd, fp_smime_outfd, fp_smime_errfd);
+                          fp_smime_infd, fp_smime_outfd, fp_smime_errfd, EnvList);
 }
 
 /**
@@ -536,7 +553,7 @@ static struct SmimeKey *smime_get_candidates(const char *search, bool only_publi
   FILE *fp = mutt_file_fopen(buf_string(index_file), "r");
   if (!fp)
   {
-    mutt_perror(buf_string(index_file));
+    mutt_perror("%s", buf_string(index_file));
     buf_pool_release(&index_file);
     return NULL;
   }
@@ -595,7 +612,7 @@ static struct SmimeKey *smime_get_key_by_hash(const char *hash, bool only_public
  * @param oppenc_mode      If true, use opportunistic encryption
  * @retval ptr Matching key
  */
-static struct SmimeKey *smime_get_key_by_addr(char *mailbox, KeyFlags abilities,
+static struct SmimeKey *smime_get_key_by_addr(const char *mailbox, KeyFlags abilities,
                                               bool only_public_key, bool oppenc_mode)
 {
   if (!mailbox)
@@ -660,7 +677,7 @@ static struct SmimeKey *smime_get_key_by_addr(char *mailbox, KeyFlags abilities,
     }
     else
     {
-      return_key = smime_copy_key(dlg_select_smime_key(matches, mailbox));
+      return_key = smime_copy_key(dlg_smime(matches, mailbox));
     }
 
     smime_key_free(&matches);
@@ -708,7 +725,7 @@ static struct SmimeKey *smime_get_key_by_str(const char *str, KeyFlags abilities
 
   if (matches)
   {
-    return_key = smime_copy_key(dlg_select_smime_key(matches, str));
+    return_key = smime_copy_key(dlg_smime(matches, str));
     smime_key_free(&matches);
   }
 
@@ -735,7 +752,7 @@ static struct SmimeKey *smime_ask_for_key(char *prompt, KeyFlags abilities, bool
   while (true)
   {
     buf_reset(resp);
-    if (buf_get_field(prompt, resp, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0)
+    if (mw_get_field(prompt, resp, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) != 0)
     {
       goto done;
     }
@@ -759,7 +776,7 @@ done:
  * This sets the '*ToUse' variables for an upcoming decryption, where the
  * required key is different from `$smime_default_key`.
  */
-static void getkeys(char *mailbox)
+static void getkeys(const char *mailbox)
 {
   const char *k = NULL;
 
@@ -792,7 +809,7 @@ static void getkeys(char *mailbox)
 }
 
 /**
- * smime_class_getkeys - Implements CryptModuleSpecs::smime_getkeys() - @ingroup crypto_smime_getkeys
+ * smime_class_getkeys - Get the S/MIME keys required to encrypt this email - Implements CryptModuleSpecs::smime_getkeys() - @ingroup crypto_smime_getkeys
  */
 void smime_class_getkeys(struct Envelope *env)
 {
@@ -812,7 +829,7 @@ void smime_class_getkeys(struct Envelope *env)
   {
     if (mutt_addr_is_user(a))
     {
-      getkeys(a->mailbox);
+      getkeys(buf_string(a->mailbox));
       return;
     }
   }
@@ -821,18 +838,18 @@ void smime_class_getkeys(struct Envelope *env)
   {
     if (mutt_addr_is_user(a))
     {
-      getkeys(a->mailbox);
+      getkeys(buf_string(a->mailbox));
       return;
     }
   }
 
   struct Address *f = mutt_default_from(NeoMutt->sub);
-  getkeys(f->mailbox);
+  getkeys(buf_string(f->mailbox));
   mutt_addr_free(&f);
 }
 
 /**
- * smime_class_find_keys - Implements CryptModuleSpecs::find_keys() - @ingroup crypto_find_keys
+ * smime_class_find_keys - Find the keyids of the recipients of a message - Implements CryptModuleSpecs::find_keys() - @ingroup crypto_find_keys
  */
 char *smime_class_find_keys(const struct AddressList *al, bool oppenc_mode)
 {
@@ -844,17 +861,17 @@ char *smime_class_find_keys(const struct AddressList *al, bool oppenc_mode)
   struct Address *a = NULL;
   TAILQ_FOREACH(a, al, entries)
   {
-    key = smime_get_key_by_addr(a->mailbox, KEYFLAG_CANENCRYPT, true, oppenc_mode);
+    key = smime_get_key_by_addr(buf_string(a->mailbox), KEYFLAG_CANENCRYPT, true, oppenc_mode);
     if (!key && !oppenc_mode)
     {
       char buf[1024] = { 0 };
-      snprintf(buf, sizeof(buf), _("Enter keyID for %s: "), a->mailbox);
+      snprintf(buf, sizeof(buf), _("Enter keyID for %s: "), buf_string(a->mailbox));
       key = smime_ask_for_key(buf, KEYFLAG_CANENCRYPT, true);
     }
     if (!key)
     {
       if (!oppenc_mode)
-        mutt_message(_("No (valid) certificate found for %s"), a->mailbox);
+        mutt_message(_("No (valid) certificate found for %s"), buf_string(a->mailbox));
       FREE(&keylist);
       return NULL;
     }
@@ -881,8 +898,8 @@ char *smime_class_find_keys(const struct AddressList *al, bool oppenc_mode)
  * @retval -1 Error
  * @retval -2 Error
  */
-static int smime_handle_cert_email(char *certificate, char *mailbox, bool copy,
-                                   char ***buffer, int *num)
+static int smime_handle_cert_email(const char *certificate, const char *mailbox,
+                                   bool copy, char ***buffer, int *num)
 {
   char email[256] = { 0 };
   int rc = -1, count = 0;
@@ -941,9 +958,13 @@ static int smime_handle_cert_email(char *certificate, char *mailbox, bool copy,
     rc = 1;
   }
   else if (rc == 0)
+  {
     rc = 1;
+  }
   else
+  {
     rc = 0;
+  }
 
   if (copy && buffer && num)
   {
@@ -963,7 +984,9 @@ static int smime_handle_cert_email(char *certificate, char *mailbox, bool copy,
     }
   }
   else if (copy)
+  {
     rc = 2;
+  }
 
   mutt_file_fclose(&fp_out);
   mutt_file_fclose(&fp_err);
@@ -981,7 +1004,7 @@ static char *smime_extract_certificate(const char *infile)
   FILE *fp_err = NULL;
   FILE *fp_out = NULL;
   FILE *fp_cert = NULL;
-  char *retval = NULL;
+  char *rc = NULL;
   pid_t pid;
   int empty;
 
@@ -999,7 +1022,7 @@ static char *smime_extract_certificate(const char *infile)
   fp_out = mutt_file_fopen(buf_string(pk7out), "w+");
   if (!fp_out)
   {
-    mutt_perror(buf_string(pk7out));
+    mutt_perror("%s", buf_string(pk7out));
     goto cleanup;
   }
 
@@ -1023,7 +1046,7 @@ static char *smime_extract_certificate(const char *infile)
   empty = (fgetc(fp_out) == EOF);
   if (empty)
   {
-    mutt_perror(buf_string(pk7out));
+    mutt_perror("%s", buf_string(pk7out));
     mutt_file_copy_stream(fp_err, stdout);
     goto cleanup;
   }
@@ -1033,7 +1056,7 @@ static char *smime_extract_certificate(const char *infile)
   fp_cert = mutt_file_fopen(buf_string(certfile), "w+");
   if (!fp_cert)
   {
-    mutt_perror(buf_string(certfile));
+    mutt_perror("%s", buf_string(certfile));
     mutt_file_unlink(buf_string(pk7out));
     goto cleanup;
   }
@@ -1067,7 +1090,7 @@ static char *smime_extract_certificate(const char *infile)
 
   mutt_file_fclose(&fp_cert);
 
-  retval = buf_strdup(certfile);
+  rc = buf_strdup(certfile);
 
 cleanup:
   mutt_file_fclose(&fp_err);
@@ -1083,7 +1106,7 @@ cleanup:
   }
   buf_pool_release(&pk7out);
   buf_pool_release(&certfile);
-  return retval;
+  return rc;
 }
 
 /**
@@ -1111,7 +1134,7 @@ static char *smime_extract_signer_certificate(const char *infile)
   if (!fp_out)
   {
     mutt_file_fclose(&fp_err);
-    mutt_perror(buf_string(certfile));
+    mutt_perror("%s", buf_string(certfile));
     goto cleanup;
   }
 
@@ -1156,7 +1179,7 @@ cleanup:
 }
 
 /**
- * smime_class_invoke_import - Implements CryptModuleSpecs::smime_invoke_import() - @ingroup crypto_smime_invoke_import
+ * smime_class_invoke_import - Add a certificate and update index file (externally) - Implements CryptModuleSpecs::smime_invoke_import() - @ingroup crypto_smime_invoke_import
  */
 void smime_class_invoke_import(const char *infile, const char *mailbox)
 {
@@ -1181,8 +1204,8 @@ void smime_class_invoke_import(const char *infile, const char *mailbox)
   const bool c_smime_ask_cert_label = cs_subset_bool(NeoMutt->sub, "smime_ask_cert_label");
   if (c_smime_ask_cert_label)
   {
-    if ((buf_get_field(_("Label for certificate: "), buf, MUTT_COMP_NO_FLAGS,
-                       false, NULL, NULL, NULL) != 0) ||
+    if ((mw_get_field(_("Label for certificate: "), buf, MUTT_COMP_NO_FLAGS,
+                      HC_OTHER, NULL, NULL) != 0) ||
         buf_is_empty(buf))
     {
       goto done;
@@ -1230,11 +1253,11 @@ done:
 }
 
 /**
- * smime_class_verify_sender - Implements CryptModuleSpecs::smime_verify_sender() - @ingroup crypto_smime_verify_sender
+ * smime_class_verify_sender - Does the sender match the certificate? - Implements CryptModuleSpecs::smime_verify_sender() - @ingroup crypto_smime_verify_sender
  */
 int smime_class_verify_sender(struct Email *e, struct Message *msg)
 {
-  char *mbox = NULL, *certfile = NULL;
+  const char *mbox = NULL, *certfile = NULL;
   int rc = 1;
 
   struct Buffer *tempfname = buf_pool_get();
@@ -1242,7 +1265,7 @@ int smime_class_verify_sender(struct Email *e, struct Message *msg)
   FILE *fp_out = mutt_file_fopen(buf_string(tempfname), "w");
   if (!fp_out)
   {
-    mutt_perror(buf_string(tempfname));
+    mutt_perror("%s", buf_string(tempfname));
     goto cleanup;
   }
 
@@ -1257,12 +1280,12 @@ int smime_class_verify_sender(struct Email *e, struct Message *msg)
   if (!TAILQ_EMPTY(&e->env->from))
   {
     mutt_expand_aliases(&e->env->from);
-    mbox = TAILQ_FIRST(&e->env->from)->mailbox;
+    mbox = buf_string(TAILQ_FIRST(&e->env->from)->mailbox);
   }
   else if (!TAILQ_EMPTY(&e->env->sender))
   {
     mutt_expand_aliases(&e->env->sender);
-    mbox = TAILQ_FIRST(&e->env->sender)->mailbox;
+    mbox = buf_string(TAILQ_FIRST(&e->env->sender)->mailbox);
   }
 
   if (mbox)
@@ -1356,7 +1379,7 @@ static pid_t smime_invoke_sign(FILE **fp_smime_in, FILE **fp_smime_out,
 }
 
 /**
- * smime_class_build_smime_entity - Implements CryptModuleSpecs::smime_build_smime_entity() - @ingroup crypto_smime_build_smime_entity
+ * smime_class_build_smime_entity - Encrypt the email body to all recipients - Implements CryptModuleSpecs::smime_build_smime_entity() - @ingroup crypto_smime_build_smime_entity
  */
 struct Body *smime_class_build_smime_entity(struct Body *a, char *certlist)
 {
@@ -1374,7 +1397,7 @@ struct Body *smime_class_build_smime_entity(struct Body *a, char *certlist)
   fp_out = mutt_file_fopen(buf_string(tempfile), "w+");
   if (!fp_out)
   {
-    mutt_perror(buf_string(tempfile));
+    mutt_perror("%s", buf_string(tempfile));
     goto cleanup;
   }
 
@@ -1389,7 +1412,7 @@ struct Body *smime_class_build_smime_entity(struct Body *a, char *certlist)
   fp_tmp = mutt_file_fopen(buf_string(smime_infile), "w+");
   if (!fp_tmp)
   {
-    mutt_perror(buf_string(smime_infile));
+    mutt_perror("%s", buf_string(smime_infile));
     goto cleanup;
   }
 
@@ -1503,14 +1526,12 @@ cleanup:
 static char *openssl_md_to_smime_micalg(const char *md)
 {
   if (!md)
-    return 0;
+    return NULL;
 
   char *micalg = NULL;
   if (mutt_istr_startswith(md, "sha"))
   {
-    const size_t l = strlen(md) + 2;
-    micalg = mutt_mem_malloc(l);
-    snprintf(micalg, l, "sha-%s", md + 3);
+    mutt_str_asprintf(&micalg, "sha-%s", md + 3);
   }
   else
   {
@@ -1521,12 +1542,12 @@ static char *openssl_md_to_smime_micalg(const char *md)
 }
 
 /**
- * smime_class_sign_message - Implements CryptModuleSpecs::sign_message() - @ingroup crypto_sign_message
+ * smime_class_sign_message - Cryptographically sign the Body of a message - Implements CryptModuleSpecs::sign_message() - @ingroup crypto_sign_message
  */
 struct Body *smime_class_sign_message(struct Body *a, const struct AddressList *from)
 {
   struct Body *t = NULL;
-  struct Body *retval = NULL;
+  struct Body *rc = NULL;
   char buf[1024] = { 0 };
   struct Buffer *filetosign = NULL, *signedfile = NULL;
   FILE *fp_smime_in = NULL, *fp_smime_out = NULL, *fp_smime_err = NULL, *fp_sign = NULL;
@@ -1553,7 +1574,7 @@ struct Body *smime_class_sign_message(struct Body *a, const struct AddressList *
   fp_sign = mutt_file_fopen(buf_string(filetosign), "w+");
   if (!fp_sign)
   {
-    mutt_perror(buf_string(filetosign));
+    mutt_perror("%s", buf_string(filetosign));
     goto cleanup;
   }
 
@@ -1561,7 +1582,7 @@ struct Body *smime_class_sign_message(struct Body *a, const struct AddressList *
   fp_smime_out = mutt_file_fopen(buf_string(signedfile), "w+");
   if (!fp_smime_out)
   {
-    mutt_perror(buf_string(signedfile));
+    mutt_perror("%s", buf_string(signedfile));
     goto cleanup;
   }
 
@@ -1644,7 +1665,7 @@ struct Body *smime_class_sign_message(struct Body *a, const struct AddressList *
   mutt_param_set(&t->parameter, "protocol", "application/pkcs7-signature");
 
   t->parts = a;
-  retval = t;
+  rc = t;
 
   t->parts->next = mutt_body_new();
   t = t->parts->next;
@@ -1670,7 +1691,7 @@ cleanup:
   }
   buf_pool_release(&filetosign);
   buf_pool_release(&signedfile);
-  return retval;
+  return rc;
 }
 
 /**
@@ -1729,7 +1750,7 @@ static pid_t smime_invoke_decrypt(FILE **fp_smime_in, FILE **fp_smime_out,
 }
 
 /**
- * smime_class_verify_one - Implements CryptModuleSpecs::verify_one() - @ingroup crypto_verify_one
+ * smime_class_verify_one - Check a signed MIME part against a signature - Implements CryptModuleSpecs::verify_one() - @ingroup crypto_verify_one
  */
 int smime_class_verify_one(struct Body *sigbdy, struct State *state, const char *tempfile)
 {
@@ -1750,7 +1771,7 @@ int smime_class_verify_one(struct Body *sigbdy, struct State *state, const char 
   state->fp_out = mutt_file_fopen(buf_string(signedfile), "w");
   if (!state->fp_out)
   {
-    mutt_perror(buf_string(signedfile));
+    mutt_perror("%s", buf_string(signedfile));
     goto cleanup;
   }
   /* decoding the attachment changes the size and offset, so save a copy
@@ -1876,7 +1897,7 @@ static struct Body *smime_handle_entity(struct Body *m, struct State *state, FIL
   fp_tmp = mutt_file_fopen(buf_string(&tmpfname), "w+");
   if (!fp_tmp)
   {
-    mutt_perror(buf_string(&tmpfname));
+    mutt_perror("%s", buf_string(&tmpfname));
     goto cleanup;
   }
 
@@ -2081,7 +2102,7 @@ cleanup:
 }
 
 /**
- * smime_class_decrypt_mime - Implements CryptModuleSpecs::decrypt_mime() - @ingroup crypto_decrypt_mime
+ * smime_class_decrypt_mime - Decrypt an encrypted MIME part - Implements CryptModuleSpecs::decrypt_mime() - @ingroup crypto_decrypt_mime
  */
 int smime_class_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Body **cur)
 {
@@ -2144,7 +2165,7 @@ bail:
 }
 
 /**
- * smime_class_application_handler - Implements CryptModuleSpecs::application_handler() - @ingroup crypto_application_handler
+ * smime_class_application_handler - Manage the MIME type "application/pgp" or "application/smime" - Implements CryptModuleSpecs::application_handler() - @ingroup crypto_application_handler
  */
 int smime_class_application_handler(struct Body *m, struct State *state)
 {
@@ -2163,7 +2184,7 @@ int smime_class_application_handler(struct Body *m, struct State *state)
 }
 
 /**
- * smime_class_send_menu - Implements CryptModuleSpecs::send_menu() - @ingroup crypto_send_menu
+ * smime_class_send_menu - Ask the user whether to sign and/or encrypt the email - Implements CryptModuleSpecs::send_menu() - @ingroup crypto_send_menu
  */
 SecurityFlags smime_class_send_menu(struct Email *e)
 {
@@ -2190,19 +2211,19 @@ SecurityFlags smime_class_send_menu(struct Email *e)
     letters = _("swaco");
     choices = "SwaCo";
   }
-  /* Opportunistic encryption option is set, but is toggled off
-   * for this message.  */
   else if (c_crypt_opportunistic_encrypt)
   {
+    /* Opportunistic encryption option is set, but is toggled off
+     * for this message.  */
     /* L10N: S/MIME options (opportunistic encryption is off) */
     prompt = _("S/MIME (e)ncrypt, (s)ign, encrypt (w)ith, sign (a)s, (b)oth, (c)lear, or (o)ppenc mode?");
     /* L10N: S/MIME options (opportunistic encryption is off) */
     letters = _("eswabco");
     choices = "eswabcO";
   }
-  /* Opportunistic encryption is unset */
   else
   {
+    /* Opportunistic encryption is unset */
     /* L10N: S/MIME options */
     prompt = _("S/MIME (e)ncrypt, (s)ign, encrypt (w)ith, sign (a)s, (b)oth, or (c)lear?");
     /* L10N: S/MIME options */
@@ -2210,7 +2231,7 @@ SecurityFlags smime_class_send_menu(struct Email *e)
     choices = "eswabc";
   }
 
-  choice = mutt_multi_choice(prompt, letters);
+  choice = mw_multi_choice(prompt, letters);
   if (choice > 0)
   {
     switch (choices[choice - 1])
@@ -2272,14 +2293,14 @@ SecurityFlags smime_class_send_menu(struct Email *e)
         {
           struct Buffer errmsg = buf_make(0);
           int rc = CSR_SUCCESS;
-          switch (mutt_multi_choice(_("Choose algorithm family: (1) DES, (2) RC2, (3) AES, or (c)lear?"),
-                                    // L10N: Options for: Choose algorithm family: (1) DES, (2) RC2, (3) AES, or (c)lear?
-                                    _("123c")))
+          switch (mw_multi_choice(_("Choose algorithm family: (1) DES, (2) RC2, (3) AES, or (c)lear?"),
+                                  // L10N: Options for: Choose algorithm family: (1) DES, (2) RC2, (3) AES, or (c)lear?
+                                  _("123c")))
           {
             case 1:
-              switch (choice = mutt_multi_choice(_("(1) DES, (2) Triple-DES?"),
-                                                 // L10N: Options for: (1) DES, (2) Triple-DES
-                                                 _("12")))
+              switch (choice = mw_multi_choice(_("(1) DES, (2) Triple-DES?"),
+                                               // L10N: Options for: (1) DES, (2) Triple-DES
+                                               _("12")))
               {
                 case 1:
                   rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",
@@ -2293,9 +2314,9 @@ SecurityFlags smime_class_send_menu(struct Email *e)
               break;
 
             case 2:
-              switch (choice = mutt_multi_choice(_("(1) RC2-40, (2) RC2-64, (3) RC2-128?"),
-                                                 // L10N: Options for: (1) RC2-40, (2) RC2-64, (3) RC2-128
-                                                 _("123")))
+              switch (choice = mw_multi_choice(_("(1) RC2-40, (2) RC2-64, (3) RC2-128?"),
+                                               // L10N: Options for: (1) RC2-40, (2) RC2-64, (3) RC2-128
+                                               _("123")))
               {
                 case 1:
                   rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",
@@ -2313,9 +2334,9 @@ SecurityFlags smime_class_send_menu(struct Email *e)
               break;
 
             case 3:
-              switch (choice = mutt_multi_choice(_("(1) AES128, (2) AES192, (3) AES256?"),
-                                                 // L10N: Options for: (1) AES128, (2) AES192, (3) AES256
-                                                 _("123")))
+              switch (choice = mw_multi_choice(_("(1) AES128, (2) AES192, (3) AES256?"),
+                                               // L10N: Options for: (1) AES128, (2) AES192, (3) AES256
+                                               _("123")))
               {
                 case 1:
                   rc = cs_subset_str_string_set(NeoMutt->sub, "smime_encrypt_with",

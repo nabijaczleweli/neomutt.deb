@@ -27,6 +27,9 @@
  */
 
 #include "config.h"
+#ifdef _MAKEDOC
+#include "docs/makedoc_defs.h"
+#else
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -38,18 +41,20 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
-#include "functions.h"
 #include "lib.h"
 #include "attach/lib.h"
-#include "enter/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
+#include "pattern/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
+#include "functions.h"
 #include "globals.h" // IWYU pragma: keep
 #include "mutt_mailbox.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "opcodes.h"
 #include "private_data.h"
 #ifdef USE_IMAP
 #include "imap/lib.h"
@@ -59,11 +64,105 @@
 #include "nntp/adata.h"
 #include "nntp/mdata.h"
 #endif
+#endif
 
 /// Error message for unavailable functions
 static const char *Not_available_in_this_menu = N_("Not available in this menu");
 
 static int op_subscribe_pattern(struct BrowserPrivateData *priv, int op);
+
+// clang-format off
+/**
+ * OpBrowser - Functions for the file Browser Menu
+ */
+const struct MenuFuncOp OpBrowser[] = { /* map: browser */
+#ifdef USE_NNTP
+  { "catchup",                       OP_CATCHUP },
+#endif
+  { "change-dir",                    OP_CHANGE_DIRECTORY },
+  { "check-new",                     OP_CHECK_NEW },
+#ifdef USE_IMAP
+  { "create-mailbox",                OP_CREATE_MAILBOX },
+  { "delete-mailbox",                OP_DELETE_MAILBOX },
+#endif
+  { "descend-directory",             OP_DESCEND_DIRECTORY },
+  { "display-filename",              OP_BROWSER_TELL },
+  { "enter-mask",                    OP_ENTER_MASK },
+  { "exit",                          OP_EXIT },
+  { "goto-folder",                   OP_BROWSER_GOTO_FOLDER },
+  { "goto-parent",                   OP_GOTO_PARENT },
+  { "mailbox-list",                  OP_MAILBOX_LIST },
+#ifdef USE_NNTP
+  { "reload-active",                 OP_LOAD_ACTIVE },
+#endif
+#ifdef USE_IMAP
+  { "rename-mailbox",                OP_RENAME_MAILBOX },
+#endif
+  { "select-new",                    OP_BROWSER_NEW_FILE },
+  { "sort",                          OP_SORT },
+  { "sort-reverse",                  OP_SORT_REVERSE },
+#if defined(USE_IMAP) || defined(USE_NNTP)
+  { "subscribe",                     OP_BROWSER_SUBSCRIBE },
+#endif
+#ifdef USE_NNTP
+  { "subscribe-pattern",             OP_SUBSCRIBE_PATTERN },
+#endif
+  { "toggle-mailboxes",              OP_TOGGLE_MAILBOXES },
+#ifdef USE_IMAP
+  { "toggle-subscribed",             OP_BROWSER_TOGGLE_LSUB },
+#endif
+#ifdef USE_NNTP
+  { "uncatchup",                     OP_UNCATCHUP },
+#endif
+#if defined(USE_IMAP) || defined(USE_NNTP)
+  { "unsubscribe",                   OP_BROWSER_UNSUBSCRIBE },
+#endif
+#ifdef USE_NNTP
+  { "unsubscribe-pattern",           OP_UNSUBSCRIBE_PATTERN },
+#endif
+  { "view-file",                     OP_BROWSER_VIEW_FILE },
+  // Deprecated
+  { "buffy-list",                    OP_MAILBOX_LIST },
+  { NULL, 0 },
+};
+
+/**
+ * BrowserDefaultBindings - Key bindings for the file Browser Menu
+ */
+const struct MenuOpSeq BrowserDefaultBindings[] = { /* map: browser */
+  { OP_BROWSER_GOTO_FOLDER,                "=" },
+  { OP_BROWSER_NEW_FILE,                   "N" },
+#if defined(USE_IMAP) || defined(USE_NNTP)
+  { OP_BROWSER_SUBSCRIBE,                  "s" },
+#endif
+  { OP_BROWSER_TELL,                       "@" },
+#ifdef USE_IMAP
+  { OP_BROWSER_TOGGLE_LSUB,                "T" },
+#endif
+#if defined(USE_IMAP) || defined(USE_NNTP)
+  { OP_BROWSER_UNSUBSCRIBE,                "u" },
+#endif
+  { OP_BROWSER_VIEW_FILE,                  " " },              // <Space>
+  { OP_CHANGE_DIRECTORY,                   "c" },
+#ifdef USE_IMAP
+  { OP_CREATE_MAILBOX,                     "C" },
+  { OP_DELETE_MAILBOX,                     "d" },
+#endif
+  { OP_ENTER_MASK,                         "m" },
+  { OP_EXIT,                               "q" },
+  { OP_GOTO_PARENT,                        "p" },
+#ifdef USE_NNTP
+#endif
+  { OP_MAILBOX_LIST,                       "." },
+#ifdef USE_IMAP
+  { OP_RENAME_MAILBOX,                     "r" },
+#endif
+  { OP_SORT,                               "o" },
+  { OP_SORT_REVERSE,                       "O" },
+  { OP_TOGGLE_MAILBOXES,                   "\t" },             // <Tab>
+  { 0, NULL },
+};
+// clang-format on
 
 /**
  * destroy_state - Free the BrowserState
@@ -96,8 +195,9 @@ static int op_browser_new_file(struct BrowserPrivateData *priv, int op)
   struct Buffer *buf = buf_pool_get();
   buf_printf(buf, "%s/", buf_string(&LastDir));
 
-  const int rc = buf_get_field(_("New file name: "), buf, MUTT_COMP_FILE, false,
-                               NULL, NULL, NULL);
+  struct FileCompletionData cdata = { false, priv->mailbox, NULL, NULL };
+  const int rc = mw_get_field(_("New file name: "), buf, MUTT_COMP_NO_FLAGS,
+                              HC_FILE, &CompleteMailboxOps, &cdata);
   if (rc != 0)
   {
     buf_pool_release(&buf);
@@ -226,10 +326,9 @@ static int op_browser_view_file(struct BrowserPrivateData *priv, int op)
   }
   else
   {
-    char buf2[PATH_MAX];
-
-    mutt_path_concat(buf2, buf_string(&LastDir), ff->name, sizeof(buf2));
-    struct Body *b = mutt_make_file_attach(buf2, NeoMutt->sub);
+    struct Buffer *path = buf_pool_get();
+    buf_concat_path(path, buf_string(&LastDir), ff->name);
+    struct Body *b = mutt_make_file_attach(buf_string(path), NeoMutt->sub);
     if (b)
     {
       mutt_view_attachment(NULL, b, MUTT_VA_REGULAR, NULL, NULL, priv->menu->win);
@@ -240,6 +339,7 @@ static int op_browser_view_file(struct BrowserPrivateData *priv, int op)
     {
       mutt_error(_("Error trying to view file"));
     }
+    buf_pool_release(&path);
   }
   return FR_ERROR;
 }
@@ -310,7 +410,9 @@ static int op_change_directory(struct BrowserPrivateData *priv, int op)
 
   if (op == OP_CHANGE_DIRECTORY)
   {
-    int rc = buf_get_field(_("Chdir to: "), buf, MUTT_COMP_FILE, false, NULL, NULL, NULL);
+    struct FileCompletionData cdata = { false, priv->mailbox, NULL, NULL };
+    int rc = mw_get_field(_("Chdir to: "), buf, MUTT_COMP_NO_FLAGS, HC_FILE,
+                          &CompleteMailboxOps, &cdata);
     if ((rc != 0) && buf_is_empty(buf))
     {
       buf_pool_release(&buf);
@@ -355,7 +457,7 @@ static int op_change_directory(struct BrowserPrivateData *priv, int op)
       /* Resolve path from <chdir>
        * Avoids buildup such as /a/b/../../c
        * Symlinks are always unraveled to keep code simple */
-      if (mutt_path_realpath(buf->data) == 0)
+      if (mutt_path_realpath(buf) == 0)
       {
         buf_pool_release(&buf);
         return FR_ERROR;
@@ -392,7 +494,7 @@ static int op_change_directory(struct BrowserPrivateData *priv, int op)
       }
       else
       {
-        mutt_perror(buf_string(buf));
+        mutt_perror("%s", buf_string(buf));
       }
     }
   }
@@ -457,7 +559,7 @@ static int op_delete_mailbox(struct BrowserPrivateData *priv, int op)
   }
 
   snprintf(msg, sizeof(msg), _("Really delete mailbox \"%s\"?"), ff->name);
-  if (mutt_yesorno(msg, MUTT_NO) != MUTT_YES)
+  if (query_yesorno(msg, MUTT_NO) != MUTT_YES)
   {
     mutt_message(_("Mailbox not deleted"));
     return FR_NO_ACTION;
@@ -489,7 +591,7 @@ static int op_enter_mask(struct BrowserPrivateData *priv, int op)
   const struct Regex *c_mask = cs_subset_regex(NeoMutt->sub, "mask");
   struct Buffer *buf = buf_pool_get();
   buf_strcpy(buf, c_mask ? c_mask->pattern : NULL);
-  if (buf_get_field(_("File Mask: "), buf, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0)
+  if (mw_get_field(_("File Mask: "), buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) != 0)
   {
     buf_pool_release(&buf);
     return FR_NO_ACTION;
@@ -735,7 +837,7 @@ static int op_generic_select_entry(struct BrowserPrivateData *priv, int op)
           }
         }
         /* resolve paths navigated from GUI */
-        if (mutt_path_realpath(LastDir.data) == 0)
+        if (mutt_path_realpath(&LastDir) == 0)
           return FR_ERROR;
       }
 
@@ -860,14 +962,13 @@ static int op_sort(struct BrowserPrivateData *priv, int op)
   int sort = -1;
   int reverse = (op == OP_SORT_REVERSE);
 
-  switch (mutt_multi_choice(
-      (reverse) ?
-          /* L10N: The highlighted letters must match the "Sort" options */
-          _("Reverse sort by (d)ate, (a)lpha, si(z)e, d(e)scription, (c)ount, ne(w) count, or do(n)'t sort?") :
-          /* L10N: The highlighted letters must match the "Reverse Sort" options */
-          _("Sort by (d)ate, (a)lpha, si(z)e, d(e)scription, (c)ount, ne(w) count, or do(n)'t sort?"),
-      /* L10N: These must match the highlighted letters from "Sort" and "Reverse Sort" */
-      _("dazecwn")))
+  switch (mw_multi_choice((reverse) ?
+                              /* L10N: The highlighted letters must match the "Sort" options */
+                              _("Reverse sort by (d)ate, (a)lpha, si(z)e, d(e)scription, (c)ount, ne(w) count, or do(n)'t sort?") :
+                              /* L10N: The highlighted letters must match the "Reverse Sort" options */
+                              _("Sort by (d)ate, (a)lpha, si(z)e, d(e)scription, (c)ount, ne(w) count, or do(n)'t sort?"),
+                          /* L10N: These must match the highlighted letters from "Sort" and "Reverse Sort" */
+                          _("dazecwn")))
   {
     case -1: /* abort */
       resort = false;
@@ -938,7 +1039,7 @@ static int op_subscribe_pattern(struct BrowserPrivateData *priv, int op)
   else
     snprintf(tmp2, sizeof(tmp2), _("Unsubscribe pattern: "));
   /* buf comes from the buffer pool, so defaults to size 1024 */
-  if ((buf_get_field(tmp2, buf, MUTT_COMP_PATTERN, false, NULL, NULL, NULL) != 0) ||
+  if ((mw_get_field(tmp2, buf, MUTT_COMP_NO_FLAGS, HC_PATTERN, &CompletePatternOps, NULL) != 0) ||
       buf_is_empty(buf))
   {
     buf_pool_release(&buf);
@@ -1133,19 +1234,19 @@ static const struct BrowserFunction BrowserFunctions[] = {
 
 /**
  * browser_function_dispatcher - Perform a Browser function
- * @param win_browser Window for the Index
- * @param op          Operation to perform, e.g. OP_GOTO_PARENT
+ * @param win Window for the Browser
+ * @param op  Operation to perform, e.g. OP_GOTO_PARENT
  * @retval num #FunctionRetval, e.g. #FR_SUCCESS
  */
-int browser_function_dispatcher(struct MuttWindow *win_browser, int op)
+int browser_function_dispatcher(struct MuttWindow *win, int op)
 {
-  if (!win_browser)
+  if (!win)
   {
-    mutt_error(_(Not_available_in_this_menu));
+    mutt_error("%s", _(Not_available_in_this_menu));
     return FR_ERROR;
   }
 
-  struct BrowserPrivateData *priv = win_browser->parent->wdata;
+  struct BrowserPrivateData *priv = win->parent->wdata;
   if (!priv)
     return FR_ERROR;
 

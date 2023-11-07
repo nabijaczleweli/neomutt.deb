@@ -33,37 +33,28 @@
 #include "mutt/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
-#include "lib.h"
-
-/// Mapping between a colour name and an ncurses colour
-const struct Mapping ColorNames[] = {
-  // clang-format off
-  { "black",   COLOR_BLACK },
-  { "blue",    COLOR_BLUE },
-  { "cyan",    COLOR_CYAN },
-  { "green",   COLOR_GREEN },
-  { "magenta", COLOR_MAGENTA },
-  { "red",     COLOR_RED },
-  { "white",   COLOR_WHITE },
-  { "yellow",  COLOR_YELLOW },
-  { "default", COLOR_DEFAULT },
-  { 0, 0 },
-  // clang-format on
-};
+#include "color.h"
+#include "curses2.h"
+#include "debug.h"
+#include "merged.h"
+#include "notify2.h"
+#include "quoted.h"
+#include "regex4.h"
+#include "simple2.h"
 
 /**
- * colors_clear - Reset all the simple, quoted and regex colours
+ * colors_cleanup - Reset all the simple, quoted and regex colours
  */
-void colors_clear(void)
+void colors_cleanup(void)
 {
   color_debug(LL_DEBUG5, "clean up\n");
   mutt_debug(LL_NOTIFY, "NT_COLOR_RESET: [ALL]\n");
   struct EventColor ev_c = { MT_COLOR_MAX, NULL };
   notify_send(ColorsNotify, NT_COLOR, NT_COLOR_RESET, &ev_c);
 
-  simple_colors_clear();
-  quoted_colors_clear();
-  regex_colors_clear();
+  simple_colors_cleanup();
+  quoted_colors_cleanup();
+  regex_colors_cleanup();
 }
 
 /**
@@ -71,9 +62,9 @@ void colors_clear(void)
  */
 void mutt_colors_cleanup(void)
 {
-  colors_clear();
-  merged_colors_clear();
-  color_notify_free();
+  colors_cleanup();
+  merged_colors_cleanup();
+  color_notify_cleanup();
 }
 
 /**
@@ -83,10 +74,12 @@ void mutt_colors_init(void)
 {
   color_debug(LL_DEBUG5, "init\n");
   color_notify_init();
-  simple_colors_init();
-  regex_colors_init();
+
   curses_colors_init();
   merged_colors_init();
+  quoted_colors_init();
+  regex_colors_init();
+  simple_colors_init();
 
   start_color();
   use_default_colors();

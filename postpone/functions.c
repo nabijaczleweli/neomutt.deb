@@ -27,20 +27,44 @@
  */
 
 #include "config.h"
+#ifdef _MAKEDOC
+#include "docs/makedoc_defs.h"
+#else
 #include <stddef.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
-#include "functions.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "pattern/lib.h"
+#include "functions.h"
 #include "mview.h"
-#include "opcodes.h"
 #include "protos.h"
+#endif
 
-struct Email;
+// clang-format off
+/**
+ * OpPostponed - Functions for the Postpone Menu
+ */
+const struct MenuFuncOp OpPostponed[] = { /* map: postpone */
+  { "exit",                          OP_EXIT },
+  { "delete-entry",                  OP_DELETE },
+  { "undelete-entry",                OP_UNDELETE },
+  { NULL, 0 },
+};
+
+/**
+ * PostponedDefaultBindings - Key bindings for the Postpone Menu
+ */
+const struct MenuOpSeq PostponedDefaultBindings[] = { /* map: postpone */
+  { OP_DELETE,                             "d" },
+  { OP_EXIT,                               "q" },
+  { OP_UNDELETE,                           "u" },
+  { 0, NULL },
+};
+// clang-format on
 
 /**
  * op_delete - Delete the current entry - Implements ::postpone_function_t - @ingroup postpone_function_api
@@ -100,9 +124,27 @@ static int op_generic_select_entry(struct PostponeData *pd, int op)
  */
 static int op_search(struct PostponeData *pd, int op)
 {
+  SearchFlags flags = SEARCH_NO_FLAGS;
+  switch (op)
+  {
+    case OP_SEARCH:
+      flags |= SEARCH_PROMPT;
+      pd->search_state->reverse = false;
+      break;
+    case OP_SEARCH_REVERSE:
+      flags |= SEARCH_PROMPT;
+      pd->search_state->reverse = true;
+      break;
+    case OP_SEARCH_NEXT:
+      break;
+    case OP_SEARCH_OPPOSITE:
+      flags |= SEARCH_OPPOSITE;
+      break;
+  }
+
   int index = menu_get_index(pd->menu);
   struct MailboxView *mv = pd->mailbox_view;
-  index = mutt_search_command(mv, pd->menu, index, op);
+  index = mutt_search_command(mv, pd->menu, index, pd->search_state, flags);
   if (index != -1)
     menu_set_index(pd->menu, index);
 
@@ -156,7 +198,7 @@ int postpone_function_dispatcher(struct MuttWindow *win, int op)
   if (rc == FR_UNKNOWN) // Not our function
     return rc;
 
-  const char *result = dispacher_get_retval_name(rc);
+  const char *result = dispatcher_get_retval_name(rc);
   mutt_debug(LL_DEBUG1, "Handled %s (%d) -> %s\n", opcodes_get_name(op), op, NONULL(result));
 
   return rc;

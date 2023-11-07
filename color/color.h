@@ -25,6 +25,7 @@
 #define MUTT_COLOR_COLOR_H
 
 #include "config.h"
+#include "mutt/lib.h"
 #include <stdbool.h>
 
 /**
@@ -73,6 +74,8 @@ enum ColorId
 #endif
   MT_COLOR_SIGNATURE,                ///< Pager: signature lines
   MT_COLOR_STATUS,                   ///< Status bar (takes a pattern)
+  MT_COLOR_STRIPE_EVEN,              ///< Stripes: even lines of the Help Page
+  MT_COLOR_STRIPE_ODD,               ///< Stripes: odd lines of the Help Page
   MT_COLOR_TILDE,                    ///< Pager: empty lines after message
   MT_COLOR_TREE,                     ///< Index: tree-drawing characters
   MT_COLOR_UNDERLINE,                ///< Underlined text
@@ -92,20 +95,15 @@ enum ColorId
   MT_COLOR_MAX,
 };
 
-#include <stdint.h>
-#include "mutt/lib.h"
-
-extern const struct Mapping ColorNames[];
 extern const struct Mapping ColorFields[];
 extern const struct Mapping ComposeColorFields[];
 
-#define COLOR_DEFAULT (-2)
-#define COLOR_UNSET   UINT32_MAX
+#define COLOR_DEFAULT -1
 
 void mutt_colors_init(void);
 void mutt_colors_cleanup(void);
 bool mutt_color_has_pattern(enum ColorId cid);
 
-void colors_clear(void);
+void colors_cleanup(void);
 
 #endif /* MUTT_COLOR_COLOR_H */

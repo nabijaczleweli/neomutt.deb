@@ -25,20 +25,22 @@
  *
  * Email Address Handling
  *
- * | File                   | Description              |
- * | :--------------------- | :----------------------- |
- * | address/address.c      | @subpage addr_address    |
- * | address/group.c        | @subpage addr_group      |
- * | address/idna.c         | @subpage addr_idna       |
+ * | File                   | Description               |
+ * | :--------------------- | :------------------------ |
+ * | address/address.c      | @subpage addr_address     |
+ * | address/config_type.c  | @subpage addr_config_type |
+ * | address/group.c        | @subpage addr_group       |
+ * | address/idna.c         | @subpage addr_idna        |
  */
 
 #ifndef MUTT_ADDRESS_LIB_H
 #define MUTT_ADDRESS_LIB_H
 
-// IWYU pragma: begin_exports
+// IWYU pragma: begin_keep
 #include "address.h"
+#include "config_type.h"
 #include "group.h"
 #include "idna2.h"
-// IWYU pragma: end_exports
+// IWYU pragma: end_keep
 
 #endif /* MUTT_ADDRESS_LIB_H */

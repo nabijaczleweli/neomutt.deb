@@ -31,7 +31,6 @@
 #include <locale.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include <string.h>
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
@@ -42,7 +41,8 @@
 #include "mutt.h"
 #include "recvcmd.h"
 #include "attach/lib.h"
-#include "enter/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "copy.h"
@@ -154,13 +154,14 @@ static short count_tagged_children(struct AttachCtx *actx, short i)
 }
 
 /**
- * mutt_attach_bounce - Bounce function, from the attachment menu
+ * attach_bounce_message - Bounce function, from the attachment menu
  * @param m    Mailbox
  * @param fp   Handle of message
  * @param actx Attachment context
  * @param cur  Body of email
  */
-void mutt_attach_bounce(struct Mailbox *m, FILE *fp, struct AttachCtx *actx, struct Body *cur)
+void attach_bounce_message(struct Mailbox *m, FILE *fp, struct AttachCtx *actx,
+                           struct Body *cur)
 {
   if (!m || !fp || !actx)
     return;
@@ -205,7 +206,8 @@ void mutt_attach_bounce(struct Mailbox *m, FILE *fp, struct AttachCtx *actx, str
   else
     buf_strcpy(prompt, _("Bounce tagged messages to: "));
 
-  if ((buf_get_field(buf_string(prompt), buf, MUTT_COMP_ALIAS, false, NULL, NULL, NULL) != 0) ||
+  if ((mw_get_field(buf_string(prompt), buf, MUTT_COMP_NO_FLAGS, HC_ALIAS,
+                    &CompleteAliasOps, NULL) != 0) ||
       buf_is_empty(buf))
   {
     goto done;
@@ -232,35 +234,17 @@ void mutt_attach_bounce(struct Mailbox *m, FILE *fp, struct AttachCtx *actx, str
   buf_alloc(buf, 8192);
   mutt_addrlist_write(&al, buf, true);
 
-#define EXTRA_SPACE (15 + 7 + 2)
-  /* See commands.c.  */
   buf_printf(prompt, ngettext("Bounce message to %s?", "Bounce messages to %s?", num_msg),
              buf_string(buf));
 
-  const size_t width = msgwin_get_width();
-  if (mutt_strwidth(buf_string(prompt)) > (width - EXTRA_SPACE))
+  if (query_quadoption(buf_string(prompt), NeoMutt->sub, "bounce") != MUTT_YES)
   {
-    struct Buffer *scratch = buf_pool_get();
-    mutt_simple_format(scratch->data, scratch->dsize - 4, 0, width - EXTRA_SPACE,
-                       JUSTIFY_LEFT, 0, prompt->data, prompt->dsize, false);
-    buf_addstr(scratch, "...?");
-    buf_copy(prompt, scratch);
-    buf_pool_release(&scratch);
-  }
-  else
-  {
-    buf_addstr(prompt, "?");
-  }
-
-  const enum QuadOption c_bounce = cs_subset_quad(NeoMutt->sub, "bounce");
-  if (query_quadoption(c_bounce, buf_string(prompt)) != MUTT_YES)
-  {
-    msgwin_clear_text();
+    msgwin_clear_text(NULL);
     mutt_message(ngettext("Message not bounced", "Messages not bounced", num_msg));
     goto done;
   }
 
-  msgwin_clear_text();
+  msgwin_clear_text(NULL);
 
   int rc = 0;
   if (cur)
@@ -355,7 +339,7 @@ static struct AttachPtr *find_common_parent(struct AttachCtx *actx, short nattac
  * is_parent - Check whether one attachment is the parent of another
  * @param i    Index of parent Attachment
  * @param actx Attachment context
- * @param cur  Potential child Attachemnt
+ * @param cur  Potential child Attachment
  * @retval true Attachment
  *
  * check whether attachment i is a parent of the attachment pointed to by cur
@@ -402,7 +386,9 @@ static struct AttachPtr *find_parent(struct AttachCtx *actx, struct Body *cur, s
     }
   }
   else if (nattach)
+  {
     parent = find_common_parent(actx, nattach);
+  }
 
   return parent;
 }
@@ -555,9 +541,8 @@ static void attach_forward_bodies(FILE *fp, struct Email *e, struct AttachCtx *a
    *
    * The next part is more interesting: either include the message bodies,
    * or attach them.  */
-  const enum QuadOption c_mime_forward = cs_subset_quad(NeoMutt->sub, "mime_forward");
   if ((!cur || mutt_can_decode(cur)) &&
-      ((ans = query_quadoption(c_mime_forward, _("Forward as attachments?"))) == MUTT_YES))
+      ((ans = query_quadoption(_("Forward as attachments?"), NeoMutt->sub, "mime_forward")) == MUTT_YES))
   {
     mime_fwd_all = true;
   }
@@ -570,9 +555,8 @@ static void attach_forward_bodies(FILE *fp, struct Email *e, struct AttachCtx *a
    * Is this intuitive?  */
   if (!mime_fwd_all && !cur && (nattach > 1) && !check_can_decode(actx, cur))
   {
-    const enum QuadOption c_mime_forward_rest = cs_subset_quad(NeoMutt->sub, "mime_forward_rest");
-    ans = query_quadoption(c_mime_forward_rest,
-                           _("Can't decode all tagged attachments.  MIME-forward the others?"));
+    ans = query_quadoption(_("Can't decode all tagged attachments.  MIME-forward the others?"),
+                           NeoMutt->sub, "mime_forward_rest");
     if (ans == MUTT_ABORT)
       goto bail;
     else if (ans == MUTT_NO)
@@ -636,11 +620,11 @@ static void attach_forward_bodies(FILE *fp, struct Email *e, struct AttachCtx *a
   fp_tmp = NULL;
 
   /* now that we have the template, send it. */
-  struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
-  emaillist_add_email(&el, e_parent);
-  mutt_send_message(SEND_NO_FLAGS, e_tmp, buf_string(tmpbody), NULL, &el,
+  struct EmailArray ea = ARRAY_HEAD_INITIALIZER;
+  ARRAY_ADD(&ea, e_parent);
+  mutt_send_message(SEND_NO_FLAGS, e_tmp, buf_string(tmpbody), NULL, &ea,
                     NeoMutt->sub);
-  emaillist_clear(&el);
+  ARRAY_FREE(&ea);
   buf_pool_release(&tmpbody);
   return;
 
@@ -703,8 +687,7 @@ static void attach_forward_msgs(FILE *fp, struct AttachCtx *actx,
 
   tmpbody = buf_pool_get();
 
-  const enum QuadOption c_mime_forward = cs_subset_quad(NeoMutt->sub, "mime_forward");
-  ans = query_quadoption(c_mime_forward, _("Forward MIME encapsulated?"));
+  ans = query_quadoption(_("Forward MIME encapsulated?"), NeoMutt->sub, "mime_forward");
   if (ans == MUTT_NO)
   {
     /* no MIME encapsulation */
@@ -782,11 +765,11 @@ static void attach_forward_msgs(FILE *fp, struct AttachCtx *actx,
     email_free(&e_tmp);
   }
 
-  struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
-  emaillist_add_email(&el, e_cur);
+  struct EmailArray ea = ARRAY_HEAD_INITIALIZER;
+  ARRAY_ADD(&ea, e_cur);
   mutt_send_message(flags, e_tmp, buf_is_empty(tmpbody) ? NULL : buf_string(tmpbody),
-                    NULL, &el, NeoMutt->sub);
-  emaillist_clear(&el);
+                    NULL, &ea, NeoMutt->sub);
+  ARRAY_FREE(&ea);
   e_tmp = NULL; /* mutt_send_message frees this */
 
 cleanup:
@@ -841,7 +824,12 @@ static int attach_reply_envelope_defaults(struct Envelope *env, struct AttachCtx
   struct Envelope *curenv = NULL;
   struct Email *e = NULL;
 
-  if (!parent)
+  if (parent)
+  {
+    curenv = parent->env;
+    e = parent;
+  }
+  else
   {
     for (short i = 0; i < actx->idxlen; i++)
     {
@@ -852,11 +840,6 @@ static int attach_reply_envelope_defaults(struct Envelope *env, struct AttachCtx
         break;
       }
     }
-  }
-  else
-  {
-    curenv = parent->env;
-    e = parent;
   }
 
   if (!curenv || !e)
@@ -972,7 +955,7 @@ void mutt_attach_reply(FILE *fp, struct Mailbox *m, struct Email *e,
   struct Email *e_tmp = NULL;
   FILE *fp_tmp = NULL;
   struct Buffer *tmpbody = NULL;
-  struct EmailList el = STAILQ_HEAD_INITIALIZER(el);
+  struct EmailArray ea = ARRAY_HEAD_INITIALIZER;
 
   char prefix[128] = { 0 };
 
@@ -1001,17 +984,17 @@ void mutt_attach_reply(FILE *fp, struct Mailbox *m, struct Email *e,
 
   if ((nattach > 1) && !check_can_decode(actx, e_cur))
   {
-    const enum QuadOption c_mime_forward_rest = cs_subset_quad(NeoMutt->sub, "mime_forward_rest");
-    const enum QuadOption ans = query_quadoption(
-        c_mime_forward_rest,
-        _("Can't decode all tagged attachments.  MIME-encapsulate the others?"));
+    const enum QuadOption ans = query_quadoption(_("Can't decode all tagged attachments.  MIME-encapsulate the others?"),
+                                                 NeoMutt->sub, "mime_forward_rest");
     if (ans == MUTT_ABORT)
       return;
     if (ans == MUTT_YES)
       mime_reply_any = true;
   }
   else if (nattach == 1)
+  {
     mime_reply_any = true;
+  }
 
   e_tmp = email_new();
   e_tmp->env = mutt_env_new();
@@ -1032,27 +1015,11 @@ void mutt_attach_reply(FILE *fp, struct Mailbox *m, struct Email *e,
     goto cleanup;
   }
 
-  if (!e_parent)
-  {
-    if (e_cur)
-    {
-      attach_include_reply(fp, fp_tmp, e_cur->email);
-    }
-    else
-    {
-      for (short i = 0; i < actx->idxlen; i++)
-      {
-        if (actx->idx[i]->body->tagged)
-          attach_include_reply(actx->idx[i]->fp, fp_tmp, actx->idx[i]->body->email);
-      }
-    }
-  }
-  else
+  if (e_parent)
   {
     mutt_make_attribution_intro(e_parent, fp_tmp, NeoMutt->sub);
 
-    struct State state;
-    memset(&state, 0, sizeof(struct State));
+    struct State state = { 0 };
     state.fp_out = fp_tmp;
 
     const bool c_text_flowed = cs_subset_bool(NeoMutt->sub, "text_flowed");
@@ -1114,11 +1081,26 @@ void mutt_attach_reply(FILE *fp, struct Mailbox *m, struct Email *e,
       goto cleanup;
     }
   }
+  else
+  {
+    if (e_cur)
+    {
+      attach_include_reply(fp, fp_tmp, e_cur->email);
+    }
+    else
+    {
+      for (short i = 0; i < actx->idxlen; i++)
+      {
+        if (actx->idx[i]->body->tagged)
+          attach_include_reply(actx->idx[i]->fp, fp_tmp, actx->idx[i]->body->email);
+      }
+    }
+  }
 
   mutt_file_fclose(&fp_tmp);
 
-  emaillist_add_email(&el, e_parent ? e_parent : (e_cur ? e_cur->email : NULL));
-  if (mutt_send_message(flags, e_tmp, buf_string(tmpbody), NULL, &el, NeoMutt->sub) == 0)
+  ARRAY_ADD(&ea, e_parent ? e_parent : (e_cur ? e_cur->email : NULL));
+  if (mutt_send_message(flags, e_tmp, buf_string(tmpbody), NULL, &ea, NeoMutt->sub) == 0)
   {
     mutt_set_flag(m, e, MUTT_REPLIED, true, true);
   }
@@ -1132,7 +1114,7 @@ cleanup:
   }
   buf_pool_release(&tmpbody);
   email_free(&e_tmp);
-  emaillist_clear(&el);
+  ARRAY_FREE(&ea);
 }
 
 /**

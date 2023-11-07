@@ -78,25 +78,24 @@ void mutt_clear_error(void)
 
   ErrorBufMessage = false;
   if (!OptNoCurses)
-    msgwin_clear_text();
+    msgwin_clear_text(NULL);
 }
 
 /**
  * log_disp_curses - Display a log line in the message line - Implements ::log_dispatcher_t - @ingroup logging_api
  */
-int log_disp_curses(time_t stamp, const char *file, int line,
-                    const char *function, enum LogLevel level, ...)
+int log_disp_curses(time_t stamp, const char *file, int line, const char *function,
+                    enum LogLevel level, const char *format, ...)
 {
   const short c_debug_level = cs_subset_number(NeoMutt->sub, "debug_level");
   if (level > c_debug_level)
     return 0;
 
-  char buf[1024] = { 0 };
+  char buf[LOG_LINE_MAX_LEN] = { 0 };
 
   va_list ap;
-  va_start(ap, level);
-  const char *fmt = va_arg(ap, const char *);
-  int rc = vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_start(ap, format);
+  int rc = vsnprintf(buf, sizeof(buf), format, ap);
   va_end(ap);
 
   if ((level == LL_PERROR) && (rc >= 0) && (rc < sizeof(buf)))
@@ -127,9 +126,7 @@ int log_disp_curses(time_t stamp, const char *file, int line,
   if ((level > LL_ERROR) && OptMsgErr && !dupe)
     error_pause();
 
-  size_t width = msgwin_get_width();
-  mutt_simple_format(ErrorBuf, sizeof(ErrorBuf), 0, width ? width : sizeof(ErrorBuf),
-                     JUSTIFY_LEFT, 0, buf, sizeof(buf), false);
+  mutt_str_copy(ErrorBuf, buf, sizeof(ErrorBuf));
   ErrorBufMessage = true;
 
   if (!OptKeepQuiet)
@@ -149,7 +146,7 @@ int log_disp_curses(time_t stamp, const char *file, int line,
         break;
     }
 
-    msgwin_set_text(cid, ErrorBuf);
+    msgwin_set_text(NULL, ErrorBuf, cid);
   }
 
   if ((level <= LL_ERROR) && !dupe)

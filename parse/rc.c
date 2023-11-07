@@ -27,12 +27,8 @@
  */
 
 #include "config.h"
-#include <ctype.h>
 #include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
 #include "mutt/lib.h"
-#include "config/lib.h"
 #include "core/lib.h"
 #include "extract.h"
 
@@ -90,7 +86,7 @@ enum CommandResult parse_rc_buffer(struct Buffer *line, struct Buffer *token,
     }
     if (i == size)
     {
-      buf_printf(err, _("%s: unknown command"), NONULL(token->data));
+      buf_printf(err, _("%s: unknown command"), buf_string(token));
       rc = MUTT_CMD_ERROR;
       break; /* Ignore the rest of the line */
     }

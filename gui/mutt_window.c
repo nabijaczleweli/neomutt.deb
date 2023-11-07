@@ -48,19 +48,20 @@ static const struct Mapping WindowNames[] = {
   { "WT_CONTAINER",       WT_CONTAINER },
   { "WT_CUSTOM",          WT_CUSTOM },
   { "WT_DLG_ALIAS",       WT_DLG_ALIAS },
-  { "WT_DLG_ATTACH",      WT_DLG_ATTACH },
+  { "WT_DLG_ATTACHMENT",  WT_DLG_ATTACHMENT },
   { "WT_DLG_AUTOCRYPT",   WT_DLG_AUTOCRYPT },
   { "WT_DLG_BROWSER",     WT_DLG_BROWSER },
   { "WT_DLG_CERTIFICATE", WT_DLG_CERTIFICATE },
   { "WT_DLG_COMPOSE",     WT_DLG_COMPOSE },
-  { "WT_DLG_CRYPT_GPGME", WT_DLG_CRYPT_GPGME },
-  { "WT_DLG_DO_PAGER",    WT_DLG_DO_PAGER },
+  { "WT_DLG_GPGME",       WT_DLG_GPGME },
   { "WT_DLG_HISTORY",     WT_DLG_HISTORY },
   { "WT_DLG_INDEX",       WT_DLG_INDEX },
+  { "WT_DLG_PAGER",       WT_DLG_PAGER },
+  { "WT_DLG_PATTERN",     WT_DLG_PATTERN },
   { "WT_DLG_PGP",         WT_DLG_PGP },
-  { "WT_DLG_POSTPONE",    WT_DLG_POSTPONE },
+  { "WT_DLG_POSTPONED",   WT_DLG_POSTPONED },
   { "WT_DLG_QUERY",       WT_DLG_QUERY },
-  { "WT_DLG_REMAILER",    WT_DLG_REMAILER },
+  { "WT_DLG_MIXMASTER",   WT_DLG_MIXMASTER },
   { "WT_DLG_SMIME",       WT_DLG_SMIME },
   { "WT_HELP_BAR",        WT_HELP_BAR },
   { "WT_INDEX",           WT_INDEX },
@@ -131,7 +132,8 @@ static void window_notify(struct MuttWindow *win)
   if (flags == WN_NO_FLAGS)
     return;
 
-  mutt_debug(LL_NOTIFY, "NT_WINDOW_STATE: %s, %p\n", mutt_window_win_name(win), win);
+  mutt_debug(LL_NOTIFY, "NT_WINDOW_STATE: %s, %p\n", mutt_window_win_name(win),
+             (void *) win);
   struct EventWindow ev_w = { win, flags };
   notify_send(win->notify, NT_WINDOW, NT_WINDOW_STATE, &ev_w);
 }
@@ -207,7 +209,8 @@ void mutt_window_free(struct MuttWindow **ptr)
   if (win->parent && (win->parent->focus == win))
     win->parent->focus = NULL;
 
-  mutt_debug(LL_NOTIFY, "NT_WINDOW_DELETE: %s, %p\n", mutt_window_win_name(win), win);
+  mutt_debug(LL_NOTIFY, "NT_WINDOW_DELETE: %s, %p\n", mutt_window_win_name(win),
+             (void *) win);
   struct EventWindow ev_w = { win, WN_NO_FLAGS };
   notify_send(win->notify, NT_WINDOW, NT_WINDOW_DELETE, &ev_w);
 
@@ -346,7 +349,10 @@ void mutt_window_reflow(struct MuttWindow *win)
   if (!win)
     win = RootWindow;
 
-  mutt_debug(LL_DEBUG2, "entering\n");
+  window_reflow(win);
+  window_notify_all(win);
+
+  // Allow Windows to resize themselves based on the first reflow
   window_reflow(win);
   window_notify_all(win);
 
@@ -447,7 +453,8 @@ void mutt_window_add_child(struct MuttWindow *parent, struct MuttWindow *child)
 
   notify_set_parent(child->notify, parent->notify);
 
-  mutt_debug(LL_NOTIFY, "NT_WINDOW_NEW: %s, %p\n", mutt_window_win_name(child), child);
+  mutt_debug(LL_NOTIFY, "NT_WINDOW_NEW: %s, %p\n", mutt_window_win_name(child),
+             (void *) child);
   struct EventWindow ev_w = { child, WN_NO_FLAGS };
   notify_send(child->notify, NT_WINDOW, NT_WINDOW_ADD, &ev_w);
 }
@@ -466,6 +473,9 @@ struct MuttWindow *mutt_window_remove_child(struct MuttWindow *parent, struct Mu
   // A notification will be sent when the Window is freed
   TAILQ_REMOVE(&parent->children, child, entries);
   child->parent = NULL;
+
+  if (parent->focus == child)
+    parent->focus = NULL;
 
   notify_set_parent(child->notify, NULL);
 
@@ -597,6 +607,25 @@ static void window_repaint(struct MuttWindow *win)
 }
 
 /**
+ * window_recursor - Recursor the focussed Window
+ *
+ * Give the focussed Window an opportunity to set the position and
+ * visibility of its cursor.
+ */
+static void window_recursor(void)
+{
+  // Give the focussed window an opportunity to set the cursor position
+  struct MuttWindow *win = window_get_focus();
+  if (!win)
+    return;
+
+  if (win->recursor && win->recursor(win))
+    return;
+
+  mutt_curses_set_cursor(MUTT_CURSOR_INVISIBLE);
+}
+
+/**
  * window_redraw - Reflow, recalc and repaint a tree of Windows
  * @param win Window to start at
  *
@@ -607,18 +636,13 @@ void window_redraw(struct MuttWindow *win)
   if (!win)
     win = RootWindow;
 
-  if (SigWinch)
-  {
-    SigWinch = false;
-    window_invalidate_all();
-    mutt_resize_screen();
-  }
-
   window_reflow(win);
   window_notify_all(win);
 
   window_recalc(win);
   window_repaint(win);
+  window_recursor();
+
   mutt_refresh();
 }
 
@@ -671,19 +695,19 @@ struct MuttWindow *window_set_focus(struct MuttWindow *win)
   for (; parent; child = parent, parent = parent->parent)
     parent->focus = child;
 
-  // Find the most focused Window
-  while (win && win->focus)
-    win = win->focus;
+  win->focus = NULL;
 
   if (win == old_focus)
     return NULL;
 
-  mutt_debug(LL_NOTIFY, "NT_WINDOW_FOCUS: %s, %p\n", mutt_window_win_name(win), win);
+  mutt_debug(LL_NOTIFY, "NT_WINDOW_FOCUS: %s, %p\n", mutt_window_win_name(win),
+             (void *) win);
   struct EventWindow ev_w = { win, WN_NO_FLAGS };
   notify_send(win->notify, NT_WINDOW, NT_WINDOW_FOCUS, &ev_w);
 #ifdef USE_DEBUG_WINDOW
   debug_win_dump();
 #endif
+
   return old_focus;
 }
 

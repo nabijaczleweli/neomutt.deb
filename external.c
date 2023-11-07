@@ -46,7 +46,9 @@
 #include "external.h"
 #include "attach/lib.h"
 #include "browser/lib.h"
-#include "enter/lib.h"
+#include "complete/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "ncrypt/lib.h"
 #include "parse/lib.h"
 #include "progress/lib.h"
@@ -75,38 +77,37 @@
 static struct Buffer LastSaveFolder = { 0 };
 
 /**
- * commands_cleanup - Clean up commands globals
+ * external_cleanup - Clean up commands globals
  */
-void commands_cleanup(void)
+void external_cleanup(void)
 {
   buf_dealloc(&LastSaveFolder);
 }
 
 /**
- * ci_bounce_message - Bounce an email
+ * index_bounce_message - Bounce an email
  * @param m  Mailbox
- * @param el List of Emails to bounce
+ * @param ea Array of Emails to bounce
  */
-void ci_bounce_message(struct Mailbox *m, struct EmailList *el)
+void index_bounce_message(struct Mailbox *m, struct EmailArray *ea)
 {
-  if (!m || !el || STAILQ_EMPTY(el))
+  if (!m || !ea || ARRAY_EMPTY(ea))
     return;
 
   struct Buffer *buf = buf_pool_get();
   struct Buffer *prompt = buf_pool_get();
-  struct Buffer *scratch = NULL;
-
   struct AddressList al = TAILQ_HEAD_INITIALIZER(al);
   char *err = NULL;
   int rc;
   int msg_count = 0;
 
-  struct EmailNode *en = NULL;
-  STAILQ_FOREACH(en, el, entries)
+  struct Email **ep = NULL;
+  ARRAY_FOREACH(ep, ea)
   {
+    struct Email *e = *ep;
     /* RFC5322 mandates a From: header,
      * so warn before bouncing messages without one */
-    if (TAILQ_EMPTY(&en->email->env->from))
+    if (TAILQ_EMPTY(&e->env->from))
       mutt_error(_("Warning: message contains no From: header"));
 
     msg_count++;
@@ -117,7 +118,8 @@ void ci_bounce_message(struct Mailbox *m, struct EmailList *el)
   else
     buf_strcpy(prompt, _("Bounce tagged messages to: "));
 
-  rc = buf_get_field(buf_string(prompt), buf, MUTT_COMP_ALIAS, false, NULL, NULL, NULL);
+  rc = mw_get_field(buf_string(prompt), buf, MUTT_COMP_NO_FLAGS, HC_ALIAS,
+                    &CompleteAliasOps, NULL);
   if ((rc != 0) || buf_is_empty(buf))
     goto done;
 
@@ -140,44 +142,30 @@ void ci_bounce_message(struct Mailbox *m, struct EmailList *el)
   buf_reset(buf);
   mutt_addrlist_write(&al, buf, true);
 
-#define EXTRA_SPACE (15 + 7 + 2)
-  scratch = buf_pool_get();
-  buf_printf(scratch, ngettext("Bounce message to %s?", "Bounce messages to %s?", msg_count),
+  buf_printf(prompt, ngettext("Bounce message to %s?", "Bounce messages to %s?", msg_count),
              buf_string(buf));
 
-  const size_t width = msgwin_get_width();
-  if (mutt_strwidth(buf_string(scratch)) > (width - EXTRA_SPACE))
+  if (query_quadoption(buf_string(prompt), NeoMutt->sub, "bounce") != MUTT_YES)
   {
-    mutt_simple_format(prompt->data, prompt->dsize, 0, width - EXTRA_SPACE,
-                       JUSTIFY_LEFT, 0, scratch->data, scratch->dsize, false);
-    buf_addstr(prompt, "...?");
-  }
-  else
-  {
-    buf_copy(prompt, scratch);
-  }
-
-  const enum QuadOption c_bounce = cs_subset_quad(NeoMutt->sub, "bounce");
-  if (query_quadoption(c_bounce, buf_string(prompt)) != MUTT_YES)
-  {
-    msgwin_clear_text();
+    msgwin_clear_text(NULL);
     mutt_message(ngettext("Message not bounced", "Messages not bounced", msg_count));
     goto done;
   }
 
-  msgwin_clear_text();
+  msgwin_clear_text(NULL);
 
   struct Message *msg = NULL;
-  STAILQ_FOREACH(en, el, entries)
+  ARRAY_FOREACH(ep, ea)
   {
-    msg = mx_msg_open(m, en->email);
+    struct Email *e = *ep;
+    msg = mx_msg_open(m, e);
     if (!msg)
     {
       rc = -1;
       break;
     }
 
-    rc = mutt_bounce_message(msg->fp, m, en->email, &al, NeoMutt->sub);
+    rc = mutt_bounce_message(msg->fp, m, e, &al, NeoMutt->sub);
     mx_msg_close(m, &msg);
 
     if (rc < 0)
@@ -192,7 +180,6 @@ done:
   mutt_addrlist_clear(&al);
   buf_pool_release(&buf);
   buf_pool_release(&prompt);
-  buf_pool_release(&scratch);
 }
 
 /**
@@ -279,7 +266,7 @@ static void pipe_msg(struct Mailbox *m, struct Email *e, struct Message *msg,
 /**
  * pipe_message - Pipe message to a command
  * @param m      Mailbox
- * @param el     List of Emails to pipe
+ * @param ea     Array of Emails to pipe
  * @param cmd    Command to pipe to
  * @param decode Should the message be decrypted
  * @param print  True if this is a print job
@@ -290,31 +277,27 @@ static void pipe_msg(struct Mailbox *m, struct Email *e, struct Message *msg,
  *
  * The following code is shared between printing and piping.
  */
-static int pipe_message(struct Mailbox *m, struct EmailList *el, const char *cmd,
+static int pipe_message(struct Mailbox *m, struct EmailArray *ea, const char *cmd,
                         bool decode, bool print, bool split, const char *sep)
 {
-  if (!m || !el)
-    return 1;
-
-  struct EmailNode *en = STAILQ_FIRST(el);
-  if (!en)
+  if (!m || !ea || ARRAY_EMPTY(ea))
     return 1;
 
   int rc = 0;
   pid_t pid;
   FILE *fp_out = NULL;
 
-  if (!STAILQ_NEXT(en, entries))
+  if (ARRAY_SIZE(ea) == 1)
   {
+    struct Email *e = *ARRAY_GET(ea, 0);
     /* handle a single message */
-    mutt_message_hook(m, en->email, MUTT_MESSAGE_HOOK);
+    mutt_message_hook(m, e, MUTT_MESSAGE_HOOK);
 
-    struct Message *msg = mx_msg_open(m, en->email);
+    struct Message *msg = mx_msg_open(m, e);
     if (msg && (WithCrypto != 0) && decode)
     {
-      mutt_parse_mime_message(en->email, msg->fp);
-      if ((en->email->security & SEC_ENCRYPT) &&
-          !crypt_valid_passphrase(en->email->security))
+      mutt_parse_mime_message(e, msg->fp);
+      if ((e->security & SEC_ENCRYPT) && !crypt_valid_passphrase(e->security))
       {
         mx_msg_close(m, &msg);
         return 1;
@@ -322,7 +305,7 @@ static int pipe_message(struct Mailbox *m, struct EmailList *el, const char *cmd
     }
     mutt_endwin();
 
-    pid = filter_create(cmd, &fp_out, NULL, NULL);
+    pid = filter_create(cmd, &fp_out, NULL, NULL, EnvList);
     if (pid < 0)
     {
       mutt_perror(_("Can't create filter process"));
@@ -331,7 +314,7 @@ static int pipe_message(struct Mailbox *m, struct EmailList *el, const char *cmd
     }
 
     OptKeepQuiet = true;
-    pipe_msg(m, en->email, msg, fp_out, decode, print);
+    pipe_msg(m, e, msg, fp_out, decode, print);
     mx_msg_close(m, &msg);
     mutt_file_fclose(&fp_out);
     rc = filter_wait(pid);
@@ -342,17 +325,18 @@ static int pipe_message(struct Mailbox *m, struct EmailList *el, const char *cmd
     /* handle tagged messages */
     if ((WithCrypto != 0) && decode)
     {
-      STAILQ_FOREACH(en, el, entries)
+      struct Email **ep = NULL;
+      ARRAY_FOREACH(ep, ea)
       {
-        struct Message *msg = mx_msg_open(m, en->email);
+        struct Email *e = *ep;
+        struct Message *msg = mx_msg_open(m, e);
         if (msg)
         {
-          mutt_parse_mime_message(en->email, msg->fp);
-          mutt_message_hook(m, en->email, MUTT_MESSAGE_HOOK);
+          mutt_parse_mime_message(e, msg->fp);
+          mutt_message_hook(m, e, MUTT_MESSAGE_HOOK);
           mx_msg_close(m, &msg);
         }
-        if ((en->email->security & SEC_ENCRYPT) &&
-            !crypt_valid_passphrase(en->email->security))
+        if ((e->security & SEC_ENCRYPT) && !crypt_valid_passphrase(e->security))
         {
           return 1;
         }
@@ -361,18 +345,20 @@ static int pipe_message(struct Mailbox *m, struct EmailList *el, const char *cmd
 
     if (split)
     {
-      STAILQ_FOREACH(en, el, entries)
+      struct Email **ep = NULL;
+      ARRAY_FOREACH(ep, ea)
       {
-        mutt_message_hook(m, en->email, MUTT_MESSAGE_HOOK);
+        struct Email *e = *ep;
+        mutt_message_hook(m, e, MUTT_MESSAGE_HOOK);
         mutt_endwin();
-        pid = filter_create(cmd, &fp_out, NULL, NULL);
+        pid = filter_create(cmd, &fp_out, NULL, NULL, EnvList);
         if (pid < 0)
         {
           mutt_perror(_("Can't create filter process"));
           return 1;
         }
         OptKeepQuiet = true;
-        pipe_msg(m, en->email, NULL, fp_out, decode, print);
+        pipe_msg(m, e, NULL, fp_out, decode, print);
         /* add the message separator */
         if (sep)
           fputs(sep, fp_out);
@@ -385,17 +371,19 @@ static int pipe_message(struct Mailbox *m, struct EmailList *el, const char *cmd
     else
     {
       mutt_endwin();
-      pid = filter_create(cmd, &fp_out, NULL, NULL);
+      pid = filter_create(cmd, &fp_out, NULL, NULL, EnvList);
       if (pid < 0)
       {
         mutt_perror(_("Can't create filter process"));
         return 1;
       }
       OptKeepQuiet = true;
-      STAILQ_FOREACH(en, el, entries)
+      struct Email **ep = NULL;
+      ARRAY_FOREACH(ep, ea)
       {
-        mutt_message_hook(m, en->email, MUTT_MESSAGE_HOOK);
-        pipe_msg(m, en->email, NULL, fp_out, decode, print);
+        struct Email *e = *ep;
+        mutt_message_hook(m, e, MUTT_MESSAGE_HOOK);
+        pipe_msg(m, e, NULL, fp_out, decode, print);
         /* add the message separator */
         if (sep)
           fputs(sep, fp_out);
@@ -416,17 +404,17 @@ static int pipe_message(struct Mailbox *m, struct EmailList *el, const char *cmd
 /**
  * mutt_pipe_message - Pipe a message
  * @param m  Mailbox
- * @param el List of Emails to pipe
+ * @param ea Array of Emails to pipe
  */
-void mutt_pipe_message(struct Mailbox *m, struct EmailList *el)
+void mutt_pipe_message(struct Mailbox *m, struct EmailArray *ea)
 {
-  if (!m || !el)
+  if (!m || !ea)
     return;
 
   struct Buffer *buf = buf_pool_get();
 
-  if (buf_get_field(_("Pipe to command: "), buf, MUTT_COMP_FILE_SIMPLE, false,
-                    NULL, NULL, NULL) != 0)
+  if (mw_get_field(_("Pipe to command: "), buf, MUTT_COMP_NO_FLAGS,
+                   HC_EXT_COMMAND, &CompleteFileOps, NULL) != 0)
   {
     goto cleanup;
   }
@@ -438,7 +426,7 @@ void mutt_pipe_message(struct Mailbox *m, struct EmailList *el)
   const bool c_pipe_decode = cs_subset_bool(NeoMutt->sub, "pipe_decode");
   const bool c_pipe_split = cs_subset_bool(NeoMutt->sub, "pipe_split");
   const char *const c_pipe_sep = cs_subset_string(NeoMutt->sub, "pipe_sep");
-  pipe_message(m, el, buf_string(buf), c_pipe_decode, false, c_pipe_split, c_pipe_sep);
+  pipe_message(m, ea, buf_string(buf), c_pipe_decode, false, c_pipe_split, c_pipe_sep);
 
 cleanup:
   buf_pool_release(&buf);
@@ -447,11 +435,11 @@ cleanup:
 /**
  * mutt_print_message - Print a message
  * @param m  Mailbox
- * @param el List of Emails to print
+ * @param ea Array of Emails to print
  */
-void mutt_print_message(struct Mailbox *m, struct EmailList *el)
+void mutt_print_message(struct Mailbox *m, struct EmailArray *ea)
 {
-  if (!m || !el)
+  if (!m || !ea)
     return;
 
   const enum QuadOption c_print = cs_subset_quad(NeoMutt->sub, "print");
@@ -462,22 +450,16 @@ void mutt_print_message(struct Mailbox *m, struct EmailList *el)
     return;
   }
 
-  int msg_count = 0;
-  struct EmailNode *en = NULL;
-  STAILQ_FOREACH(en, el, entries)
-  {
-    msg_count++;
-  }
-
-  if (query_quadoption(c_print, (msg_count == 1) ? _("Print message?") :
-                                                   _("Print tagged messages?")) != MUTT_YES)
+  int msg_count = ARRAY_SIZE(ea);
+  const char *msg = ngettext("Print message?", "Print tagged messages?", msg_count);
+  if (query_quadoption(msg, NeoMutt->sub, "print") != MUTT_YES)
   {
     return;
   }
 
   const bool c_print_decode = cs_subset_bool(NeoMutt->sub, "print_decode");
   const bool c_print_split = cs_subset_bool(NeoMutt->sub, "print_split");
-  if (pipe_message(m, el, c_print_command, c_print_decode, true, c_print_split, "\f") == 0)
+  if (pipe_message(m, ea, c_print_command, c_print_decode, true, c_print_split, "\f") == 0)
   {
     mutt_message(ngettext("Message printed", "Messages printed", msg_count));
   }
@@ -497,14 +479,13 @@ bool mutt_select_sort(bool reverse)
 {
   enum SortType sort = SORT_DATE;
 
-  switch (mutt_multi_choice(
-      reverse ?
-          /* L10N: The highlighted letters must match the "Sort" options */
-          _("Rev-Sort (d)ate,(f)rm,(r)ecv,(s)ubj,t(o),(t)hread,(u)nsort,si(z)e,s(c)ore,s(p)am,(l)abel?") :
-          /* L10N: The highlighted letters must match the "Rev-Sort" options */
-          _("Sort (d)ate,(f)rm,(r)ecv,(s)ubj,t(o),(t)hread,(u)nsort,si(z)e,s(c)ore,s(p)am,(l)abel?"),
-      /* L10N: These must match the highlighted letters from "Sort" and "Rev-Sort" */
-      _("dfrsotuzcpl")))
+  switch (mw_multi_choice(reverse ?
+                              /* L10N: The highlighted letters must match the "Sort" options */
+                              _("Rev-Sort (d)ate,(f)rm,(r)ecv,(s)ubj,t(o),(t)hread,(u)nsort,si(z)e,s(c)ore,s(p)am,(l)abel?") :
+                              /* L10N: The highlighted letters must match the "Rev-Sort" options */
+                              _("Sort (d)ate,(f)rm,(r)ecv,(s)ubj,t(o),(t)hread,(u)nsort,si(z)e,s(c)ore,s(p)am,(l)abel?"),
+                          /* L10N: These must match the highlighted letters from "Sort" and "Rev-Sort" */
+                          _("dfrsotuzcpl")))
   {
     case -1: /* abort - don't resort */
       return false;
@@ -602,8 +583,8 @@ bool mutt_shell_escape(void)
   bool rc = false;
   struct Buffer *buf = buf_pool_get();
 
-  if (buf_get_field(_("Shell command: "), buf, MUTT_COMP_FILE_SIMPLE, false,
-                    NULL, NULL, NULL) != 0)
+  if (mw_get_field(_("Shell command: "), buf, MUTT_COMP_NO_FLAGS,
+                   HC_EXT_COMMAND, &CompleteFileOps, NULL) != 0)
   {
     goto done;
   }
@@ -619,7 +600,7 @@ bool mutt_shell_escape(void)
     goto done;
   }
 
-  msgwin_clear_text();
+  msgwin_clear_text(NULL);
   mutt_endwin();
   fflush(stdout);
   int rc2 = mutt_system(buf_string(buf));
@@ -646,7 +627,8 @@ void mutt_enter_command(void)
 
   window_redraw(NULL);
   /* if enter is pressed after : with no command, just return */
-  if ((buf_get_field(":", buf, MUTT_COMP_COMMAND, false, NULL, NULL, NULL) != 0) ||
+  if ((mw_get_field(":", buf, MUTT_COMP_NO_FLAGS, HC_NEO_COMMAND,
+                    &CompleteCommandOps, NULL) != 0) ||
       buf_is_empty(buf))
   {
     goto done;
@@ -745,7 +727,7 @@ static void set_copy_flags(struct Email *e, enum MessageTransformOpt transform_o
 }
 
 /**
- * mutt_save_message_ctx - Save a message to a given mailbox
+ * mutt_save_message_mbox - Save a message to a given mailbox
  * @param m_src            Mailbox to copy from
  * @param e                Email
  * @param save_opt         Copy or move, e.g. #SAVE_MOVE
@@ -754,8 +736,8 @@ static void set_copy_flags(struct Email *e, enum MessageTransformOpt transform_o
  * @retval  0 Success
  * @retval -1 Error
  */
-int mutt_save_message_ctx(struct Mailbox *m_src, struct Email *e, enum MessageSaveOpt save_opt,
-                          enum MessageTransformOpt transform_opt, struct Mailbox *m_dst)
+int mutt_save_message_mbox(struct Mailbox *m_src, struct Email *e, enum MessageSaveOpt save_opt,
+                           enum MessageTransformOpt transform_opt, struct Mailbox *m_dst)
 {
   CopyMessageFlags cmflags = MUTT_CM_NO_FLAGS;
   CopyHeaderFlags chflags = CH_NO_FLAGS;
@@ -789,34 +771,28 @@ int mutt_save_message_ctx(struct Mailbox *m_src, struct Email *e, enum MessageSa
 /**
  * mutt_save_message - Save an email
  * @param m                Mailbox
- * @param el               List of Emails to save
+ * @param ea               Array of Emails to save
  * @param save_opt         Copy or move, e.g. #SAVE_MOVE
  * @param transform_opt    Transformation, e.g. #TRANSFORM_DECRYPT
  * @retval  0 Copy/save was successful
  * @retval -1 Error/abort
  */
-int mutt_save_message(struct Mailbox *m, struct EmailList *el,
+int mutt_save_message(struct Mailbox *m, struct EmailArray *ea,
                       enum MessageSaveOpt save_opt, enum MessageTransformOpt transform_opt)
 {
-  if (!el || STAILQ_EMPTY(el))
+  if (!ea || ARRAY_EMPTY(ea))
     return -1;
 
   int rc = -1;
   int tagged_progress_count = 0;
-  unsigned int msg_count = 0;
+  unsigned int msg_count = ARRAY_SIZE(ea);
   struct Mailbox *m_save = NULL;
 
   struct Buffer *buf = buf_pool_get();
   struct stat st = { 0 };
-  struct EmailNode *en = NULL;
+  struct Email *e_cur = *ARRAY_GET(ea, 0);
 
-  STAILQ_FOREACH(en, el, entries)
-  {
-    msg_count++;
-  }
-  en = STAILQ_FIRST(el);
-
-  const SecurityFlags security_flags = WithCrypto ? en->email->security : SEC_NO_FLAGS;
+  const SecurityFlags security_flags = WithCrypto ? e_cur->security : SEC_NO_FLAGS;
   const bool is_passphrase_needed = security_flags & SEC_ENCRYPT;
 
   const char *prompt = NULL;
@@ -864,12 +840,12 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
       break;
   }
 
-  mutt_message_hook(m, en->email, MUTT_MESSAGE_HOOK);
-  mutt_default_save(buf->data, buf->dsize, en->email);
+  mutt_message_hook(m, e_cur, MUTT_MESSAGE_HOOK);
+  mutt_default_save(buf->data, buf->dsize, e_cur);
   buf_fix_dptr(buf);
   buf_pretty_mailbox(buf);
 
-  if (buf_enter_fname(prompt, buf, false, NULL, false, NULL, NULL, MUTT_SEL_NO_FLAGS) == -1)
+  if (mw_enter_fname(prompt, buf, false, NULL, false, NULL, NULL, MUTT_SEL_NO_FLAGS) == -1)
   {
     goto cleanup;
   }
@@ -910,13 +886,25 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
   enum MailboxType mailbox_type = imap_path_probe(buf_string(buf), NULL);
   if ((m->type == MUTT_IMAP) && (transform_opt == TRANSFORM_NONE) && (mailbox_type == MUTT_IMAP))
   {
-    rc = imap_copy_messages(m, el, buf_string(buf), save_opt);
+    rc = imap_copy_messages(m, ea, buf_string(buf), save_opt);
     switch (rc)
     {
       /* success */
       case 0:
         mutt_clear_error();
         rc = 0;
+        if (save_opt == SAVE_MOVE)
+        {
+          const bool c_delete_untag = cs_subset_bool(NeoMutt->sub, "delete_untag");
+          if (c_delete_untag)
+          {
+            struct Email **ep = NULL;
+            ARRAY_FOREACH(ep, ea)
+            {
+              mutt_set_flag(m, *ep, MUTT_TAG, false, true);
+            }
+          }
+        }
         goto cleanup;
       /* non-fatal error: continue to fetch/append */
       case 1:
@@ -958,7 +946,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
 #endif
   if (msg_count == 1)
   {
-    rc = mutt_save_message_ctx(m, en->email, save_opt, transform_opt, m_save);
+    rc = mutt_save_message_mbox(m, e_cur, save_opt, transform_opt, m_save);
     if (rc != 0)
     {
       mx_mbox_close(m_save);
@@ -969,13 +957,13 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
     if (m_comp)
     {
       m_comp->msg_count++;
-      if (!en->email->read)
+      if (!e_cur->read)
       {
         m_comp->msg_unread++;
-        if (!en->email->old)
+        if (!e_cur->old)
           m_comp->msg_new++;
       }
-      if (en->email->flagged)
+      if (e_cur->flagged)
         m_comp->msg_flagged++;
     }
 #endif
@@ -989,17 +977,19 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
       nm_db_longrun_init(m, true);
 #endif
     struct Progress *progress = progress_new(progress_msg, MUTT_PROGRESS_WRITE, msg_count);
-    STAILQ_FOREACH(en, el, entries)
+    struct Email **ep = NULL;
+    ARRAY_FOREACH(ep, ea)
     {
+      struct Email *e = *ep;
       progress_update(progress, ++tagged_progress_count, -1);
-      mutt_message_hook(m, en->email, MUTT_MESSAGE_HOOK);
-      rc = mutt_save_message_ctx(m, en->email, save_opt, transform_opt, m_save);
+      mutt_message_hook(m, e, MUTT_MESSAGE_HOOK);
+      rc = mutt_save_message_mbox(m, e, save_opt, transform_opt, m_save);
       if (rc != 0)
         break;
 #ifdef USE_COMP_MBOX
       if (m_comp)
       {
-        struct Email *e2 = en->email;
+        struct Email *e2 = e;
         m_comp->msg_count++;
         if (!e2->read)
         {
@@ -1033,7 +1023,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailList *el,
   m_save->append = old_append;
 
   if (need_mailbox_cleanup)
-    mutt_mailbox_cleanup(buf_string(buf), &st);
+    mailbox_restore_timestamp(buf_string(buf), &st);
 
   mutt_clear_error();
   rc = 0;
@@ -1113,7 +1103,7 @@ bool mutt_edit_content_type(struct Email *e, struct Body *b, FILE *fp)
     }
   }
 
-  if ((buf_get_field("Content-Type: ", buf, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0) ||
+  if ((mw_get_field("Content-Type: ", buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) != 0) ||
       buf_is_empty(buf))
   {
     goto done;
@@ -1136,7 +1126,7 @@ bool mutt_edit_content_type(struct Email *e, struct Body *b, FILE *fp)
   {
     buf_printf(tmp, _("Convert to %s upon sending?"),
                mutt_param_get(&b->parameter, "charset"));
-    enum QuadOption ans = mutt_yesorno(buf_string(tmp), b->noconv ? MUTT_NO : MUTT_YES);
+    enum QuadOption ans = query_yesorno(buf_string(tmp), b->noconv ? MUTT_NO : MUTT_YES);
     if (ans != MUTT_ABORT)
       b->noconv = (ans == MUTT_NO);
   }
@@ -1224,17 +1214,19 @@ static bool check_traditional_pgp(struct Mailbox *m, struct Email *e)
 /**
  * mutt_check_traditional_pgp - Check if a message has inline PGP content
  * @param m  Mailbox
- * @param el List of Emails to check
+ * @param ea Array of Emails to check
  * @retval true Message contains inline PGP content
  */
-bool mutt_check_traditional_pgp(struct Mailbox *m, struct EmailList *el)
+bool mutt_check_traditional_pgp(struct Mailbox *m, struct EmailArray *ea)
 {
   bool rc = false;
-  struct EmailNode *en = NULL;
-  STAILQ_FOREACH(en, el, entries)
+
+  struct Email **ep = NULL;
+  ARRAY_FOREACH(ep, ea)
   {
-    if (!(en->email->security & PGP_TRADITIONAL_CHECKED))
-      rc = check_traditional_pgp(m, en->email) || rc;
+    struct Email *e = *ep;
+    if (!(e->security & PGP_TRADITIONAL_CHECKED))
+      rc = check_traditional_pgp(m, e) || rc;
   }
 
   return rc;

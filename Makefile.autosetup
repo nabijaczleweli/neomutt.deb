@@ -65,25 +65,25 @@ default:	all
 # neomutt
 NEOMUTT=	neomutt$(EXEEXT)
 NEOMUTTOBJS=	alternates.o commands.o conststrings.o copy.o editmsg.o \
-		enriched.o external.o flags.o functions.o git_ver.o globals.o \
-		handler.o hdrline.o help.o hook.o init.o keymap.o mailcap.o \
+		enriched.o external.o flags.o git_ver.o globals.o \
+		handler.o hdrline.o help.o hook.o init.o mailcap.o \
 		maillist.o main.o muttlib.o mutt_account.o mutt_body.o \
-		mutt_config.o mutt_header.o mutt_history.o mutt_logging.o \
-		mutt_mailbox.o mutt_signal.o mutt_socket.o mutt_thread.o \
-		mview.o mx.o opcodes.o recvcmd.o resize.o rfc3676.o \
-		score.o sort.o status.o subjectrx.o system.o version.o
+		mutt_config.o mutt_header.o mutt_logging.o mutt_mailbox.o \
+		mutt_signal.o mutt_socket.o mutt_thread.o mview.o mx.o \
+		recvcmd.o rfc3676.o score.o sort.o status.o subjectrx.o \
+		system.o version.o
 
+@if USE_INOTIFY
+NEOMUTTOBJS+=	monitor.o
+@endif
+@if USE_LUA
+NEOMUTTOBJS+=	mutt_lua.o
+@endif
 @if !HAVE_TIMEGM
 NEOMUTTOBJS+=	timegm.o
 @endif
 @if !HAVE_WCSCASECMP
 NEOMUTTOBJS+=	wcscasecmp.o
-@endif
-@if USE_LUA
-NEOMUTTOBJS+=	mutt_lua.o
-@endif
-@if USE_INOTIFY
-NEOMUTTOBJS+=	monitor.o
 @endif
 
 CLEANFILES+=	$(NEOMUTT) $(NEOMUTTOBJS)
@@ -92,7 +92,8 @@ ALLOBJS+=	$(NEOMUTTOBJS)
 ###############################################################################
 # libaddress
 LIBADDRESS=	libaddress.a
-LIBADDRESSOBJS=	address/address.o address/group.o address/idna.o
+LIBADDRESSOBJS=	address/address.o address/config_type.o address/group.o \
+		address/idna.o
 CLEANFILES+=	$(LIBADDRESS) $(LIBADDRESSOBJS)
 ALLOBJS+=	$(LIBADDRESSOBJS)
 
@@ -105,9 +106,9 @@ $(PWD)/address:
 ###############################################################################
 # libalias
 LIBALIAS=	libalias.a
-LIBALIASOBJS=	alias/alias.o alias/array.o alias/commands.o alias/config.o \
-		alias/dlg_alias.o alias/dlg_query.o alias/functions.o \
-		alias/gui.o alias/reverse.o alias/sort.o
+LIBALIASOBJS=	alias/alias.o alias/array.o alias/commands.o alias/complete.o \
+		alias/config.o alias/dlg_alias.o alias/dlg_query.o \
+		alias/functions.o alias/gui.o alias/reverse.o alias/sort.o
 CLEANFILES+=	$(LIBALIAS) $(LIBALIASOBJS)
 ALLOBJS+=	$(LIBALIASOBJS)
 
@@ -136,9 +137,9 @@ $(PWD)/attach:
 # libautocrypt
 @if USE_AUTOCRYPT
 LIBAUTOCRYPT=	libautocrypt.a
-LIBAUTOCRYPTOBJS=autocrypt/autocrypt.o autocrypt/dlg_autocrypt.o \
-		 autocrypt/config.o autocrypt/db.o autocrypt/functions.o \
-		 autocrypt/gpgme.o autocrypt/schema.o
+LIBAUTOCRYPTOBJS=autocrypt/autocrypt.o autocrypt/config.o autocrypt/db.o \
+		autocrypt/dlg_autocrypt.o autocrypt/functions.o \
+		autocrypt/gpgme.o autocrypt/schema.o
 CLEANFILES+=	$(LIBAUTOCRYPT) $(LIBAUTOCRYPTOBJS)
 ALLOBJS+=	$(LIBAUTOCRYPTOBJS)
 
@@ -165,8 +166,8 @@ $(PWD)/bcache:
 ###############################################################################
 # libbrowser
 LIBBROWSER=	libbrowser.a
-LIBBROWSEROBJS=	browser/browser.o browser/config.o browser/functions.o \
-		browser/private_data.o browser/sort.o
+LIBBROWSEROBJS=	browser/complete.o browser/config.o browser/dlg_browser.o \
+		browser/functions.o browser/private_data.o browser/sort.o
 CLEANFILES+=	$(LIBBROWSER) $(LIBBROWSEROBJS)
 ALLOBJS+=	$(LIBBROWSEROBJS)
 
@@ -180,7 +181,8 @@ $(PWD)/browser:
 # libcolor
 LIBCOLOR=	libcolor.a
 LIBCOLOROBJS=	color/ansi.o color/attr.o color/color.o color/command.o \
-		color/curses.o color/merged.o color/notify.o color/quoted.o \
+		color/curses.o color/dump.o color/merged.o color/notify.o \
+		color/parse_ansi.o color/parse_color.o color/quoted.o \
 		color/regex.o color/simple.o
 @if USE_DEBUG_COLOR
 LIBCOLOROBJS+=	color/debug.o
@@ -224,7 +226,7 @@ $(PWD)/compmbox:
 # libcompose
 LIBCOMPOSE=	libcompose.a
 LIBCOMPOSEOBJS=	compose/attach.o compose/attach_data.o compose/cbar.o \
-		compose/cbar_data.o compose/compose.o compose/config.o \
+		compose/cbar_data.o compose/config.o compose/dlg_compose.o \
 		compose/functions.o compose/shared_data.o
 
 CLEANFILES+=	$(LIBCOMPOSE) $(LIBCOMPOSEOBJS)
@@ -263,11 +265,11 @@ $(PWD)/compress:
 ###############################################################################
 # libconfig
 LIBCONFIG=	libconfig.a
-LIBCONFIGOBJS=	config/address.o config/bool.o config/cache.o config/charset.o \
-		config/dump.o config/enum.o config/helpers.o config/long.o \
-		config/mbtable.o config/myvar.o config/number.o config/path.o \
-		config/quad.o config/regex.o config/set.o config/slist.o \
-		config/sort.o config/string.o config/subset.o
+LIBCONFIGOBJS=	config/bool.o config/charset.o config/dump.o config/enum.o \
+		config/helpers.o config/long.o config/mbtable.o config/myvar.o \
+		config/number.o config/path.o config/quad.o config/regex.o \
+		config/set.o config/slist.o config/sort.o config/string.o \
+		config/subset.o
 CLEANFILES+=	$(LIBCONFIG) $(LIBCONFIGOBJS)
 ALLOBJS+=	$(LIBCONFIGOBJS)
 
@@ -313,7 +315,7 @@ $(PWD)/conn:
 ###############################################################################
 # libconvert
 LIBCONVERT=	libconvert.a
-LIBCONVERTOBJS=convert/convert.o convert/content_info.o
+LIBCONVERTOBJS=	convert/content_info.o convert/convert.o
 CLEANFILES+=	$(LIBCONVERT) $(LIBCONVERTOBJS)
 ALLOBJS+=	$(LIBCONVERTOBJS)
 
@@ -326,8 +328,9 @@ $(PWD)/convert:
 ###############################################################################
 # libcore
 LIBCORE=	libcore.a
-LIBCOREOBJS=	core/account.o core/command.o core/dispatcher.o core/mailbox.o \
-		core/neomutt.o core/tmp.o
+LIBCOREOBJS=	core/account.o core/command.o core/config_cache.o \
+		core/dispatcher.o core/mailbox.o core/message.o core/neomutt.o \
+		core/tmp.o
 CLEANFILES+=	$(LIBCORE) $(LIBCOREOBJS)
 ALLOBJS+=	$(LIBCOREOBJS)
 
@@ -339,7 +342,7 @@ $(PWD)/core:
 
 ###############################################################################
 # libdebug
-@if HAVE_LIBUNWIND
+@if USE_DEBUG_BACKTRACE
 LIBDEBUGOBJS+=	debug/backtrace.o
 @endif
 @if USE_DEBUG_COLOR
@@ -351,14 +354,20 @@ LIBDEBUGOBJS+=	debug/email.o
 @if USE_DEBUG_GRAPHVIZ
 LIBDEBUGOBJS+=	debug/graphviz.o
 @endif
+@if USE_DEBUG_KEYMAP
+LIBDEBUGOBJS+=	debug/keymap.o
+@endif
+@if USE_DEBUG_LOGGING
+LIBDEBUGOBJS+=	debug/logging.o
+@endif
 @if USE_DEBUG_NOTIFY
 LIBDEBUGOBJS+=	debug/notify.o
 @endif
 @if USE_DEBUG_WINDOW
 LIBDEBUGOBJS+=	debug/window.o
 @endif
-@if HAVE_LIBUNWIND || USE_DEBUG_COLOR || USE_DEBUG_EMAIL || USE_DEBUG_GRAPHVIZ || USE_DEBUG_NOTIFY || USE_DEBUG_WINDOW
-LIBDEBUGOBJS+=	debug/common.o
+@if USE_DEBUG_BACKTRACE || USE_DEBUG_COLOR || USE_DEBUG_EMAIL || USE_DEBUG_GRAPHVIZ || USE_DEBUG_KEYMAP || USE_DEBUG_LOGGING || USE_DEBUG_NAMES || USE_DEBUG_NOTIFY || USE_DEBUG_WINDOW
+LIBDEBUGOBJS+=	debug/common.o debug/names.o
 LIBDEBUG=	libdebug.a
 CLEANFILES+=	$(LIBDEBUG) $(LIBDEBUGOBJS)
 ALLOBJS+=	$(LIBDEBUGOBJS)
@@ -371,12 +380,25 @@ $(PWD)/debug:
 @endif
 
 ###############################################################################
+# libeditor
+LIBEDITOR=	libeditor.a
+LIBEDITOROBJS=	editor/enter.o editor/functions.o editor/state.o editor/window.o
+CLEANFILES+=	$(LIBEDITOR) $(LIBEDITOROBJS)
+ALLOBJS+=	$(LIBEDITOROBJS)
+
+$(LIBEDITOR): $(PWD)/editor $(LIBEDITOROBJS)
+	$(AR) cr $@ $(LIBEDITOROBJS)
+	$(RANLIB) $@
+$(PWD)/editor:
+	$(MKDIR_P) $(PWD)/editor
+
+###############################################################################
 # libemail
 LIBEMAIL=	libemail.a
-LIBEMAILOBJS=	email/body.o email/email.o email/envelope.o \
-		email/from.o email/globals.o email/mime.o email/parameter.o \
-		email/parse.o email/rfc2047.o email/rfc2231.o email/tags.o \
-		email/thread.o email/url.o
+LIBEMAILOBJS=	email/body.o email/email.o email/envelope.o email/from.o \
+		email/globals.o email/mime.o email/parameter.o email/parse.o \
+		email/rfc2047.o email/rfc2231.o email/tags.o email/thread.o \
+		email/url.o
 CLEANFILES+=	$(LIBEMAIL) $(LIBEMAILOBJS)
 ALLOBJS+=	$(LIBEMAILOBJS)
 
@@ -387,22 +409,9 @@ $(PWD)/email:
 	$(MKDIR_P) $(PWD)/email
 
 ###############################################################################
-# libenter
-LIBENTER=	libenter.a
-LIBENTEROBJS=	enter/enter.o enter/functions.o enter/state.o enter/window.o
-CLEANFILES+=	$(LIBENTER) $(LIBENTEROBJS)
-ALLOBJS+=	$(LIBENTEROBJS)
-
-$(LIBENTER): $(PWD)/enter $(LIBENTEROBJS)
-	$(AR) cr $@ $(LIBENTEROBJS)
-	$(RANLIB) $@
-$(PWD)/enter:
-	$(MKDIR_P) $(PWD)/enter
-
-###############################################################################
 # libenvelope
 LIBENVELOPE=	libenvelope.a
-LIBENVELOPEOBJS= envelope/functions.o envelope/wdata.o envelope/window.o
+LIBENVELOPEOBJS=envelope/functions.o envelope/wdata.o envelope/window.o
 CLEANFILES+=	$(LIBENVELOPE) $(LIBENVELOPEOBJS)
 ALLOBJS+=	$(LIBENVELOPEOBJS)
 
@@ -415,9 +424,11 @@ $(PWD)/envelope:
 ###############################################################################
 # libgui
 LIBGUI=		libgui.a
-LIBGUIOBJS=	gui/curs_lib.o gui/dialog.o gui/global.o gui/msgcont.o gui/msgwin.o \
-		gui/mutt_curses.o gui/mutt_window.o gui/reflow.o gui/rootwin.o \
-		gui/sbar.o gui/simple.o gui/terminal.o
+LIBGUIOBJS=	gui/curs_lib.o gui/dialog.o gui/functions.o gui/global.o \
+		gui/msgcont.o gui/msgwin.o gui/msgwin_wdata.o \
+		gui/mutt_curses.o gui/mutt_window.o gui/opcodes.o gui/reflow.o \
+		gui/resize.o gui/rootwin.o gui/sbar.o gui/simple.o \
+		gui/terminal.o
 CLEANFILES+=	$(LIBGUI) $(LIBGUIOBJS)
 ALLOBJS+=	$(LIBGUIOBJS)
 
@@ -473,10 +484,10 @@ $(PWD)/history:
 ###############################################################################
 # libimap
 LIBIMAP=	libimap.a
-LIBIMAPOBJS=	imap/auth.o imap/auth_login.o imap/auth_oauth.o \
+LIBIMAPOBJS=	imap/adata.o imap/auth.o imap/auth_login.o imap/auth_oauth.o \
 		imap/auth_plain.o imap/browse.o imap/command.o imap/config.o \
-		imap/imap.o imap/message.o imap/msn.o imap/search.o \
-		imap/adata.o imap/edata.o imap/mdata.o imap/utf7.o imap/util.o
+		imap/edata.o imap/imap.o imap/mdata.o imap/message.o \
+		imap/msg_set.o imap/msn.o imap/search.o imap/utf7.o imap/util.o
 @if USE_GSS
 LIBIMAPOBJS+=	imap/auth_gss.o
 @endif
@@ -512,6 +523,19 @@ $(LIBINDEX): $(PWD)/index $(LIBINDEXOBJS)
 	$(RANLIB) $@
 $(PWD)/index:
 	$(MKDIR_P) $(PWD)/index
+
+###############################################################################
+# libkey
+LIBKEY=		libkey.a
+LIBKEYOBJS=	key/dump.o key/get.o key/init.o key/lib.o key/parse.o
+CLEANFILES+=	$(LIBKEY) $(LIBKEYOBJS)
+ALLOBJS+=	$(LIBKEYOBJS)
+
+$(LIBKEY): $(PWD)/key $(LIBKEYOBJS)
+	$(AR) cr $@ $(LIBKEYOBJS)
+	$(RANLIB) $@
+$(PWD)/key:
+	$(MKDIR_P) $(PWD)/key
 
 ###############################################################################
 # libmaildir
@@ -560,10 +584,9 @@ $(PWD)/menu:
 # libmixmaster
 @if MIXMASTER
 LIBMIXMASTER=	libmixmaster.a
-LIBMIXMASTEROBJS=	mixmaster/chain_data.o mixmaster/dlg_mixmaster.o \
+LIBMIXMASTEROBJS=mixmaster/chain_data.o mixmaster/dlg_mixmaster.o \
 		mixmaster/functions.o mixmaster/mixmaster.o \
-		mixmaster/remailer.o mixmaster/win_chain.o \
-		mixmaster/win_hosts.o
+		mixmaster/remailer.o mixmaster/win_chain.o mixmaster/win_hosts.o
 CLEANFILES+=	$(LIBMIXMASTER) $(LIBMIXMASTEROBJS)
 ALLOBJS+=	$(LIBMIXMASTEROBJS)
 
@@ -597,8 +620,8 @@ $(PWD)/mutt:
 ###############################################################################
 # libncrypt
 LIBNCRYPT=	libncrypt.a
-LIBNCRYPTOBJS=	ncrypt/config.o ncrypt/crypt.o ncrypt/cryptglue.o \
-		ncrypt/crypt_mod.o
+LIBNCRYPTOBJS=	ncrypt/config.o ncrypt/crypt.o ncrypt/crypt_mod.o \
+		ncrypt/cryptglue.o ncrypt/functions.o
 @if HAVE_PKG_GPGME
 LIBNCRYPTOBJS+=	ncrypt/crypt_gpgme.o ncrypt/dlg_gpgme.o \
 		ncrypt/gpgme_functions.o ncrypt/crypt_mod_pgp_gpgme.o \
@@ -626,8 +649,8 @@ $(PWD)/ncrypt:
 ###############################################################################
 # libnntp
 LIBNNTP=	libnntp.a
-LIBNNTPOBJS=	nntp/browse.o nntp/config.o nntp/complete.o nntp/newsrc.o \
-		nntp/nntp.o nntp/adata.o nntp/edata.o nntp/mdata.o
+LIBNNTPOBJS=	nntp/adata.o nntp/browse.o nntp/complete.o nntp/config.o \
+		nntp/edata.o nntp/mdata.o nntp/newsrc.o nntp/nntp.o
 CLEANFILES+=	$(LIBNNTP) $(LIBNNTPOBJS)
 ALLOBJS+=	$(LIBNNTPOBJS)
 
@@ -641,8 +664,8 @@ $(PWD)/nntp:
 # libnotmuch
 @if USE_NOTMUCH
 LIBNOTMUCH=	libnotmuch.a
-LIBNOTMUCHOBJS=	notmuch/config.o notmuch/db.o notmuch/notmuch.o \
-		notmuch/adata.o notmuch/edata.o notmuch/mdata.o \
+LIBNOTMUCHOBJS=	notmuch/adata.o notmuch/complete.o notmuch/config.o \
+		notmuch/db.o notmuch/edata.o notmuch/mdata.o notmuch/notmuch.o \
 		notmuch/query.o notmuch/tag.o
 CLEANFILES+=	$(LIBNOTMUCH) $(LIBNOTMUCHOBJS)
 ALLOBJS+=	$(LIBNOTMUCHOBJS)
@@ -685,9 +708,10 @@ $(PWD)/parse:
 ###############################################################################
 # libpattern
 LIBPATTERN=	libpattern.a
-LIBPATTERNOBJS=	pattern/compile.o pattern/config.o pattern/dlg_pattern.o \
-		pattern/exec.o pattern/flags.o pattern/functions.o \
-		pattern/message.o pattern/pattern.o
+LIBPATTERNOBJS=	pattern/compile.o pattern/complete.o pattern/config.o \
+		pattern/dlg_pattern.o pattern/exec.o pattern/flags.o \
+		pattern/functions.o pattern/message.o pattern/pattern.o \
+		pattern/search_state.o
 CLEANFILES+=	$(LIBPATTERN) $(LIBPATTERNOBJS)
 ALLOBJS+=	$(LIBPATTERNOBJS)
 
@@ -700,8 +724,8 @@ $(PWD)/pattern:
 ###############################################################################
 # libpop
 LIBPOP=		libpop.a
-LIBPOPOBJS=	pop/auth.o pop/config.o pop/lib.o pop/pop.o \
-		pop/adata.o pop/edata.o
+LIBPOPOBJS=	pop/adata.o pop/auth.o pop/config.o pop/edata.o pop/lib.o \
+		pop/pop.o
 CLEANFILES+=	$(LIBPOP) $(LIBPOPOBJS)
 ALLOBJS+=	$(LIBPOPOBJS)
 
@@ -714,8 +738,7 @@ $(PWD)/pop:
 ###############################################################################
 # libpostpone
 LIBPOSTPONE=		libpostpone.a
-LIBPOSTPONEOBJS=	postpone/dlg_postpone.o postpone/functions.o \
-			postpone/postpone.o
+LIBPOSTPONEOBJS=postpone/dlg_postpone.o postpone/functions.o postpone/postpone.o
 CLEANFILES+=	$(LIBPOSTPONE) $(LIBPOSTPONEOBJS)
 ALLOBJS+=	$(LIBPOSTPONEOBJS)
 
@@ -728,7 +751,7 @@ $(PWD)/postpone:
 ###############################################################################
 # libprogress
 LIBPROGRESS=	libprogress.a
-LIBPROGRESSOBJS=	progress/progress.o progress/wdata.o progress/window.o
+LIBPROGRESSOBJS=progress/progress.o progress/wdata.o progress/window.o
 CLEANFILES+=	$(LIBPROGRESS) $(LIBPROGRESSOBJS)
 ALLOBJS+=	$(LIBPROGRESSOBJS)
 
@@ -769,8 +792,8 @@ $(PWD)/send:
 # libsidebar
 @if USE_SIDEBAR
 LIBSIDEBAR=	libsidebar.a
-LIBSIDEBAROBJS=	sidebar/config.o sidebar/sidebar.o sidebar/commands.o \
-		sidebar/functions.o sidebar/observer.o sidebar/sort.o \
+LIBSIDEBAROBJS=	sidebar/commands.o sidebar/config.o sidebar/functions.o \
+		sidebar/observer.o sidebar/sidebar.o sidebar/sort.o \
 		sidebar/wdata.o sidebar/window.o
 CLEANFILES+=	$(LIBSIDEBAR) $(LIBSIDEBAROBJS)
 ALLOBJS+=	$(LIBSIDEBAROBJS)
@@ -844,12 +867,12 @@ $(ALLOBJS):
 
 # The order of these libraries depends on their dependencies.
 # The libraries with the most dependencies will come first.
-MUTTLIBS+=	$(LIBINDEX) $(LIBPAGER) $(LIBAUTOCRYPT) $(LIBPOP) \
-		$(LIBBROWSER) $(LIBCOMPMBOX) $(LIBSTORE) \
+MUTTLIBS+=	$(LIBINDEX) $(LIBPAGER) $(LIBINDEX) $(LIBPAGER) $(LIBAUTOCRYPT) $(LIBPOP) \
+		$(LIBEDITOR) $(LIBCOMPLETE) $(LIBBROWSER) $(LIBCOMPMBOX) $(LIBSTORE) \
 		$(LIBPROGRESS) $(LIBQUESTION) $(LIBPOSTPONE) $(LIBALIAS) $(LIBSEND) \
-		$(LIBCONVERT) $(LIBCOMPOSE) $(LIBATTACH) $(LIBGUI) $(LIBENTER) $(LIBCOMPLETE) $(LIBNNTP) \
+		$(LIBCONVERT) $(LIBCOMPOSE) $(LIBATTACH) $(LIBKEY) $(LIBGUI) $(LIBNNTP) \
 		$(LIBPATTERN) $(LIBMENU) $(LIBCOLOR) $(LIBENVELOPE) $(LIBMIXMASTER) \
-		$(LIBHELPBAR) $(LIBMBOX) $(LIBNOTMUCH) $(LIBMAILDIR) \
+		$(LIBHELPBAR) $(LIBMBOX) $(LIBNOTMUCH) $(LIBMAILDIR) $(LIBEDITOR) $(LIBCOMPLETE) $(LIBNNTP) \
 		$(LIBNCRYPT) $(LIBIMAP) $(LIBCONN) $(LIBHCACHE) \
 		$(LIBCOMPRESS) $(LIBSIDEBAR) $(LIBBCACHE) $(LIBHISTORY) \
 		$(LIBCORE) $(LIBPARSE) $(LIBCONFIG) $(LIBEMAIL) $(LIBADDRESS) \
@@ -887,9 +910,9 @@ uninstall: $(UNINSTALL_TARGETS)
 
 # distclean
 distclean: clean
-	$(RM) $(DEPFILES) autosetup/jimsh0 config.h config.log conststrings.c \
+	$(RM) $(DEPFILES) jimsh0 config.h config.log conststrings.c \
 		contrib/Makefile docs/Makefile docs/neomutt.1 html Makefile po/Makefile \
-		test/Makefile .clang_complete
+		test/Makefile .clang_complete compile_commands.json
 	$(RM) *.gc?? */*.gc?? test/*/*.gc??
 	$(RM) *.expand */*.expand test/*/*.expand
 	$(RM) coverage.info coverage
@@ -929,17 +952,20 @@ coverage: all test
 	$(RM) mutt/exit.gc??
 	lcov --test-name "test" --output-file coverage.info --capture \
 	  --directory address \
+	  --directory color \
 	  --directory compress \
 	  --directory config \
 	  --directory core \
+	  --directory editor \
 	  --directory email \
-	  --directory enter \
+	  --directory imap \
 	  --directory mutt \
 	  --directory notmuch \
 	  --directory parse \
 	  --directory pattern \
 	  --directory store \
 	  --directory test/eqi \
+	  --exclude '*/atoi.h' \
 	  --exclude '*/include/*'
 	-genhtml --output-directory coverage --frames coverage.info
 	lcov --list coverage.info

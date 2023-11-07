@@ -43,6 +43,7 @@
 #include "pgpinvoke.h"
 #include "lib.h"
 #include "format_flags.h"
+#include "globals.h" // IWYU pragma: keep
 #include "mutt_logging.h"
 #include "muttlib.h"
 #include "pgpkey.h"
@@ -95,7 +96,9 @@ static const char *pgp_command_format_str(char *buf, size_t buflen, size_t col, 
         snprintf(buf, buflen, fmt, NONULL(cctx->signas));
       }
       else if (!cctx->signas)
+      {
         optional = false;
+      }
       break;
     }
     case 'f':
@@ -106,7 +109,9 @@ static const char *pgp_command_format_str(char *buf, size_t buflen, size_t col, 
         snprintf(buf, buflen, fmt, NONULL(cctx->fname));
       }
       else if (!cctx->fname)
+      {
         optional = false;
+      }
       break;
     }
     case 'p':
@@ -117,7 +122,9 @@ static const char *pgp_command_format_str(char *buf, size_t buflen, size_t col, 
         snprintf(buf, buflen, fmt, cctx->need_passphrase ? "PGPPASSFD=0" : "");
       }
       else if (!cctx->need_passphrase || pgp_use_gpg_agent())
+      {
         optional = false;
+      }
       break;
     }
     case 'r':
@@ -128,7 +135,9 @@ static const char *pgp_command_format_str(char *buf, size_t buflen, size_t col, 
         snprintf(buf, buflen, fmt, NONULL(cctx->ids));
       }
       else if (!cctx->ids)
+      {
         optional = false;
+      }
       break;
     }
     case 's':
@@ -139,7 +148,9 @@ static const char *pgp_command_format_str(char *buf, size_t buflen, size_t col, 
         snprintf(buf, buflen, fmt, NONULL(cctx->sig_fname));
       }
       else if (!cctx->sig_fname)
+      {
         optional = false;
+      }
       break;
     }
     default:
@@ -225,7 +236,7 @@ static pid_t pgp_invoke(FILE **fp_pgp_in, FILE **fp_pgp_out, FILE **fp_pgp_err,
   mutt_pgp_command(cmd, sizeof(cmd), &cctx, format);
 
   return filter_create_fd(cmd, fp_pgp_in, fp_pgp_out, fp_pgp_err, fd_pgp_in,
-                          fd_pgp_out, fd_pgp_err);
+                          fd_pgp_out, fd_pgp_err, EnvList);
 }
 
 /*
@@ -403,7 +414,7 @@ pid_t pgp_invoke_traditional(FILE **fp_pgp_in, FILE **fp_pgp_out, FILE **fp_pgp_
 }
 
 /**
- * pgp_class_invoke_import - Implements CryptModuleSpecs::pgp_invoke_import() - @ingroup crypto_pgp_invoke_import
+ * pgp_class_invoke_import - Import a key from a message into the user's public key ring - Implements CryptModuleSpecs::pgp_invoke_import() - @ingroup crypto_pgp_invoke_import
  */
 void pgp_class_invoke_import(const char *fname)
 {
@@ -430,13 +441,13 @@ void pgp_class_invoke_import(const char *fname)
 }
 
 /**
- * pgp_class_invoke_getkeys - Implements CryptModuleSpecs::pgp_invoke_getkeys() - @ingroup crypto_pgp_invoke_getkeys
+ * pgp_class_invoke_getkeys - Run a command to download a PGP key - Implements CryptModuleSpecs::pgp_invoke_getkeys() - @ingroup crypto_pgp_invoke_getkeys
  */
 void pgp_class_invoke_getkeys(struct Address *addr)
 {
   char cmd[STR_COMMAND] = { 0 };
 
-  char *personal = NULL;
+  struct Buffer *personal = NULL;
 
   struct PgpCommandContext cctx = { 0 };
 

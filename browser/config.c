@@ -29,9 +29,9 @@
 
 #include "config.h"
 #include <stddef.h>
-#include <config/lib.h>
 #include <stdbool.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
 
 /**
  * SortBrowserMethods - Sort methods for the folder/dir browser
@@ -64,7 +64,7 @@ static struct ConfigDef BrowserVars[] = {
   { "group_index_format", DT_STRING|DT_NOT_EMPTY|R_INDEX, IP "%4C %M%N %5s  %-45.45f %d", 0, NULL,
     "(nntp) printf-like format string for the browser's display of newsgroups"
   },
-  { "mailbox_folder_format", DT_STRING|DT_NOT_EMPTY, IP "%2C %?n?%6n&%6 ? %6m %i", 0, NULL,
+  { "mailbox_folder_format", DT_STRING|DT_NOT_EMPTY, IP "%2C %<n?%6n&      > %6m %i", 0, NULL,
     "printf-like format string for the browser's display of mailbox folders"
   },
   { "mask", DT_REGEX|DT_REGEX_MATCH_CASE|DT_REGEX_ALLOW_NOT|DT_REGEX_NOSUB, IP "!^\\.[^.]", 0, NULL,
@@ -75,6 +75,9 @@ static struct ConfigDef BrowserVars[] = {
   },
   { "sort_browser", DT_SORT|DT_SORT_REVERSE, SORT_ALPHA, IP SortBrowserMethods, NULL,
     "Sort method for the browser"
+  },
+  { "browser_sort_dirs_first", DT_BOOL, false, 0, NULL,
+    "Group directories before files in the browser"
   },
   { NULL },
   // clang-format on

@@ -55,7 +55,8 @@
 #include "crypt_gpgme.h"
 #include "lib.h"
 #include "attach/lib.h"
-#include "enter/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "crypt.h"
@@ -336,14 +337,13 @@ static int crypt_id_matches_addr(struct Address *addr, struct Address *u_addr,
 
   if (addr && u_addr)
   {
-    if (addr->mailbox && u_addr->mailbox &&
-        mutt_istr_equal(addr->mailbox, u_addr->mailbox))
+    if (addr->mailbox && u_addr->mailbox && buf_istr_equal(addr->mailbox, u_addr->mailbox))
     {
       rc |= CRYPT_KV_ADDR;
     }
 
     if (addr->personal && u_addr->personal &&
-        mutt_istr_equal(addr->personal, u_addr->personal))
+        buf_istr_equal(addr->personal, u_addr->personal))
     {
       rc |= CRYPT_KV_STRING;
     }
@@ -425,7 +425,7 @@ static gpgme_data_t body_to_data_object(struct Body *a, bool convert)
   FILE *fp_tmp = mutt_file_fopen(buf_string(tempfile), "w+");
   if (!fp_tmp)
   {
-    mutt_perror(buf_string(tempfile));
+    mutt_perror("%s", buf_string(tempfile));
     goto cleanup;
   }
 
@@ -581,7 +581,7 @@ static char *data_object_to_tempfile(gpgme_data_t data, FILE **fp_ret)
     {
       if (fwrite(buf, nread, 1, fp) != 1)
       {
-        mutt_perror(buf_string(tempf));
+        mutt_perror("%s", buf_string(tempf));
         mutt_file_fclose(&fp);
         unlink(buf_string(tempf));
         goto cleanup;
@@ -737,7 +737,7 @@ static int set_signer(gpgme_ctx_t ctx, const struct AddressList *al, bool for_sm
     struct Address *a;
     TAILQ_FOREACH(a, al, entries)
     {
-      if (a->mailbox && set_signer_from_address(ctx, a->mailbox, for_smime))
+      if (a->mailbox && set_signer_from_address(ctx, buf_string(a->mailbox), for_smime))
       {
         return 0;
       }
@@ -1016,7 +1016,7 @@ static struct Body *sign_message(struct Body *a, const struct AddressList *from,
 }
 
 /**
- * pgp_gpgme_sign_message - Implements CryptModuleSpecs::sign_message() - @ingroup crypto_sign_message
+ * pgp_gpgme_sign_message - Cryptographically sign the Body of a message - Implements CryptModuleSpecs::sign_message() - @ingroup crypto_sign_message
  */
 struct Body *pgp_gpgme_sign_message(struct Body *a, const struct AddressList *from)
 {
@@ -1024,7 +1024,7 @@ struct Body *pgp_gpgme_sign_message(struct Body *a, const struct AddressList *fr
 }
 
 /**
- * smime_gpgme_sign_message - Implements CryptModuleSpecs::sign_message() - @ingroup crypto_sign_message
+ * smime_gpgme_sign_message - Cryptographically sign the Body of a message - Implements CryptModuleSpecs::sign_message() - @ingroup crypto_sign_message
  */
 struct Body *smime_gpgme_sign_message(struct Body *a, const struct AddressList *from)
 {
@@ -1032,7 +1032,7 @@ struct Body *smime_gpgme_sign_message(struct Body *a, const struct AddressList *
 }
 
 /**
- * pgp_gpgme_encrypt_message - Implements CryptModuleSpecs::pgp_encrypt_message() - @ingroup crypto_pgp_encrypt_message
+ * pgp_gpgme_encrypt_message - PGP encrypt an email - Implements CryptModuleSpecs::pgp_encrypt_message() - @ingroup crypto_pgp_encrypt_message
  */
 struct Body *pgp_gpgme_encrypt_message(struct Body *a, char *keylist, bool sign,
                                        const struct AddressList *from)
@@ -1078,7 +1078,7 @@ struct Body *pgp_gpgme_encrypt_message(struct Body *a, char *keylist, bool sign,
 }
 
 /**
- * smime_gpgme_build_smime_entity - Implements CryptModuleSpecs::smime_build_smime_entity() - @ingroup crypto_smime_build_smime_entity
+ * smime_gpgme_build_smime_entity - Encrypt the email body to all recipients - Implements CryptModuleSpecs::smime_build_smime_entity() - @ingroup crypto_smime_build_smime_entity
  */
 struct Body *smime_gpgme_build_smime_entity(struct Body *a, char *keylist)
 {
@@ -1663,7 +1663,7 @@ static int verify_one(struct Body *sigbdy, struct State *state,
 }
 
 /**
- * pgp_gpgme_verify_one - Implements CryptModuleSpecs::verify_one() - @ingroup crypto_verify_one
+ * pgp_gpgme_verify_one - Check a signed MIME part against a signature - Implements CryptModuleSpecs::verify_one() - @ingroup crypto_verify_one
  */
 int pgp_gpgme_verify_one(struct Body *sigbdy, struct State *state, const char *tempfile)
 {
@@ -1671,7 +1671,7 @@ int pgp_gpgme_verify_one(struct Body *sigbdy, struct State *state, const char *t
 }
 
 /**
- * smime_gpgme_verify_one - Implements CryptModuleSpecs::verify_one() - @ingroup crypto_verify_one
+ * smime_gpgme_verify_one - Check a signed MIME part against a signature - Implements CryptModuleSpecs::verify_one() - @ingroup crypto_verify_one
  */
 int smime_gpgme_verify_one(struct Body *sigbdy, struct State *state, const char *tempfile)
 {
@@ -1765,7 +1765,6 @@ restart:
         plaintext = NULL;
         /* gpgsm ends the session after an error; restart it */
         gpgme_release(ctx);
-        ctx = NULL;
         goto restart;
       }
     }
@@ -1849,7 +1848,7 @@ cleanup:
 }
 
 /**
- * pgp_gpgme_decrypt_mime - Implements CryptModuleSpecs::decrypt_mime() - @ingroup crypto_decrypt_mime
+ * pgp_gpgme_decrypt_mime - Decrypt an encrypted MIME part - Implements CryptModuleSpecs::decrypt_mime() - @ingroup crypto_decrypt_mime
  */
 int pgp_gpgme_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Body **cur)
 {
@@ -1946,7 +1945,7 @@ bail:
 }
 
 /**
- * smime_gpgme_decrypt_mime - Implements CryptModuleSpecs::decrypt_mime() - @ingroup crypto_decrypt_mime
+ * smime_gpgme_decrypt_mime - Decrypt an encrypted MIME part - Implements CryptModuleSpecs::decrypt_mime() - @ingroup crypto_decrypt_mime
  */
 int smime_gpgme_decrypt_mime(FILE *fp_in, FILE **fp_out, struct Body *b, struct Body **cur)
 {
@@ -2232,7 +2231,7 @@ cleanup:
 }
 
 /**
- * pgp_gpgme_check_traditional - Implements CryptModuleSpecs::pgp_check_traditional() - @ingroup crypto_pgp_check_traditional
+ * pgp_gpgme_check_traditional - Look for inline (non-MIME) PGP content - Implements CryptModuleSpecs::pgp_check_traditional() - @ingroup crypto_pgp_check_traditional
  */
 bool pgp_gpgme_check_traditional(FILE *fp, struct Body *b, bool just_one)
 {
@@ -2259,7 +2258,7 @@ bool pgp_gpgme_check_traditional(FILE *fp, struct Body *b, bool just_one)
 }
 
 /**
- * pgp_gpgme_invoke_import - Implements CryptModuleSpecs::pgp_invoke_import() - @ingroup crypto_pgp_invoke_import
+ * pgp_gpgme_invoke_import - Import a key from a message into the user's public key ring - Implements CryptModuleSpecs::pgp_invoke_import() - @ingroup crypto_pgp_invoke_import
  */
 void pgp_gpgme_invoke_import(const char *fname)
 {
@@ -2272,7 +2271,7 @@ void pgp_gpgme_invoke_import(const char *fname)
   FILE *fp_in = mutt_file_fopen(fname, "r");
   if (!fp_in)
   {
-    mutt_perror(fname);
+    mutt_perror("%s", fname);
     goto leave;
   }
   /* Note that the stream, "fp_in", needs to be kept open while the keydata
@@ -2424,7 +2423,7 @@ static void copy_clearsigned(gpgme_data_t data, struct State *state, char *chars
 }
 
 /**
- * pgp_gpgme_application_handler - Implements CryptModuleSpecs::application_handler() - @ingroup crypto_application_handler
+ * pgp_gpgme_application_handler - Manage the MIME type "application/pgp" or "application/smime" - Implements CryptModuleSpecs::application_handler() - @ingroup crypto_application_handler
  */
 int pgp_gpgme_application_handler(struct Body *m, struct State *state)
 {
@@ -2544,12 +2543,10 @@ int pgp_gpgme_application_handler(struct Body *m, struct State *state)
           bool sig_stat = false;
           char *tmpfname = NULL;
 
-          {
-            /* Check whether signatures have been verified.  */
-            gpgme_verify_result_t verify_result = gpgme_op_verify_result(ctx);
-            if (verify_result->signatures)
-              sig_stat = true;
-          }
+          /* Check whether signatures have been verified.  */
+          gpgme_verify_result_t verify_result = gpgme_op_verify_result(ctx);
+          if (verify_result->signatures)
+            sig_stat = true;
 
           have_any_sigs = false;
           maybe_goodsig = false;
@@ -2656,7 +2653,7 @@ int pgp_gpgme_application_handler(struct Body *m, struct State *state)
 }
 
 /**
- * pgp_gpgme_encrypted_handler - Implements CryptModuleSpecs::encrypted_handler() - @ingroup crypto_encrypted_handler
+ * pgp_gpgme_encrypted_handler - Manage a PGP or S/MIME encrypted MIME part - Implements CryptModuleSpecs::encrypted_handler() - @ingroup crypto_encrypted_handler
  *
  * This handler is passed the application/octet-stream directly.
  * The caller must propagate a->goodsig to its parent.
@@ -2700,12 +2697,10 @@ int pgp_gpgme_encrypted_handler(struct Body *a, struct State *state)
     a->mime_headers = tattach->mime_headers;
     tattach->mime_headers = NULL;
 
-    {
-      FILE *fp_save = state->fp_in;
-      state->fp_in = fp_out;
-      rc = mutt_body_handler(tattach, state);
-      state->fp_in = fp_save;
-    }
+    FILE *fp_save = state->fp_in;
+    state->fp_in = fp_out;
+    rc = mutt_body_handler(tattach, state);
+    state->fp_in = fp_save;
 
     /* Embedded multipart signed protected headers override the
      * encrypted headers.  We need to do this after the handler so
@@ -2752,7 +2747,7 @@ int pgp_gpgme_encrypted_handler(struct Body *a, struct State *state)
 }
 
 /**
- * smime_gpgme_application_handler - Implements CryptModuleSpecs::application_handler() - @ingroup crypto_application_handler
+ * smime_gpgme_application_handler - Manage the MIME type "application/pgp" or "application/smime" - Implements CryptModuleSpecs::application_handler() - @ingroup crypto_application_handler
  */
 int smime_gpgme_application_handler(struct Body *a, struct State *state)
 {
@@ -2796,12 +2791,10 @@ int smime_gpgme_application_handler(struct Body *a, struct State *state)
     a->mime_headers = tattach->mime_headers;
     tattach->mime_headers = NULL;
 
-    {
-      FILE *fp_save = state->fp_in;
-      state->fp_in = fp_out;
-      rc = mutt_body_handler(tattach, state);
-      state->fp_in = fp_save;
-    }
+    FILE *fp_save = state->fp_in;
+    state->fp_in = fp_out;
+    rc = mutt_body_handler(tattach, state);
+    state->fp_in = fp_save;
 
     /* Embedded multipart signed protected headers override the
      * encrypted headers.  We need to do this after the handler so
@@ -2948,9 +2941,13 @@ static char *list_to_pattern(struct ListHead *list)
           *p++ = 'B';
         }
         else if (*s == ' ')
+        {
           *p++ = '+';
+        }
         else
+        {
           *p++ = *s;
+        }
       }
     }
   }
@@ -3163,12 +3160,12 @@ static struct CryptKeyInfo *crypt_getkeybyaddr(struct Address *a,
   struct CryptKeyInfo **matches_endp = &matches;
 
   if (a && a->mailbox)
-    mutt_list_insert_tail(&hints, mutt_str_dup(a->mailbox));
+    mutt_list_insert_tail(&hints, buf_strdup(a->mailbox));
   if (a && a->personal)
-    crypt_add_string_to_hints(a->personal, &hints);
+    crypt_add_string_to_hints(buf_string(a->personal), &hints);
 
   if (!oppenc_mode)
-    mutt_message(_("Looking for keys matching \"%s\"..."), a ? a->mailbox : "");
+    mutt_message(_("Looking for keys matching \"%s\"..."), a ? buf_string(a->mailbox) : "");
   keys = get_candidates(&hints, app, (abilities & KEYFLAG_CANSIGN));
 
   mutt_list_free(&hints);
@@ -3176,8 +3173,8 @@ static struct CryptKeyInfo *crypt_getkeybyaddr(struct Address *a,
   if (!keys)
     return NULL;
 
-  mutt_debug(LL_DEBUG5, "looking for %s <%s>\n", a ? NONULL(a->personal) : "",
-             a ? NONULL(a->mailbox) : "");
+  mutt_debug(LL_DEBUG5, "looking for %s <%s>\n",
+             a ? buf_string(a->personal) : "", a ? buf_string(a->mailbox) : "");
 
   for (k = keys; k; k = k->next)
   {
@@ -3258,7 +3255,7 @@ static struct CryptKeyInfo *crypt_getkeybyaddr(struct Address *a,
     else
     {
       /* Else: Ask the user.  */
-      k = dlg_select_gpgme_key(matches, a, NULL, app, forced_valid);
+      k = dlg_gpgme(matches, a, NULL, app, forced_valid);
     }
 
     crypt_key_free(&matches);
@@ -3330,7 +3327,7 @@ static struct CryptKeyInfo *crypt_getkeybystr(const char *p, KeyFlags abilities,
 
   if (matches)
   {
-    k = dlg_select_gpgme_key(matches, NULL, p, app, forced_valid);
+    k = dlg_gpgme(matches, NULL, p, app, forced_valid);
     crypt_key_free(&matches);
     return k;
   }
@@ -3350,7 +3347,8 @@ static struct CryptKeyInfo *crypt_getkeybystr(const char *p, KeyFlags abilities,
  * If whatfor is not null use it as default and store it under that label as
  * the next default.
  */
-static struct CryptKeyInfo *crypt_ask_for_key(char *tag, char *whatfor, KeyFlags abilities,
+static struct CryptKeyInfo *crypt_ask_for_key(const char *tag, const char *whatfor,
+                                              KeyFlags abilities,
                                               unsigned int app, bool *forced_valid)
 {
   struct CryptKeyInfo *key = NULL;
@@ -3374,7 +3372,7 @@ static struct CryptKeyInfo *crypt_ask_for_key(char *tag, char *whatfor, KeyFlags
   while (true)
   {
     buf_reset(resp);
-    if (buf_get_field(tag, resp, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0)
+    if (mw_get_field(tag, resp, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) != 0)
     {
       goto done;
     }
@@ -3453,8 +3451,9 @@ static char *find_keys(const struct AddressList *addrlist, unsigned int app, boo
         enum QuadOption ans = MUTT_YES;
         if (!oppenc_mode && c_crypt_confirm_hook)
         {
-          snprintf(buf, sizeof(buf), _("Use keyID = \"%s\" for %s?"), keyid, p->mailbox);
-          ans = mutt_yesorno(buf, MUTT_YES);
+          snprintf(buf, sizeof(buf), _("Use keyID = \"%s\" for %s?"), keyid,
+                   buf_string(p->mailbox));
+          ans = query_yesorno_help(buf, MUTT_YES, NeoMutt->sub, "crypt_confirm_hook");
         }
         if (ans == MUTT_YES)
         {
@@ -3501,9 +3500,10 @@ static char *find_keys(const struct AddressList *addrlist, unsigned int app, boo
 
       if (!k_info && !oppenc_mode)
       {
-        snprintf(buf, sizeof(buf), _("Enter keyID for %s: "), p->mailbox);
+        snprintf(buf, sizeof(buf), _("Enter keyID for %s: "), buf_string(p->mailbox));
 
-        k_info = crypt_ask_for_key(buf, p->mailbox, KEYFLAG_CANENCRYPT, app, &forced_valid);
+        k_info = crypt_ask_for_key(buf, buf_string(p->mailbox),
+                                   KEYFLAG_CANENCRYPT, app, &forced_valid);
       }
 
       if (!k_info)
@@ -3539,7 +3539,7 @@ static char *find_keys(const struct AddressList *addrlist, unsigned int app, boo
 }
 
 /**
- * pgp_gpgme_find_keys - Implements CryptModuleSpecs::find_keys() - @ingroup crypto_find_keys
+ * pgp_gpgme_find_keys - Find the keyids of the recipients of a message - Implements CryptModuleSpecs::find_keys() - @ingroup crypto_find_keys
  */
 char *pgp_gpgme_find_keys(const struct AddressList *addrlist, bool oppenc_mode)
 {
@@ -3547,7 +3547,7 @@ char *pgp_gpgme_find_keys(const struct AddressList *addrlist, bool oppenc_mode)
 }
 
 /**
- * smime_gpgme_find_keys - Implements CryptModuleSpecs::find_keys() - @ingroup crypto_find_keys
+ * smime_gpgme_find_keys - Find the keyids of the recipients of a message - Implements CryptModuleSpecs::find_keys() - @ingroup crypto_find_keys
  */
 char *smime_gpgme_find_keys(const struct AddressList *addrlist, bool oppenc_mode)
 {
@@ -3630,7 +3630,7 @@ int mutt_gpgme_select_secret_key(struct Buffer *keyid)
     goto cleanup;
   }
 
-  choice = dlg_select_gpgme_key(results, NULL, "*", APPLICATION_PGP, NULL);
+  choice = dlg_gpgme(results, NULL, "*", APPLICATION_PGP, NULL);
   if (!(choice && choice->kobj && choice->kobj->subkeys && choice->kobj->subkeys->fpr))
     goto cleanup;
   buf_strcpy(keyid, choice->kobj->subkeys->fpr);
@@ -3646,7 +3646,7 @@ cleanup:
 #endif
 
 /**
- * pgp_gpgme_make_key_attachment - Implements CryptModuleSpecs::pgp_make_key_attachment() - @ingroup crypto_pgp_make_key_attachment
+ * pgp_gpgme_make_key_attachment - Generate a public key attachment - Implements CryptModuleSpecs::pgp_make_key_attachment() - @ingroup crypto_pgp_make_key_attachment
  */
 struct Body *pgp_gpgme_make_key_attachment(void)
 {
@@ -3746,7 +3746,7 @@ static void init_smime(void)
 }
 
 /**
- * pgp_gpgme_init - Implements CryptModuleSpecs::init() - @ingroup crypto_init
+ * pgp_gpgme_init - Initialise the crypto module - Implements CryptModuleSpecs::init() - @ingroup crypto_init
  */
 void pgp_gpgme_init(void)
 {
@@ -3755,7 +3755,7 @@ void pgp_gpgme_init(void)
 }
 
 /**
- * smime_gpgme_init - Implements CryptModuleSpecs::init() - @ingroup crypto_init
+ * smime_gpgme_init - Initialise the crypto module - Implements CryptModuleSpecs::init() - @ingroup crypto_init
  */
 void smime_gpgme_init(void)
 {
@@ -3806,9 +3806,9 @@ static SecurityFlags gpgme_send_menu(struct Email *e, bool is_smime)
       choices = "SamCo";
     }
   }
-  /* Opportunistic encryption option is set, but is toggled off for this message.  */
   else if (c_crypt_opportunistic_encrypt)
   {
+    /* Opportunistic encryption option is set, but is toggled off for this message.  */
     if (is_smime)
     {
       /* L10N: S/MIME options (opportunistic encryption is off) */
@@ -3826,9 +3826,9 @@ static SecurityFlags gpgme_send_menu(struct Email *e, bool is_smime)
       choices = "esabmcO";
     }
   }
-  /* Opportunistic encryption is unset */
   else
   {
+    /* Opportunistic encryption is unset */
     if (is_smime)
     {
       /* L10N: S/MIME options */
@@ -3847,7 +3847,7 @@ static SecurityFlags gpgme_send_menu(struct Email *e, bool is_smime)
     }
   }
 
-  choice = mutt_multi_choice(prompt, letters);
+  choice = mw_multi_choice(prompt, letters);
   if (choice > 0)
   {
     switch (choices[choice - 1])
@@ -3928,7 +3928,7 @@ static SecurityFlags gpgme_send_menu(struct Email *e, bool is_smime)
 }
 
 /**
- * pgp_gpgme_send_menu - Implements CryptModuleSpecs::send_menu() - @ingroup crypto_send_menu
+ * pgp_gpgme_send_menu - Ask the user whether to sign and/or encrypt the email - Implements CryptModuleSpecs::send_menu() - @ingroup crypto_send_menu
  */
 SecurityFlags pgp_gpgme_send_menu(struct Email *e)
 {
@@ -3936,7 +3936,7 @@ SecurityFlags pgp_gpgme_send_menu(struct Email *e)
 }
 
 /**
- * smime_gpgme_send_menu - Implements CryptModuleSpecs::send_menu() - @ingroup crypto_send_menu
+ * smime_gpgme_send_menu - Ask the user whether to sign and/or encrypt the email - Implements CryptModuleSpecs::send_menu() - @ingroup crypto_send_menu
  */
 SecurityFlags smime_gpgme_send_menu(struct Email *e)
 {
@@ -3970,7 +3970,7 @@ static bool verify_sender(struct Email *e)
     {
       gpgme_key_t key = SignatureKey;
       gpgme_user_id_t uid = NULL;
-      int sender_length = strlen(sender->mailbox);
+      int sender_length = buf_len(sender->mailbox);
       for (uid = key->uids; uid && rc; uid = uid->next)
       {
         int uid_length = strlen(uid->email);
@@ -3984,7 +3984,7 @@ static bool verify_sender(struct Email *e)
              * The mailbox part is case-sensitive,
              * the domainname is not. (RFC2821) */
             const char *tmp_email = uid->email + 1;
-            const char *tmp_sender = sender->mailbox;
+            const char *tmp_sender = buf_string(sender->mailbox);
             /* length of mailbox part including '@' */
             int mailbox_length = at_sign - tmp_email + 1;
             int domainname_length = sender_length - mailbox_length;
@@ -3999,7 +3999,7 @@ static bool verify_sender(struct Email *e)
           }
           else
           {
-            if (mutt_strn_equal(uid->email + 1, sender->mailbox, sender_length))
+            if (mutt_strn_equal(uid->email + 1, buf_string(sender->mailbox), sender_length))
               rc = false;
           }
         }
@@ -4025,7 +4025,7 @@ static bool verify_sender(struct Email *e)
 }
 
 /**
- * smime_gpgme_verify_sender - Implements CryptModuleSpecs::smime_verify_sender() - @ingroup crypto_smime_verify_sender
+ * smime_gpgme_verify_sender - Does the sender match the certificate? - Implements CryptModuleSpecs::smime_verify_sender() - @ingroup crypto_smime_verify_sender
  */
 int smime_gpgme_verify_sender(struct Email *e, struct Message *msg)
 {
@@ -4033,7 +4033,7 @@ int smime_gpgme_verify_sender(struct Email *e, struct Message *msg)
 }
 
 /**
- * pgp_gpgme_set_sender - Implements CryptModuleSpecs::set_sender() - @ingroup crypto_set_sender
+ * pgp_gpgme_set_sender - Set the sender of the email - Implements CryptModuleSpecs::set_sender() - @ingroup crypto_set_sender
  */
 void pgp_gpgme_set_sender(const char *sender)
 {

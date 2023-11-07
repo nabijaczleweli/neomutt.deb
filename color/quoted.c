@@ -29,13 +29,33 @@
 #include "config.h"
 #include <stddef.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include "mutt/lib.h"
 #include "core/lib.h"
-#include "lib.h"
+#include "quoted.h"
+#include "attr.h"
+#include "color.h"
+#include "command2.h"
+#include "curses2.h"
+#include "debug.h"
+#include "notify2.h"
+#include "simple2.h"
 
 struct AttrColor QuotedColors[COLOR_QUOTES_MAX]; ///< Array of colours for quoted email text
 int NumQuotedColors; ///< Number of colours for quoted email text
+
+/**
+ * quoted_colors_init - Initialise the Quoted colours
+ */
+void quoted_colors_init(void)
+{
+  for (size_t i = 0; i < COLOR_QUOTES_MAX; i++)
+  {
+    struct AttrColor *ac = &QuotedColors[i];
+    ac->fg.color = COLOR_DEFAULT;
+    ac->bg.color = COLOR_DEFAULT;
+  }
+  NumQuotedColors = 0;
+}
 
 /**
  * find_highest_used - Find the highest-numbered quotedN in use
@@ -52,9 +72,9 @@ static int find_highest_used(void)
 }
 
 /**
- * quoted_colors_clear - Reset the quoted-email colours
+ * quoted_colors_cleanup - Reset the quoted-email colours
  */
-void quoted_colors_clear(void)
+void quoted_colors_cleanup(void)
 {
   color_debug(LL_DEBUG5, "QuotedColors: clean up\n");
   for (size_t i = 0; i < COLOR_QUOTES_MAX; i++)
@@ -67,7 +87,7 @@ void quoted_colors_clear(void)
 /**
  * quoted_colors_get - Return the color of a quote, cycling through the used quotes
  * @param q Quote level
- * @retval num Color ID, e.g. #MT_COLOR_QUOTED
+ * @retval enum #ColorId, e.g. #MT_COLOR_QUOTED
  */
 struct AttrColor *quoted_colors_get(int q)
 {
@@ -88,16 +108,14 @@ int quoted_colors_num_used(void)
 /**
  * quoted_colors_parse_color - Parse the 'color quoted' command
  * @param cid     Colour Id, should be #MT_COLOR_QUOTED
- * @param fg      Foreground colour
- * @param bg      Background colour
- * @param attrs   Attributes, e.g. A_UNDERLINE
+ * @param ac_val  Colour value to use
  * @param q_level Quoting depth level
  * @param rc      Return code, e.g. #MUTT_CMD_SUCCESS
  * @param err     Buffer for error messages
  * @retval true Colour was parsed
  */
-bool quoted_colors_parse_color(enum ColorId cid, uint32_t fg, uint32_t bg,
-                               int attrs, int q_level, int *rc, struct Buffer *err)
+bool quoted_colors_parse_color(enum ColorId cid, struct AttrColor *ac_val,
+                               int q_level, int *rc, struct Buffer *err)
 {
   if (cid != MT_COLOR_QUOTED)
     return false;
@@ -113,20 +131,12 @@ bool quoted_colors_parse_color(enum ColorId cid, uint32_t fg, uint32_t bg,
     NumQuotedColors = q_level + 1;
 
   struct AttrColor *ac = &QuotedColors[q_level];
-  const bool was_set = ((ac->attrs != 0) || ac->curses_color);
-  ac->attrs = attrs;
 
-  struct CursesColor *cc = curses_color_new(fg, bg);
-  curses_color_free(&ac->curses_color);
-  ac->curses_color = cc;
+  attr_color_overwrite(ac, ac_val);
 
+  struct CursesColor *cc = ac->curses_color;
   if (!cc)
     NumQuotedColors = find_highest_used();
-
-  if (was_set)
-    quoted_color_dump(ac, q_level, "QuotedColors changed: ");
-  else
-    quoted_color_dump(ac, q_level, "QuotedColors new: ");
 
   struct Buffer *buf = buf_pool_get();
   get_colorid_name(cid, buf);
@@ -137,17 +147,20 @@ bool quoted_colors_parse_color(enum ColorId cid, uint32_t fg, uint32_t bg,
   {
     // Copy the colour into the SimpleColors
     struct AttrColor *ac_quoted = simple_color_get(MT_COLOR_QUOTED);
+    curses_color_free(&ac_quoted->curses_color);
     *ac_quoted = *ac;
     ac_quoted->ref_count = 1;
     if (ac_quoted->curses_color)
+    {
       ac_quoted->curses_color->ref_count++;
+      curses_color_dump(cc, "curses rc++");
+    }
   }
 
   struct EventColor ev_c = { cid, ac };
   notify_send(ColorsNotify, NT_COLOR, NT_COLOR_SET, &ev_c);
 
-  curses_colors_dump();
-  quoted_color_list_dump();
+  curses_colors_dump(buf);
 
   *rc = MUTT_CMD_SUCCESS;
   return true;
@@ -158,7 +171,7 @@ bool quoted_colors_parse_color(enum ColorId cid, uint32_t fg, uint32_t bg,
  * @param cid     Colour Id, should be #MT_COLOR_QUOTED
  * @param q_level Quoting depth level
  * @param err     Buffer for error messages
- * @retval num Result, e.g. #MUTT_CMD_SUCCESS
+ * @retval enum CommandResult, e.g. #MUTT_CMD_SUCCESS
  */
 enum CommandResult quoted_colors_parse_uncolor(enum ColorId cid, int q_level,
                                                struct Buffer *err)
@@ -167,10 +180,6 @@ enum CommandResult quoted_colors_parse_uncolor(enum ColorId cid, int q_level,
 
   struct AttrColor *ac = &QuotedColors[q_level];
   attr_color_clear(ac);
-  quoted_color_dump(ac, q_level, "QuotedColors clear: ");
-
-  curses_colors_dump();
-  quoted_color_list_dump();
 
   NumQuotedColors = find_highest_used();
 
@@ -192,8 +201,8 @@ static void qstyle_free(struct QuoteStyle **ptr)
     return;
 
   struct QuoteStyle *qc = *ptr;
-
   FREE(&qc->prefix);
+
   FREE(ptr);
 }
 
@@ -303,7 +312,35 @@ struct QuoteStyle *qstyle_classify(struct QuoteStyle **quote_list, const char *q
           return q_list; /* same prefix: return the current class */
 
         /* found shorter prefix */
-        if (!tmp)
+        if (tmp)
+        {
+          /* found another branch for which tmp is a shorter prefix */
+
+          /* save the next sibling for later */
+          save = q_list->next;
+
+          /* unlink q_list from the top level list */
+          if (q_list->next)
+            q_list->next->prev = q_list->prev;
+          if (q_list->prev)
+            q_list->prev->next = q_list->next;
+
+          /* at this point, we have a tmp->down; link q_list to it */
+          ptr = tmp->down;
+          /* sibling order is important here, q_list should be linked last */
+          while (ptr->next)
+            ptr = ptr->next;
+          ptr->next = q_list;
+          q_list->next = NULL;
+          q_list->prev = ptr;
+          q_list->up = tmp;
+
+          index = q_list->quote_n;
+
+          /* next class to test; as above, we shouldn't go down */
+          q_list = save;
+        }
+        else
         {
           /* add a node above q_list */
           tmp = qstyle_new();
@@ -343,34 +380,6 @@ struct QuoteStyle *qstyle_classify(struct QuoteStyle **quote_list, const char *q
            * node, that node can only be in the top level list, so don't
            * go down after this point */
           q_list = tmp->next;
-        }
-        else
-        {
-          /* found another branch for which tmp is a shorter prefix */
-
-          /* save the next sibling for later */
-          save = q_list->next;
-
-          /* unlink q_list from the top level list */
-          if (q_list->next)
-            q_list->next->prev = q_list->prev;
-          if (q_list->prev)
-            q_list->prev->next = q_list->next;
-
-          /* at this point, we have a tmp->down; link q_list to it */
-          ptr = tmp->down;
-          /* sibling order is important here, q_list should be linked last */
-          while (ptr->next)
-            ptr = ptr->next;
-          ptr->next = q_list;
-          q_list->next = NULL;
-          q_list->prev = ptr;
-          q_list->up = tmp;
-
-          index = q_list->quote_n;
-
-          /* next class to test; as above, we shouldn't go down */
-          q_list = save;
         }
 
         /* we found a shorter prefix, so certain quotes have changed classes */
@@ -606,10 +615,10 @@ static void qstyle_recurse(struct QuoteStyle *quote_list, int num_qlevel, int *c
 }
 
 /**
- * qstyle_recolour - Recolour quotes after colour changes
+ * qstyle_recolor - Recolour quotes after colour changes
  * @param quote_list List of quote colours
  */
-void qstyle_recolour(struct QuoteStyle *quote_list)
+void qstyle_recolor(struct QuoteStyle *quote_list)
 {
   if (!quote_list)
     return;
@@ -617,7 +626,5 @@ void qstyle_recolour(struct QuoteStyle *quote_list)
   int num = quoted_colors_num_used();
   int cur = 0;
 
-  quoted_color_list_dump();
   qstyle_recurse(quote_list, num, &cur);
-  quoted_color_list_dump();
 }

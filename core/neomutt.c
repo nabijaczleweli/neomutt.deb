@@ -54,6 +54,22 @@ struct NeoMutt *neomutt_new(struct ConfigSet *cs)
   n->sub->cs = cs;
   n->sub->scope = SET_SCOPE_NEOMUTT;
 
+  n->time_c_locale = duplocale(LC_GLOBAL_LOCALE);
+  if (n->time_c_locale)
+    n->time_c_locale = newlocale(LC_TIME_MASK, "C", n->time_c_locale);
+
+  if (!n->time_c_locale)
+  {
+    mutt_error(_("Out of memory")); // LCOV_EXCL_LINE
+    mutt_exit(1);                   // LCOV_EXCL_LINE
+  }
+
+  n->notify_timeout = notify_new();
+  notify_set_parent(n->notify_timeout, n->notify);
+
+  n->notify_resize = notify_new();
+  notify_set_parent(n->notify_resize, n->notify);
+
   return n;
 }
 
@@ -70,7 +86,11 @@ void neomutt_free(struct NeoMutt **ptr)
 
   neomutt_account_remove(n, NULL);
   cs_subset_free(&n->sub);
+  notify_free(&n->notify_resize);
+  notify_free(&n->notify_timeout);
   notify_free(&n->notify);
+  if (n->time_c_locale)
+    freelocale(n->time_c_locale);
 
   FREE(ptr);
 }
@@ -89,7 +109,8 @@ bool neomutt_account_add(struct NeoMutt *n, struct Account *a)
   TAILQ_INSERT_TAIL(&n->accounts, a, entries);
   notify_set_parent(a->notify, n->notify);
 
-  mutt_debug(LL_NOTIFY, "NT_ACCOUNT_ADD: %s %p\n", mailbox_get_type_name(a->type), a);
+  mutt_debug(LL_NOTIFY, "NT_ACCOUNT_ADD: %s %p\n",
+             mailbox_get_type_name(a->type), (void *) a);
   struct EventAccount ev_a = { a };
   notify_send(n->notify, NT_ACCOUNT, NT_ACCOUNT_ADD, &ev_a);
   return true;

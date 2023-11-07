@@ -43,6 +43,8 @@ struct Account
   void *adata;                    ///< Private data (for Mailbox backends)
 
   /**
+   * @defgroup account_adata_free Account Private Data API
+   *
    * adata_free - Free the private data attached to the Account
    * @param ptr Private data to be freed
    *
@@ -51,7 +53,7 @@ struct Account
    */
   void (*adata_free)(void **ptr);
 
-  TAILQ_ENTRY(Account) entries;   ///< Linked list of Accounts
+  TAILQ_ENTRY(Account) entries;   ///< Linked list
 };
 TAILQ_HEAD(AccountList, Account);
 

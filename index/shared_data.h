@@ -42,6 +42,8 @@ struct IndexSharedData
   struct Email        *email;          ///< Currently selected Email
   size_t               email_seq;      ///< Sequence number of the current email
   struct Notify       *notify;         ///< Notifications: #NotifyIndex, #IndexSharedData
+  struct SearchState  *search_state;   ///< State of the current search
+  bool                 attach_msg;     ///< Are we in "attach message" mode?
 };
 
 void                    index_shared_data_free(struct MuttWindow *win, void **ptr);

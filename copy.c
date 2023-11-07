@@ -62,7 +62,7 @@ static int address_header_decode(char **h);
 static int copy_delete_attach(struct Body *b, FILE *fp_in, FILE *fp_out,
                               const char *quoted_date);
 
-ARRAY_HEAD(Headers, char *);
+ARRAY_HEAD(HeaderArray, char *);
 
 /**
  * add_one_header - Add a header to a Headers array
@@ -73,7 +73,7 @@ ARRAY_HEAD(Headers, char *);
  * If a header already exists in that position, the new text will be
  * concatenated on the old.
  */
-static void add_one_header(struct Headers *headers, size_t pos, char *value)
+static void add_one_header(struct HeaderArray *headers, size_t pos, char *value)
 {
   char **old = ARRAY_GET(headers, pos);
   if (old && *old)
@@ -111,7 +111,7 @@ int mutt_copy_hdr(FILE *fp_in, FILE *fp_out, LOFF_T off_start, LOFF_T off_end,
   bool ignore = false;
   char buf[1024] = { 0 }; /* should be long enough to get most fields in one pass */
   char *nl = NULL;
-  struct Headers headers = ARRAY_HEAD_INITIALIZER;
+  struct HeaderArray headers = ARRAY_HEAD_INITIALIZER;
   int hdr_count;
   int x;
   char *this_one = NULL;
@@ -149,9 +149,13 @@ int mutt_copy_hdr(FILE *fp_in, FILE *fp_out, LOFF_T off_start, LOFF_T off_end,
           from = true;
         }
         else if ((chflags & CH_NOQFROM) && mutt_istr_startswith(buf, ">From "))
+        {
           continue;
+        }
         else if ((buf[0] == '\n') || ((buf[0] == '\r') && (buf[1] == '\n')))
+        {
           break; /* end of header */
+        }
 
         if ((chflags & (CH_UPDATE | CH_XMIT | CH_NOSTATUS)) &&
             (mutt_istr_startswith(buf, "Status:") || mutt_istr_startswith(buf, "X-Status:")))
@@ -252,7 +256,9 @@ int mutt_copy_hdr(FILE *fp_in, FILE *fp_out, LOFF_T off_start, LOFF_T off_end,
         from = true;
       }
       else if ((buf[0] == '\n') || ((buf[0] == '\r') && (buf[1] == '\n')))
+      {
         break; /* end of header */
+      }
 
       /* note: CH_FROM takes precedence over header weeding. */
       if (!((chflags & CH_FROM) && (chflags & CH_FORCE_FROM) && this_is_from) &&
@@ -846,7 +852,9 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
       }
     }
     else if (mutt_file_copy_bytes(fp_in, fp_out, body->length) == -1)
+    {
       return -1;
+    }
   }
 
   if ((cmflags & MUTT_CM_UPDATE) && ((cmflags & MUTT_CM_NOHEADER) == 0) &&
@@ -1117,7 +1125,7 @@ static int address_header_decode(char **h)
   {
     if (a->personal)
     {
-      mutt_str_dequote_comment(a->personal);
+      buf_dequote_comment(a->personal);
     }
   }
 

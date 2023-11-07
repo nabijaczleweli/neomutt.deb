@@ -27,6 +27,9 @@
  */
 
 #include "config.h"
+#ifdef _MAKEDOC
+#include "docs/makedoc_defs.h"
+#else
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -36,15 +39,78 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "mutt.h"
-#include "functions.h"
 #include "lib.h"
-#include "enter/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "pattern/lib.h"
 #include "question/lib.h"
 #include "alias.h"
+#include "functions.h"
 #include "gui.h"
-#include "opcodes.h"
+#endif
+
+// clang-format off
+/**
+ * OpAlias - Functions for the Alias Menu
+ */
+const struct MenuFuncOp OpAlias[] = { /* map: alias */
+  { "delete-entry",                  OP_DELETE },
+  { "exit",                          OP_EXIT },
+  { "limit",                         OP_MAIN_LIMIT },
+  { "mail",                          OP_MAIL },
+  { "sort-alias",                    OP_SORT },
+  { "sort-alias-reverse",            OP_SORT_REVERSE },
+  { "undelete-entry",                OP_UNDELETE },
+  { NULL, 0 },
+};
+
+/**
+ * OpQuery - Functions for the external Query Menu
+ */
+const struct MenuFuncOp OpQuery[] = { /* map: query */
+  { "create-alias",                  OP_CREATE_ALIAS },
+  { "exit",                          OP_EXIT },
+  { "limit",                         OP_MAIN_LIMIT },
+  { "mail",                          OP_MAIL },
+  { "query",                         OP_QUERY },
+  { "query-append",                  OP_QUERY_APPEND },
+  { "sort",                          OP_SORT },
+  { "sort-reverse",                  OP_SORT_REVERSE },
+  { NULL, 0 },
+};
+
+/**
+ * AliasDefaultBindings - Key bindings for the Alias Menu
+ */
+const struct MenuOpSeq AliasDefaultBindings[] = { /* map: alias */
+  { OP_DELETE,                             "d" },
+  { OP_EXIT,                               "q" },
+  { OP_MAIL,                               "m" },
+  { OP_MAIN_LIMIT,                         "l" },
+  { OP_SORT,                               "o" },
+  { OP_SORT_REVERSE,                       "O" },
+  { OP_TAG,                                "<space>" },
+  { OP_UNDELETE,                           "u" },
+  { 0, NULL },
+};
+
+/**
+ * QueryDefaultBindings - Key bindings for the external Query Menu
+ */
+const struct MenuOpSeq QueryDefaultBindings[] = { /* map: query */
+  { OP_CREATE_ALIAS,                       "a" },
+  { OP_EXIT,                               "q" },
+  { OP_MAIL,                               "m" },
+  { OP_MAIN_LIMIT,                         "l" },
+  { OP_QUERY,                              "Q" },
+  { OP_QUERY_APPEND,                       "A" },
+  { OP_SORT,                               "o" },
+  { OP_SORT_REVERSE,                       "O" },
+  { 0, NULL },
+};
+// clang-format on
 
 /**
  * op_create_alias - create an alias from a message sender - Implements ::alias_function_t - @ingroup alias_function_api
@@ -190,7 +256,7 @@ static int op_main_limit(struct AliasMenuData *mdata, int op)
 static int op_query(struct AliasMenuData *mdata, int op)
 {
   struct Buffer *buf = mdata->query;
-  if ((buf_get_field(_("Query: "), buf, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0) ||
+  if ((mw_get_field(_("Query: "), buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) != 0) ||
       buf_is_empty(buf))
   {
     return FR_NO_ACTION;
@@ -242,8 +308,27 @@ static int op_query(struct AliasMenuData *mdata, int op)
  */
 static int op_search(struct AliasMenuData *mdata, int op)
 {
+  SearchFlags flags = SEARCH_NO_FLAGS;
+  switch (op)
+  {
+    case OP_SEARCH:
+      flags |= SEARCH_PROMPT;
+      mdata->search_state->reverse = false;
+      break;
+    case OP_SEARCH_REVERSE:
+      flags |= SEARCH_PROMPT;
+      mdata->search_state->reverse = true;
+      break;
+    case OP_SEARCH_NEXT:
+      break;
+    case OP_SEARCH_OPPOSITE:
+      flags |= SEARCH_OPPOSITE;
+      break;
+  }
+
   struct Menu *menu = mdata->menu;
-  int index = mutt_search_alias_command(menu, menu_get_index(menu), op);
+  int index = menu_get_index(menu);
+  index = mutt_search_alias_command(menu, index, mdata->search_state, flags);
   if (index == -1)
     return FR_NO_ACTION;
 
@@ -264,13 +349,13 @@ static int op_sort(struct AliasMenuData *mdata, int op)
   bool resort = true;
   bool reverse = (op == OP_SORT_REVERSE);
 
-  switch (mutt_multi_choice(reverse ?
-                                /* L10N: The highlighted letters must match the "Sort" options */
-                                _("Rev-Sort (a)lias, a(d)dress or (u)nsorted?") :
-                                /* L10N: The highlighted letters must match the "Rev-Sort" options */
-                                _("Sort (a)lias, a(d)dress or (u)nsorted?"),
-                            /* L10N: These must match the highlighted letters from "Sort" and "Rev-Sort" */
-                            _("adu")))
+  switch (mw_multi_choice(reverse ?
+                              /* L10N: The highlighted letters must match the "Sort" options */
+                              _("Rev-Sort (a)lias, a(d)dress or (u)nsorted?") :
+                              /* L10N: The highlighted letters must match the "Rev-Sort" options */
+                              _("Sort (a)lias, a(d)dress or (u)nsorted?"),
+                          /* L10N: These must match the highlighted letters from "Sort" and "Rev-Sort" */
+                          _("adu")))
   {
     case -1: /* abort */
       resort = false;
@@ -350,7 +435,7 @@ int alias_function_dispatcher(struct MuttWindow *win, int op)
   if (rc == FR_UNKNOWN) // Not our function
     return rc;
 
-  const char *result = dispacher_get_retval_name(rc);
+  const char *result = dispatcher_get_retval_name(rc);
   mutt_debug(LL_DEBUG1, "Handled %s (%d) -> %s\n", opcodes_get_name(op), op, NONULL(result));
 
   return rc;

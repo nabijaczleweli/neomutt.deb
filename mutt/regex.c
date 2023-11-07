@@ -109,18 +109,19 @@ struct Regex *mutt_regex_new(const char *str, uint32_t flags, struct Buffer *err
 
 /**
  * mutt_regex_free - Free a Regex object
- * @param[out] r Regex to free
+ * @param[out] ptr Regex to free
  */
-void mutt_regex_free(struct Regex **r)
+void mutt_regex_free(struct Regex **ptr)
 {
-  if (!r || !*r)
+  if (!ptr || !*ptr)
     return;
 
-  FREE(&(*r)->pattern);
-  if ((*r)->regex)
-    regfree((*r)->regex);
-  FREE(&(*r)->regex);
-  FREE(r);
+  struct Regex *rx = *ptr;
+  FREE(&rx->pattern);
+  if (rx->regex)
+    regfree(rx->regex);
+  FREE(&rx->regex);
+  FREE(ptr);
 }
 
 /**
@@ -345,7 +346,7 @@ int mutt_replacelist_add(struct ReplaceList *rl, const char *pat,
   if (np->nmatch > np->regex->regex->re_nsub)
   {
     if (err)
-      buf_printf(err, "%s", _("Not enough subexpressions for template"));
+      buf_addstr(err, _("Not enough subexpressions for template"));
     mutt_replacelist_remove(rl, pat);
     return -1;
   }

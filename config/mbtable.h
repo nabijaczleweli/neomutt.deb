@@ -38,7 +38,8 @@ struct MbTable
   char *segmented_str; ///< Each chars entry points inside this string
 };
 
-void            mbtable_free (struct MbTable **table);
+void            mbtable_free (struct MbTable **ptr);
+const char *    mbtable_get_nth_wchar(const struct MbTable *table, int index);
 struct MbTable *mbtable_parse(const char *str);
 
 #endif /* MUTT_CONFIG_MBTABLE_H */

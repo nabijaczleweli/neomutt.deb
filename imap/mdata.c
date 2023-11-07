@@ -27,7 +27,6 @@
  */
 
 #include "config.h"
-#include <stddef.h>
 #include "private.h"
 #include "core/lib.h"
 #include "mdata.h"
@@ -35,7 +34,7 @@
 #include "adata.h"
 
 /**
- * imap_mdata_free - Free the private Mailbox data - Implements Mailbox::mdata_free()
+ * imap_mdata_free - Free the private Mailbox data - Implements Mailbox::mdata_free() - @ingroup mailbox_mdata_free
  */
 void imap_mdata_free(void **ptr)
 {
@@ -49,6 +48,7 @@ void imap_mdata_free(void **ptr)
   FREE(&mdata->name);
   FREE(&mdata->real_name);
   FREE(&mdata->munge_name);
+
   FREE(ptr);
 }
 
@@ -93,10 +93,10 @@ struct ImapMboxData *imap_mdata_new(struct ImapAccountData *adata, const char *n
   imap_hcache_open(adata, mdata);
   if (mdata->hcache)
   {
-    if (mutt_hcache_fetch_obj(mdata->hcache, "/UIDVALIDITY", 12, &mdata->uidvalidity))
+    if (hcache_fetch_obj(mdata->hcache, "/UIDVALIDITY", 12, &mdata->uidvalidity))
     {
-      mutt_hcache_fetch_obj(mdata->hcache, "/UIDNEXT", 8, &mdata->uid_next);
-      mutt_hcache_fetch_obj(mdata->hcache, "/MODSEQ", 7, &mdata->modseq);
+      hcache_fetch_obj(mdata->hcache, "/UIDNEXT", 8, &mdata->uid_next);
+      hcache_fetch_obj(mdata->hcache, "/MODSEQ", 7, &mdata->modseq);
       mutt_debug(LL_DEBUG3, "hcache uidvalidity %u, uidnext %u, modseq %llu\n",
                  mdata->uidvalidity, mdata->uid_next, mdata->modseq);
     }

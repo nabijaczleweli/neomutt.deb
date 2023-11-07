@@ -295,6 +295,11 @@ static const struct CompileOptions CompOpts[] = {
 #else
   { "sun_attachment", 0 },
 #endif
+#ifdef NEOMUTT_DIRECT_COLORS
+  { "truecolor", 1 },
+#else
+  { "truecolor", 0 },
+#endif
   { NULL, 0 },
 };
 
@@ -303,17 +308,26 @@ static const struct CompileOptions DebugOpts[] = {
 #ifdef USE_ASAN
   { "asan", 2 },
 #endif
+#ifdef USE_DEBUG_BACKTRACE
+  { "backtrace", 2 },
+#endif
 #ifdef USE_DEBUG_COLOR
   { "color", 2 },
-#endif
-#ifdef HAVE_LIBUNWIND
-  { "backtrace", 2 },
 #endif
 #ifdef USE_DEBUG_EMAIL
   { "email", 2 },
 #endif
 #ifdef USE_DEBUG_GRAPHVIZ
   { "graphviz", 2 },
+#endif
+#ifdef USE_DEBUG_KEYMAP
+  { "keymap", 2 },
+#endif
+#ifdef USE_DEBUG_LOGGING
+  { "logging", 2 },
+#endif
+#ifdef USE_DEBUG_NAMES
+  { "names", 2 },
 #endif
 #ifdef USE_DEBUG_NOTIFY
   { "notify", 2 },

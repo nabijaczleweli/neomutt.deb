@@ -24,66 +24,31 @@
 #define MUTT_COLOR_DEBUG_H
 
 #include "config.h"
-#include <stdbool.h>
-#include "mutt/lib.h"
-#include "color.h"
+#include "curses2.h"
 
-struct AttrColor;
-struct AttrColorList;
-struct CursesColor;
-struct RegexColor;
-struct RegexColorList;
-
-const char *color_debug_log_color_attrs(int fg, int bg, int attrs);
-const char *color_debug_log_name(char *buf, int buflen, int color);
-const char *color_debug_log_attrs_list(int attrs);
+struct Buffer;
 
 #ifdef USE_DEBUG_COLOR
 
-const char *color_debug_log_attrs(int attrs);
-const char *color_debug_log_color(int fg, int bg);
-void attr_color_dump       (struct AttrColor *ac, const char *prefix);
-void attr_color_list_dump  (struct AttrColorList *acl, const char *title);
+const char *color_log_color(color_t fg, color_t bg);
 
-void curses_color_dump     (struct CursesColor *cc, const char *prefix);
-void curses_colors_dump    (void);
+void curses_color_dump(struct CursesColor *cc, const char *prefix);
 
-void merged_colors_dump    (void);
+void ansi_colors_dump  (struct Buffer *buf);
+void curses_colors_dump(struct Buffer *buf);
+void merged_colors_dump(struct Buffer *buf);
 
-void quoted_color_dump     (struct AttrColor *ac, int q_level, const char *prefix);
-void quoted_color_list_dump(void);
-
-void regex_color_dump      (struct RegexColor *rcol, const char *prefix);
-void regex_color_list_dump (const char *name, struct RegexColorList *rcl);
-void regex_colors_dump_all (void);
-
-void simple_color_dump     (enum ColorId cid, const char *prefix);
-void simple_colors_dump    (bool force);
-
-int color_debug(enum LogLevel level, const char *format, ...);
+#define color_debug(LEVEL, ...) MuttLogger(0, __FILE__, __LINE__, __func__, LEVEL, __VA_ARGS__) ///< @ingroup logging_api
 
 #else
 
-static inline const char *color_debug_log_attrs(int attrs) { return ""; }
-static inline const char *color_debug_log_color(int fg, int bg) { return ""; }
+static inline const char *color_log_color(color_t fg, color_t bg) { return ""; }
 
-static inline void attr_color_dump       (struct AttrColor *ac, const char *prefix) {}
-static inline void attr_color_list_dump  (struct AttrColorList *acl, const char *title) {}
+static inline void curses_color_dump(struct CursesColor *cc, const char *prefix) {}
 
-static inline void curses_color_dump     (struct CursesColor *cc, const char *prefix) {}
-static inline void curses_colors_dump    (void) {}
-
-static inline void merged_colors_dump    (void) {}
-
-static inline void quoted_color_dump     (struct AttrColor *ac, int q_level, const char *prefix) {}
-static inline void quoted_color_list_dump(void) {}
-
-static inline void regex_color_dump      (struct RegexColor *rcol, const char *prefix) {}
-static inline void regex_color_list_dump (const char *name, struct RegexColorList *rcl) {}
-static inline void regex_colors_dump_all (void) {}
-
-static inline void simple_color_dump     (enum ColorId cid, const char *prefix) {}
-static inline void simple_colors_dump    (bool force) {}
+static inline void ansi_colors_dump  (struct Buffer *buf) {}
+static inline void curses_colors_dump(struct Buffer *buf) {}
+static inline void merged_colors_dump(struct Buffer *buf) {}
 
 static inline int color_debug(enum LogLevel level, const char *format, ...) { return 0; }
 

@@ -32,7 +32,6 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include "message.h"
 #include "signal2.h"
 
@@ -110,7 +109,7 @@ void mutt_sig_init(sig_handler_t sig_fn, sig_handler_t exit_fn, sig_handler_t se
   if (segv_fn)
     SegvHandler = segv_fn;
 
-  struct sigaction act;
+  struct sigaction act = { 0 };
 
   sigemptyset(&act.sa_mask);
   act.sa_flags = 0;
@@ -199,7 +198,7 @@ void mutt_sig_block_system(void)
   if (SysSignalsBlocked)
     return;
 
-  struct sigaction sa;
+  struct sigaction sa = { 0 };
 
   /* POSIX: ignore SIGINT and SIGQUIT & block SIGCHLD before exec */
   sa.sa_handler = SIG_IGN;
@@ -231,7 +230,7 @@ void mutt_sig_unblock_system(bool restore)
   }
   else
   {
-    struct sigaction sa;
+    struct sigaction sa = { 0 };
 
     sa.sa_handler = SIG_DFL;
     sigemptyset(&sa.sa_mask);
@@ -251,9 +250,8 @@ void mutt_sig_unblock_system(bool restore)
  */
 void mutt_sig_allow_interrupt(bool allow)
 {
-  struct sigaction sa;
+  struct sigaction sa = { 0 };
 
-  memset(&sa, 0, sizeof(sa));
   sa.sa_handler = SigHandler;
 #ifdef SA_RESTART
   if (!allow)

@@ -34,9 +34,9 @@
  *
  * ## Windows
  *
- * | Name                | Type         | See Also           |
- * | :------------------ | :----------- | :----------------- |
- * | Address Book Dialog | WT_DLG_ALIAS | dlg_select_alias() |
+ * | Name                | Type         | See Also    |
+ * | :------------------ | :----------- | :---------- |
+ * | Address Book Dialog | WT_DLG_ALIAS | dlg_alias() |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -75,7 +75,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 #include "mutt/lib.h"
 #include "address/lib.h"
 #include "config/lib.h"
@@ -83,6 +82,7 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "pattern/lib.h"
 #include "send/lib.h"
@@ -90,10 +90,8 @@
 #include "format_flags.h"
 #include "functions.h"
 #include "gui.h"
-#include "keymap.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "opcodes.h"
 
 /// Help Bar for the Alias dialog (address book)
 static const struct Mapping AliasHelp[] = {
@@ -165,7 +163,7 @@ static const char *alias_format_str(char *buf, size_t buflen, size_t col, int co
 }
 
 /**
- * alias_make_entry - Format a menu item for the alias list - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * alias_make_entry - Format an Alias for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  *
  * @sa $alias_format, alias_format_str()
  */
@@ -264,7 +262,7 @@ static int alias_window_observer(struct NotifyCallback *nc)
   struct Menu *menu = win_menu->wdata;
 
   notify_observer_remove(NeoMutt->notify, alias_alias_observer, menu);
-  notify_observer_remove(NeoMutt->notify, alias_config_observer, menu);
+  notify_observer_remove(NeoMutt->sub->notify, alias_config_observer, menu);
   notify_observer_remove(win_menu->notify, alias_window_observer, win_menu);
 
   mutt_debug(LL_DEBUG5, "window delete done\n");
@@ -283,7 +281,6 @@ static struct MuttWindow *alias_dialog_new(struct AliasMenuData *mdata)
   struct Menu *menu = dlg->wdata;
 
   menu->make_entry = alias_make_entry;
-  menu->custom_search = true;
   menu->tag = alias_tag;
   menu->max = alias_array_count_visible(&mdata->ava);
   menu->mdata = mdata;
@@ -299,19 +296,22 @@ static struct MuttWindow *alias_dialog_new(struct AliasMenuData *mdata)
 
   // NT_COLOR is handled by the SimpleDialog
   notify_observer_add(NeoMutt->notify, NT_ALIAS, alias_alias_observer, menu);
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, alias_config_observer, menu);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, alias_config_observer, menu);
   notify_observer_add(win_menu->notify, NT_WINDOW, alias_window_observer, win_menu);
 
   return dlg;
 }
 
 /**
- * dlg_select_alias - Display a menu of Aliases
+ * dlg_alias - Display a menu of Aliases - @ingroup gui_dlg
  * @param buf   Buffer for expanded aliases
  * @param mdata Menu data holding Aliases
  * @retval true Selection was made
+ *
+ * The Alias Dialog is an Address Book.
+ * The user can select addresses to add to an Email.
  */
-static bool dlg_select_alias(struct Buffer *buf, struct AliasMenuData *mdata)
+static bool dlg_alias(struct Buffer *buf, struct AliasMenuData *mdata)
 {
   if (ARRAY_EMPTY(&mdata->ava))
   {
@@ -336,6 +336,7 @@ static bool dlg_select_alias(struct Buffer *buf, struct AliasMenuData *mdata)
     avp->num = ARRAY_FOREACH_IDX;
   }
 
+  struct MuttWindow *old_focus = window_set_focus(menu->win);
   // ---------------------------------------------------------------------------
   // Event Loop
   int rc = 0;
@@ -345,7 +346,7 @@ static bool dlg_select_alias(struct Buffer *buf, struct AliasMenuData *mdata)
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(MENU_ALIAS);
+    op = km_dokey(MENU_ALIAS, GETCH_NO_FLAGS);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
@@ -364,6 +365,7 @@ static bool dlg_select_alias(struct Buffer *buf, struct AliasMenuData *mdata)
   } while ((rc != FR_DONE) && (rc != FR_CONTINUE));
   // ---------------------------------------------------------------------------
 
+  window_set_focus(old_focus);
   simple_dialog_free(&dlg);
   window_redraw(NULL);
   return (rc == FR_CONTINUE); // Was a selection made?
@@ -371,9 +373,8 @@ static bool dlg_select_alias(struct Buffer *buf, struct AliasMenuData *mdata)
 
 /**
  * alias_complete - Alias completion routine
- * @param buf    Partial Alias to complete
- * @param buflen Length of buffer
- * @param sub    Config items
+ * @param buf Partial Alias to complete
+ * @param sub Config items
  * @retval 1 Success
  * @retval 0 Error
  *
@@ -381,19 +382,20 @@ static bool dlg_select_alias(struct Buffer *buf, struct AliasMenuData *mdata)
  * from the alias list as much as possible. if given empty search string
  * or found nothing, present all aliases
  */
-int alias_complete(char *buf, size_t buflen, struct ConfigSubset *sub)
+int alias_complete(struct Buffer *buf, struct ConfigSubset *sub)
 {
   struct Alias *np = NULL;
   char bestname[8192] = { 0 };
 
   struct AliasMenuData mdata = { ARRAY_HEAD_INITIALIZER, NULL, sub };
-  mdata.limit = mutt_str_dup(buf);
+  mdata.limit = buf_strdup(buf);
+  mdata.search_state = search_state_new();
 
-  if (buf[0] != '\0')
+  if (buf_at(buf, 0) != '\0')
   {
     TAILQ_FOREACH(np, &Aliases, entries)
     {
-      if (np->name && mutt_strn_equal(np->name, buf, strlen(buf)))
+      if (np->name && mutt_strn_equal(np->name, buf_string(buf), buf_len(buf)))
       {
         if (bestname[0] == '\0') /* init */
         {
@@ -424,14 +426,14 @@ int alias_complete(char *buf, size_t buflen, struct ConfigSubset *sub)
     {
       /* fake the pattern for menu title */
       char *mtitle = NULL;
-      mutt_str_asprintf(&mtitle, "~f ^%s", buf);
+      mutt_str_asprintf(&mtitle, "~f ^%s", buf_string(buf));
       FREE(&mdata.limit);
       mdata.limit = mtitle;
 
-      if (!mutt_str_equal(bestname, buf))
+      if (!mutt_str_equal(bestname, buf_string(buf)))
       {
         /* we are adding something to the completion */
-        mutt_str_copy(buf, bestname, mutt_str_len(bestname) + 1);
+        buf_strcpy_n(buf, bestname, mutt_str_len(bestname) + 1);
         FREE(&mdata.limit);
         return 1;
       }
@@ -443,7 +445,7 @@ int alias_complete(char *buf, size_t buflen, struct ConfigSubset *sub)
 
         struct AliasView *av = ARRAY_GET(&mdata.ava, aasize - 1);
 
-        if (np->name && !mutt_strn_equal(np->name, buf, strlen(buf)))
+        if (np->name && !mutt_strn_equal(np->name, buf_string(buf), buf_len(buf)))
         {
           av->is_visible = false;
         }
@@ -461,10 +463,10 @@ int alias_complete(char *buf, size_t buflen, struct ConfigSubset *sub)
     mutt_pattern_alias_func(NULL, &mdata, NULL);
   }
 
-  if (!dlg_select_alias(NULL, &mdata))
+  if (!dlg_alias(NULL, &mdata))
     goto done;
 
-  buf[0] = '\0';
+  buf_reset(buf);
 
   // Extract the selected aliases
   struct Buffer *tmpbuf = buf_pool_get();
@@ -475,8 +477,9 @@ int alias_complete(char *buf, size_t buflen, struct ConfigSubset *sub)
       continue;
 
     mutt_addrlist_write(&avp->alias->addr, tmpbuf, true);
+    buf_addstr(tmpbuf, ", ");
   }
-  mutt_str_copy(buf, buf_string(tmpbuf), buflen);
+  buf_copy(buf, tmpbuf);
   buf_pool_release(&tmpbuf);
 
 done:
@@ -493,6 +496,7 @@ done:
   ARRAY_FREE(&mdata.ava);
   FREE(&mdata.limit);
   FREE(&mdata.title);
+  search_state_free(&mdata.search_state);
 
   return 0;
 }
@@ -507,6 +511,7 @@ void alias_dialog(struct Mailbox *m, struct ConfigSubset *sub)
   struct Alias *np = NULL;
 
   struct AliasMenuData mdata = { ARRAY_HEAD_INITIALIZER, NULL, sub };
+  mdata.search_state = search_state_new();
 
   // Create a View Array of all the Aliases
   TAILQ_FOREACH(np, &Aliases, entries)
@@ -514,7 +519,7 @@ void alias_dialog(struct Mailbox *m, struct ConfigSubset *sub)
     alias_array_alias_add(&mdata.ava, np);
   }
 
-  if (!dlg_select_alias(NULL, &mdata))
+  if (!dlg_alias(NULL, &mdata))
     goto done;
 
   // Prepare the "To:" field of a new email
@@ -551,4 +556,5 @@ done:
   ARRAY_FREE(&mdata.ava);
   FREE(&mdata.limit);
   FREE(&mdata.title);
+  search_state_free(&mdata.search_state);
 }

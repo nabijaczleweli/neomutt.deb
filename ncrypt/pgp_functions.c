@@ -40,7 +40,6 @@
 #include "question/lib.h"
 #include "globals.h"
 #include "mutt_logging.h"
-#include "opcodes.h"
 #include "pgp.h"
 #include "pgpinvoke.h"
 #include "pgpkey.h"
@@ -100,7 +99,7 @@ static int op_generic_select_entry(struct PgpData *pd, int op)
 
     snprintf(buf2, sizeof(buf2), "%s", str);
 
-    if (mutt_yesorno(buf2, MUTT_NO) != MUTT_YES)
+    if (query_yesorno(buf2, MUTT_NO) != MUTT_YES)
     {
       mutt_clear_error();
       return FR_NO_ACTION;
@@ -230,7 +229,7 @@ int pgp_function_dispatcher(struct MuttWindow *win, int op)
   if (rc == FR_UNKNOWN) // Not our function
     return rc;
 
-  const char *result = dispacher_get_retval_name(rc);
+  const char *result = dispatcher_get_retval_name(rc);
   mutt_debug(LL_DEBUG1, "Handled %s (%d) -> %s\n", opcodes_get_name(op), op, NONULL(result));
 
   return rc;

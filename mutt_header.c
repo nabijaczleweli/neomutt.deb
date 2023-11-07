@@ -40,7 +40,9 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "mutt_header.h"
-#include "enter/lib.h"
+#include "complete/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "index/lib.h"
 #include "ncrypt/lib.h"
 #include "postpone/lib.h"
@@ -120,12 +122,12 @@ static bool label_message(struct Mailbox *m, struct Email *e, char *new_label)
 /**
  * mutt_label_message - Let the user label a message
  * @param mv Mailbox
- * @param el List of Emails to label
+ * @param ea Array of Emails to label
  * @retval num Number of messages changed
  */
-int mutt_label_message(struct MailboxView *mv, struct EmailList *el)
+int mutt_label_message(struct MailboxView *mv, struct EmailArray *ea)
 {
-  if (!mv || !mv->mailbox || !el)
+  if (!mv || !mv->mailbox || !ea)
     return 0;
 
   struct Mailbox *m = mv->mailbox;
@@ -133,16 +135,16 @@ int mutt_label_message(struct MailboxView *mv, struct EmailList *el)
   int changed = 0;
   struct Buffer *buf = buf_pool_get();
 
-  struct EmailNode *en = STAILQ_FIRST(el);
-  if (!STAILQ_NEXT(en, entries))
+  struct Email **ep = ARRAY_GET(ea, 0);
+  if (ARRAY_SIZE(ea) == 1)
   {
     // If there's only one email, use its label as a template
-    if (en->email->env->x_label)
-      buf_strcpy(buf, en->email->env->x_label);
+    struct Email *e = *ep;
+    if (e->env->x_label)
+      buf_strcpy(buf, e->env->x_label);
   }
 
-  if (buf_get_field("Label: ", buf, MUTT_COMP_LABEL /* | MUTT_COMP_CLEAR */,
-                    false, NULL, NULL, NULL) != 0)
+  if (mw_get_field("Label: ", buf, MUTT_COMP_NO_FLAGS, HC_OTHER, &CompleteLabelOps, NULL) != 0)
   {
     goto done;
   }
@@ -152,12 +154,13 @@ int mutt_label_message(struct MailboxView *mv, struct EmailList *el)
   if (*new_label == '\0')
     new_label = NULL;
 
-  STAILQ_FOREACH(en, el, entries)
+  ARRAY_FOREACH(ep, ea)
   {
-    if (label_message(m, en->email, new_label))
+    struct Email *e = *ep;
+    if (label_message(m, e, new_label))
     {
       changed++;
-      mutt_set_header_color(m, en->email);
+      mutt_set_header_color(m, e);
     }
   }
 
@@ -181,7 +184,7 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
   FILE *fp_out = mutt_file_fopen(buf_string(path), "w");
   if (!fp_out)
   {
-    mutt_perror(buf_string(path));
+    mutt_perror("%s", buf_string(path));
     goto cleanup;
   }
 
@@ -194,7 +197,7 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
   FILE *fp_in = fopen(body, "r");
   if (!fp_in)
   {
-    mutt_perror(body);
+    mutt_perror("%s", body);
     mutt_file_fclose(&fp_out);
     goto cleanup;
   }
@@ -207,14 +210,14 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
   struct stat st = { 0 };
   if (stat(buf_string(path), &st) == -1)
   {
-    mutt_perror(buf_string(path));
+    mutt_perror("%s", buf_string(path));
     goto cleanup;
   }
 
   time_t mtime = mutt_file_decrease_mtime(buf_string(path), &st);
   if (mtime == (time_t) -1)
   {
-    mutt_perror(buf_string(path));
+    mutt_perror("%s", buf_string(path));
     goto cleanup;
   }
 
@@ -234,7 +237,7 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
   fp_in = fopen(buf_string(path), "r");
   if (!fp_in)
   {
-    mutt_perror(buf_string(path));
+    mutt_perror("%s", buf_string(path));
     goto cleanup;
   }
 
@@ -243,7 +246,7 @@ void mutt_edit_headers(const char *editor, const char *body, struct Email *e,
   {
     /* intentionally leak a possible temporary file here */
     mutt_file_fclose(&fp_in);
-    mutt_perror(body);
+    mutt_perror("%s", body);
     goto cleanup;
   }
 

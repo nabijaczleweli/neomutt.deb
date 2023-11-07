@@ -44,7 +44,8 @@
 #include "mutt.h"
 #include "pgpkey.h"
 #include "lib.h"
-#include "enter/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "send/lib.h"
 #include "crypt.h"
 #include "globals.h" // IWYU pragma: keep
@@ -154,13 +155,13 @@ static PgpKeyValidFlags pgp_id_matches_addr(struct Address *addr,
   if (pgp_id_is_strong(uid))
     flags |= PGP_KV_STRONGID;
 
-  if (addr->mailbox && u_addr->mailbox && mutt_istr_equal(addr->mailbox, u_addr->mailbox))
+  if (addr->mailbox && u_addr->mailbox && buf_istr_equal(addr->mailbox, u_addr->mailbox))
   {
     flags |= PGP_KV_ADDR;
   }
 
   if (addr->personal && u_addr->personal &&
-      mutt_istr_equal(addr->personal, u_addr->personal))
+      buf_istr_equal(addr->personal, u_addr->personal))
   {
     flags |= PGP_KV_STRING;
   }
@@ -176,8 +177,8 @@ static PgpKeyValidFlags pgp_id_matches_addr(struct Address *addr,
  * @param keyring   PGP keyring to use
  * @retval ptr Selected PGP key
  */
-struct PgpKeyInfo *pgp_ask_for_key(char *tag, char *whatfor, KeyFlags abilities,
-                                   enum PgpRing keyring)
+struct PgpKeyInfo *pgp_ask_for_key(char *tag, const char *whatfor,
+                                   KeyFlags abilities, enum PgpRing keyring)
 {
   struct PgpKeyInfo *key = NULL;
   struct PgpCache *l = NULL;
@@ -200,7 +201,7 @@ struct PgpKeyInfo *pgp_ask_for_key(char *tag, char *whatfor, KeyFlags abilities,
   while (true)
   {
     buf_reset(resp);
-    if (buf_get_field(tag, resp, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0)
+    if (mw_get_field(tag, resp, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) != 0)
     {
       goto done;
     }
@@ -234,7 +235,7 @@ done:
 }
 
 /**
- * pgp_class_make_key_attachment - Implements CryptModuleSpecs::pgp_make_key_attachment() - @ingroup crypto_pgp_make_key_attachment
+ * pgp_class_make_key_attachment - Generate a public key attachment - Implements CryptModuleSpecs::pgp_make_key_attachment() - @ingroup crypto_pgp_make_key_attachment
  */
 struct Body *pgp_class_make_key_attachment(void)
 {
@@ -371,12 +372,12 @@ struct PgpKeyInfo *pgp_getkeybyaddr(struct Address *a, KeyFlags abilities,
   struct PgpUid *q = NULL;
 
   if (a->mailbox)
-    mutt_list_insert_tail(&hints, mutt_str_dup(a->mailbox));
+    mutt_list_insert_tail(&hints, buf_strdup(a->mailbox));
   if (a->personal)
-    pgp_add_string_to_hints(a->personal, &hints);
+    pgp_add_string_to_hints(buf_string(a->personal), &hints);
 
   if (!oppenc_mode)
-    mutt_message(_("Looking for keys matching \"%s\"..."), a->mailbox);
+    mutt_message(_("Looking for keys matching \"%s\"..."), buf_string(a->mailbox));
   keys = pgp_get_candidates(keyring, &hints);
 
   mutt_list_free(&hints);
@@ -384,7 +385,8 @@ struct PgpKeyInfo *pgp_getkeybyaddr(struct Address *a, KeyFlags abilities,
   if (!keys)
     return NULL;
 
-  mutt_debug(LL_DEBUG5, "looking for %s <%s>\n", NONULL(a->personal), NONULL(a->mailbox));
+  mutt_debug(LL_DEBUG5, "looking for %s <%s>\n", buf_string(a->personal),
+             buf_string(a->mailbox));
 
   for (k = keys; k; k = kn)
   {
@@ -471,7 +473,7 @@ struct PgpKeyInfo *pgp_getkeybyaddr(struct Address *a, KeyFlags abilities,
     else
     {
       /* Else: Ask the user.  */
-      k = dlg_select_pgp_key(matches, a, NULL);
+      k = dlg_pgp(matches, a, NULL);
       if (k)
         pgp_remove_key(&matches, k);
     }
@@ -521,7 +523,7 @@ struct PgpKeyInfo *pgp_getkeybystr(const char *cp, KeyFlags abilities, enum PgpR
       continue;
 
     /* This shouldn't happen, but keys without any addresses aren't selectable
-     * in dlg_select_pgp_key().  */
+     * in dlg_pgp().  */
     if (!k->address)
       continue;
 
@@ -563,7 +565,7 @@ struct PgpKeyInfo *pgp_getkeybystr(const char *cp, KeyFlags abilities, enum PgpR
 
   if (matches)
   {
-    k = dlg_select_pgp_key(matches, NULL, p);
+    k = dlg_pgp(matches, NULL, p);
     if (k)
       pgp_remove_key(&matches, k);
     pgp_key_free(&matches);

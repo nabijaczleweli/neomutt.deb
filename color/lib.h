@@ -33,8 +33,11 @@
  * | color/command.c     | @subpage color_command     |
  * | color/curses.c      | @subpage color_curses      |
  * | color/debug.c       | @subpage color_debug       |
+ * | color/dump.c        | @subpage color_dump        |
  * | color/merged.c      | @subpage color_merge       |
  * | color/notify.c      | @subpage color_notify      |
+ * | color/parse_ansi.c  | @subpage color_parse_ansi  |
+ * | color/parse_color.c | @subpage color_parse_color |
  * | color/quoted.c      | @subpage color_quote       |
  * | color/regex.c       | @subpage color_regex       |
  * | color/simple.c      | @subpage color_simple      |
@@ -43,18 +46,21 @@
 #ifndef MUTT_COLOR_LIB_H
 #define MUTT_COLOR_LIB_H
 
-// IWYU pragma: begin_exports
+// IWYU pragma: begin_keep
 #include "ansi.h"
 #include "attr.h"
 #include "color.h"
 #include "command2.h"
 #include "curses2.h"
 #include "debug.h"
+#include "dump.h"
 #include "merged.h"
 #include "notify2.h"
+#include "parse_ansi.h"
+#include "parse_color.h"
 #include "quoted.h"
 #include "regex4.h"
 #include "simple2.h"
-// IWYU pragma: end_exports
+// IWYU pragma: end_keep
 
 #endif /* MUTT_COLOR_LIB_H */

@@ -30,7 +30,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "config/lib.h"
-#include "mutt.h"
 
 struct Buffer;
 struct ConnAccount;
@@ -59,7 +58,6 @@ struct Progress;
 #define IMAP_RES_NEW       3  ///< ImapCommand.state additions
 
 #define SEQ_LEN 16
-#define IMAP_MAX_CMDLEN 1024 ///< Maximum length of command lines before they must be split (for lazy servers)
 
 typedef uint8_t ImapOpenFlags;         ///< Flags, e.g. #MUTT_THREAD_COLLAPSE
 #define IMAP_OPEN_NO_FLAGS          0  ///< No flags are set
@@ -183,8 +181,6 @@ struct SeqsetIterator
 /* imap.c */
 int imap_create_mailbox(struct ImapAccountData *adata, const char *mailbox);
 int imap_rename_mailbox(struct ImapAccountData *adata, char *oldname, const char *newname);
-int imap_exec_msgset(struct Mailbox *m, const char *pre, const char *post,
-                     enum MessageType flag, bool changed, bool invert);
 int imap_open_connection(struct ImapAccountData *adata);
 void imap_close_connection(struct ImapAccountData *adata);
 int imap_read_literal(FILE *fp, struct ImapAccountData *adata, unsigned long bytes, struct Progress *progress);
@@ -239,6 +235,7 @@ int imap_get_literal_count(const char *buf, unsigned int *bytes);
 char *imap_get_qualifier(char *buf);
 char *imap_next_word(char *s);
 void imap_qualify_path(char *buf, size_t buflen, struct ConnAccount *conn_account, char *path);
+void imap_buf_qualify_path(struct Buffer *buf, struct ConnAccount *conn_account, char *path);
 void imap_quote_string(char *dest, size_t dlen, const char *src, bool quote_backtick);
 void imap_unquote_string(char *s);
 void imap_munge_mbox_name(bool unicode, char *dest, size_t dlen, const char *src);

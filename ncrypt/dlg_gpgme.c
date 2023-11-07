@@ -29,9 +29,9 @@
  *
  * ## Windows
  *
- * | Name                       | Type               | See Also               |
- * | :------------------------- | :----------------- | :--------------------- |
- * | GPGME Key Selection Dialog | WT_DLG_CRYPT_GPGME | dlg_select_gpgme_key() |
+ * | Name                       | Type         | See Also           |
+ * | :------------------------- | :----------- | :----------------- |
+ * | GPGME Key Selection Dialog | WT_DLG_GPGME | dlg_gpgme()        |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -72,7 +72,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <time.h>
 #include "private.h"
 #include "mutt/lib.h"
@@ -81,14 +80,14 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "crypt_gpgme.h"
 #include "format_flags.h"
 #include "gpgme_functions.h"
-#include "keymap.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "opcodes.h"
+#include "sort.h"
 
 /// Help Bar for the GPGME key selection dialog
 static const struct Mapping GpgmeHelp[] = {
@@ -111,177 +110,132 @@ struct CryptEntry
 };
 
 /**
- * crypt_compare_key_address - Compare Key addresses and IDs for sorting
- * @param a First key
- * @param b Second key
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * crypt_sort_address - Compare two keys by their addresses - Implements ::sort_t - @ingroup sort_api
  */
-static int crypt_compare_key_address(const void *a, const void *b)
+static int crypt_sort_address(const void *a, const void *b, void *sdata)
 {
-  struct CryptKeyInfo **s = (struct CryptKeyInfo **) a;
-  struct CryptKeyInfo **t = (struct CryptKeyInfo **) b;
+  struct CryptKeyInfo *s = *(struct CryptKeyInfo **) a;
+  struct CryptKeyInfo *t = *(struct CryptKeyInfo **) b;
+  const bool sort_reverse = *(bool *) sdata;
 
-  int r = mutt_istr_cmp((*s)->uid, (*t)->uid);
-  if (r != 0)
-    return r > 0;
-  return mutt_istr_cmp(crypt_fpr_or_lkeyid(*s), crypt_fpr_or_lkeyid(*t)) > 0;
+  int rc = mutt_istr_cmp(s->uid, t->uid);
+  if (rc != 0)
+    goto done;
+
+  rc = mutt_istr_cmp(crypt_fpr_or_lkeyid(s), crypt_fpr_or_lkeyid(t));
+
+done:
+  return sort_reverse ? -rc : rc;
 }
 
 /**
- * crypt_compare_address_qsort - Compare the addresses of two keys
- * @param a First key
- * @param b Second key
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * crypt_sort_keyid - Compare two keys by their IDs - Implements ::sort_t - @ingroup sort_api
  */
-static int crypt_compare_address_qsort(const void *a, const void *b)
+static int crypt_sort_keyid(const void *a, const void *b, void *sdata)
 {
-  const short c_pgp_sort_keys = cs_subset_sort(NeoMutt->sub, "pgp_sort_keys");
-  return (c_pgp_sort_keys & SORT_REVERSE) ? !crypt_compare_key_address(a, b) :
-                                            crypt_compare_key_address(a, b);
+  struct CryptKeyInfo *s = *(struct CryptKeyInfo **) a;
+  struct CryptKeyInfo *t = *(struct CryptKeyInfo **) b;
+  const bool sort_reverse = *(bool *) sdata;
+
+  int rc = mutt_istr_cmp(crypt_fpr_or_lkeyid(s), crypt_fpr_or_lkeyid(t));
+  if (rc != 0)
+    goto done;
+
+  rc = mutt_istr_cmp(s->uid, t->uid);
+
+done:
+  return sort_reverse ? -rc : rc;
 }
 
 /**
- * crypt_compare_keyid - Compare Key IDs and addresses for sorting
- * @param a First key ID
- * @param b Second key ID
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * crypt_sort_date - Compare two keys by their dates - Implements ::sort_t - @ingroup sort_api
  */
-static int crypt_compare_keyid(const void *a, const void *b)
+static int crypt_sort_date(const void *a, const void *b, void *sdata)
 {
-  struct CryptKeyInfo **s = (struct CryptKeyInfo **) a;
-  struct CryptKeyInfo **t = (struct CryptKeyInfo **) b;
+  struct CryptKeyInfo *s = *(struct CryptKeyInfo **) a;
+  struct CryptKeyInfo *t = *(struct CryptKeyInfo **) b;
+  const bool sort_reverse = *(bool *) sdata;
 
-  int r = mutt_istr_cmp(crypt_fpr_or_lkeyid(*s), crypt_fpr_or_lkeyid(*t));
-  if (r != 0)
-    return r > 0;
-  return mutt_istr_cmp((*s)->uid, (*t)->uid) > 0;
-}
+  unsigned long ts = 0;
+  unsigned long tt = 0;
+  int rc = 0;
 
-/**
- * crypt_compare_keyid_qsort - Compare the IDs of two keys
- * @param a First key ID
- * @param b Second key ID
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- */
-static int crypt_compare_keyid_qsort(const void *a, const void *b)
-{
-  const short c_pgp_sort_keys = cs_subset_sort(NeoMutt->sub, "pgp_sort_keys");
-  return (c_pgp_sort_keys & SORT_REVERSE) ? !crypt_compare_keyid(a, b) :
-                                            crypt_compare_keyid(a, b);
-}
-
-/**
- * crypt_compare_key_date - Compare Key creation dates and addresses for sorting
- * @param a First key
- * @param b Second key
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- */
-static int crypt_compare_key_date(const void *a, const void *b)
-{
-  struct CryptKeyInfo **s = (struct CryptKeyInfo **) a;
-  struct CryptKeyInfo **t = (struct CryptKeyInfo **) b;
-  unsigned long ts = 0, tt = 0;
-
-  if ((*s)->kobj->subkeys && ((*s)->kobj->subkeys->timestamp > 0))
-    ts = (*s)->kobj->subkeys->timestamp;
-  if ((*t)->kobj->subkeys && ((*t)->kobj->subkeys->timestamp > 0))
-    tt = (*t)->kobj->subkeys->timestamp;
+  if (s->kobj->subkeys && (s->kobj->subkeys->timestamp > 0))
+    ts = s->kobj->subkeys->timestamp;
+  if (t->kobj->subkeys && (t->kobj->subkeys->timestamp > 0))
+    tt = t->kobj->subkeys->timestamp;
 
   if (ts > tt)
-    return 1;
+  {
+    rc = 1;
+    goto done;
+  }
+
   if (ts < tt)
-    return 0;
+  {
+    rc = -1;
+    goto done;
+  }
 
-  return mutt_istr_cmp((*s)->uid, (*t)->uid) > 0;
+  rc = mutt_istr_cmp(s->uid, t->uid);
+
+done:
+  return sort_reverse ? -rc : rc;
 }
 
 /**
- * crypt_compare_date_qsort - Compare the dates of two keys
- * @param a First key
- * @param b Second key
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * crypt_sort_trust - Compare two keys by their trust levels - Implements ::sort_t - @ingroup sort_api
  */
-static int crypt_compare_date_qsort(const void *a, const void *b)
+static int crypt_sort_trust(const void *a, const void *b, void *sdata)
 {
-  const short c_pgp_sort_keys = cs_subset_sort(NeoMutt->sub, "pgp_sort_keys");
-  return (c_pgp_sort_keys & SORT_REVERSE) ? !crypt_compare_key_date(a, b) :
-                                            crypt_compare_key_date(a, b);
-}
+  struct CryptKeyInfo *s = *(struct CryptKeyInfo **) a;
+  struct CryptKeyInfo *t = *(struct CryptKeyInfo **) b;
+  const bool sort_reverse = *(bool *) sdata;
 
-/**
- * crypt_compare_key_trust - Compare the trust of keys for sorting
- * @param a First key
- * @param b Second key
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- *
- * Compare two trust values, the key length, the creation dates. the addresses
- * and the key IDs.
- */
-static int crypt_compare_key_trust(const void *a, const void *b)
-{
-  struct CryptKeyInfo **s = (struct CryptKeyInfo **) a;
-  struct CryptKeyInfo **t = (struct CryptKeyInfo **) b;
-  unsigned long ts = 0, tt = 0;
+  unsigned long ts = 0;
+  unsigned long tt = 0;
 
-  int r = (((*s)->flags & KEYFLAG_RESTRICTIONS) - ((*t)->flags & KEYFLAG_RESTRICTIONS));
-  if (r != 0)
-    return r > 0;
+  int rc = mutt_numeric_cmp(s->flags & KEYFLAG_RESTRICTIONS, t->flags & KEYFLAG_RESTRICTIONS);
+  if (rc != 0)
+    goto done;
 
-  ts = (*s)->validity;
-  tt = (*t)->validity;
-  r = (tt - ts);
-  if (r != 0)
-    return r < 0;
+  // Note: reversed
+  rc = mutt_numeric_cmp(t->validity, s->validity);
+  if (rc != 0)
+    return rc;
 
-  if ((*s)->kobj->subkeys)
-    ts = (*s)->kobj->subkeys->length;
-  if ((*t)->kobj->subkeys)
-    tt = (*t)->kobj->subkeys->length;
-  if (ts != tt)
-    return ts > tt;
+  ts = 0;
+  tt = 0;
+  if (s->kobj->subkeys)
+    ts = s->kobj->subkeys->length;
+  if (t->kobj->subkeys)
+    tt = t->kobj->subkeys->length;
 
-  if ((*s)->kobj->subkeys && ((*s)->kobj->subkeys->timestamp > 0))
-    ts = (*s)->kobj->subkeys->timestamp;
-  if ((*t)->kobj->subkeys && ((*t)->kobj->subkeys->timestamp > 0))
-    tt = (*t)->kobj->subkeys->timestamp;
-  if (ts > tt)
-    return 1;
-  if (ts < tt)
-    return 0;
+  // Note: reversed
+  rc = mutt_numeric_cmp(tt, ts);
+  if (rc != 0)
+    goto done;
 
-  r = mutt_istr_cmp((*s)->uid, (*t)->uid);
-  if (r != 0)
-    return r > 0;
-  return mutt_istr_cmp(crypt_fpr_or_lkeyid((*s)), crypt_fpr_or_lkeyid((*t))) > 0;
-}
+  ts = 0;
+  tt = 0;
+  if (s->kobj->subkeys && (s->kobj->subkeys->timestamp > 0))
+    ts = s->kobj->subkeys->timestamp;
+  if (t->kobj->subkeys && (t->kobj->subkeys->timestamp > 0))
+    tt = t->kobj->subkeys->timestamp;
 
-/**
- * crypt_compare_trust_qsort - Compare the trust levels of two keys
- * @param a First key
- * @param b Second key
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
- */
-static int crypt_compare_trust_qsort(const void *a, const void *b)
-{
-  const short c_pgp_sort_keys = cs_subset_sort(NeoMutt->sub, "pgp_sort_keys");
-  return (c_pgp_sort_keys & SORT_REVERSE) ? !crypt_compare_key_trust(a, b) :
-                                            crypt_compare_key_trust(a, b);
+  // Note: reversed
+  rc = mutt_numeric_cmp(tt, ts);
+  if (rc != 0)
+    goto done;
+
+  rc = mutt_istr_cmp(s->uid, t->uid);
+  if (rc != 0)
+    goto done;
+
+  rc = mutt_istr_cmp(crypt_fpr_or_lkeyid(s), crypt_fpr_or_lkeyid(t));
+
+done:
+  return sort_reverse ? -rc : rc;
 }
 
 /**
@@ -395,7 +349,9 @@ static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int co
         snprintf(buf, buflen, fmt, crypt_key_abilities(kflags));
       }
       else if (!(kflags & KEYFLAG_ABILITIES))
+      {
         optional = false;
+      }
       break;
 
     case 'f':
@@ -405,7 +361,9 @@ static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int co
         snprintf(buf, buflen, fmt, crypt_flags(kflags));
       }
       else if (!(kflags & KEYFLAG_RESTRICTIONS))
+      {
         optional = false;
+      }
       break;
 
     case 'i':
@@ -502,7 +460,7 @@ static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int co
     case '[':
     {
       char buf2[128];
-      bool do_locales = true;
+      bool use_c_locale = false;
       struct tm tm = { 0 };
 
       char *p = buf;
@@ -510,7 +468,7 @@ static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int co
       const char *cp = src;
       if (*cp == '!')
       {
-        do_locales = false;
+        use_c_locale = true;
         cp++;
       }
 
@@ -545,11 +503,10 @@ static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int co
       else
         tm = mutt_date_localtime(0); // Default to 1970-01-01
 
-      if (!do_locales)
-        setlocale(LC_TIME, "C");
-      strftime(buf2, sizeof(buf2), buf, &tm);
-      if (!do_locales)
-        setlocale(LC_TIME, "");
+      if (use_c_locale)
+        strftime_l(buf2, sizeof(buf2), buf, &tm, NeoMutt->time_c_locale);
+      else
+        strftime(buf2, sizeof(buf2), buf, &tm);
 
       snprintf(fmt, sizeof(fmt), "%%%ss", prec);
       snprintf(buf, buflen, fmt, buf2);
@@ -578,14 +535,14 @@ static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int co
 }
 
 /**
- * crypt_make_entry - Format a menu item for the key selection list - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * crypt_make_entry - Format a PGP Key for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  *
  * @sa $pgp_entry_format, crypt_format_str()
  */
 static void crypt_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
 {
   struct CryptKeyInfo **key_table = menu->mdata;
-  struct CryptEntry entry;
+  struct CryptEntry entry = { 0 };
 
   entry.key = key_table[line];
   entry.num = line + 1;
@@ -653,7 +610,7 @@ static int gpgme_key_window_observer(struct NotifyCallback *nc)
 
   struct Menu *menu = win_menu->wdata;
 
-  notify_observer_remove(NeoMutt->notify, gpgme_key_config_observer, menu);
+  notify_observer_remove(NeoMutt->sub->notify, gpgme_key_config_observer, menu);
   notify_observer_remove(win_menu->notify, gpgme_key_window_observer, win_menu);
 
   mutt_debug(LL_DEBUG5, "window delete done\n");
@@ -661,7 +618,7 @@ static int gpgme_key_window_observer(struct NotifyCallback *nc)
 }
 
 /**
- * dlg_select_gpgme_key - Get the user to select a key
+ * dlg_gpgme - Get the user to select a key - @ingroup gui_dlg
  * @param[in]  keys         List of keys to select from
  * @param[in]  p            Address to match
  * @param[in]  s            Real name to display
@@ -669,15 +626,14 @@ static int gpgme_key_window_observer(struct NotifyCallback *nc)
  * @param[out] forced_valid Set to true if user overrode key's validity
  * @retval ptr Key selected by user
  *
- * Display a menu to select a key from the array of keys.
+ * The Select GPGME Key Dialog lets the user select a PGP Key to use.
  */
-struct CryptKeyInfo *dlg_select_gpgme_key(struct CryptKeyInfo *keys,
-                                          struct Address *p, const char *s,
-                                          unsigned int app, bool *forced_valid)
+struct CryptKeyInfo *dlg_gpgme(struct CryptKeyInfo *keys, struct Address *p,
+                               const char *s, unsigned int app, bool *forced_valid)
 {
   int keymax;
   int i;
-  int (*f)(const void *, const void *);
+  sort_t f = NULL;
   enum MenuType menu_to_use = MENU_GENERIC;
   bool unusable = false;
 
@@ -713,29 +669,32 @@ struct CryptKeyInfo *dlg_select_gpgme_key(struct CryptKeyInfo *keys,
   switch (c_pgp_sort_keys & SORT_MASK)
   {
     case SORT_ADDRESS:
-      f = crypt_compare_address_qsort;
+      f = crypt_sort_address;
       break;
     case SORT_DATE:
-      f = crypt_compare_date_qsort;
+      f = crypt_sort_date;
       break;
     case SORT_KEYID:
-      f = crypt_compare_keyid_qsort;
+      f = crypt_sort_keyid;
       break;
     case SORT_TRUST:
     default:
-      f = crypt_compare_trust_qsort;
+      f = crypt_sort_trust;
       break;
   }
 
   if (key_table)
-    qsort(key_table, i, sizeof(struct CryptKeyInfo *), f);
+  {
+    bool sort_reverse = c_pgp_sort_keys & SORT_REVERSE;
+    mutt_qsort_r(key_table, i, sizeof(struct CryptKeyInfo *), f, &sort_reverse);
+  }
 
   if (app & APPLICATION_PGP)
     menu_to_use = MENU_KEY_SELECT_PGP;
   else if (app & APPLICATION_SMIME)
     menu_to_use = MENU_KEY_SELECT_SMIME;
 
-  struct MuttWindow *dlg = simple_dialog_new(menu_to_use, WT_DLG_CRYPT_GPGME, GpgmeHelp);
+  struct MuttWindow *dlg = simple_dialog_new(menu_to_use, WT_DLG_GPGME, GpgmeHelp);
 
   struct Menu *menu = dlg->wdata;
   menu->max = i;
@@ -747,41 +706,40 @@ struct CryptKeyInfo *dlg_select_gpgme_key(struct CryptKeyInfo *keys,
   dlg->wdata = &gd;
 
   // NT_COLOR is handled by the SimpleDialog
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, gpgme_key_config_observer, menu);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, gpgme_key_config_observer, menu);
   notify_observer_add(menu->win->notify, NT_WINDOW, gpgme_key_window_observer, menu->win);
 
+  const char *ts = NULL;
+
+  if ((app & APPLICATION_PGP) && (app & APPLICATION_SMIME))
+    ts = _("PGP and S/MIME keys matching");
+  else if ((app & APPLICATION_PGP))
+    ts = _("PGP keys matching");
+  else if ((app & APPLICATION_SMIME))
+    ts = _("S/MIME keys matching");
+  else
+    ts = _("keys matching");
+
+  char buf[1024] = { 0 };
+  if (p)
   {
-    const char *ts = NULL;
-
-    if ((app & APPLICATION_PGP) && (app & APPLICATION_SMIME))
-      ts = _("PGP and S/MIME keys matching");
-    else if ((app & APPLICATION_PGP))
-      ts = _("PGP keys matching");
-    else if ((app & APPLICATION_SMIME))
-      ts = _("S/MIME keys matching");
-    else
-      ts = _("keys matching");
-
-    char buf[1024] = { 0 };
-    if (p)
-    {
-      /* L10N: 1$s is one of the previous four entries.
-         %2$s is an address.
-         e.g. "S/MIME keys matching <me@mutt.org>" */
-      snprintf(buf, sizeof(buf), _("%s <%s>"), ts, p->mailbox);
-    }
-    else
-    {
-      /* L10N: e.g. 'S/MIME keys matching "Michael Elkins".' */
-      snprintf(buf, sizeof(buf), _("%s \"%s\""), ts, s);
-    }
-
-    struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
-    sbar_set_title(sbar, buf);
+    /* L10N: 1$s is one of the previous four entries.
+       %2$s is an address.
+       e.g. "S/MIME keys matching <john.doe@example.com>" */
+    snprintf(buf, sizeof(buf), _("%s <%s>"), ts, buf_string(p->mailbox));
   }
+  else
+  {
+    /* L10N: e.g. 'S/MIME keys matching "John Doe".' */
+    snprintf(buf, sizeof(buf), _("%s \"%s\""), ts, s);
+  }
+
+  struct MuttWindow *sbar = window_find_child(dlg, WT_STATUS_BAR);
+  sbar_set_title(sbar, buf);
 
   mutt_clear_error();
 
+  struct MuttWindow *old_focus = window_set_focus(menu->win);
   // ---------------------------------------------------------------------------
   // Event Loop
   int op = OP_NULL;
@@ -790,7 +748,7 @@ struct CryptKeyInfo *dlg_select_gpgme_key(struct CryptKeyInfo *keys,
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(menu_to_use);
+    op = km_dokey(menu_to_use, GETCH_NO_FLAGS);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
@@ -810,6 +768,7 @@ struct CryptKeyInfo *dlg_select_gpgme_key(struct CryptKeyInfo *keys,
   } while (!gd.done);
   // ---------------------------------------------------------------------------
 
+  window_set_focus(old_focus);
   simple_dialog_free(&dlg);
   return gd.key;
 }

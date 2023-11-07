@@ -40,9 +40,13 @@
 #include "config/lib.h"
 #include "core/lib.h"
 #include "lib.h"
+#include "connaccount.h"
+#include "connection.h"
 #include "globals.h"
 #include "muttlib.h"
 #include "ssl.h"
+
+int gnutls_protocol_set_priority(gnutls_session_t session, const int *list);
 
 // clang-format off
 /* certificate error bitmap values */
@@ -560,7 +564,7 @@ static int tls_check_one_certificate(const gnutls_datum_t *certdata,
   const char *const c_certificate_file = cs_subset_path(NeoMutt->sub, "certificate_file");
   const bool allow_always = (c_certificate_file && !savedcert &&
                              !(certerr & (CERTERR_EXPIRED | CERTERR_NOTYETVALID | CERTERR_REVOKED)));
-  int rc = dlg_verify_certificate(title, &carr, allow_always, false);
+  int rc = dlg_certificate(title, &carr, allow_always, false);
   if (rc == 3) // Accept always
   {
     bool saved = false;
@@ -588,7 +592,7 @@ static int tls_check_one_certificate(const gnutls_datum_t *certdata,
       }
       mutt_file_fclose(&fp);
     }
-    if (!saved)
+    if (saved)
       mutt_message(_("Certificate saved"));
     else
       mutt_error(_("Warning: Couldn't save certificate"));
@@ -978,7 +982,7 @@ fail:
 }
 
 /**
- * tls_socket_poll - Check whether a socket read would block - Implements Connection::poll() - @ingroup connection_poll
+ * tls_socket_poll - Check if any data is waiting on a socket - Implements Connection::poll() - @ingroup connection_poll
  */
 static int tls_socket_poll(struct Connection *conn, time_t wait_secs)
 {

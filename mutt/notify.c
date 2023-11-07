@@ -32,6 +32,8 @@
 #include "notify.h"
 #include "logging2.h"
 #include "memory.h"
+#include "notify_type.h"
+#include "observer.h"
 #include "queue.h"
 
 /// Lookup table for NotifyType
@@ -40,8 +42,8 @@ static const char *NotifyTypeNames[] = {
   "NT_ALL",     "NT_ACCOUNT",  "NT_ALIAS",   "NT_ALTERN", "NT_ATTACH",
   "NT_BINDING", "NT_COLOR",    "NT_COMMAND", "NT_CONFIG", "NT_CONTEXT",
   "NT_EMAIL",   "NT_ENVELOPE", "NT_GLOBAL",  "NT_HEADER", "NT_INDEX",
-  "NT_MAILBOX", "NT_MENU",     "NT_PAGER",   "NT_SCORE",  "NT_SUBJRX",
-  "NT_WINDOW",
+  "NT_MAILBOX", "NT_MENU",     "NT_PAGER",   "NT_RESIZE", "NT_SCORE",
+  "NT_SUBJRX",  "NT_TIMEOUT",  "NT_WINDOW",
 };
 
 /**
@@ -196,7 +198,7 @@ bool notify_observer_add(struct Notify *notify, enum NotifyType type,
   STAILQ_FOREACH(np, &notify->observers, entries)
   {
     if (!np->observer)
-      continue;
+      continue; // LCOV_EXCL_LINE
 
     if ((np->observer->callback == callback) && (np->observer->global_data == global_data))
       return true;
@@ -235,7 +237,7 @@ bool notify_observer_remove(struct Notify *notify, const observer_t callback,
   STAILQ_FOREACH(np, &notify->observers, entries)
   {
     if (!np->observer)
-      continue;
+      continue; // LCOV_EXCL_LINE
 
     if ((np->observer->callback == callback) && (np->observer->global_data == global_data))
     {

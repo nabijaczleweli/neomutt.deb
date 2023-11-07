@@ -30,7 +30,6 @@
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include "mutt/lib.h"
 #include "subset.h"
 #include "set.h"
@@ -50,14 +49,9 @@ static const struct Mapping ConfigEventNames[] = {
 };
 
 /**
- * elem_list_sort - Sort two HashElem pointers to config
- * @param a First HashElem
- * @param b Second HashElem
- * @retval -1 a precedes b
- * @retval  0 a and b are identical
- * @retval  1 b precedes a
+ * elem_list_sort - Compare two HashElem pointers to config - Implements ::sort_t - @ingroup sort_api
  */
-int elem_list_sort(const void *a, const void *b)
+int elem_list_sort(const void *a, const void *b, void *sdata)
 {
   if (!a || !b)
     return 0;
@@ -91,7 +85,7 @@ struct HashElem **get_elem_list(struct ConfigSet *cs)
       break; /* LCOV_EXCL_LINE */
   }
 
-  qsort(he_list, index, sizeof(struct HashElem *), elem_list_sort);
+  mutt_qsort_r(he_list, index, sizeof(struct HashElem *), elem_list_sort, NULL);
 
   return he_list;
 }

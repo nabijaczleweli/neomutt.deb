@@ -34,7 +34,7 @@
 struct Connection;
 
 /**
- * nntp_adata_free - Free the private Account data - Implements Account::adata_free()
+ * nntp_adata_free - Free the private Account data - Implements Account::adata_free() - @ingroup account_adata_free
  *
  * The NntpAccountData struct stores global NNTP data, such as the connection to
  * the database.  This function will close the database, free the resources and
@@ -42,6 +42,9 @@ struct Connection;
  */
 void nntp_adata_free(void **ptr)
 {
+  if (!ptr || !*ptr)
+    return;
+
   struct NntpAccountData *adata = *ptr;
 
   mutt_file_fclose(&adata->fp_newsrc);

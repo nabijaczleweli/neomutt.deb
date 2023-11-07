@@ -44,6 +44,7 @@
 #include "core/lib.h"
 #include "lib.h"
 #include "parse/lib.h"
+#include "globals.h" // IWYU pragma: keep
 #include "mview.h"
 
 struct Menu;
@@ -75,9 +76,9 @@ static bool eat_regex(struct Pattern *pat, PatternCompFlags flags,
     buf_printf(err, _("Error in expression: %s"), pexpr);
     goto out;
   }
-  if (buf->data[0] == '\0')
+  if (buf_is_empty(buf))
   {
-    buf_printf(err, "%s", _("Empty expression"));
+    buf_addstr(err, _("Empty expression"));
     goto out;
   }
 
@@ -151,7 +152,7 @@ static bool eat_query(struct Pattern *pat, PatternCompFlags flags,
   const char *const c_external_search_command = cs_subset_string(NeoMutt->sub, "external_search_command");
   if (!c_external_search_command)
   {
-    buf_printf(err, "%s", _("No search command defined"));
+    buf_addstr(err, _("No search command defined"));
     goto out;
   }
 
@@ -164,7 +165,7 @@ static bool eat_query(struct Pattern *pat, PatternCompFlags flags,
   }
   if (*tok_buf->data == '\0')
   {
-    buf_printf(err, "%s", _("Empty expression"));
+    buf_addstr(err, _("Empty expression"));
     goto out;
   }
 
@@ -189,7 +190,7 @@ static bool eat_query(struct Pattern *pat, PatternCompFlags flags,
   mutt_message(_("Running search command: %s ..."), cmd_buf->data);
   pat->is_multi = true;
   mutt_list_clear(&pat->p.multi_cases);
-  pid_t pid = filter_create(cmd_buf->data, NULL, &fp, NULL);
+  pid_t pid = filter_create(cmd_buf->data, NULL, &fp, NULL, EnvList);
   if (pid < 0)
   {
     buf_printf(err, "unable to fork command: %s\n", cmd_buf->data);
@@ -584,7 +585,7 @@ bool eval_date_minmax(struct Pattern *pat, const char *s, struct Buffer *err)
     if (!until_now)
     { /* max date or relative range/window */
 
-      struct tm base_min;
+      struct tm base_min = { 0 };
 
       if (!have_min)
       { /* save base minimum and set current date, e.g. for "-3d+1d" */
@@ -726,7 +727,7 @@ static bool eat_date(struct Pattern *pat, PatternCompFlags flags,
 
   if (buf_is_empty(tmp))
   {
-    buf_printf(err, "%s", _("Empty expression"));
+    buf_addstr(err, _("Empty expression"));
     goto out;
   }
 
@@ -786,11 +787,17 @@ void mutt_pattern_free(struct PatternList **pat)
     next = SLIST_NEXT(np, entries);
 
     if (np->is_multi)
+    {
       mutt_list_free(&np->p.multi_cases);
+    }
     else if (np->string_match || np->dynamic)
+    {
       FREE(&np->p.str);
+    }
     else if (np->group_match)
+    {
       np->p.group = NULL;
+    }
     else if (np->p.regex)
     {
       regfree(np->p.regex);
@@ -843,7 +850,7 @@ static struct Pattern *attach_leaf(struct PatternList *list, struct Pattern *lea
   SLIST_FOREACH(last, list, entries)
   {
     // TODO - or we could use a doubly-linked list
-    if (SLIST_NEXT(last, entries) == NULL)
+    if (!SLIST_NEXT(last, entries))
     {
       SLIST_NEXT(last, entries) = leaf;
       break;
@@ -1053,7 +1060,7 @@ struct PatternList *mutt_pattern_comp(struct MailboxView *mv, struct Menu *menu,
         {
           if (ps.dptr[0] == '\0')
           {
-            buf_printf(err, "%s", _("missing parameter"));
+            buf_addstr(err, _("missing parameter"));
             goto cleanup;
           }
           switch (entry->eat_arg)

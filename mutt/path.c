@@ -156,62 +156,29 @@ bool mutt_path_tidy_dotdot(char *buf)
 
 /**
  * mutt_path_tidy - Remove unnecessary parts of a path
- * @param[in,out] buf Path to modify
+ * @param[in,out] path Path to modify
  * @param[in]     is_dir Is the path a directory?
  * @retval true Success
  *
  * Remove unnecessary dots and slashes from a path
  */
-bool mutt_path_tidy(char *buf, bool is_dir)
+bool mutt_path_tidy(struct Buffer *path, bool is_dir)
 {
-  if (!buf || (buf[0] != '/'))
+  if (buf_is_empty(path) || (buf_at(path, 0) != '/'))
     return false;
 
-  if (!mutt_path_tidy_slash(buf, is_dir))
-    return false;
+  if (!mutt_path_tidy_slash(path->data, is_dir))
+    return false; // LCOV_EXCL_LINE
 
-  return mutt_path_tidy_dotdot(buf);
-}
+  mutt_path_tidy_dotdot(path->data);
+  buf_fix_dptr(path);
 
-/**
- * mutt_path_pretty - Tidy a filesystem path
- * @param buf     Path to modify
- * @param buflen  Length of the buffer
- * @param homedir Home directory for '~' substitution
- * @param is_dir  Is the path a directory?
- * @retval true Success
- *
- * Tidy a path and replace a home directory with '~'
- */
-bool mutt_path_pretty(char *buf, size_t buflen, const char *homedir, bool is_dir)
-{
-  if (!buf)
-    return false;
-
-  mutt_path_tidy(buf, is_dir);
-
-  size_t len = mutt_str_startswith(buf, homedir);
-  if (len == 0)
-    return false;
-
-  if ((buf[len] != '/') && (buf[len] != '\0'))
-    return false;
-
-  buf[0] = '~';
-  if (buf[len] == '\0')
-  {
-    buf[1] = '\0';
-    return true;
-  }
-
-  mutt_str_copy(buf + 1, buf + len, buflen - len);
   return true;
 }
 
 /**
  * mutt_path_tilde - Expand '~' in a path
- * @param buf     Path to modify
- * @param buflen  Length of the buffer
+ * @param path    Path to modify
  * @param homedir Home directory for '~' substitution
  * @retval true Success
  *
@@ -220,16 +187,16 @@ bool mutt_path_pretty(char *buf, size_t buflen, const char *homedir, bool is_dir
  * - `~realuser/dir` (~realuser expanded)
  * - `~nonuser/dir` (~nonuser not changed)
  */
-bool mutt_path_tilde(char *buf, size_t buflen, const char *homedir)
+bool mutt_path_tilde(struct Buffer *path, const char *homedir)
 {
-  if (!buf || (buf[0] != '~'))
+  if (buf_is_empty(path) || (buf_at(path, 0) != '~'))
     return false;
 
   char result[PATH_MAX] = { 0 };
   char *dir = NULL;
   size_t len = 0;
 
-  if ((buf[1] == '/') || (buf[1] == '\0'))
+  if ((buf_at(path, 1) == '/') || (buf_at(path, 1) == '\0'))
   {
     if (!homedir)
     {
@@ -238,16 +205,16 @@ bool mutt_path_tilde(char *buf, size_t buflen, const char *homedir)
     }
 
     len = mutt_str_copy(result, homedir, sizeof(result));
-    dir = buf + 1;
+    dir = path->data + 1;
   }
   else
   {
     char user[128] = { 0 };
-    dir = strchr(buf + 1, '/');
+    dir = strchr(path->data + 1, '/');
     if (dir)
-      mutt_str_copy(user, buf + 1, MIN(dir - buf, (unsigned) sizeof(user)));
+      mutt_str_copy(user, path->data + 1, MIN(dir - path->data, (unsigned) sizeof(user)));
     else
-      mutt_str_copy(user, buf + 1, sizeof(user));
+      mutt_str_copy(user, path->data + 1, sizeof(user));
 
     struct passwd *pw = getpwnam(user);
     if (!pw || !pw->pw_dir)
@@ -259,107 +226,70 @@ bool mutt_path_tilde(char *buf, size_t buflen, const char *homedir)
     len = mutt_str_copy(result, pw->pw_dir, sizeof(result));
   }
 
-  size_t dirlen = mutt_str_len(dir);
-  if ((len + dirlen) >= buflen)
-  {
-    mutt_debug(LL_DEBUG3, "result too big for the buffer %ld >= %ld\n", len + dirlen, buflen);
-    return false;
-  }
-
   mutt_str_copy(result + len, dir, sizeof(result) - len);
-  mutt_str_copy(buf, result, buflen);
+  buf_strcpy(path, result);
 
   return true;
 }
 
 /**
  * mutt_path_canon - Create the canonical version of a path
- * @param buf     Path to modify
- * @param buflen  Length of the buffer
+ * @param path    Path to modify
  * @param homedir Home directory for '~' substitution
  * @param is_dir  Is the path a directory?
  * @retval true Success
  *
  * Remove unnecessary dots and slashes from a path and expand '~'.
  */
-bool mutt_path_canon(char *buf, size_t buflen, const char *homedir, bool is_dir)
+bool mutt_path_canon(struct Buffer *path, const char *homedir, bool is_dir)
 {
-  if (!buf)
+  if (buf_is_empty(path))
     return false;
 
-  char result[PATH_MAX] = { 0 };
-
-  if (buf[0] == '~')
+  if (buf_at(path, 0) == '~')
   {
-    mutt_path_tilde(buf, buflen, homedir);
+    mutt_path_tilde(path, homedir);
   }
-  else if (buf[0] != '/')
+  else if (buf_at(path, 0) != '/')
   {
-    if (!getcwd(result, sizeof(result)))
+    char cwd[PATH_MAX] = { 0 };
+    if (!getcwd(cwd, sizeof(cwd)))
     {
-      mutt_debug(LL_DEBUG1, "getcwd failed: %s (%d)\n", strerror(errno), errno);
-      return false;
+      mutt_debug(LL_DEBUG1, "getcwd failed: %s (%d)\n", strerror(errno), errno); // LCOV_EXCL_LINE
+      return false; // LCOV_EXCL_LINE
     }
 
-    size_t cwdlen = mutt_str_len(result);
-    size_t dirlen = mutt_str_len(buf);
-    if ((cwdlen + dirlen + 1) >= buflen)
-    {
-      mutt_debug(LL_DEBUG3, "result too big for the buffer %ld >= %ld\n",
-                 cwdlen + dirlen + 1, buflen);
-      return false;
-    }
-
-    result[cwdlen] = '/';
-    mutt_str_copy(result + cwdlen + 1, buf, sizeof(result) - cwdlen - 1);
-    mutt_str_copy(buf, result, buflen);
+    size_t cwd_len = mutt_str_len(cwd);
+    cwd[cwd_len] = '/';
+    cwd[cwd_len + 1] = '\0';
+    buf_insert(path, 0, cwd);
   }
 
-  if (!mutt_path_tidy(buf, is_dir))
-    return false;
-
-  return true;
+  return mutt_path_tidy(path, is_dir);
 }
 
 /**
  * mutt_path_basename - Find the last component for a pathname
- * @param f String to be examined
+ * @param path String to be examined
  * @retval ptr Part of pathname after last '/' character
- */
-const char *mutt_path_basename(const char *f)
-{
-  if (!f)
-    return NULL;
-
-  const char *p = strrchr(f, '/');
-  if (p)
-    return p + 1;
-  return f;
-}
-
-/**
- * mutt_path_concat - Join a directory name and a filename
- * @param d     Buffer for the result
- * @param dir   Directory name
- * @param fname File name
- * @param l     Length of buffer
- * @retval ptr Destination buffer
  *
- * If both dir and fname are supplied, they are separated with '/'.
- * If either is missing, then the other will be copied exactly.
+ * @note Basename of / is /
  */
-char *mutt_path_concat(char *d, const char *dir, const char *fname, size_t l)
+const char *mutt_path_basename(const char *path)
 {
-  if (!d || !dir || !fname)
+  if (!path)
     return NULL;
 
-  const char *fmt = "%s/%s";
+  const char *p = strrchr(path, '/');
+  if (p)
+  {
+    if (p[1] == '\0')
+      return path;
 
-  if ((fname[0] == '\0') || ((dir[0] != '\0') && (dir[strlen(dir) - 1] == '/')))
-    fmt = "%s%s";
+    return p + 1;
+  }
 
-  snprintf(d, l, fmt, dir, fname);
-  return d;
+  return path;
 }
 
 /**
@@ -370,6 +300,8 @@ char *mutt_path_concat(char *d, const char *dir, const char *fname, size_t l)
  * Unlike the IEEE Std 1003.1-2001 specification of dirname(3), this
  * implementation does not modify its parameter, so callers need not manually
  * copy their paths into a modifiable buffer prior to calling this function.
+ *
+ * @note Dirname of / is /
  *
  * @note The caller must free the returned string
  */
@@ -429,67 +361,66 @@ bool mutt_path_to_absolute(char *path, const char *reference)
 
 /**
  * mutt_path_realpath - Resolve path, unraveling symlinks
- * @param buf Buffer containing path
+ * @param  path Buffer containing path
  * @retval num String length of resolved path
  * @retval 0   Error, buf is not overwritten
  *
  * Resolve and overwrite the path in buf.
- *
- * @note Size of buf should be at least PATH_MAX bytes.
  */
-size_t mutt_path_realpath(char *buf)
+size_t mutt_path_realpath(struct Buffer *path)
 {
-  if (!buf)
+  if (buf_is_empty(path))
     return 0;
 
   char s[PATH_MAX] = { 0 };
 
-  if (!realpath(buf, s))
+  if (!realpath(buf_string(path), s))
     return 0;
 
-  return mutt_str_copy(buf, s, sizeof(s));
+  return buf_strcpy(path, s);
 }
 
 /**
  * mutt_path_parent - Find the parent of a path
- * @param buf    Buffer for the result
+ * @param  path  Buffer for the result
  * @retval true  Success
  */
-bool mutt_path_parent(char *buf)
+bool mutt_path_parent(struct Buffer *path)
 {
-  if (!buf)
+  if (buf_is_empty(path))
     return false;
 
-  int n = mutt_str_len(buf);
+  int n = buf_len(path);
   if (n < 2)
     return false;
 
-  if (buf[n - 1] == '/')
+  if (buf_at(path, n - 1) == '/')
     n--;
 
   // Find the previous '/'
-  for (n--; ((n >= 0) && (buf[n] != '/')); n--)
+  for (n--; ((n >= 0) && (buf_at(path, n) != '/')); n--)
     ; // do nothing
 
   if (n == 0) // Always keep at least one '/'
     n++;
 
-  buf[n] = '\0';
+  path->data[n] = '\0';
+  buf_fix_dptr(path);
   return true;
 }
 
 /**
  * mutt_path_abbr_folder - Create a folder abbreviation
- * @param buf    Path to modify
+ * @param path   Path to modify
  * @param folder Base path for '=' substitution
- * @retval true Path was abbreviated
+ * @retval true  Path was abbreviated
  *
  * Abbreviate a path using '=' to represent the 'folder'.
  * If the folder path is passed, it won't be abbreviated to just '='
  */
-bool mutt_path_abbr_folder(char *buf, const char *folder)
+bool mutt_path_abbr_folder(struct Buffer *path, const char *folder)
 {
-  if (!buf || !folder)
+  if (buf_is_empty(path) || !folder)
     return false;
 
   size_t flen = mutt_str_len(folder);
@@ -499,16 +430,18 @@ bool mutt_path_abbr_folder(char *buf, const char *folder)
   if (folder[flen - 1] == '/')
     flen--;
 
-  if (!mutt_strn_equal(buf, folder, flen))
+  if (!mutt_strn_equal(buf_string(path), folder, flen))
     return false;
 
-  if (buf[flen + 1] == '\0') // Don't abbreviate to '=/'
+  if (buf_at(path, flen + 1) == '\0') // Don't abbreviate to '=/'
     return false;
 
-  size_t rlen = mutt_str_len(buf + flen + 1);
+  size_t rlen = mutt_str_len(path->data + flen + 1);
 
-  buf[0] = '=';
-  memmove(buf + 1, buf + flen + 1, rlen + 1);
+  path->data[0] = '=';
+  memmove(path->data + 1, path->data + flen + 1, rlen + 1);
+  buf_fix_dptr(path);
+
   return true;
 }
 
@@ -516,6 +449,8 @@ bool mutt_path_abbr_folder(char *buf, const char *folder)
  * mutt_path_escape - Escapes single quotes in a path for a command string
  * @param src the path to escape
  * @retval ptr The escaped string
+ *
+ * @note Do not free the returned string
  */
 char *mutt_path_escape(const char *src)
 {
@@ -536,7 +471,7 @@ char *mutt_path_escape(const char *src)
     else
     {
       /* convert ' into '\'' */
-      if (destsize + 4 < sizeof(dest))
+      if ((destsize + 4) < sizeof(dest))
       {
         *destp++ = *src++;
         *destp++ = '\\';
@@ -546,7 +481,7 @@ char *mutt_path_escape(const char *src)
       }
       else
       {
-        break;
+        break; // LCOV_EXCL_LINE
       }
     }
   }
@@ -566,16 +501,16 @@ const char *mutt_path_getcwd(struct Buffer *cwd)
     return NULL;
 
   buf_alloc(cwd, PATH_MAX);
-  char *retval = getcwd(cwd->data, cwd->dsize);
-  while (!retval && (errno == ERANGE))
+  char *rc = getcwd(cwd->data, cwd->dsize);
+  while (!rc && (errno == ERANGE))
   {
-    buf_alloc(cwd, cwd->dsize + 256);
-    retval = getcwd(cwd->data, cwd->dsize);
+    buf_alloc(cwd, cwd->dsize + 256);   // LCOV_EXCL_LINE
+    rc = getcwd(cwd->data, cwd->dsize); // LCOV_EXCL_LINE
   }
-  if (retval)
+  if (rc)
     buf_fix_dptr(cwd);
   else
-    buf_reset(cwd);
+    buf_reset(cwd); // LCOV_EXCL_LINE
 
-  return retval;
+  return rc;
 }

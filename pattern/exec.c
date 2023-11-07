@@ -172,6 +172,9 @@ static bool msg_search(struct Pattern *pat, struct Email *e, struct Message *msg
 
       if (!mutt_file_seek(msg->fp, e->offset, SEEK_SET))
       {
+#ifdef USE_FMEMOPEN
+        FREE(&temp);
+#endif
         return false;
       }
       mutt_body_handler(e->body, &state);
@@ -197,6 +200,7 @@ static bool msg_search(struct Pattern *pat, struct Email *e, struct Message *msg
       if (!fp)
       {
         mutt_perror(_("Error opening /dev/null"));
+        FREE(&temp);
         return false;
       }
     }
@@ -403,9 +407,10 @@ static int match_addrlist(struct Pattern *pat, bool match_personal, int n, ...)
     struct Address *a = NULL;
     TAILQ_FOREACH(a, al, entries)
     {
-      if (pat->all_addr ^ ((!pat->is_alias || alias_reverse_lookup(a)) &&
-                           ((a->mailbox && patmatch(pat, a->mailbox)) ||
-                            (match_personal && a->personal && patmatch(pat, a->personal)))))
+      if (pat->all_addr ^
+          ((!pat->is_alias || alias_reverse_lookup(a)) &&
+           ((a->mailbox && patmatch(pat, buf_string(a->mailbox))) ||
+            (match_personal && a->personal && patmatch(pat, buf_string(a->personal))))))
       {
         va_end(ap);
         return !pat->all_addr; /* Found match, or non-match if all_addr */
@@ -709,7 +714,7 @@ static int msg_search_sendmode(struct Email *e, struct Pattern *pat)
     fp = mutt_file_fopen(buf_string(tempfile), "w+");
     if (!fp)
     {
-      mutt_perror(buf_string(tempfile));
+      mutt_perror("%s", buf_string(tempfile));
       buf_pool_release(&tempfile);
       return 0;
     }
@@ -743,7 +748,7 @@ static int msg_search_sendmode(struct Email *e, struct Pattern *pat)
     fp = mutt_file_fopen(e->body->filename, "r");
     if (!fp)
     {
-      mutt_perror(e->body->filename);
+      mutt_perror("%s", e->body->filename);
       return 0;
     }
 

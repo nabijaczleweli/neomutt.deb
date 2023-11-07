@@ -39,7 +39,6 @@
 #include "attr.h"
 #include "color.h"
 #include "command2.h"
-#include "curses2.h"
 #include "debug.h"
 #include "notify2.h"
 #include "regex4.h"
@@ -86,9 +85,9 @@ void regex_colors_init(void)
 }
 
 /**
- * regex_colors_clear - Clear the Regex colours
+ * regex_colors_cleanup - Clear the Regex colours
  */
-void regex_colors_clear(void)
+void regex_colors_cleanup(void)
 {
   color_debug(LL_DEBUG5, "clean up regex\n");
   regex_color_list_clear(&AttachList);
@@ -225,9 +224,7 @@ struct RegexColorList *regex_colors_get_list(enum ColorId cid)
  * @param rcl       List of existing colours
  * @param s         String to match
  * @param sensitive true if the pattern case-sensitive
- * @param fg        Foreground colour
- * @param bg        Background colour
- * @param attrs     Attributes, e.g. A_UNDERLINE
+ * @param ac_val    Colour value to use
  * @param err       Buffer for error messages
  * @param is_index  true of this is for the index
  * @param match     Number of regex subexpression to match (0 for entire pattern)
@@ -237,7 +234,7 @@ struct RegexColorList *regex_colors_get_list(enum ColorId cid)
  * called from mutt_parse_color()
  */
 static enum CommandResult add_pattern(struct RegexColorList *rcl, const char *s,
-                                      bool sensitive, uint32_t fg, uint32_t bg, int attrs,
+                                      bool sensitive, struct AttrColor *ac_val,
                                       struct Buffer *err, bool is_index, int match)
 {
   struct RegexColor *rcol = NULL;
@@ -254,21 +251,7 @@ static enum CommandResult add_pattern(struct RegexColorList *rcl, const char *s,
   if (rcol) // found a matching regex
   {
     struct AttrColor *ac = &rcol->attr_color;
-    struct CursesColor *cc = ac->curses_color;
-
-    // different colours
-    if (!cc || (cc->fg != fg) || (cc->bg != bg))
-    {
-      cc = curses_color_new(fg, bg);
-      if (cc)
-      {
-        attr_color_clear(&rcol->attr_color);
-        cc->fg = fg;
-        cc->bg = bg;
-      }
-      ac->curses_color = cc;
-    }
-    ac->attrs = attrs;
+    attr_color_overwrite(ac, ac_val);
   }
   else
   {
@@ -307,10 +290,11 @@ static enum CommandResult add_pattern(struct RegexColorList *rcl, const char *s,
     }
     rcol->pattern = mutt_str_dup(s);
     rcol->match = match;
-    struct CursesColor *cc = curses_color_new(fg, bg);
+
     struct AttrColor *ac = &rcol->attr_color;
-    ac->curses_color = cc;
-    ac->attrs = attrs;
+
+    attr_color_overwrite(ac, ac_val);
+
     STAILQ_INSERT_TAIL(rcl, rcol, entries);
   }
 
@@ -328,17 +312,15 @@ static enum CommandResult add_pattern(struct RegexColorList *rcl, const char *s,
  * regex_colors_parse_color_list - Parse a Regex 'color' command
  * @param cid     Colour Id, should be #MT_COLOR_QUOTED
  * @param pat     Regex pattern
- * @param fg      Foreground colour
- * @param bg      Background colour
- * @param attrs   Attributes, e.g. A_UNDERLINE
+ * @param ac      Colour value to use
  * @param rc      Return code, e.g. #MUTT_CMD_SUCCESS
  * @param err     Buffer for error messages
  * @retval true Colour was parsed
  *
  * Parse a Regex 'color' command, e.g. "color index green default pattern"
  */
-bool regex_colors_parse_color_list(enum ColorId cid, const char *pat, uint32_t fg,
-                                   uint32_t bg, int attrs, int *rc, struct Buffer *err)
+bool regex_colors_parse_color_list(enum ColorId cid, const char *pat,
+                                   struct AttrColor *ac, int *rc, struct Buffer *err)
 
 {
   if (cid == MT_COLOR_STATUS)
@@ -379,7 +361,7 @@ bool regex_colors_parse_color_list(enum ColorId cid, const char *pat, uint32_t f
       return false;
   }
 
-  *rc = add_pattern(rcl, pat, sensitive, fg, bg, attrs, err, is_index, 0);
+  *rc = add_pattern(rcl, pat, sensitive, ac, err, is_index, 0);
 
   struct Buffer *buf = buf_pool_get();
   get_colorid_name(cid, buf);
@@ -392,7 +374,6 @@ bool regex_colors_parse_color_list(enum ColorId cid, const char *pat, uint32_t f
     notify_send(ColorsNotify, NT_COLOR, NT_COLOR_SET, &ev_c);
   }
 
-  regex_colors_dump_all();
   return true;
 }
 
@@ -400,20 +381,18 @@ bool regex_colors_parse_color_list(enum ColorId cid, const char *pat, uint32_t f
  * regex_colors_parse_status_list - Parse a Regex 'color status' command
  * @param cid     Colour ID, should be #MT_COLOR_QUOTED
  * @param pat     Regex pattern
- * @param fg      Foreground colour
- * @param bg      Background colour
- * @param attrs   Attributes, e.g. A_UNDERLINE
+ * @param ac      Colour value to use
  * @param match   Use the nth regex submatch
  * @param err     Buffer for error messages
  * @retval #CommandResult Result e.g. #MUTT_CMD_SUCCESS
  */
-int regex_colors_parse_status_list(enum ColorId cid, const char *pat, uint32_t fg,
-                                   uint32_t bg, int attrs, int match, struct Buffer *err)
+int regex_colors_parse_status_list(enum ColorId cid, const char *pat,
+                                   struct AttrColor *ac, int match, struct Buffer *err)
 {
   if (cid != MT_COLOR_STATUS)
     return MUTT_CMD_ERROR;
 
-  int rc = add_pattern(&StatusList, pat, true, fg, bg, attrs, err, false, match);
+  int rc = add_pattern(&StatusList, pat, true, ac, err, false, match);
   if (rc != MUTT_CMD_SUCCESS)
     return rc;
 
@@ -425,7 +404,6 @@ int regex_colors_parse_status_list(enum ColorId cid, const char *pat, uint32_t f
   struct EventColor ev_c = { cid, NULL };
   notify_send(ColorsNotify, NT_COLOR, NT_COLOR_SET, &ev_c);
 
-  regex_colors_dump_all();
   return rc;
 }
 
@@ -464,7 +442,7 @@ bool regex_colors_parse_uncolor(enum ColorId cid, const char *pat, bool uncolor)
     {
       rc = true;
 
-      mutt_debug(LL_DEBUG1, "Freeing pattern \"%s\" from XXX\n", pat);
+      color_debug(LL_DEBUG1, "Freeing pattern \"%s\" from XXX\n", pat);
       if (prev)
         STAILQ_REMOVE_AFTER(cl, prev, entries);
       else

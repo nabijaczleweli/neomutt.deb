@@ -24,21 +24,21 @@
 #define MUTT_COLOR_ANSI_H
 
 #include <stdbool.h>
-
-struct AttrColorList;
+#include "attr.h"
 
 /**
  * struct AnsiColor - An ANSI escape sequence
+ * 
+ * @note AnsiColor doesn't own the AttrColor
  */
 struct AnsiColor
 {
-  struct AttrColor *attr_color;    ///< Curses colour of text
-  int attrs;                       ///< Attributes, e.g. A_BOLD
-  int fg;                          ///< Foreground colour
-  int bg;                          ///< Background colour
+  struct ColorElement fg;              ///< Foreground colour
+  struct ColorElement bg;              ///< Background colour
+  int attrs;                           ///< Text attributes, e.g. A_BOLD
+  const struct AttrColor *attr_color;  ///< Curses colour of text
 };
 
-int ansi_color_parse     (const char *str, struct AnsiColor *ansi, struct AttrColorList *acl, bool dry_run);
-int ansi_color_seq_length(const char *str);
+int ansi_color_parse(const char *str, struct AnsiColor *ansi, struct AttrColorList *acl, bool dry_run);
 
 #endif /* MUTT_COLOR_ANSI_H */

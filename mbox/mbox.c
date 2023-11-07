@@ -34,6 +34,7 @@
  */
 
 #include "config.h"
+#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -72,10 +73,13 @@ struct MUpdate
 };
 
 /**
- * mbox_adata_free - Free the private Account data - Implements Account::adata_free()
+ * mbox_adata_free - Free the private Account data - Implements Account::adata_free() - @ingroup account_adata_free
  */
 static void mbox_adata_free(void **ptr)
 {
+  if (!ptr || !*ptr)
+    return;
+
   struct MboxAccountData *m = *ptr;
 
   mutt_file_fclose(&m->fp);
@@ -197,11 +201,11 @@ static enum MxOpenReturns mmdf_parse_mailbox(struct Mailbox *m)
 
   if (stat(mailbox_path(m), &st) == -1)
   {
-    mutt_perror(mailbox_path(m));
+    mutt_perror("%s", mailbox_path(m));
     goto fail;
   }
   mutt_file_get_stat_timespec(&adata->atime, &st, MUTT_STAT_ATIME);
-  mutt_file_get_stat_timespec(&m->mtime, &st, MUTT_STAT_MTIME);
+  mutt_file_get_stat_timespec(&adata->mtime, &st, MUTT_STAT_MTIME);
   m->size = st.st_size;
 
   buf[sizeof(buf) - 1] = '\0';
@@ -228,11 +232,9 @@ static enum MxOpenReturns mmdf_parse_mailbox(struct Mailbox *m)
         goto fail;
 
       count++;
-      if (m->verbose)
-        progress_update(progress, count, (int) (loc / (m->size / 100 + 1)));
+      progress_update(progress, count, (int) (loc / (m->size / 100 + 1)));
 
-      if (m->msg_count == m->email_max)
-        mx_alloc_memory(m);
+      mx_alloc_memory(m, m->msg_count);
       e = email_new();
       m->emails[m->msg_count] = e;
       e->offset = loc;
@@ -367,12 +369,12 @@ static enum MxOpenReturns mbox_parse_mailbox(struct Mailbox *m)
   /* Save information about the folder at the time we opened it. */
   if (stat(mailbox_path(m), &st) == -1)
   {
-    mutt_perror(mailbox_path(m));
+    mutt_perror("%s", mailbox_path(m));
     goto fail;
   }
 
   m->size = st.st_size;
-  mutt_file_get_stat_timespec(&m->mtime, &st, MUTT_STAT_MTIME);
+  mutt_file_get_stat_timespec(&adata->mtime, &st, MUTT_STAT_MTIME);
   mutt_file_get_stat_timespec(&adata->atime, &st, MUTT_STAT_ATIME);
 
   if (!m->readonly)
@@ -386,6 +388,12 @@ static enum MxOpenReturns mbox_parse_mailbox(struct Mailbox *m)
   }
 
   loc = ftello(adata->fp);
+  if (loc < 0)
+  {
+    mutt_debug(LL_DEBUG1, "ftello: %s (errno %d)\n", strerror(errno), errno);
+    loc = 0;
+  }
+
   while ((fgets(buf, sizeof(buf), adata->fp)) && !SigInt)
   {
     if (is_from(buf, return_path, sizeof(return_path), &t))
@@ -406,13 +414,9 @@ static enum MxOpenReturns mbox_parse_mailbox(struct Mailbox *m)
 
       count++;
 
-      if (m->verbose)
-      {
-        progress_update(progress, count, (int) (ftello(adata->fp) / (m->size / 100 + 1)));
-      }
+      progress_update(progress, count, (int) (ftello(adata->fp) / (m->size / 100 + 1)));
 
-      if (m->msg_count == m->email_max)
-        mx_alloc_memory(m);
+      mx_alloc_memory(m, m->msg_count);
 
       m->emails[m->msg_count] = email_new();
       e_cur = m->emails[m->msg_count];
@@ -430,6 +434,11 @@ static enum MxOpenReturns mbox_parse_mailbox(struct Mailbox *m)
         LOFF_T tmploc;
 
         loc = ftello(adata->fp);
+        if (loc < 0)
+        {
+          mutt_debug(LL_DEBUG1, "ftello: %s (errno %d)\n", strerror(errno), errno);
+          loc = 0;
+        }
 
         /* The test below avoids a potential integer overflow if the
          * content-length is huge (thus necessarily invalid).  */
@@ -690,7 +699,7 @@ static int reopen_mailbox(struct Mailbox *m)
       }
     }
 
-    /* free the remaining old headers */
+    /* free the remaining old emails */
     for (int j = 0; j < old_msg_count; j++)
     {
       if (e_old[j])
@@ -728,119 +737,6 @@ static bool mbox_has_new(struct Mailbox *m)
 }
 
 /**
- * fseek_last_message - Find the last message in the file
- * @param fp File to search
- * @retval  0 Success
- * @retval -1 No message found
- */
-static int fseek_last_message(FILE *fp)
-{
-  LOFF_T pos;
-  char buf[BUFSIZ + 7] = { 0 }; // 7 for "\n\nFrom "
-  size_t bytes_read;
-
-  if (!mutt_file_seek(fp, 0, SEEK_END))
-  {
-    return -1;
-  }
-  pos = ftello(fp);
-
-  /* Set 'bytes_read' to the size of the last, probably partial, buf;
-   * 0 < 'bytes_read' <= 'BUFSIZ'.  */
-  bytes_read = pos % BUFSIZ;
-  if (bytes_read == 0)
-    bytes_read = BUFSIZ;
-  /* Make 'pos' a multiple of 'BUFSIZ' (0 if the file is short), so that all
-   * reads will be on block boundaries, which might increase efficiency.  */
-  while ((pos -= bytes_read) >= 0)
-  {
-    /* we save in the buf at the end the first 7 chars from the last read */
-    memcpy(buf + BUFSIZ, buf, 7);
-    if (!mutt_file_seek(fp, pos, SEEK_SET))
-    {
-      return -1;
-    }
-    bytes_read = fread(buf, sizeof(char), bytes_read, fp);
-    if (bytes_read == 0)
-      return -1;
-    /* 'i' is Index into 'buf' for scanning.  */
-    for (int i = bytes_read; i >= 0; i--)
-    {
-      if (mutt_str_startswith(buf + i, "\n\nFrom "))
-      { /* found it - go to the beginning of the From */
-        if (!mutt_file_seek(fp, pos + i + 2, SEEK_SET))
-        {
-          return -1;
-        }
-        return 0;
-      }
-    }
-    bytes_read = BUFSIZ;
-  }
-
-  /* here we are at the beginning of the file */
-  if (mutt_str_startswith(buf, "From "))
-  {
-    if (!mutt_file_seek(fp, 0, SEEK_SET))
-    {
-      return -1;
-    }
-    return 0;
-  }
-
-  return -1;
-}
-
-/**
- * test_last_status_new - Is the last message new
- * @param fp File to check
- * @retval true The last message is new
- */
-static bool test_last_status_new(FILE *fp)
-{
-  struct Email *e = NULL;
-  struct Envelope *tmp_envelope = NULL;
-  bool rc = false;
-
-  if (fseek_last_message(fp) == -1)
-    return false;
-
-  e = email_new();
-  tmp_envelope = mutt_rfc822_read_header(fp, e, false, false);
-  if (!e->read && !e->old)
-    rc = true;
-
-  mutt_env_free(&tmp_envelope);
-  email_free(&e);
-
-  return rc;
-}
-
-/**
- * mbox_test_new_folder - Test if an mbox or mmdf mailbox has new mail
- * @param path Path to the mailbox
- * @retval true The folder contains new mail
- */
-bool mbox_test_new_folder(const char *path)
-{
-  bool rc = false;
-
-  enum MailboxType type = mx_path_probe(path);
-
-  if ((type != MUTT_MBOX) && (type != MUTT_MMDF))
-    return false;
-
-  FILE *fp = fopen(path, "rb");
-  if (fp)
-  {
-    rc = test_last_status_new(fp);
-    mutt_file_fclose(&fp);
-  }
-
-  return rc;
-}
-
-/**
  * mbox_reset_atime - Reset the access time on the mailbox file
  * @param m  Mailbox
  * @param st Timestamp
@@ -850,9 +746,7 @@ bool mbox_test_new_folder(const char *path)
  */
 void mbox_reset_atime(struct Mailbox *m, struct stat *st)
 {
-  struct utimbuf utimebuf;
   struct stat st2 = { 0 };
-
   if (!st)
   {
     if (stat(mailbox_path(m), &st2) < 0)
@@ -860,6 +754,7 @@ void mbox_reset_atime(struct Mailbox *m, struct stat *st)
     st = &st2;
   }
 
+  struct utimbuf utimebuf = { 0 };
   utimebuf.actime = st->st_atime;
   utimebuf.modtime = st->st_mtime;
 
@@ -946,7 +841,7 @@ static enum MxOpenReturns mbox_mbox_open(struct Mailbox *m)
   }
   if (!adata->fp)
   {
-    mutt_perror(mailbox_path(m));
+    mutt_perror("%s", mailbox_path(m));
     return MX_OPEN_ERROR;
   }
 
@@ -994,7 +889,7 @@ static bool mbox_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
     char *tmp_path = mutt_path_dirname(mailbox_path(m));
     if (mutt_file_mkdir(tmp_path, S_IRWXU) == -1)
     {
-      mutt_perror(mailbox_path(m));
+      mutt_perror("%s", mailbox_path(m));
       FREE(&tmp_path);
       return false;
     }
@@ -1003,7 +898,7 @@ static bool mbox_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
     adata->fp = mutt_file_fopen(mailbox_path(m), (flags & MUTT_NEWFOLDER) ? "w+" : "a+");
     if (!adata->fp)
     {
-      mutt_perror(mailbox_path(m));
+      mutt_perror("%s", mailbox_path(m));
       return false;
     }
 
@@ -1052,7 +947,7 @@ static enum MxStatus mbox_mbox_check(struct Mailbox *m)
 
   if (stat(mailbox_path(m), &st) == 0)
   {
-    if ((mutt_file_stat_timespec_compare(&st, MUTT_STAT_MTIME, &m->mtime) == 0) &&
+    if ((mutt_file_stat_timespec_compare(&st, MUTT_STAT_MTIME, &adata->mtime) == 0) &&
         (st.st_size == m->size))
     {
       return MX_STATUS_OK;
@@ -1061,7 +956,7 @@ static enum MxStatus mbox_mbox_check(struct Mailbox *m)
     if (st.st_size == m->size)
     {
       /* the file was touched, but it is still the same length, so just exit */
-      mutt_file_get_stat_timespec(&m->mtime, &st, MUTT_STAT_MTIME);
+      mutt_file_get_stat_timespec(&adata->mtime, &st, MUTT_STAT_MTIME);
       return MX_STATUS_OK;
     }
 
@@ -1287,8 +1182,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
 
   for (i = first, j = 0; i < m->msg_count; i++)
   {
-    if (m->verbose)
-      progress_update(progress, i, i / (m->msg_count / 100 + 1));
+    progress_update(progress, i, i / (m->msg_count / 100 + 1));
     /* back up some information which is needed to restore offsets when
      * something fails.  */
 
@@ -1306,7 +1200,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
       {
         if (fputs(MMDF_SEP, fp) == EOF)
         {
-          mutt_perror(buf_string(tempfile));
+          mutt_perror("%s", buf_string(tempfile));
           goto bail;
         }
       }
@@ -1322,7 +1216,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
       mx_msg_close(m, &msg);
       if (rc2 != 0)
       {
-        mutt_perror(buf_string(tempfile));
+        mutt_perror("%s", buf_string(tempfile));
         goto bail;
       }
 
@@ -1338,7 +1232,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
       {
         if (fputs(MMDF_SEP, fp) == EOF)
         {
-          mutt_perror(buf_string(tempfile));
+          mutt_perror("%s", buf_string(tempfile));
           goto bail;
         }
       }
@@ -1346,7 +1240,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
       {
         if (fputs("\n", fp) == EOF)
         {
-          mutt_perror(buf_string(tempfile));
+          mutt_perror("%s", buf_string(tempfile));
           goto bail;
         }
       }
@@ -1356,14 +1250,14 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
   if (mutt_file_fclose(&fp) != 0)
   {
     mutt_debug(LL_DEBUG1, "mutt_file_fclose (&) returned non-zero\n");
-    mutt_perror(buf_string(tempfile));
+    mutt_perror("%s", buf_string(tempfile));
     goto bail;
   }
 
   /* Save the state of this folder. */
   if (stat(mailbox_path(m), &st) == -1)
   {
-    mutt_perror(mailbox_path(m));
+    mutt_perror("%s", mailbox_path(m));
     goto bail;
   }
 
@@ -1375,7 +1269,7 @@ static enum MxStatus mbox_mbox_sync(struct Mailbox *m)
     mutt_sig_unblock();
     mx_fastclose_mailbox(m, false);
     mutt_debug(LL_DEBUG1, "unable to reopen temp copy of mailbox!\n");
-    mutt_perror(buf_string(tempfile));
+    mutt_perror("%s", buf_string(tempfile));
     FREE(&new_offset);
     FREE(&old_offset);
     goto fatal;
@@ -1562,17 +1456,17 @@ static enum MxStatus mbox_mbox_close(struct Mailbox *m)
 
   /* fix up the times so mailbox won't get confused */
   if (m->peekonly && !buf_is_empty(&m->pathbuf) &&
-      (mutt_file_timespec_compare(&m->mtime, &adata->atime) > 0))
+      (mutt_file_timespec_compare(&adata->mtime, &adata->atime) > 0))
   {
 #ifdef HAVE_UTIMENSAT
-    struct timespec ts[2];
+    struct timespec ts[2] = { { 0 }, { 0 } };
     ts[0] = adata->atime;
-    ts[1] = m->mtime;
+    ts[1] = adata->mtime;
     utimensat(AT_FDCWD, m->path, ts, 0);
 #else
-    struct utimbuf ut;
+    struct utimbuf ut = { 0 };
     ut.actime = adata->atime.tv_sec;
-    ut.modtime = m->mtime.tv_sec;
+    ut.modtime = adata->mtime.tv_sec;
     utime(mailbox_path(m), &ut);
 #endif
   }
@@ -1698,12 +1592,12 @@ enum MailboxType mbox_path_probe(const char *path, const struct stat *st)
      * only the type was accessed.  This is important, because detection
      * of "new mail" depends on those times set correctly.  */
 #ifdef HAVE_UTIMENSAT
-    struct timespec ts[2];
+    struct timespec ts[2] = { { 0 }, { 0 } };
     mutt_file_get_stat_timespec(&ts[0], &st, MUTT_STAT_ATIME);
     mutt_file_get_stat_timespec(&ts[1], &st, MUTT_STAT_MTIME);
     utimensat(AT_FDCWD, path, ts, 0);
 #else
-    struct utimbuf times;
+    struct utimbuf times = { 0 };
     times.actime = st->st_atime;
     times.modtime = st->st_mtime;
     utime(path, &times);
@@ -1716,38 +1610,24 @@ enum MailboxType mbox_path_probe(const char *path, const struct stat *st)
 /**
  * mbox_path_canon - Canonicalise a Mailbox path - Implements MxOps::path_canon() - @ingroup mx_path_canon
  */
-static int mbox_path_canon(char *buf, size_t buflen)
+static int mbox_path_canon(struct Buffer *path)
 {
-  mutt_path_canon(buf, buflen, HomeDir, false);
+  mutt_path_canon(path, HomeDir, false);
   return 0;
-}
-
-/**
- * mbox_path_pretty - Abbreviate a Mailbox path - Implements MxOps::path_pretty() - @ingroup mx_path_pretty
- */
-static int mbox_path_pretty(char *buf, size_t buflen, const char *folder)
-{
-  if (mutt_path_abbr_folder(buf, folder))
-    return 0;
-
-  if (mutt_path_pretty(buf, buflen, HomeDir, false))
-    return 0;
-
-  return -1;
 }
 
 /**
  * mbox_path_parent - Find the parent of a Mailbox path - Implements MxOps::path_parent() - @ingroup mx_path_parent
  */
-static int mbox_path_parent(char *buf, size_t buflen)
+static int mbox_path_parent(struct Buffer *path)
 {
-  if (mutt_path_parent(buf))
+  if (mutt_path_parent(path))
     return 0;
 
-  if (buf[0] == '~')
-    mutt_path_canon(buf, buflen, HomeDir, false);
+  if (buf_at(path, 0) == '~')
+    mutt_path_canon(path, HomeDir, false);
 
-  if (mutt_path_parent(buf))
+  if (mutt_path_parent(path))
     return 0;
 
   return -1;
@@ -1756,9 +1636,9 @@ static int mbox_path_parent(char *buf, size_t buflen)
 /**
  * mbox_path_is_empty - Is the mailbox empty - Implements MxOps::path_is_empty() - @ingroup mx_path_is_empty
  */
-static int mbox_path_is_empty(const char *path)
+static int mbox_path_is_empty(struct Buffer *path)
 {
-  return mutt_file_check_empty(path);
+  return mutt_file_check_empty(buf_string(path));
 }
 
 /**
@@ -1876,7 +1756,6 @@ const struct MxOps MxMboxOps = {
   .tags_commit      = NULL,
   .path_probe       = mbox_path_probe,
   .path_canon       = mbox_path_canon,
-  .path_pretty      = mbox_path_pretty,
   .path_parent      = mbox_path_parent,
   .path_is_empty    = mbox_path_is_empty,
   // clang-format on
@@ -1908,7 +1787,6 @@ const struct MxOps MxMmdfOps = {
   .tags_commit      = NULL,
   .path_probe       = mbox_path_probe,
   .path_canon       = mbox_path_canon,
-  .path_pretty      = mbox_path_pretty,
   .path_parent      = mbox_path_parent,
   .path_is_empty    = mbox_path_is_empty,
   // clang-format on

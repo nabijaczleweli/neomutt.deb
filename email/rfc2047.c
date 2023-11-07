@@ -55,80 +55,82 @@
  *
  * Prototype for an encoding function
  *
- * @param str    String to encode
- * @param buf    Buffer for result
- * @param buflen Length of buffer
+ * @param res    Buffer for the result
+ * @param src    String to encode
+ * @param srclen Length of string to encode
  * @param tocode Character encoding
  * @retval num Bytes written to buffer
  */
-typedef size_t (*encoder_t)(char *str, const char *buf, size_t buflen, const char *tocode);
+typedef size_t (*encoder_t)(char *res, const char *buf, size_t buflen, const char *tocode);
 
 /**
  * b_encoder - Base64 Encode a string - Implements ::encoder_t - @ingroup encoder_api
  */
-static size_t b_encoder(char *str, const char *buf, size_t buflen, const char *tocode)
+static size_t b_encoder(char *res, const char *src, size_t srclen, const char *tocode)
 {
-  char *s0 = str;
+  char *s0 = res;
 
-  memcpy(str, "=?", 2);
-  str += 2;
-  memcpy(str, tocode, strlen(tocode));
-  str += strlen(tocode);
-  memcpy(str, "?B?", 3);
-  str += 3;
+  memcpy(res, "=?", 2);
+  res += 2;
+  memcpy(res, tocode, strlen(tocode));
+  res += strlen(tocode);
+  memcpy(res, "?B?", 3);
+  res += 3;
 
-  while (buflen)
+  while (srclen)
   {
     char encoded[11] = { 0 };
     size_t rc;
-    size_t in_len = MIN(3, buflen);
+    size_t in_len = MIN(3, srclen);
 
-    rc = mutt_b64_encode(buf, in_len, encoded, sizeof(encoded));
+    rc = mutt_b64_encode(src, in_len, encoded, sizeof(encoded));
     for (size_t i = 0; i < rc; i++)
-      *str++ = encoded[i];
+      *res++ = encoded[i];
 
-    buflen -= in_len;
-    buf += in_len;
+    srclen -= in_len;
+    src += in_len;
   }
 
-  memcpy(str, "?=", 2);
-  str += 2;
-  return str - s0;
+  memcpy(res, "?=", 2);
+  res += 2;
+  return res - s0;
 }
 
 /**
  * q_encoder - Quoted-printable Encode a string - Implements ::encoder_t - @ingroup encoder_api
  */
-static size_t q_encoder(char *str, const char *buf, size_t buflen, const char *tocode)
+static size_t q_encoder(char *res, const char *src, size_t srclen, const char *tocode)
 {
   static const char hex[] = "0123456789ABCDEF";
-  char *s0 = str;
+  char *s0 = res;
 
-  memcpy(str, "=?", 2);
-  str += 2;
-  memcpy(str, tocode, strlen(tocode));
-  str += strlen(tocode);
-  memcpy(str, "?Q?", 3);
-  str += 3;
-  while (buflen--)
+  memcpy(res, "=?", 2);
+  res += 2;
+  memcpy(res, tocode, strlen(tocode));
+  res += strlen(tocode);
+  memcpy(res, "?Q?", 3);
+  res += 3;
+  while (srclen--)
   {
-    unsigned char c = *buf++;
+    unsigned char c = *src++;
     if (c == ' ')
     {
-      *str++ = '_';
+      *res++ = '_';
     }
     else if ((c >= 0x7f) || (c < 0x20) || (c == '_') || strchr(MimeSpecials, c))
     {
-      *str++ = '=';
-      *str++ = hex[(c & 0xf0) >> 4];
-      *str++ = hex[c & 0x0f];
+      *res++ = '=';
+      *res++ = hex[(c & 0xf0) >> 4];
+      *res++ = hex[c & 0x0f];
     }
     else
-      *str++ = c;
+    {
+      *res++ = c;
+    }
   }
-  memcpy(str, "?=", 2);
-  str += 2;
-  return str - s0;
+  memcpy(res, "?=", 2);
+  res += 2;
+  return res - s0;
 }
 
 /**
@@ -356,12 +358,15 @@ static void finalize_chunk(struct Buffer *res, struct Buffer *buf, char *charset
  * @param enc Encoding type
  * @retval ptr Decoded string
  *
- * @note The caller must free the returned string
+ * @note The input string must be null-terminated; the len parameter is
+ *       an optimization. The caller must free the returned string.
  */
 static char *decode_word(const char *s, size_t len, enum ContentEncoding enc)
 {
   const char *it = s;
   const char *end = s + len;
+
+  assert(*end == '\0');
 
   if (enc == ENC_QUOTED_PRINTABLE)
   {
@@ -656,14 +661,14 @@ void rfc2047_decode(char **pd)
   if (!pd || !*pd)
     return;
 
-  struct Buffer buf = buf_make(0); /* Output buffer            */
-  char *s = *pd;                   /* Read pointer                           */
-  char *beg = NULL;                /* Begin of encoded word                  */
-  enum ContentEncoding enc;        /* ENC_BASE64 or ENC_QUOTED_PRINTABLE     */
-  char *charset = NULL;            /* Which charset                          */
-  size_t charsetlen;               /* Length of the charset                  */
-  char *text = NULL;               /* Encoded text                           */
-  size_t textlen;                  /* Length of encoded text                 */
+  struct Buffer buf = buf_make(0);      // Output buffer
+  char *s = *pd;                        // Read pointer
+  char *beg = NULL;                     // Begin of encoded word
+  enum ContentEncoding enc = ENC_OTHER; // ENC_BASE64 or ENC_QUOTED_PRINTABLE
+  char *charset = NULL;                 // Which charset
+  size_t charsetlen;                    // Length of the charset
+  char *text = NULL;                    // Encoded text
+  size_t textlen = 0;                   // Length of encoded text
 
   /* Keep some state in case the next decoded word is using the same charset
    * and it happens to be split in the middle of a multibyte character.
@@ -696,16 +701,16 @@ void rfc2047_decode(char **pd)
       }
 
       /* Add non-encoded part */
-      if (!slist_is_empty(c_assumed_charset))
+      if (slist_is_empty(c_assumed_charset))
+      {
+        buf_addstr_n(&buf, s, holelen);
+      }
+      else
       {
         char *conv = mutt_strn_dup(s, holelen);
         mutt_ch_convert_nonmime_string(c_assumed_charset, c_charset, &conv);
         buf_addstr(&buf, conv);
         FREE(&conv);
-      }
-      else
-      {
-        buf_addstr_n(&buf, s, holelen);
       }
       s += holelen;
     }
@@ -750,6 +755,9 @@ void rfc2047_decode(char **pd)
  * rfc2047_encode_addrlist - Encode any RFC2047 headers, where required, in an Address list
  * @param al   AddressList
  * @param tag  Header tag (used for wrapping calculation)
+ *
+ * @note rfc2047_encode() may realloc the data pointer it's given,
+ *       so work on a copy to avoid breaking the Buffer
  */
 void rfc2047_encode_addrlist(struct AddressList *al, const char *tag)
 {
@@ -758,19 +766,33 @@ void rfc2047_encode_addrlist(struct AddressList *al, const char *tag)
 
   int col = tag ? strlen(tag) + 2 : 32;
   struct Address *a = NULL;
+  char *data = NULL;
   const struct Slist *const c_send_charset = cs_subset_slist(NeoMutt->sub, "send_charset");
   TAILQ_FOREACH(a, al, entries)
   {
     if (a->personal)
-      rfc2047_encode(&a->personal, AddressSpecials, col, c_send_charset);
+    {
+      data = buf_strdup(a->personal);
+      rfc2047_encode(&data, AddressSpecials, col, c_send_charset);
+      buf_strcpy(a->personal, data);
+      FREE(&data);
+    }
     else if (a->group && a->mailbox)
-      rfc2047_encode(&a->mailbox, AddressSpecials, col, c_send_charset);
+    {
+      data = buf_strdup(a->mailbox);
+      rfc2047_encode(&data, AddressSpecials, col, c_send_charset);
+      buf_strcpy(a->mailbox, data);
+      FREE(&data);
+    }
   }
 }
 
 /**
  * rfc2047_decode_addrlist - Decode any RFC2047 headers in an Address list
  * @param al AddressList
+ *
+ * @note rfc2047_decode() may realloc the data pointer it's given,
+ *       so work on a copy to avoid breaking the Buffer
  */
 void rfc2047_decode_addrlist(struct AddressList *al)
 {
@@ -779,15 +801,22 @@ void rfc2047_decode_addrlist(struct AddressList *al)
 
   const bool assumed = !slist_is_empty(cc_assumed_charset());
   struct Address *a = NULL;
+  char *data = NULL;
   TAILQ_FOREACH(a, al, entries)
   {
-    if (a->personal && ((strstr(a->personal, "=?")) || assumed))
+    if (a->personal && ((buf_find_string(a->personal, "=?")) || assumed))
     {
-      rfc2047_decode(&a->personal);
+      data = buf_strdup(a->personal);
+      rfc2047_decode(&data);
+      buf_strcpy(a->personal, data);
+      FREE(&data);
     }
-    else if (a->group && a->mailbox && strstr(a->mailbox, "=?"))
+    else if (a->group && a->mailbox && buf_find_string(a->mailbox, "=?"))
     {
-      rfc2047_decode(&a->mailbox);
+      data = buf_strdup(a->mailbox);
+      rfc2047_decode(&data);
+      buf_strcpy(a->mailbox, data);
+      FREE(&data);
     }
   }
 }

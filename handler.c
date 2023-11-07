@@ -39,20 +39,20 @@
 #include "config/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "handler.h"
 #include "attach/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "ncrypt/lib.h"
 #include "pager/lib.h"
 #include "copy.h"
 #include "enriched.h"
 #include "globals.h" // IWYU pragma: keep
-#include "keymap.h"
 #include "mailcap.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "opcodes.h"
 #include "rfc3676.h"
 #ifdef ENABLE_NLS
 #include <libintl.h>
@@ -574,12 +574,12 @@ static int autoview_handler(struct Body *a, struct State *state)
       fflush(fp_in);
       rewind(fp_in);
       pid = filter_create_fd(buf_string(cmd), NULL, &fp_out, &fp_err,
-                             fileno(fp_in), -1, -1);
+                             fileno(fp_in), -1, -1, EnvList);
     }
     else
     {
       mutt_file_fclose(&fp_in);
-      pid = filter_create(buf_string(cmd), NULL, &fp_out, &fp_err);
+      pid = filter_create(buf_string(cmd), NULL, &fp_out, &fp_err, EnvList);
     }
 
     if (pid < 0)
@@ -814,7 +814,7 @@ static int external_body_handler(struct Body *b, struct State *state)
                  Sadly, we can't do anything about that at the moment besides
                  passing the precise size in bytes. If you are interested the
                  function responsible for the prettification is
-                 mutt_str_pretty_size() in mutt/string.c. */
+                 mutt_str_pretty_size() in muttlib.c */
               "[-- This %s/%s attachment (size %s byte) has been deleted --]\n"
               "[-- on %s --]\n",
               "[-- This %s/%s attachment (size %s bytes) has been deleted --]\n"
@@ -837,7 +837,7 @@ static int external_body_handler(struct Body *b, struct State *state)
                  Sadly, we can't do anything about that at the moment besides
                  passing the precise size in bytes. If you are interested the
                  function responsible for the prettification is
-                 mutt_str_pretty_size() in mutt/string.c.  */
+                 mutt_str_pretty_size() in muttlib.c  */
               "[-- This %s/%s attachment (size %s byte) has been deleted --]\n",
               "[-- This %s/%s attachment (size %s bytes) has been deleted --]\n", size);
         }
@@ -1339,7 +1339,11 @@ static int run_decode_and_handler(struct Body *b, struct State *state,
   /* text subtypes may require character set conversion even with 8bit encoding */
   {
     const int orig_type = b->type;
-    if (!plaintext)
+    if (plaintext)
+    {
+      b->type = TYPE_TEXT;
+    }
+    else
     {
       /* decode to a tempfile, saving the original destination */
       fp = state->fp_out;
@@ -1374,10 +1378,6 @@ static int run_decode_and_handler(struct Body *b, struct State *state,
       state->prefix = NULL;
 
       decode = 1;
-    }
-    else
-    {
-      b->type = TYPE_TEXT;
     }
 
     mutt_decode_attachment(b, state);
@@ -1666,9 +1666,13 @@ int mutt_body_handler(struct Body *b, struct State *state)
       }
     }
     else if (mutt_istr_equal("enriched", b->subtype))
+    {
       handler = text_enriched_handler;
+    }
     else /* text body type without a handler */
+    {
       plaintext = false;
+    }
   }
   else if (b->type == TYPE_MESSAGE)
   {
@@ -1739,10 +1743,10 @@ int mutt_body_handler(struct Body *b, struct State *state)
     }
   }
 
-  /* only respect disposition == attachment if we're not
-   * displaying from the attachment menu (i.e. pager) */
   if ((plaintext || handler) && (is_attachment_display || !mutt_prefer_as_attachment(b)))
   {
+    /* only respect disposition == attachment if we're not
+     * displaying from the attachment menu (i.e. pager) */
     /* Prevent encrypted attachments from being included in replies
      * unless $include_encrypted is set. */
     const bool c_include_encrypted = cs_subset_bool(NeoMutt->sub, "include_encrypted");
@@ -1754,14 +1758,26 @@ int mutt_body_handler(struct Body *b, struct State *state)
 
     rc = run_decode_and_handler(b, state, handler, plaintext);
   }
-  /* print hint to use attachment menu for disposition == attachment
-   * if we're not already being called from there */
   else if (state->flags & STATE_DISPLAY)
   {
+    /* print hint to use attachment menu for disposition == attachment
+     * if we're not already being called from there */
     const bool c_honor_disposition = cs_subset_bool(NeoMutt->sub, "honor_disposition");
     struct Buffer msg = buf_make(256);
 
-    if (!is_attachment_display)
+    if (is_attachment_display)
+    {
+      if (c_honor_disposition && (b->disposition == DISP_ATTACH))
+      {
+        buf_strcpy(&msg, _("[-- This is an attachment --]\n"));
+      }
+      else
+      {
+        /* L10N: %s/%s is a MIME type, e.g. "text/plain". */
+        buf_printf(&msg, _("[-- %s/%s is unsupported --]\n"), TYPE(b), b->subtype);
+      }
+    }
+    else
     {
       char keystroke[128] = { 0 };
       if (km_expand_key(keystroke, sizeof(keystroke),
@@ -1793,18 +1809,6 @@ int mutt_body_handler(struct Body *b, struct State *state)
           buf_printf(&msg, _("[-- %s/%s is unsupported (need 'view-attachments' bound to key) --]\n"),
                      TYPE(b), b->subtype);
         }
-      }
-    }
-    else
-    {
-      if (c_honor_disposition && (b->disposition == DISP_ATTACH))
-      {
-        buf_strcpy(&msg, _("[-- This is an attachment --]\n"));
-      }
-      else
-      {
-        /* L10N: %s/%s is a MIME type, e.g. "text/plain". */
-        buf_printf(&msg, _("[-- %s/%s is unsupported --]\n"), TYPE(b), b->subtype);
       }
     }
     state_mark_attach(state);

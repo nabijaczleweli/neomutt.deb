@@ -37,9 +37,9 @@
 #include "lib.h"
 
 /**
- * store_kyotocabinet_open - Implements StoreOps::open() - @ingroup store_open
+ * store_kyotocabinet_open - Open a connection to a Store - Implements StoreOps::open() - @ingroup store_open
  */
-static void *store_kyotocabinet_open(const char *path)
+static StoreHandle *store_kyotocabinet_open(const char *path)
 {
   if (!path)
     return NULL;
@@ -62,25 +62,28 @@ static void *store_kyotocabinet_open(const char *path)
   }
 
   buf_dealloc(&kcdbpath);
-  return db;
+  // Return an opaque pointer
+  return (StoreHandle *) db;
 }
 
 /**
- * store_kyotocabinet_fetch - Implements StoreOps::fetch() - @ingroup store_fetch
+ * store_kyotocabinet_fetch - Fetch a Value from the Store - Implements StoreOps::fetch() - @ingroup store_fetch
  */
-static void *store_kyotocabinet_fetch(void *store, const char *key, size_t klen, size_t *vlen)
+static void *store_kyotocabinet_fetch(StoreHandle *store, const char *key,
+                                      size_t klen, size_t *vlen)
 {
   if (!store)
     return NULL;
 
+  // Decloak an opaque pointer
   KCDB *db = store;
   return kcdbget(db, key, klen, vlen);
 }
 
 /**
- * store_kyotocabinet_free - Implements StoreOps::free() - @ingroup store_free
+ * store_kyotocabinet_free - Free a Value returned by fetch() - Implements StoreOps::free() - @ingroup store_free
  */
-static void store_kyotocabinet_free(void *store, void **ptr)
+static void store_kyotocabinet_free(StoreHandle *store, void **ptr)
 {
   if (!ptr || !*ptr)
     return;
@@ -90,14 +93,15 @@ static void store_kyotocabinet_free(void *store, void **ptr)
 }
 
 /**
- * store_kyotocabinet_store - Implements StoreOps::store() - @ingroup store_store
+ * store_kyotocabinet_store - Write a Value to the Store - Implements StoreOps::store() - @ingroup store_store
  */
-static int store_kyotocabinet_store(void *store, const char *key, size_t klen,
-                                    void *value, size_t vlen)
+static int store_kyotocabinet_store(StoreHandle *store, const char *key,
+                                    size_t klen, void *value, size_t vlen)
 {
   if (!store)
     return -1;
 
+  // Decloak an opaque pointer
   KCDB *db = store;
   if (!kcdbset(db, key, klen, value, vlen))
   {
@@ -108,13 +112,14 @@ static int store_kyotocabinet_store(void *store, const char *key, size_t klen,
 }
 
 /**
- * store_kyotocabinet_delete_record - Implements StoreOps::delete_record() - @ingroup store_delete_record
+ * store_kyotocabinet_delete_record - Delete a record from the Store - Implements StoreOps::delete_record() - @ingroup store_delete_record
  */
-static int store_kyotocabinet_delete_record(void *store, const char *key, size_t klen)
+static int store_kyotocabinet_delete_record(StoreHandle *store, const char *key, size_t klen)
 {
   if (!store)
     return -1;
 
+  // Decloak an opaque pointer
   KCDB *db = store;
   if (!kcdbremove(db, key, klen))
   {
@@ -125,13 +130,14 @@ static int store_kyotocabinet_delete_record(void *store, const char *key, size_t
 }
 
 /**
- * store_kyotocabinet_close - Implements StoreOps::close() - @ingroup store_close
+ * store_kyotocabinet_close - Close a Store connection - Implements StoreOps::close() - @ingroup store_close
  */
-static void store_kyotocabinet_close(void **ptr)
+static void store_kyotocabinet_close(StoreHandle **ptr)
 {
   if (!ptr || !*ptr)
     return;
 
+  // Decloak an opaque pointer
   KCDB *db = *ptr;
   if (!kcdbclose(db))
   {
@@ -143,7 +149,7 @@ static void store_kyotocabinet_close(void **ptr)
 }
 
 /**
- * store_kyotocabinet_version - Implements StoreOps::version() - @ingroup store_version
+ * store_kyotocabinet_version - Get a Store version string - Implements StoreOps::version() - @ingroup store_version
  */
 static const char *store_kyotocabinet_version(void)
 {

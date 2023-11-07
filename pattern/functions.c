@@ -33,17 +33,6 @@
 #include "gui/lib.h"
 #include "functions.h"
 #include "menu/lib.h"
-#include "opcodes.h"
-
-/**
- * op_exit - Exit this menu - Implements ::pattern_function_t - @ingroup pattern_function_api
- */
-static int op_exit(struct PatternData *pd, int op)
-{
-  pd->done = true;
-  pd->selection = false;
-  return FR_SUCCESS;
-}
 
 /**
  * op_generic_select_entry - Select the current entry - Implements ::pattern_function_t - @ingroup pattern_function_api
@@ -59,6 +48,16 @@ static int op_generic_select_entry(struct PatternData *pd, int op)
   return FR_SUCCESS;
 }
 
+/**
+ * op_quit - Quit this menu - Implements ::pattern_function_t - @ingroup pattern_function_api
+ */
+static int op_quit(struct PatternData *pd, int op)
+{
+  pd->done = true;
+  pd->selection = false;
+  return FR_SUCCESS;
+}
+
 // -----------------------------------------------------------------------------
 
 /**
@@ -66,8 +65,8 @@ static int op_generic_select_entry(struct PatternData *pd, int op)
  */
 static const struct PatternFunction PatternFunctions[] = {
   // clang-format off
-  { OP_EXIT,                   op_exit },
   { OP_GENERIC_SELECT_ENTRY,   op_generic_select_entry },
+  { OP_QUIT,                   op_quit },
   { 0, NULL },
   // clang-format on
 };
@@ -100,7 +99,7 @@ int pattern_function_dispatcher(struct MuttWindow *win, int op)
   if (rc == FR_UNKNOWN) // Not our function
     return rc;
 
-  const char *result = dispacher_get_retval_name(rc);
+  const char *result = dispatcher_get_retval_name(rc);
   mutt_debug(LL_DEBUG1, "Handled %s (%d) -> %s\n", opcodes_get_name(op), op, NONULL(result));
 
   return rc;

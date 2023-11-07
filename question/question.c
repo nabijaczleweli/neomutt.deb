@@ -27,183 +27,159 @@
  */
 
 #include "config.h"
+#include <assert.h>
 #include <ctype.h>
 #include <langinfo.h>
+#include <limits.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "gui/lib.h"
 #include "color/lib.h"
-#include "globals.h"
-#include "keymap.h"
-#include "mutt_logging.h"
-#include "opcodes.h"
-#ifdef HAVE_SYS_PARAM_H
-#include <sys/param.h>
-#endif
+#include "key/lib.h"
 
 /**
- * mutt_multi_choice - Offer the user a multiple choice question
+ * mw_multi_choice - Offer the user a multiple choice question - @ingroup gui_mw
  * @param prompt  Message prompt
  * @param letters Allowable selection keys
  * @retval >=1 1-based user selection
  * @retval  -1 Selection aborted
+ *
+ * This function uses a message window.
+ *
+ * Ask the user a multiple-choice question, using shortcut letters, e.g.
+ * `PGP (e)ncrypt, (s)ign, sign (a)s, (b)oth, s/(m)ime or (c)lear?`
+ *
+ * Colours:
+ * - Question:  `color prompt`
+ * - Shortcuts: `color options`
  */
-int mutt_multi_choice(const char *prompt, const char *letters)
+int mw_multi_choice(const char *prompt, const char *letters)
 {
-  struct MuttWindow *win = msgwin_get_window();
+  struct MuttWindow *win = msgwin_new(true);
   if (!win)
     return -1;
 
-  struct KeyEvent ch = { OP_NULL, OP_NULL };
-  int choice;
-  bool redraw = true;
-  int prompt_lines = 1;
+  int choice = 0;
 
-  struct AttrColor *ac_opts = NULL;
+  const struct AttrColor *ac_opts = NULL;
   if (simple_color_is_set(MT_COLOR_OPTIONS))
   {
-    struct AttrColor *ac_base = simple_color_get(MT_COLOR_NORMAL);
+    const struct AttrColor *ac_base = simple_color_get(MT_COLOR_NORMAL);
     ac_base = merged_color_overlay(ac_base, simple_color_get(MT_COLOR_PROMPT));
 
     ac_opts = simple_color_get(MT_COLOR_OPTIONS);
     ac_opts = merged_color_overlay(ac_base, ac_opts);
   }
 
+  const struct AttrColor *ac_normal = simple_color_get(MT_COLOR_NORMAL);
+  const struct AttrColor *ac_prompt = simple_color_get(MT_COLOR_PROMPT);
+
+  if (ac_opts)
+  {
+    char *cur = NULL;
+
+    while ((cur = strchr(prompt, '(')))
+    {
+      // write the part between prompt and cur using MT_COLOR_PROMPT
+      msgwin_add_text_n(win, prompt, cur - prompt, ac_prompt);
+
+      if (isalnum(cur[1]) && (cur[2] == ')'))
+      {
+        // we have a single letter within parentheses - MT_COLOR_OPTIONS
+        msgwin_add_text_n(win, cur + 1, 1, ac_opts);
+        prompt = cur + 3;
+      }
+      else
+      {
+        // we have a parenthesis followed by something else
+        msgwin_add_text_n(win, cur, 1, ac_prompt);
+        prompt = cur + 1;
+      }
+    }
+  }
+
+  msgwin_add_text(win, prompt, ac_prompt);
+  msgwin_add_text(win, " ", ac_normal);
+
+  msgcont_push_window(win);
   struct MuttWindow *old_focus = window_set_focus(win);
-  enum MuttCursorState cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
-  window_redraw(NULL);
+  window_redraw(win);
+
+  // ---------------------------------------------------------------------------
+  // Event Loop
+  struct KeyEvent event = { 0, OP_NULL };
   while (true)
   {
-    if (redraw || SigWinch)
-    {
-      redraw = false;
-      if (SigWinch)
-      {
-        SigWinch = false;
-        mutt_resize_screen();
-        clearok(stdscr, true);
-        window_redraw(NULL);
-      }
-      if (win->state.cols)
-      {
-        int width = mutt_strwidth(prompt) + 2; // + '?' + space
-        /* If we're going to colour the options,
-         * make an assumption about the modified prompt size. */
-        if (ac_opts)
-          width -= 2 * mutt_str_len(letters);
+    event = mutt_getch(GETCH_NO_FLAGS);
+    mutt_debug(LL_DEBUG1, "mw_multi_choice: EVENT(%d,%d)\n", event.ch, event.op);
 
-        prompt_lines = (width + win->state.cols - 1) / win->state.cols;
-        prompt_lines = MAX(1, MIN(3, prompt_lines));
-      }
-      if (prompt_lines != win->state.rows)
-      {
-        msgwin_set_height(prompt_lines);
-        window_redraw(NULL);
-      }
+    if (event.op == OP_REPAINT)
+      window_redraw(NULL);
 
-      mutt_window_move(win, 0, 0);
-
-      if (ac_opts)
-      {
-        char *cur = NULL;
-
-        while ((cur = strchr(prompt, '(')))
-        {
-          // write the part between prompt and cur using MT_COLOR_PROMPT
-          mutt_curses_set_normal_backed_color_by_id(MT_COLOR_PROMPT);
-          mutt_window_addnstr(win, prompt, cur - prompt);
-
-          if (isalnum(cur[1]) && (cur[2] == ')'))
-          {
-            // we have a single letter within parentheses
-            mutt_curses_set_color(ac_opts);
-            mutt_window_addch(win, cur[1]);
-            prompt = cur + 3;
-          }
-          else
-          {
-            // we have a parenthesis followed by something else
-            mutt_window_addch(win, cur[0]);
-            prompt = cur + 1;
-          }
-        }
-      }
-
-      mutt_curses_set_normal_backed_color_by_id(MT_COLOR_PROMPT);
-      mutt_window_addstr(win, prompt);
-      mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
-
-      mutt_window_addch(win, ' ');
-      mutt_window_clrtoeol(win);
-    }
-
-    mutt_refresh();
-    /* SigWinch is not processed unless timeout is set */
-    ch = mutt_getch_timeout(30 * 1000);
-    if (ch.op == OP_TIMEOUT)
+    if ((event.op == OP_TIMEOUT) || (event.op == OP_REPAINT))
       continue;
-    if (ch.op == OP_ABORT || CI_is_return(ch.ch))
+
+    if ((event.op == OP_ABORT) || key_is_return(event.ch))
     {
       choice = -1;
       break;
     }
-    else
+
+    char *p = strchr(letters, event.ch);
+    if (p)
     {
-      char *p = strchr(letters, ch.ch);
-      if (p)
-      {
-        choice = p - letters + 1;
-        break;
-      }
-      else if ((ch.ch <= '9') && (ch.ch > '0'))
-      {
-        choice = ch.ch - '0';
-        if (choice <= mutt_str_len(letters))
-          break;
-      }
+      choice = p - letters + 1;
+      break;
     }
-    mutt_beep(false);
-  }
 
-  if (win->state.rows == 1)
-  {
-    mutt_window_clearline(win, 0);
+    if ((event.ch > '0') && (event.ch <= '9'))
+    {
+      choice = event.ch - '0';
+      if (choice <= mutt_str_len(letters))
+        break;
+    }
   }
-  else
-  {
-    msgwin_set_height(1);
-    window_redraw(NULL);
-  }
+  // ---------------------------------------------------------------------------
 
-  mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
+  win = msgcont_pop_window();
   window_set_focus(old_focus);
-  mutt_curses_set_cursor(cursor);
-  mutt_refresh();
+  mutt_window_free(&win);
+
   return choice;
 }
 
 /**
- * mutt_yesorno - Ask the user a Yes/No question
- * @param msg Prompt
- * @param def Default answer, #MUTT_YES or #MUTT_NO (see #QuadOption)
- * @retval num Selection made, see #QuadOption
+ * mw_yesorno - Ask the user a Yes/No question offering help - @ingroup gui_mw
+ * @param prompt Prompt
+ * @param def    Default answer, e.g. #MUTT_YES
+ * @param cdef   Config definition for help
+ * @retval enum #QuadOption, Selection made
+ *
+ * This function uses a message window.
+ *
+ * Ask the user a yes/no question, using shortcut letters, e.g.
+ * `Quit NeoMutt? ([yes]/no):`
+ *
+ * This question can be answered using locale-dependent letters, e.g.
+ * - English, `[+1yY]` or `[-0nN]`
+ * - Serbian, `[+1yYdDДд]` or `[-0nNНн]`
+ *
+ * If a config variable (cdef) is given, then help is offered.
+ * The options change to: `([yes]/no/?)`
+ *
+ * Pressing '?' will show the name and one-line description of the config variable.
+ * Additionally, if `$help` is set, a link to the config's documentation is shown.
  */
-enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
+static enum QuadOption mw_yesorno(const char *prompt, enum QuadOption def,
+                                  struct ConfigDef *cdef)
 {
-  struct MuttWindow *win = msgwin_get_window();
+  struct MuttWindow *win = msgwin_new(true);
   if (!win)
     return MUTT_ABORT;
-
-  struct KeyEvent ch = { OP_NULL, OP_NULL };
-  char *answer_string = NULL;
-  int answer_string_wid, msg_wid;
-  size_t trunc_msg_len;
-  bool redraw = true;
-  int prompt_lines = 1;
-  char answer[2] = { 0 };
 
   char *yes = N_("yes");
   char *no = N_("no");
@@ -263,139 +239,146 @@ enum QuadOption mutt_yesorno(const char *msg, enum QuadOption def)
     }
   }
 
-  /* In order to prevent the default answer to the question to wrapped
-   * around the screen in the event the question is wider than the screen,
-   * ensure there is enough room for the answer and truncate the question
-   * to fit.  */
-  mutt_str_asprintf(&answer_string, " ([%s]/%s): ", (def == MUTT_YES) ? yes : no,
-                    (def == MUTT_YES) ? no : yes);
-  answer_string_wid = mutt_strwidth(answer_string);
-  msg_wid = mutt_strwidth(msg);
+  bool show_help_prompt = cdef;
 
+  struct Buffer *text = buf_pool_get();
+  buf_printf(text, "%s ([%s]/%s%s): ", prompt, (def == MUTT_YES) ? yes : no,
+             (def == MUTT_YES) ? no : yes, show_help_prompt ? "/?" : "");
+
+  msgwin_set_text(win, buf_string(text), MT_COLOR_PROMPT);
+  msgcont_push_window(win);
   struct MuttWindow *old_focus = window_set_focus(win);
 
-  enum MuttCursorState cursor = mutt_curses_set_cursor(MUTT_CURSOR_VISIBLE);
+  struct KeyEvent event = { 0, OP_NULL };
   window_redraw(NULL);
   while (true)
   {
-    if (redraw || SigWinch)
+    event = mutt_getch(GETCH_NO_FLAGS);
+    if ((event.op == OP_TIMEOUT) || (event.op == OP_REPAINT))
     {
-      redraw = false;
-      if (SigWinch)
-      {
-        SigWinch = false;
-        mutt_resize_screen();
-        clearok(stdscr, true);
-        window_redraw(NULL);
-      }
-      if (win->state.cols)
-      {
-        prompt_lines = (msg_wid + answer_string_wid + win->state.cols - 1) /
-                       win->state.cols;
-        prompt_lines = MAX(1, MIN(3, prompt_lines));
-      }
-      if (prompt_lines != win->state.rows)
-      {
-        msgwin_set_height(prompt_lines);
-        window_redraw(NULL);
-      }
-
-      /* maxlen here is sort of arbitrary, so pick a reasonable upper bound */
-      trunc_msg_len = mutt_wstr_trunc(msg,
-                                      (size_t) 4 * prompt_lines * win->state.cols,
-                                      ((size_t) prompt_lines * win->state.cols) - answer_string_wid,
-                                      NULL);
-
-      mutt_window_move(win, 0, 0);
-      mutt_curses_set_normal_backed_color_by_id(MT_COLOR_PROMPT);
-      mutt_window_addnstr(win, msg, trunc_msg_len);
-      mutt_window_addstr(win, answer_string);
-      mutt_curses_set_color_by_id(MT_COLOR_NORMAL);
-      mutt_window_clrtoeol(win);
+      window_redraw(NULL);
+      mutt_refresh();
+      continue;
     }
 
-    mutt_refresh();
-    /* SigWinch is not processed unless timeout is set */
-    ch = mutt_getch_timeout(30 * 1000);
-    if (ch.op == OP_TIMEOUT)
-      continue;
-    if (CI_is_return(ch.ch))
-      break;
-    if (ch.op == OP_ABORT)
+    if (key_is_return(event.ch))
+      break; // Do nothing, use default
+
+    if (event.op == OP_ABORT)
     {
       def = MUTT_ABORT;
       break;
     }
 
-    answer[0] = ch.ch;
-    if (reyes_ok ? (regexec(&reyes, answer, 0, 0, 0) == 0) : (tolower(ch.ch) == 'y'))
+    char answer[4] = { 0 };
+    answer[0] = event.ch;
+    if (reyes_ok ? (regexec(&reyes, answer, 0, 0, 0) == 0) : (tolower(event.ch) == 'y'))
     {
       def = MUTT_YES;
       break;
     }
-    else if (reno_ok ? (regexec(&reno, answer, 0, 0, 0) == 0) : (tolower(ch.ch) == 'n'))
+    if (reno_ok ? (regexec(&reno, answer, 0, 0, 0) == 0) : (tolower(event.ch) == 'n'))
     {
       def = MUTT_NO;
       break;
     }
-    else
+    if (show_help_prompt && (event.ch == '?'))
     {
-      mutt_beep(false);
-    }
-  }
-  window_set_focus(old_focus);
-  mutt_curses_set_cursor(cursor);
+      show_help_prompt = false;
+      msgwin_clear_text(win);
+      buf_printf(text, "$%s - %s\n", cdef->name, cdef->docs);
 
-  FREE(&answer_string);
+      char hyphen[128] = { 0 };
+      mutt_str_hyphenate(hyphen, sizeof(hyphen), cdef->name);
+      buf_add_printf(text, "https://neomutt.org/guide/reference#%s\n", hyphen);
+
+      msgwin_add_text(win, buf_string(text), simple_color_get(MT_COLOR_NORMAL));
+
+      buf_printf(text, "%s ([%s]/%s): ", prompt, (def == MUTT_YES) ? yes : no,
+                 (def == MUTT_YES) ? no : yes);
+      msgwin_add_text(win, buf_string(text), simple_color_get(MT_COLOR_PROMPT));
+      msgwin_add_text(win, NULL, NULL);
+
+      window_redraw(NULL);
+      mutt_refresh();
+    }
+
+    mutt_beep(false);
+  }
+
+  win = msgcont_pop_window();
+  window_set_focus(old_focus);
+  mutt_window_free(&win);
 
   if (reyes_ok)
     regfree(&reyes);
   if (reno_ok)
     regfree(&reno);
 
-  if (win->state.rows == 1)
-  {
-    mutt_window_clearline(win, 0);
-  }
-  else
-  {
-    msgwin_set_height(1);
-    window_redraw(NULL);
-  }
-
-  if (def == MUTT_ABORT)
-  {
-    /* when the users cancels with ^G, clear the message stored with
-     * mutt_message() so it isn't displayed when the screen is refreshed. */
-    mutt_clear_error();
-  }
-  else
-  {
-    mutt_window_addstr(win, (char *) ((def == MUTT_YES) ? yes : no));
-    mutt_refresh();
-  }
+  buf_pool_release(&text);
   return def;
 }
 
 /**
- * query_quadoption - Ask the user a quad-question
- * @param opt    Option to use
- * @param prompt Message to show to the user
- * @retval #QuadOption Result, e.g. #MUTT_NO
+ * query_yesorno - Ask the user a Yes/No question
+ * @param prompt Prompt
+ * @param def Default answer, e.g. #MUTT_YES
+ * @retval enum #QuadOption, Selection made
+ *
+ * Wrapper for mw_yesorno().
  */
-enum QuadOption query_quadoption(enum QuadOption opt, const char *prompt)
+enum QuadOption query_yesorno(const char *prompt, enum QuadOption def)
 {
-  switch (opt)
-  {
-    case MUTT_YES:
-    case MUTT_NO:
-      return opt;
+  return mw_yesorno(prompt, def, NULL);
+}
 
-    default:
-      opt = mutt_yesorno(prompt, (opt == MUTT_ASKYES) ? MUTT_YES : MUTT_NO);
-      msgwin_clear_text();
-      return opt;
-  }
+/**
+ * query_yesorno_help - Ask the user a Yes/No question offering help
+ * @param prompt Prompt
+ * @param def    Default answer, e.g. #MUTT_YES
+ * @param sub    Config Subset
+ * @param name   Name of controlling config variable
+ * @retval enum #QuadOption, Selection made
+ *
+ * Wrapper for mw_yesorno().
+ */
+enum QuadOption query_yesorno_help(const char *prompt, enum QuadOption def,
+                                   struct ConfigSubset *sub, const char *name)
+{
+  struct HashElem *he = cs_subset_create_inheritance(sub, name);
+  struct HashElem *he_base = cs_get_base(he);
+  assert(DTYPE(he_base->type) == DT_BOOL);
 
-  /* not reached */
+  intptr_t value = cs_subset_he_native_get(sub, he, NULL);
+  assert(value != INT_MIN);
+
+  struct ConfigDef *cdef = he_base->data;
+  return mw_yesorno(prompt, def, cdef);
+}
+
+/**
+ * query_quadoption - Ask the user a quad-question
+ * @param prompt Message to show to the user
+ * @param sub    Config Subset
+ * @param name   Name of controlling config variable
+ * @retval #QuadOption Result, e.g. #MUTT_NO
+ *
+ * If the config variable is set to 'yes' or 'no', the function returns immediately.
+ * Otherwise, the job is delegated to mw_yesorno().
+ */
+enum QuadOption query_quadoption(const char *prompt, struct ConfigSubset *sub, const char *name)
+{
+  struct HashElem *he = cs_subset_create_inheritance(sub, name);
+  struct HashElem *he_base = cs_get_base(he);
+  assert(DTYPE(he_base->type) == DT_QUAD);
+
+  intptr_t value = cs_subset_he_native_get(sub, he, NULL);
+  assert(value != INT_MIN);
+
+  if ((value == MUTT_YES) || (value == MUTT_NO))
+    return value;
+
+  struct ConfigDef *cdef = he_base->data;
+  enum QuadOption def = (value == MUTT_ASKYES) ? MUTT_YES : MUTT_NO;
+  return mw_yesorno(prompt, def, cdef);
 }

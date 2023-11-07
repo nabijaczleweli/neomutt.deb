@@ -314,7 +314,7 @@ static void print_fixed_line(const char *line, struct State *state, int ql,
 }
 
 /**
- * rfc3676_handler - Body handler implementing RFC3676 for format=flowed - Implements ::handler_t - @ingroup handler_api
+ * rfc3676_handler - Handler for format=flowed - Implements ::handler_t - @ingroup handler_api
  * @retval 0 Always
  */
 int rfc3676_handler(struct Body *a, struct State *state)
@@ -458,7 +458,7 @@ static void rfc3676_space_stuff(const char *filename, bool unstuff)
 
   if ((truncate(filename, 0) == -1) || ((fp_out = mutt_file_fopen(filename, "a")) == NULL))
   {
-    mutt_perror(filename);
+    mutt_perror("%s", filename);
     goto bail;
   }
 

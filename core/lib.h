@@ -28,8 +28,11 @@
  * | File                | Description                |
  * | :------------------ | :------------------------- |
  * | core/account.c      | @subpage core_account      |
+ * | core/command.c      | @subpage core_command      |
+ * | core/config_cache.c | @subpage core_config_cache |
  * | core/dispatcher.c   | @subpage core_dispatcher   |
  * | core/mailbox.c      | @subpage core_mailbox      |
+ * | core/message.c      | @subpage core_message      |
  * | core/neomutt.c      | @subpage core_neomutt      |
  * | core/tmp.c          | @subpage core_tmp          |
  */
@@ -37,14 +40,16 @@
 #ifndef MUTT_CORE_LIB_H
 #define MUTT_CORE_LIB_H
 
-// IWYU pragma: begin_exports
+// IWYU pragma: begin_keep
 #include "account.h"
 #include "command.h"
+#include "config_cache.h"
 #include "dispatcher.h"
 #include "mailbox.h"
+#include "message.h"
 #include "mxapi.h"
 #include "neomutt.h"
 #include "tmp.h"
-// IWYU pragma: end_exports
+// IWYU pragma: end_keep
 
 #endif /* MUTT_CORE_LIB_H */

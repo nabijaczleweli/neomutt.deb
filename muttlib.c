@@ -49,7 +49,9 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "muttlib.h"
-#include "enter/lib.h"
+#include "browser/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "ncrypt/lib.h"
 #include "parse/lib.h"
 #include "question/lib.h"
@@ -203,11 +205,17 @@ void buf_expand_path_regex(struct Buffer *buf, bool regex)
           buf_strcpy(p, NONULL(c_folder));
         }
         else if (mb_type == MUTT_NOTMUCH)
+        {
           buf_strcpy(p, NONULL(c_folder));
+        }
         else if (c_folder && (c_folder[strlen(c_folder) - 1] == '/'))
+        {
           buf_strcpy(p, NONULL(c_folder));
+        }
         else
+        {
           buf_printf(p, "%s/", NONULL(c_folder));
+        }
 
         tail = s + 1;
         break;
@@ -381,9 +389,13 @@ char *mutt_gecos_name(char *dest, size_t destlen, struct passwd *pw)
                   MIN(pat_match[0].rm_eo - pat_match[0].rm_so + 1, destlen));
   }
   else if ((p = strchr(pw->pw_gecos, ',')))
+  {
     mutt_str_copy(dest, pw->pw_gecos, MIN(destlen, p - pw->pw_gecos + 1));
+  }
   else
+  {
     mutt_str_copy(dest, pw->pw_gecos, destlen);
+  }
 
   pwnl = strlen(pw->pw_name);
 
@@ -519,7 +531,9 @@ void mutt_pretty_mailbox(char *buf, size_t buflen)
         p += 3;
       }
       else
+      {
         *q++ = *p++;
+      }
     }
     *q = '\0';
   }
@@ -582,7 +596,7 @@ int mutt_check_overwrite(const char *attname, const char *path, struct Buffer *f
     enum QuadOption ans = MUTT_NO;
     if (directory)
     {
-      switch (mutt_multi_choice
+      switch (mw_multi_choice
               /* L10N: Means "The path you specified as the destination file is a directory."
                  See the msgid "Save to file: " (alias.c, recvattach.c)
                  These three letters correspond to the choices in the string.  */
@@ -604,13 +618,14 @@ int mutt_check_overwrite(const char *attname, const char *path, struct Buffer *f
     }
     /* L10N: Means "The path you specified as the destination file is a directory."
        See the msgid "Save to file: " (alias.c, recvattach.c) */
-    else if ((ans = mutt_yesorno(_("File is a directory, save under it?"), MUTT_YES)) != MUTT_YES)
+    else if ((ans = query_yesorno(_("File is a directory, save under it?"), MUTT_YES)) != MUTT_YES)
       return (ans == MUTT_NO) ? 1 : -1;
 
     struct Buffer *tmp = buf_pool_get();
     buf_strcpy(tmp, mutt_path_basename(NONULL(attname)));
-    if ((buf_get_field(_("File under directory: "), tmp, MUTT_COMP_FILE | MUTT_COMP_CLEAR,
-                       false, NULL, NULL, NULL) != 0) ||
+    struct FileCompletionData cdata = { false, NULL, NULL, NULL };
+    if ((mw_get_field(_("File under directory: "), tmp, MUTT_COMP_CLEAR,
+                      HC_FILE, &CompleteFileOps, &cdata) != 0) ||
         buf_is_empty(tmp))
     {
       buf_pool_release(&tmp);
@@ -626,7 +641,7 @@ int mutt_check_overwrite(const char *attname, const char *path, struct Buffer *f
     snprintf(buf, sizeof(buf), "%s - %s", buf_string(fname),
              // L10N: Options for: File %s exists, (o)verwrite, (a)ppend, or (c)ancel?
              _("File exists, (o)verwrite, (a)ppend, or (c)ancel?"));
-    switch (mutt_multi_choice(buf, _("oac")))
+    switch (mw_multi_choice(buf, _("oac")))
     {
       case -1: /* abort */
         return -1;
@@ -657,7 +672,7 @@ void mutt_save_path(char *buf, size_t buflen, const struct Address *addr)
 {
   if (addr && addr->mailbox)
   {
-    mutt_str_copy(buf, addr->mailbox, buflen);
+    mutt_str_copy(buf, buf_string(addr->mailbox), buflen);
     const bool c_save_address = cs_subset_bool(NeoMutt->sub, "save_address");
     if (!c_save_address)
     {
@@ -682,7 +697,7 @@ void buf_save_path(struct Buffer *dest, const struct Address *a)
 {
   if (a && a->mailbox)
   {
-    buf_strcpy(dest, a->mailbox);
+    buf_copy(dest, a->mailbox);
     const bool c_save_address = cs_subset_bool(NeoMutt->sub, "save_address");
     if (!c_save_address)
     {
@@ -744,12 +759,11 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
 
   const bool c_arrow_cursor = cs_subset_bool(NeoMutt->sub, "arrow_cursor");
   const char *const c_arrow_string = cs_subset_string(NeoMutt->sub, "arrow_string");
+  const int arrow_width = mutt_strwidth(c_arrow_string);
 
   prefix[0] = '\0';
   buflen--; /* save room for the terminal \0 */
-  wlen = ((flags & MUTT_FORMAT_ARROWCURSOR) && c_arrow_cursor) ?
-             mutt_strwidth(c_arrow_string) + 1 :
-             0;
+  wlen = ((flags & MUTT_FORMAT_ARROWCURSOR) && c_arrow_cursor) ? arrow_width + 1 : 0;
   col += wlen;
 
   if ((flags & MUTT_FORMAT_NOFILTER) == 0)
@@ -822,7 +836,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
 
       col -= wlen; /* reset to passed in value */
       wptr = buf;  /* reset write ptr */
-      pid_t pid = filter_create(cmd.data, NULL, &fp_filter, NULL);
+      pid_t pid = filter_create(cmd.data, NULL, &fp_filter, NULL, EnvList);
       if (pid != -1)
       {
         int rc;
@@ -1103,7 +1117,7 @@ void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const c
           else if (soft)
           {
             int offset = ((flags & MUTT_FORMAT_ARROWCURSOR) && c_arrow_cursor) ?
-                             mutt_strwidth(c_arrow_string) + 1 :
+                             arrow_width + 1 :
                              0;
             int avail_cols = (cols > offset) ? (cols - offset) : 0;
             /* \0-terminate buf for length computation in mutt_wstr_trunc() */
@@ -1284,7 +1298,7 @@ FILE *mutt_open_read(const char *path, pid_t *thepid)
 
     p[len - 1] = 0;
     mutt_endwin();
-    *thepid = filter_create(p, NULL, &fp, NULL);
+    *thepid = filter_create(p, NULL, &fp, NULL, EnvList);
     FREE(&p);
   }
   else
@@ -1331,7 +1345,8 @@ int mutt_save_confirm(const char *s, struct stat *st)
     {
       struct Buffer *tmp = buf_pool_get();
       buf_printf(tmp, _("Append messages to %s?"), s);
-      enum QuadOption ans = mutt_yesorno(buf_string(tmp), MUTT_YES);
+      enum QuadOption ans = query_yesorno_help(buf_string(tmp), MUTT_YES,
+                                               NeoMutt->sub, "confirm_append");
       if (ans == MUTT_NO)
         rc = 1;
       else if (ans == MUTT_ABORT)
@@ -1369,7 +1384,8 @@ int mutt_save_confirm(const char *s, struct stat *st)
       {
         struct Buffer *tmp = buf_pool_get();
         buf_printf(tmp, _("Create %s?"), s);
-        enum QuadOption ans = mutt_yesorno(buf_string(tmp), MUTT_YES);
+        enum QuadOption ans = query_yesorno_help(buf_string(tmp), MUTT_YES,
+                                                 NeoMutt->sub, "confirm_create");
         if (ans == MUTT_NO)
           rc = 1;
         else if (ans == MUTT_ABORT)
@@ -1385,7 +1401,7 @@ int mutt_save_confirm(const char *s, struct stat *st)
         if (mutt_file_mkdir(tmp_path, S_IRWXU) == -1)
         {
           /* report failure & abort */
-          mutt_perror(s);
+          mutt_perror("%s", s);
           FREE(&tmp_path);
           return 1;
         }
@@ -1394,12 +1410,12 @@ int mutt_save_confirm(const char *s, struct stat *st)
     }
     else
     {
-      mutt_perror(s);
+      mutt_perror("%s", s);
       return 1;
     }
   }
 
-  msgwin_clear_text();
+  msgwin_clear_text(NULL);
   return rc;
 }
 
@@ -1543,7 +1559,7 @@ void mutt_get_parent_path(const char *path, char *buf, size_t buflen)
 }
 
 /**
- * mutt_inbox_cmp - Do two folders share the same path and one is an inbox
+ * mutt_inbox_cmp - Do two folders share the same path and one is an inbox - @ingroup sort_api
  * @param a First path
  * @param b Second path
  * @retval -1 a is INBOX of b

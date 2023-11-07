@@ -26,13 +26,11 @@
 #include <stdbool.h>
 #include <wchar.h>
 #include "browser/lib.h"
-#include "keymap.h"
+#include "key/lib.h"
 
 struct Buffer;
 struct Mailbox;
 struct MuttWindow;
-
-extern int MuttGetchTimeout; ///< Timeout in ms for mutt_getch()
 
 /**
  * enum FormatJustify - Alignment for mutt_simple_format()
@@ -44,20 +42,28 @@ enum FormatJustify
   JUSTIFY_RIGHT = 1,  ///< Right justify the text
 };
 
+/**
+ * struct FileCompletionData - Input for the file completion function
+ */
+struct FileCompletionData
+{
+  bool            multiple; ///< Allow multiple selections
+  struct Mailbox *mailbox;  ///< Mailbox
+  char         ***files;    ///< List of files selected
+  int            *numfiles; ///< Number of files selected
+};
+
 int          mutt_addwch(struct MuttWindow *win, wchar_t wc);
 int          mutt_any_key_to_continue(const char *s);
 void         mutt_beep(bool force);
-int          buf_enter_fname(const char *prompt, struct Buffer *fname, bool mailbox, struct Mailbox *m, bool multiple, char ***files, int *numfiles, SelectFileFlags flags);
+int          mw_enter_fname(const char *prompt, struct Buffer *fname, bool mailbox, struct Mailbox *m, bool multiple, char ***files, int *numfiles, SelectFileFlags flags);
 void         mutt_edit_file(const char *editor, const char *file);
 void         mutt_endwin(void);
 void         mutt_flushinp(void);
-void         mutt_flush_macro_to_endcond(void);
-void         mutt_flush_unget_to_endcond(void);
 void         mutt_format_s(char *buf, size_t buflen, const char *prec, const char *s);
 void         mutt_format_s_tree(char *buf, size_t buflen, const char *prec, const char *s);
 void         mutt_format_s_x(char *buf, size_t buflen, const char *prec, const char *s, bool arboreal);
-struct KeyEvent mutt_getch_timeout(int delay);
-struct KeyEvent mutt_getch(void);
+struct KeyEvent mutt_getch(GetChFlags flags);
 void         mutt_need_hard_redraw(void);
 void         mutt_paddstr(struct MuttWindow *win, int n, const char *s);
 void         mutt_perror_debug(const char *s);

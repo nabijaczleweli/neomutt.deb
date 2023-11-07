@@ -31,6 +31,8 @@
  * | debug/common.c      | @subpage debug_common      |
  * | debug/email.c       | @subpage debug_email       |
  * | debug/graphviz.c    | @subpage debug_graphviz    |
+ * | debug/keymap.c      | @subpage debug_keymap      |
+ * | debug/logging.c     | @subpage debug_logging     |
  * | debug/notify.c      | @subpage debug_notify      |
  * | debug/pager.c       | @subpage debug_pager       |
  * | debug/window.c      | @subpage debug_window      |
@@ -41,29 +43,26 @@
 
 #include <stddef.h>
 #include <stdbool.h>
+#include <time.h>
+#include "mutt/lib.h"
 #include "email/lib.h"
 #include "core/lib.h"
+#include "menu/lib.h"
 
 struct AddressList;
 struct AttachCtx;
 struct AttachPtr;
-struct Buffer;
-struct ListHead;
 struct MailboxView;
-struct NotifyCallback;
+struct MuttWindow;
 struct PagerPrivateData;
 
 // Common
 void        add_flag               (struct Buffer *buf, bool is_set, const char *name);
-const char *get_content_encoding   (enum ContentEncoding enc);
-const char *get_content_disposition(enum ContentDisposition disp);
-const char *get_content_type       (enum ContentType type);
 
 // Backtrace
 void show_backtrace(void);
 
 // Email
-void        add_flag               (struct Buffer *buf, bool is_set, const char *name);
 char        body_name              (const struct Body *b);
 void        dump_addr_list         (char *buf, size_t buflen, const struct AddressList *al, const char *name);
 void        dump_attach            (const struct AttachPtr *att);
@@ -74,23 +73,39 @@ void        dump_email             (const struct Email *e);
 void        dump_envelope          (const struct Envelope *env);
 void        dump_list_head         (const struct ListHead *list, const char *name);
 void        dump_param_list        (const struct ParameterList *pl);
-const char *get_content_disposition(enum ContentDisposition disp);
-const char *get_content_encoding   (enum ContentEncoding enc);
-const char *get_content_type       (enum ContentType type);
 
 // Graphviz
-void        add_flag               (struct Buffer *buf, bool is_set, const char *name);
-void        dump_graphviz          (const char *title, struct MailboxView *mv);
+void        dump_graphviz           (const char *title, struct MailboxView *mv);
 void        dump_graphviz_attach_ctx(struct AttachCtx *actx);
-void        dump_graphviz_body     (struct Body *b);
-void        dump_graphviz_email    (struct Email *e);
-const char *get_content_disposition(enum ContentDisposition disp);
-const char *get_content_encoding   (enum ContentEncoding enc);
-const char *get_content_type       (enum ContentType type);
+void        dump_graphviz_body      (struct Body *b);
+void        dump_graphviz_email     (struct Email *e, const char *title);
+
+// Keymap
+void        dump_keybindings        (void);
+
+// Logging
+extern bool DebugLogColor;
+extern bool DebugLogLevel;
+extern bool DebugLogTimestamp;
+
+extern int log_disp_debug           (time_t stamp, const char *file, int line, const char *function, enum LogLevel level, const char *format, ...);
+
+// Names
+const char *name_content_disposition(enum ContentDisposition disp);
+const char *name_content_encoding   (enum ContentEncoding enc);
+const char *name_content_type       (enum ContentType type);
+const char *name_mailbox_type       (enum MailboxType type);
+const char *name_menu_type          (enum MenuType mt);
+const char *name_notify_config      (int id);
+const char *name_notify_global      (int id);
+const char *name_notify_mailbox     (int id);
+const char *name_notify_mview       (int id);
+const char *name_notify_type        (enum NotifyType type);
+const char *name_window_size        (const struct MuttWindow *win);
+const char *name_window_type        (const struct MuttWindow *win);
 
 // Notify
 int debug_all_observer(struct NotifyCallback *nc);
-const char *get_mailbox_type(enum MailboxType type);
 
 // Pager
 void dump_pager(struct PagerPrivateData *priv);

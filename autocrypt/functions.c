@@ -27,6 +27,9 @@
  */
 
 #include "config.h"
+#ifdef _MAKEDOC
+#include "docs/makedoc_defs.h"
+#else
 #include <stdio.h>
 #include "private.h"
 #include "mutt/lib.h"
@@ -34,11 +37,42 @@
 #include "config/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
-#include "functions.h"
 #include "lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "question/lib.h"
-#include "opcodes.h"
+#include "functions.h"
+#endif
+
+// clang-format off
+#ifdef USE_AUTOCRYPT
+/**
+ * OpAutocrypt - Functions for the Autocrypt Account
+ */
+const struct MenuFuncOp OpAutocrypt[] = { /* map: autocrypt account */
+  { "create-account",                OP_AUTOCRYPT_CREATE_ACCT },
+  { "delete-account",                OP_AUTOCRYPT_DELETE_ACCT },
+  { "exit",                          OP_EXIT },
+  { "toggle-active",                 OP_AUTOCRYPT_TOGGLE_ACTIVE },
+  { "toggle-prefer-encrypt",         OP_AUTOCRYPT_TOGGLE_PREFER },
+  { NULL, 0 }
+};
+#endif
+
+#ifdef USE_AUTOCRYPT
+/**
+ * AutocryptDefaultBindings - Key bindings for the Autocrypt Account
+ */
+const struct MenuOpSeq AutocryptDefaultBindings[] = { /* map: autocrypt account */
+  { OP_AUTOCRYPT_CREATE_ACCT,              "c" },
+  { OP_AUTOCRYPT_DELETE_ACCT,              "D" },
+  { OP_AUTOCRYPT_TOGGLE_ACTIVE,            "a" },
+  { OP_AUTOCRYPT_TOGGLE_PREFER,            "p" },
+  { OP_EXIT,                               "q" },
+  { 0, NULL }
+};
+#endif
+// clang-format on
 
 /**
  * toggle_active - Toggle whether an Autocrypt account is active
@@ -96,8 +130,8 @@ static int op_autocrypt_delete_acct(struct AutocryptData *ad, int op)
   char msg[128] = { 0 };
   snprintf(msg, sizeof(msg),
            // L10N: Confirmation message when deleting an autocrypt account
-           _("Really delete account \"%s\"?"), entry->addr->mailbox);
-  if (mutt_yesorno(msg, MUTT_NO) != MUTT_YES)
+           _("Really delete account \"%s\"?"), buf_string(entry->addr->mailbox));
+  if (query_yesorno(msg, MUTT_NO) != MUTT_YES)
     return FR_NO_ACTION;
 
   if (mutt_autocrypt_db_account_delete(entry->account) == 0)
@@ -191,7 +225,7 @@ int autocrypt_function_dispatcher(struct MuttWindow *win, int op)
   if (rc == FR_UNKNOWN) // Not our function
     return rc;
 
-  const char *result = dispacher_get_retval_name(rc);
+  const char *result = dispatcher_get_retval_name(rc);
   mutt_debug(LL_DEBUG1, "Handled %s (%d) -> %s\n", opcodes_get_name(op), op, NONULL(result));
 
   return rc;

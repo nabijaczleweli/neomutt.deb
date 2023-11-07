@@ -51,8 +51,10 @@
 #include "mutt/lib.h"
 #include "mutt.h"
 #include "sasl.h"
-#include "lib.h"
-#include "enter/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
+#include "connaccount.h"
+#include "connection.h"
 #include "globals.h"
 
 /**
@@ -87,7 +89,7 @@ struct SaslSockData
   int (*write)(struct Connection *conn, const char *buf, size_t count);
 
   /**
-   * poll - Check whether a socket read would block - Implements Connection::poll() - @ingroup connection_poll
+   * poll - Check if any data is waiting on a socket - Implements Connection::poll() - @ingroup connection_poll
    */
   int (*poll)(struct Connection *conn, time_t wait_secs);
 
@@ -576,7 +578,7 @@ fail:
 }
 
 /**
- * mutt_sasl_conn_poll - Check an SASL connection for data - Implements Connection::poll() - @ingroup connection_poll
+ * mutt_sasl_conn_poll - Check if any data is waiting on a socket - Implements Connection::poll() - @ingroup connection_poll
  */
 static int mutt_sasl_conn_poll(struct Connection *conn, time_t wait_secs)
 {
@@ -602,14 +604,6 @@ static int mutt_sasl_conn_poll(struct Connection *conn, time_t wait_secs)
  */
 int mutt_sasl_client_new(struct Connection *conn, sasl_conn_t **saslconn)
 {
-  sasl_security_properties_t secprops;
-  struct sockaddr_storage local, remote;
-  socklen_t size;
-  char iplocalport[IP_PORT_BUFLEN], ipremoteport[IP_PORT_BUFLEN];
-  char *plp = NULL;
-  char *prp = NULL;
-  int rc;
-
   if (mutt_sasl_start() != SASL_OK)
     return -1;
 
@@ -619,6 +613,11 @@ int mutt_sasl_client_new(struct Connection *conn, sasl_conn_t **saslconn)
     return -1;
   }
 
+  socklen_t size;
+
+  struct sockaddr_storage local = { 0 };
+  char iplocalport[IP_PORT_BUFLEN] = { 0 };
+  char *plp = NULL;
   size = sizeof(local);
   if (getsockname(conn->fd, (struct sockaddr *) &local, &size) == 0)
   {
@@ -632,6 +631,9 @@ int mutt_sasl_client_new(struct Connection *conn, sasl_conn_t **saslconn)
     mutt_debug(LL_DEBUG2, "SASL failed to get local IP address\n");
   }
 
+  struct sockaddr_storage remote = { 0 };
+  char ipremoteport[IP_PORT_BUFLEN] = { 0 };
+  char *prp = NULL;
   size = sizeof(remote);
   if (getpeername(conn->fd, (struct sockaddr *) &remote, &size) == 0)
   {
@@ -647,17 +649,16 @@ int mutt_sasl_client_new(struct Connection *conn, sasl_conn_t **saslconn)
 
   mutt_debug(LL_DEBUG2, "SASL local ip: %s, remote ip:%s\n", NONULL(plp), NONULL(prp));
 
-  rc = sasl_client_new(conn->account.service, conn->account.host, plp, prp,
-                       mutt_sasl_get_callbacks(&conn->account), 0, saslconn);
-
+  int rc = sasl_client_new(conn->account.service, conn->account.host, plp, prp,
+                           mutt_sasl_get_callbacks(&conn->account), 0, saslconn);
   if (rc != SASL_OK)
   {
     mutt_error(_("Error allocating SASL connection"));
     return -1;
   }
 
-  memset(&secprops, 0, sizeof(secprops));
   /* Work around a casting bug in the SASL krb4 module */
+  sasl_security_properties_t secprops = { 0 };
   secprops.max_ssf = 0x7fff;
   secprops.maxbufsize = MUTT_SASL_MAXBUF;
   if (sasl_setprop(*saslconn, SASL_SEC_PROPS, &secprops) != SASL_OK)
@@ -713,7 +714,7 @@ int mutt_sasl_interact(sasl_interact_t *interaction)
     buf_reset(resp);
 
     if (OptNoCurses ||
-        (buf_get_field(prompt, resp, MUTT_COMP_NO_FLAGS, false, NULL, NULL, NULL) != 0))
+        (mw_get_field(prompt, resp, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) != 0))
     {
       rc = SASL_FAIL;
       break;
@@ -776,12 +777,12 @@ void mutt_sasl_setup_conn(struct Connection *conn, sasl_conn_t *saslconn)
 }
 
 /**
- * mutt_sasl_done - Invoke when processing is complete
+ * mutt_sasl_cleanup - Invoke when processing is complete
  *
  * This is a cleanup function, used to free all memory used by the library.
  * Invoke when processing is complete.
  */
-void mutt_sasl_done(void)
+void mutt_sasl_cleanup(void)
 {
   /* As we never use the server-side, the silently ignore the return value */
   sasl_client_done();

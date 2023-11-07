@@ -35,6 +35,7 @@
  */
 
 #include "config.h"
+#include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -101,7 +102,7 @@ static bool lock_realpath(struct Mailbox *m, bool excl)
     ci->fp_lock = fopen(m->realpath, "r");
   if (!ci->fp_lock)
   {
-    mutt_perror(m->realpath);
+    mutt_perror("%s", m->realpath);
     return false;
   }
 
@@ -317,21 +318,21 @@ static void expand_command_str(const struct Mailbox *m, const char *cmd, char *b
  * @param m        Mailbox to work with
  * @param command  Command string to execute
  * @param progress Message to show the user
- * @retval 1 Success
- * @retval 0 Failure
+ * @retval true  Success
+ * @retval false Failure
  *
  * Run the supplied command, taking care of all the NeoMutt requirements,
  * such as locking files and blocking signals.
  */
-static int execute_command(struct Mailbox *m, const char *command, const char *progress)
+static bool execute_command(struct Mailbox *m, const char *command, const char *progress)
 {
   if (!m || !command || !progress)
-    return 0;
+    return false;
 
   if (m->verbose)
     mutt_message(progress, m->realpath);
 
-  int rc = 1;
+  bool rc = true;
   char sys_cmd[STR_COMMAND] = { 0 };
 
   mutt_sig_block();
@@ -342,7 +343,7 @@ static int execute_command(struct Mailbox *m, const char *command, const char *p
 
   if (mutt_system(sys_cmd) != 0)
   {
-    rc = 0;
+    rc = false;
     mutt_any_key_to_continue(NULL);
     mutt_error(_("Error running \"%s\""), sys_cmd);
   }
@@ -464,8 +465,7 @@ static enum MxOpenReturns comp_mbox_open(struct Mailbox *m)
     goto cmo_fail;
   }
 
-  int rc = execute_command(m, ci->cmd_open, _("Decompressing %s"));
-  if (rc == 0)
+  if (!execute_command(m, ci->cmd_open, _("Decompressing %s")))
     goto cmo_fail;
 
   unlock_realpath(m);
@@ -531,8 +531,7 @@ static bool comp_mbox_open_append(struct Mailbox *m, OpenMailboxFlags flags)
   /* Open the existing mailbox, unless we are appending */
   if (!ci->cmd_append && (mutt_file_get_size(m->realpath) > 0))
   {
-    int rc = execute_command(m, ci->cmd_open, _("Decompressing %s"));
-    if (rc == 0)
+    if (!execute_command(m, ci->cmd_open, _("Decompressing %s")))
     {
       mutt_error(_("Compress command failed: %s"), ci->cmd_open);
       goto cmoa_fail2;
@@ -604,10 +603,10 @@ static enum MxStatus comp_mbox_check(struct Mailbox *m)
     return MX_STATUS_ERROR;
   }
 
-  int rc = execute_command(m, ci->cmd_open, _("Decompressing %s"));
+  bool rc = execute_command(m, ci->cmd_open, _("Decompressing %s"));
   store_size(m);
   unlock_realpath(m);
-  if (rc == 0)
+  if (!rc)
     return MX_STATUS_ERROR;
 
   return ops->mbox_check(m);
@@ -650,8 +649,7 @@ static enum MxStatus comp_mbox_sync(struct Mailbox *m)
   if (check != MX_STATUS_OK)
     goto sync_cleanup;
 
-  int rc = execute_command(m, ci->cmd_close, _("Compressing %s"));
-  if (rc == 0)
+  if (!execute_command(m, ci->cmd_close, _("Compressing %s")))
   {
     check = MX_STATUS_ERROR;
     goto sync_cleanup;
@@ -705,15 +703,18 @@ static enum MxStatus comp_mbox_close(struct Mailbox *m)
       msg = _("Compressing %s");
     }
 
-    int rc = execute_command(m, append, msg);
-    if (rc == 0)
+    if (!execute_command(m, append, msg))
     {
       mutt_any_key_to_continue(NULL);
       mutt_error(_("Error. Preserving temporary file: %s"), mailbox_path(m));
     }
     else
     {
-      remove(mailbox_path(m));
+      if (remove(mailbox_path(m)) < 0)
+      {
+        mutt_debug(LL_DEBUG1, "remove failed: %s: %s (errno %d)\n",
+                   mailbox_path(m), strerror(errno), errno);
+      }
     }
 
     unlock_realpath(m);
@@ -726,12 +727,20 @@ static enum MxStatus comp_mbox_close(struct Mailbox *m)
       const bool c_save_empty = cs_subset_bool(NeoMutt->sub, "save_empty");
       if (!c_save_empty)
       {
-        remove(m->realpath);
+        if (remove(m->realpath) < 0)
+        {
+          mutt_debug(LL_DEBUG1, "remove failed: %s: %s (errno %d)\n",
+                     m->realpath, strerror(errno), errno);
+        }
       }
     }
     else
     {
-      remove(mailbox_path(m));
+      if (remove(mailbox_path(m)) < 0)
+      {
+        mutt_debug(LL_DEBUG1, "remove failed: %s: %s (errno %d)\n",
+                   mailbox_path(m), strerror(errno), errno);
+      }
     }
   }
 
@@ -897,38 +906,24 @@ static enum MailboxType comp_path_probe(const char *path, const struct stat *st)
 /**
  * comp_path_canon - Canonicalise a Mailbox path - Implements MxOps::path_canon() - @ingroup mx_path_canon
  */
-static int comp_path_canon(char *buf, size_t buflen)
+static int comp_path_canon(struct Buffer *path)
 {
-  mutt_path_canon(buf, buflen, HomeDir, false);
+  mutt_path_canon(path, HomeDir, false);
   return 0;
-}
-
-/**
- * comp_path_pretty - Abbreviate a Mailbox path - Implements MxOps::path_pretty() - @ingroup mx_path_pretty
- */
-static int comp_path_pretty(char *buf, size_t buflen, const char *folder)
-{
-  if (mutt_path_abbr_folder(buf, folder))
-    return 0;
-
-  if (mutt_path_pretty(buf, buflen, HomeDir, false))
-    return 0;
-
-  return -1;
 }
 
 /**
  * comp_path_parent - Find the parent of a Mailbox path - Implements MxOps::path_parent() - @ingroup mx_path_parent
  */
-static int comp_path_parent(char *buf, size_t buflen)
+static int comp_path_parent(struct Buffer *path)
 {
-  if (mutt_path_parent(buf))
+  if (mutt_path_parent(path))
     return 0;
 
-  if (buf[0] == '~')
-    mutt_path_canon(buf, buflen, HomeDir, false);
+  if (buf_at(path, 0) == '~')
+    mutt_path_canon(path, HomeDir, false);
 
-  if (mutt_path_parent(buf))
+  if (mutt_path_parent(path))
     return 0;
 
   return -1;
@@ -963,7 +958,6 @@ const struct MxOps MxCompOps = {
   .tags_commit      = comp_tags_commit,
   .path_probe       = comp_path_probe,
   .path_canon       = comp_path_canon,
-  .path_pretty      = comp_path_pretty,
   .path_parent      = comp_path_parent,
   .path_is_empty    = NULL,
   // clang-format on

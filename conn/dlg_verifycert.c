@@ -32,7 +32,7 @@
  *
  * | Name                            | Type               | See Also                 |
  * | :------------------------------ | :----------------- | :----------------------- |
- * | Certificate Verification Dialog | WT_DLG_CERTIFICATE | dlg_verify_certificate() |
+ * | Certificate Verification Dialog | WT_DLG_CERTIFICATE | dlg_certificate() |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -57,10 +57,8 @@
 #include "mutt/lib.h"
 #include "gui/lib.h"
 #include "color/lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
-#include "globals.h"
-#include "keymap.h"
-#include "opcodes.h"
 #include "ssl.h"
 
 /// Help Bar for the Certificate Verification dialog
@@ -81,26 +79,26 @@ static const struct Mapping VerifyHelp[] = {
  */
 static int menu_dialog_dokey(struct Menu *menu, int *id)
 {
-  struct KeyEvent ch = mutt_getch_timeout(5000);
+  struct KeyEvent event = mutt_getch(GETCH_IGNORE_MACRO);
 
-  if ((ch.op == OP_TIMEOUT) || (ch.op == OP_ABORT))
+  if ((event.op == OP_TIMEOUT) || (event.op == OP_ABORT))
   {
-    *id = ch.op;
+    *id = event.op;
     return 0;
   }
 
   struct CertMenuData *mdata = menu->mdata;
   char *p = NULL;
-  if ((ch.ch != 0) && (p = strchr(mdata->keys, ch.ch)))
+  if ((event.ch != 0) && (p = strchr(mdata->keys, event.ch)))
   {
     *id = OP_MAX + (p - mdata->keys + 1);
     return 0;
   }
 
-  if (ch.op == OP_NULL)
-    mutt_unget_ch(ch.ch);
+  if (event.op == OP_NULL)
+    mutt_unget_ch(event.ch);
   else
-    mutt_unget_op(ch.op);
+    mutt_unget_op(event.op);
   return -1;
 }
 
@@ -129,7 +127,7 @@ static int menu_dialog_translate_op(int op)
 }
 
 /**
- * cert_make_entry - Create a string to display in a Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * cert_make_entry - Create a Certificate for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  */
 static void cert_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
 {
@@ -163,7 +161,7 @@ void cert_array_clear(struct CertArray *carr)
 }
 
 /**
- * dlg_verify_certificate - Ask the user to validate the certificate
+ * dlg_certificate - Ask the user to validate the certificate - @ingroup gui_dlg
  * @param title        Menu title
  * @param carr         Certificate text to display
  * @param allow_always If true, allow the user to always accept the certificate
@@ -173,12 +171,14 @@ void cert_array_clear(struct CertArray *carr)
  * @retval 3 Accept certificate always/skip (see notes)
  * @retval 4 Accept certificate skip
  *
+ * The Verify Certificate Dialog shows a list of signatures for a domain certificate.
+ * They can choose whether to accept or reject it.
+ *
  * The possible retvals will depend on the parameters.
  * The options are given in the order: Reject, Once, Always, Skip.
  * The retval represents the chosen option.
  */
-int dlg_verify_certificate(const char *title, struct CertArray *carr,
-                           bool allow_always, bool allow_skip)
+int dlg_certificate(const char *title, struct CertArray *carr, bool allow_always, bool allow_skip)
 {
   struct MuttWindow *dlg = simple_dialog_new(MENU_GENERIC, WT_DLG_CERTIFICATE, VerifyHelp);
 
@@ -231,11 +231,9 @@ int dlg_verify_certificate(const char *title, struct CertArray *carr,
       mdata.keys = _("ro");
     }
   }
-  msgwin_set_text(MT_COLOR_PROMPT, mdata.prompt);
+  msgwin_set_text(NULL, mdata.prompt, MT_COLOR_PROMPT);
 
-  bool old_ime = OptIgnoreMacroEvents;
-  OptIgnoreMacroEvents = true;
-
+  struct MuttWindow *old_focus = window_set_focus(menu->win);
   // ---------------------------------------------------------------------------
   // Event Loop
   int choice = 0;
@@ -243,16 +241,12 @@ int dlg_verify_certificate(const char *title, struct CertArray *carr,
   do
   {
     window_redraw(NULL);
-    msgwin_set_text(MT_COLOR_PROMPT, mdata.prompt);
+    msgwin_set_text(NULL, mdata.prompt, MT_COLOR_PROMPT);
 
     // Try to catch dialog keys before ops
     if (menu_dialog_dokey(menu, &op) != 0)
     {
-      struct KeyEvent event = km_dokey_event(MENU_GENERIC);
-      if (event.ch == 'q')
-        op = OP_EXIT;
-      else
-        op = event.op;
+      op = km_dokey(MENU_DIALOG, GETCH_IGNORE_MACRO);
     }
 
     if (op == OP_TIMEOUT)
@@ -269,7 +263,7 @@ int dlg_verify_certificate(const char *title, struct CertArray *carr,
     switch (op)
     {
       case -1:         // Abort: Ctrl-G
-      case OP_EXIT:    // Q)uit
+      case OP_QUIT:    // Q)uit
       case OP_MAX + 1: // R)eject
         choice = 1;
         break;
@@ -308,8 +302,7 @@ int dlg_verify_certificate(const char *title, struct CertArray *carr,
   } while (choice == 0);
   // ---------------------------------------------------------------------------
 
-  OptIgnoreMacroEvents = old_ime;
-
+  window_set_focus(old_focus);
   simple_dialog_free(&dlg);
 
   return choice;

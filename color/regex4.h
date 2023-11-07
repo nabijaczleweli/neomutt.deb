@@ -25,7 +25,6 @@
 
 #include "config.h"
 #include <stdbool.h>
-#include <stdint.h>
 #include "mutt/lib.h"
 #include "attr.h"
 #include "color.h"
@@ -43,40 +42,22 @@ struct RegexColor
 
   bool stop_matching : 1;            ///< Used by the pager for body patterns, to prevent the color from being retried once it fails
 
-  STAILQ_ENTRY(RegexColor) entries;   ///< Linked list
+  STAILQ_ENTRY(RegexColor) entries;  ///< Linked list
 };
 STAILQ_HEAD(RegexColorList, RegexColor);
-
-#ifdef USE_DEBUG_COLOR
-extern struct RegexColorList AttachList;
-extern struct RegexColorList BodyList;
-extern struct RegexColorList HeaderList;
-extern struct RegexColorList IndexAuthorList;
-extern struct RegexColorList IndexCollapsedList;
-extern struct RegexColorList IndexDateList;
-extern struct RegexColorList IndexFlagsList;
-extern struct RegexColorList IndexLabelList;
-extern struct RegexColorList IndexList;
-extern struct RegexColorList IndexNumberList;
-extern struct RegexColorList IndexSizeList;
-extern struct RegexColorList IndexSubjectList;
-extern struct RegexColorList IndexTagList;
-extern struct RegexColorList IndexTagsList;
-extern struct RegexColorList StatusList;
-#endif
 
 void                   regex_color_clear(struct RegexColor *rcol);
 void                   regex_color_free(struct RegexColorList *list, struct RegexColor **ptr);
 struct RegexColor *    regex_color_new (void);
 
-void                   regex_colors_clear(void);
+void                   regex_colors_cleanup(void);
 struct RegexColorList *regex_colors_get_list(enum ColorId cid);
 void                   regex_colors_init(void);
 
 void                   regex_color_list_clear(struct RegexColorList *rcl);
 
-bool regex_colors_parse_color_list (enum ColorId cid, const char *pat, uint32_t fg, uint32_t bg, int attrs, int *rc,   struct Buffer *err);
-int  regex_colors_parse_status_list(enum ColorId cid, const char *pat, uint32_t fg, uint32_t bg, int attrs, int match, struct Buffer *err);
+bool regex_colors_parse_color_list (enum ColorId cid, const char *pat, struct AttrColor *ac, int *rc, struct Buffer *err);
+int  regex_colors_parse_status_list(enum ColorId cid, const char *pat, struct AttrColor *ac, int match, struct Buffer *err);
 bool regex_colors_parse_uncolor    (enum ColorId cid, const char *pat, bool uncolor);
 
 #endif /* MUTT_COLOR_REGEX4_H */

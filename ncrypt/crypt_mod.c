@@ -29,6 +29,7 @@
 #include "config.h"
 #include "mutt/lib.h"
 #include "crypt_mod.h"
+#include "lib.h"
 
 /**
  * struct CryptModule - A crypto plugin module
@@ -77,9 +78,9 @@ const struct CryptModuleSpecs *crypto_module_lookup(int identifier)
 }
 
 /**
- * crypto_module_free - Clean up the crypto modules
+ * crypto_module_cleanup - Clean up the crypto modules
  */
-void crypto_module_free(void)
+void crypto_module_cleanup(void)
 {
   struct CryptModule *np = NULL, *tmp = NULL;
   STAILQ_FOREACH_SAFE(np, &CryptModules, entries, tmp)

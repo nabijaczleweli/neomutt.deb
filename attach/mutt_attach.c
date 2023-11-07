@@ -47,6 +47,7 @@
 #include "pager/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
+#include "attach.h"
 #include "cid.h"
 #include "copy.h"
 #include "globals.h" // IWYU pragma: keep
@@ -97,7 +98,7 @@ int mutt_get_tmp_attachment(struct Body *a)
   }
   else
   {
-    mutt_perror(fp_in ? buf_string(tmpfile) : a->filename);
+    mutt_perror("%s", fp_in ? buf_string(tmpfile) : a->filename);
   }
 
   mutt_file_fclose(&fp_in);
@@ -139,7 +140,7 @@ int mutt_compose_attachment(struct Body *a)
                  buf_string(newfile));
       if (mutt_file_symlink(a->filename, buf_string(newfile)) == -1)
       {
-        if (mutt_yesorno(_("Can't match 'nametemplate', continue?"), MUTT_YES) != MUTT_YES)
+        if (query_yesorno(_("Can't match 'nametemplate', continue?"), MUTT_YES) != MUTT_YES)
           goto bailout;
         buf_strcpy(newfile, a->filename);
       }
@@ -281,7 +282,7 @@ bool mutt_edit_attachment(struct Body *a)
                  buf_string(newfile));
       if (mutt_file_symlink(a->filename, buf_string(newfile)) == -1)
       {
-        if (mutt_yesorno(_("Can't match 'nametemplate', continue?"), MUTT_YES) != MUTT_YES)
+        if (query_yesorno(_("Can't match 'nametemplate', continue?"), MUTT_YES) != MUTT_YES)
           goto bailout;
         buf_strcpy(newfile, a->filename);
       }
@@ -391,7 +392,7 @@ static int wait_interactive_filter(pid_t pid)
   int rc;
 
 #ifdef USE_IMAP
-  rc = imap_wait_keepalive(pid);
+  rc = imap_wait_keep_alive(pid);
 #else
   waitpid(pid, &rc, 0);
 #endif
@@ -563,8 +564,8 @@ int mutt_view_attachment(FILE *fp, struct Body *a, enum ViewAttachMode mode,
       }
       unlink_pagerfile = true;
 
-      pid = filter_create_fd(buf_string(cmd), NULL, NULL, NULL,
-                             use_pipe ? fd_temp : -1, use_pager ? fd_pager : -1, -1);
+      pid = filter_create_fd(buf_string(cmd), NULL, NULL, NULL, use_pipe ? fd_temp : -1,
+                             use_pager ? fd_pager : -1, -1, EnvList);
 
       if (pid == -1)
       {
@@ -634,7 +635,7 @@ int mutt_view_attachment(FILE *fp, struct Body *a, enum ViewAttachMode mode,
         {
           mutt_debug(LL_DEBUG1, "mutt_file_fopen(%s) errno=%d %s\n",
                      buf_string(pagerfile), errno, strerror(errno));
-          mutt_perror(buf_string(pagerfile));
+          mutt_perror("%s", buf_string(pagerfile));
           goto return_error;
         }
         state.fp_in = fp;
@@ -742,7 +743,7 @@ return_error:
  * @retval 1 Success
  * @retval 0 Error
  */
-int mutt_pipe_attachment(FILE *fp, struct Body *b, const char *path, char *outfile)
+int mutt_pipe_attachment(FILE *fp, struct Body *b, const char *path, const char *outfile)
 {
   pid_t pid = 0;
   int out = -1, rc = 0;
@@ -771,9 +772,9 @@ int mutt_pipe_attachment(FILE *fp, struct Body *b, const char *path, char *outfi
   mutt_endwin();
 
   if (outfile && *outfile)
-    pid = filter_create_fd(path, &fp_filter, NULL, NULL, -1, out, -1);
+    pid = filter_create_fd(path, &fp_filter, NULL, NULL, -1, out, -1, EnvList);
   else
-    pid = filter_create(path, &fp_filter, NULL, NULL);
+    pid = filter_create(path, &fp_filter, NULL, NULL, EnvList);
   if (pid < 0)
   {
     mutt_perror(_("Can't create filter"));
@@ -791,7 +792,7 @@ int mutt_pipe_attachment(FILE *fp, struct Body *b, const char *path, char *outfi
     if (is_flowed)
     {
       fp_unstuff = mutt_file_fopen(buf_string(unstuff_tempfile), "w");
-      if (fp_unstuff == NULL)
+      if (!fp_unstuff)
       {
         mutt_perror("mutt_file_fopen");
         goto bail;
@@ -806,7 +807,7 @@ int mutt_pipe_attachment(FILE *fp, struct Body *b, const char *path, char *outfi
       mutt_rfc3676_space_unstuff_attachment(b, buf_string(unstuff_tempfile));
 
       fp_unstuff = mutt_file_fopen(buf_string(unstuff_tempfile), "r");
-      if (fp_unstuff == NULL)
+      if (!fp_unstuff)
       {
         mutt_perror("mutt_file_fopen");
         goto bail;
@@ -821,10 +822,9 @@ int mutt_pipe_attachment(FILE *fp, struct Body *b, const char *path, char *outfi
       mutt_decode_attachment(b, &state);
     }
   }
-
-  /* send case */
   else
   {
+    /* send case */
     const char *infile = NULL;
 
     if (is_flowed)
@@ -1069,7 +1069,12 @@ int mutt_decode_save_attachment(FILE *fp, struct Body *m, const char *path,
     return -1;
   }
 
-  if (!fp)
+  if (fp)
+  {
+    state.fp_in = fp;
+    state.flags |= STATE_CHARCONV;
+  }
+  else
   {
     /* When called from the compose menu, the attachment isn't parsed,
      * so we need to do it here. */
@@ -1102,11 +1107,6 @@ int mutt_decode_save_attachment(FILE *fp, struct Body *m, const char *path,
 
     if (m->noconv || is_multipart(m))
       state.flags |= STATE_CHARCONV;
-  }
-  else
-  {
-    state.fp_in = fp;
-    state.flags |= STATE_CHARCONV;
   }
 
   mutt_body_handler(m, &state);
@@ -1198,7 +1198,7 @@ int mutt_print_attachment(FILE *fp, struct Body *a)
         goto mailcap_cleanup;
       }
 
-      pid = filter_create(buf_string(cmd), &fp_out, NULL, NULL);
+      pid = filter_create(buf_string(cmd), &fp_out, NULL, NULL, EnvList);
       if (pid < 0)
       {
         mutt_perror(_("Can't create filter"));
@@ -1263,7 +1263,7 @@ int mutt_print_attachment(FILE *fp, struct Body *a)
       mutt_debug(LL_DEBUG2, "successfully opened %s read-only\n", buf_string(newfile));
 
       mutt_endwin();
-      pid = filter_create(NONULL(c_print_command), &fp_out, NULL, NULL);
+      pid = filter_create(NONULL(c_print_command), &fp_out, NULL, NULL, EnvList);
       if (pid < 0)
       {
         mutt_perror(_("Can't create filter"));
@@ -1311,9 +1311,9 @@ void mutt_add_temp_attachment(const char *filename)
 }
 
 /**
- * mutt_unlink_temp_attachments - Delete all temporary attachments
+ * mutt_temp_attachments_cleanup - Delete all temporary attachments
  */
-void mutt_unlink_temp_attachments(void)
+void mutt_temp_attachments_cleanup(void)
 {
   struct ListNode *np = NULL;
 

@@ -34,9 +34,9 @@ struct AttrColor *simple_color_get      (enum ColorId cid);
 bool              simple_color_is_header(enum ColorId cid);
 bool              simple_color_is_set   (enum ColorId cid);
 void              simple_color_reset    (enum ColorId cid);
-struct AttrColor *simple_color_set      (enum ColorId cid, int fg, int bg, int attrs);
+struct AttrColor *simple_color_set      (enum ColorId cid, struct AttrColor *ac_val);
 
-void              simple_colors_clear(void);
+void              simple_colors_cleanup(void);
 void              simple_colors_init(void);
 
 #endif /* MUTT_COLOR_SIMPLE2_H */

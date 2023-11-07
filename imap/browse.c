@@ -38,10 +38,12 @@
 #include "email/lib.h"
 #include "core/lib.h"
 #include "conn/lib.h"
+#include "gui/lib.h"
 #include "mutt.h"
 #include "lib.h"
 #include "browser/lib.h"
-#include "enter/lib.h"
+#include "editor/lib.h"
+#include "history/lib.h"
 #include "adata.h"
 #include "mdata.h"
 #include "mutt_logging.h"
@@ -71,14 +73,20 @@ static void add_folder(char delim, char *folder, bool noselect, bool noinferiors
   if (imap_parse_path(state->folder, &cac, mailbox, sizeof(mailbox)))
     return;
 
-  /* render superiors as unix-standard ".." */
   if (isparent)
+  {
+    /* render superiors as unix-standard ".." */
     mutt_str_copy(relpath, "../", sizeof(relpath));
-  /* strip current folder from target, to render a relative path */
+  }
   else if (mutt_str_startswith(folder, mailbox))
+  {
+    /* strip current folder from target, to render a relative path */
     mutt_str_copy(relpath, folder + mutt_str_len(mailbox), sizeof(relpath));
+  }
   else
+  {
     mutt_str_copy(relpath, folder, sizeof(relpath));
+  }
 
   /* apply filemask filter. This should really be done at menu setup rather
    * than at scan, since it's so expensive to scan. But that's big changes
@@ -321,9 +329,9 @@ int imap_browse(const char *path, struct BrowserState *state)
       }
       mbox[n] = ctmp;
     }
-    /* "/bbbb/" -> add  "/", "aaaa/" -> add "" */
     else
     {
+      /* "/bbbb/" -> add  "/", "aaaa/" -> add "" */
       char relpath[2] = { 0 };
       /* folder may be "/" */
       snprintf(relpath, sizeof(relpath), "%c", (n < 0) ? '\0' : adata->delim);
@@ -401,7 +409,9 @@ int imap_mailbox_create(const char *path)
     buf_addch(name, adata->delim);
   }
 
-  if (buf_get_field(_("Create mailbox: "), name, MUTT_COMP_FILE, false, NULL, NULL, NULL) != 0)
+  struct FileCompletionData cdata = { false, NULL, NULL, NULL };
+  if (mw_get_field(_("Create mailbox: "), name, MUTT_COMP_NO_FLAGS, HC_FILE,
+                   &CompleteMailboxOps, &cdata) != 0)
   {
     goto done;
   }
@@ -460,7 +470,9 @@ int imap_mailbox_rename(const char *path)
   buf_printf(buf, _("Rename mailbox %s to: "), mdata->name);
   buf_strcpy(newname, mdata->name);
 
-  if (buf_get_field(buf_string(buf), newname, MUTT_COMP_FILE, false, NULL, NULL, NULL) != 0)
+  struct FileCompletionData cdata = { false, NULL, NULL, NULL };
+  if (mw_get_field(buf_string(buf), newname, MUTT_COMP_NO_FLAGS, HC_FILE,
+                   &CompleteMailboxOps, &cdata) != 0)
   {
     goto done;
   }

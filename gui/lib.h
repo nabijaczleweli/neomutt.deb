@@ -29,12 +29,16 @@
  * | :------------------ | :------------------------- |
  * | gui/curs_lib.c      | @subpage gui_curs_lib      |
  * | gui/dialog.c        | @subpage gui_dialog        |
+ * | gui/functions.c     | @subpage gui_functions     |
  * | gui/global.c        | @subpage gui_global        |
  * | gui/msgcont.c       | @subpage gui_msgcont       |
  * | gui/msgwin.c        | @subpage gui_msgwin        |
+ * | gui/msgwin_wdata.c  | @subpage gui_msgwin_wdata  |
  * | gui/mutt_curses.c   | @subpage gui_curses        |
  * | gui/mutt_window.c   | @subpage gui_window        |
+ * | gui/opcodes.c       | @subpage gui_opcode        |
  * | gui/reflow.c        | @subpage gui_reflow        |
+ * | gui/resize.c        | @subpage gui_resize        |
  * | gui/rootwin.c       | @subpage gui_rootwin       |
  * | gui/sbar.c          | @subpage gui_sbar          |
  * | gui/simple.c        | @subpage gui_simple        |
@@ -44,19 +48,21 @@
 #ifndef MUTT_GUI_LIB_H
 #define MUTT_GUI_LIB_H
 
-// IWYU pragma: begin_exports
+// IWYU pragma: begin_keep
 #include "curs_lib.h"
 #include "dialog.h"
+#include "functions.h"
 #include "global.h"
 #include "msgcont.h"
 #include "msgwin.h"
 #include "mutt_curses.h"
 #include "mutt_window.h"
+#include "opcodes.h"
 #include "reflow.h"
 #include "rootwin.h"
 #include "sbar.h"
 #include "simple.h"
 #include "terminal.h"
-// IWYU pragma: end_exports
+// IWYU pragma: end_keep
 
 #endif /* MUTT_GUI_LIB_H */

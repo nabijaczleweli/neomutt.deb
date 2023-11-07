@@ -209,7 +209,9 @@ int url_pct_decode(char *s)
       }
     }
     else
+    {
       *d++ = *s;
+    }
   }
   *d = '\0';
   return 0;
@@ -218,7 +220,7 @@ int url_pct_decode(char *s)
 /**
  * url_check_scheme - Check the protocol of a URL
  * @param str String to check
- * @retval num Url type, e.g. #U_IMAPS
+ * @retval enum UrlScheme, e.g. #U_IMAPS
  */
 enum UrlScheme url_check_scheme(const char *str)
 {
@@ -376,7 +378,7 @@ int url_tobuffer(struct Url *url, struct Buffer *buf, uint8_t flags)
     if (strchr(url->host, ':'))
       buf_add_printf(buf, "[%s]", url->host);
     else
-      buf_add_printf(buf, "%s", url->host);
+      buf_addstr(buf, url->host);
 
     if (url->port)
       buf_add_printf(buf, ":%hu/", url->port);
@@ -424,11 +426,11 @@ int url_tostring(struct Url *url, char *dest, size_t len, uint8_t flags)
 
   struct Buffer *dest_buf = buf_pool_get();
 
-  int retval = url_tobuffer(url, dest_buf, flags);
-  if (retval == 0)
+  int rc = url_tobuffer(url, dest_buf, flags);
+  if (rc == 0)
     mutt_str_copy(dest, buf_string(dest_buf), len);
 
   buf_pool_release(&dest_buf);
 
-  return retval;
+  return rc;
 }

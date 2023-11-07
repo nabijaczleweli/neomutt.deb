@@ -46,6 +46,7 @@
  * | imap/imap.c       | @subpage imap_imap       |
  * | imap/mdata.c      | @subpage imap_mdata      |
  * | imap/message.c    | @subpage imap_message    |
+ * | imap/msg_set.c    | @subpage imap_msg_set    |
  * | imap/msn.c        | @subpage imap_msn        |
  * | imap/search.c     | @subpage imap_search     |
  * | imap/utf7.c       | @subpage imap_utf7       |
@@ -66,7 +67,7 @@ struct BrowserState;
 struct Buffer;
 struct ConnAccount;
 struct Email;
-struct EmailList;
+struct EmailArray;
 struct PatternList;
 struct stat;
 
@@ -79,10 +80,10 @@ enum MxStatus imap_sync_mailbox(struct Mailbox *m, bool expunge, bool close);
 int imap_path_status(const char *path, bool queue);
 int imap_mailbox_status(struct Mailbox *m, bool queue);
 int imap_subscribe(char *path, bool subscribe);
-int imap_complete(char *buf, size_t buflen, const char *path);
+int imap_complete(struct Buffer *buf, const char *path);
 int imap_fast_trash(struct Mailbox *m, const char *dest);
 enum MailboxType imap_path_probe(const char *path, const struct stat *st);
-int imap_path_canon(char *buf, size_t buflen);
+int imap_path_canon(struct Buffer *buf);
 void imap_notify_delete_email(struct Mailbox *m, struct Email *e);
 
 extern const struct MxOps MxImapOps;
@@ -93,7 +94,7 @@ int imap_mailbox_create(const char *folder);
 int imap_mailbox_rename(const char *path);
 
 /* message.c */
-int imap_copy_messages(struct Mailbox *m, struct EmailList *el, const char *dest, enum MessageSaveOpt save_opt);
+int imap_copy_messages(struct Mailbox *m, struct EmailArray *ea, const char *dest, enum MessageSaveOpt save_opt);
 
 /* socket.c */
 void imap_logout_all(void);
@@ -104,8 +105,8 @@ int imap_parse_path(const char *path, struct ConnAccount *cac, char *mailbox, si
 void imap_pretty_mailbox(char *path, size_t pathlen, const char *folder);
 int imap_mxcmp(const char *mx1, const char *mx2);
 
-int imap_wait_keepalive(pid_t pid);
-void imap_keepalive(void);
+int imap_wait_keep_alive(pid_t pid);
+void imap_keep_alive(void);
 
 void imap_get_parent_path(const char *path, char *buf, size_t buflen);
 void imap_clean_path(char *path, size_t plen);

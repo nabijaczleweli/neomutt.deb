@@ -241,7 +241,7 @@
 ** of the value as shown above if included.
 */
 
-{ "attach_format", DT_STRING, "%u%D%I %t%4n %T%.40d%> [%.7m/%.10M, %.6e%?C?, %C?, %s] " },
+{ "attach_format", DT_STRING, "%u%D%I %t%4n %T%d %> [%.7m/%.10M, %.6e%<C?, %C>, %s] " },
 /*
 ** .pp
 ** This variable describes the format of the "attachment" menu.  The
@@ -1001,7 +1001,7 @@
 /*
 ** .pp
 ** This variable controls how some hooks are interpreted if their pattern is a
-** plain string or a regex. i.e.  They don't contain a pattern, like \fC~f\fP
+** plain string or a regex. i.e. they don't contain a pattern, like \fC~f\fP
 ** .pp
 ** The hooks are: $fcc-hook, $fcc-save-hook, $index-format-hook, $message-hook,
 ** $reply-hook, $save-hook, $send-hook and $send2-hook.
@@ -1883,7 +1883,7 @@
 ** up periodically, try unsetting this.
 */
 
-{ "imap_keepalive", DT_NUMBER, 300 },
+{ "imap_keep_alive", DT_NUMBER, 300 },
 /*
 ** .pp
 ** This variable specifies the maximum amount of time in seconds that NeoMutt
@@ -2072,7 +2072,7 @@
 ** $$index_format for supported \fCprintf(3)\fP-style sequences.
 */
 
-{ "index_format", DT_STRING, "%4C %Z %{%b %d} %-15.15L (%?l?%4l&%4c?) %s" },
+{ "index_format", DT_STRING, "%4C %Z %{%b %d} %-15.15L (%<l?%4l&%4c>) %s" },
 /*
 ** .pp
 ** This variable allows you to customize the message index display to
@@ -2080,7 +2080,7 @@
 ** .pp
 ** "Format strings" are similar to the strings used in the C
 ** function \fCprintf(3)\fP to format output (see the man page for more details).
-** For an explanation of the %? construct, see the $status_format description.
+** For an explanation of the %<...> construct, see the $status_format description.
 ** The following sequences are defined in NeoMutt:
 ** .dl
 ** .dt %a .dd Address of the author
@@ -2276,7 +2276,7 @@
 ** how often (in seconds) NeoMutt will update message counts.
 */
 
-{ "mailbox_folder_format", DT_STRING, "%2C %?n?%6n&%6 ? %6m %i" },
+{ "mailbox_folder_format", DT_STRING, "%2C %<n?%6n&      > %6m %i" },
 /*
 ** .pp
 ** This variable allows you to customize the file browser display to your
@@ -2318,6 +2318,17 @@
 ** messages to the cur directory.  Note that setting this option may
 ** slow down polling for new messages in large folders, since NeoMutt has
 ** to scan all cur messages.
+*/
+
+{ "maildir_field_delimiter", DT_STRING, ":" },
+/*
+** .pp
+** Use the value as maildir field delimiter. This is a single-character used to
+** accommodate maildir mailboxes on platforms where `:` is not allowed
+** in a filename. The recommended alternative on such platforms is `;`.
+** Neomutt supports all non-alphanumeric values except for `-`, `.`, `\`, `/`.
+** \fBNote:\fP this only applies to maildir-style mailboxes. Setting
+** it will have no effect on other mailbox types.
 */
 
 #ifdef USE_HCACHE
@@ -3049,7 +3060,7 @@
 **            of $$pgp_default_key.
 ** .dt %f .dd Expands to the name of a file containing a message.
 ** .dt %p .dd Expands to PGPPASSFD=0 when a pass phrase is needed, to an empty
-**            string otherwise. Note: This may be used with a %? construct.
+**            string otherwise. Note: This may be used with a %<...> construct.
 ** .dt %r .dd One or more key IDs (or fingerprints if available).
 ** .dt %s .dd Expands to the name of a file containing the signature part
 **            of a \fCmultipart/signed\fP attachment when verifying it.
@@ -4279,7 +4290,7 @@
 ** .pp
 ** In order to use %S, %N, %F, and %!, $$mail_check_stats must
 ** be \fIset\fP.  When thus set, a suggested value for this option is
-** "%B%?F? [%F]?%* %?N?%N/?%S".
+** "%B%<F? [%F]>%* %<N?%N/>%S".
 */
 
 { "sidebar_indent_string", DT_STRING, "  " },
@@ -4303,7 +4314,7 @@
 { "sidebar_next_new_wrap", DT_BOOL, false },
 /*
 ** .pp
-** When set, the \fC<sidebar-next-new>\fP command will not stop and the end of
+** When set, the \fC<sidebar-next-new>\fP command will not stop at the end of
 ** the list of mailboxes, but wrap around to the beginning. The
 ** \fC<sidebar-prev-new>\fP command is similarly affected, wrapping around to
 ** the end of the list.
@@ -4923,17 +4934,24 @@
 ** The "unread" value is a synonym for "new".
 */
 
+{ "browser_sort_dirs_first", DT_BOOL, false },
+/*
+** .pp
+** If this variable is \fIset\fP, the browser will group directories before
+** files.
+*/
+
 { "sort_re", DT_BOOL, true },
 /*
 ** .pp
-** This variable is only useful when sorting by threads with
-** $$strict_threads \fIunset\fP.  In that case, it changes the heuristic
-** mutt uses to thread messages by subject.  With $$sort_re \fIset\fP, mutt will
-** only attach a message as the child of another message by subject if
-** the subject of the child message starts with a substring matching the
-** setting of $$reply_regex.  With $$sort_re \fIunset\fP, mutt will attach
-** the message whether or not this is the case, as long as the
-** non-$$reply_regex parts of both messages are identical.
+** This variable is only useful when sorting by threads with $$strict_threads
+** \fIunset\fP.  In that case, it changes the heuristic neomutt uses to thread
+** messages by subject.  With $$sort_re \fIset\fP, neomutt will only attach a
+** message as the child of another message by subject if the subject of the
+** child message starts with a substring matching the setting of
+** $$reply_regex.  With $$sort_re \fIunset\fP, neomutt will attach the message
+** whether or not this is the case, as long as the non-$$reply_regex parts of
+** both messages are identical.
 */
 
 { "spam_separator", DT_STRING, "," },
@@ -5144,7 +5162,7 @@
 ** .de
 */
 
-{ "status_format", DT_STRING, "-%r-NeoMutt: %D [Msgs:%?M?%M/?%m%?n? New:%n?%?o? Old:%o?%?d? Del:%d?%?F? Flag:%F?%?t? Tag:%t?%?p? Post:%p?%?b? Inc:%b?%?l? %l?]---(%?T?%T/?%s/%S)-%>-(%P)---" },
+{ "status_format", DT_STRING, "-%r-NeoMutt: %D [Msgs:%<M?%M/>%m%<n? New:%n>%<o? Old:%o>%<d? Del:%d>%<F? Flag:%F>%<t? Tag:%t>%<p? Post:%p>%<b? Inc:%b>%<l? %l>]---(%<T?%T/>%s/%S)-%>-(%P)---" },
 /*
 ** .pp
 ** Controls the format of the status line displayed in the "index"
@@ -5191,22 +5209,21 @@
 ** particularly meaningful.  To optionally print a string based upon one
 ** of the above sequences, the following construct is used:
 ** .pp
-**  \fC%?<sequence_char>?<optional_string>?\fP
+**  \fC%<sequence_char?optional_string>\fP
 ** .pp
 ** where \fIsequence_char\fP is a character from the table above, and
 ** \fIoptional_string\fP is the string you would like printed if
 ** \fIsequence_char\fP is nonzero.  \fIoptional_string\fP \fBmay\fP contain
-** other sequences as well as normal text, but you may \fBnot\fP nest
-** optional strings.
+** other sequences as well as normal text.
 ** .pp
 ** Here is an example illustrating how to optionally print the number of
 ** new messages in a mailbox:
 ** .pp
-** \fC%?n?%n new messages.?\fP
+** \fC%<n?%n new messages>\fP
 ** .pp
 ** You can also switch between two strings using the following construct:
 ** .pp
-** \fC%?<sequence_char>?<if_string>&<else_string>?\fP
+** \fC%<sequence_char?if_string&else_string>\fP
 ** .pp
 ** If the value of \fIsequence_char\fP is non-zero, \fIif_string\fP will
 ** be expanded, otherwise \fIelse_string\fP will be expanded.
@@ -5215,7 +5232,7 @@
 ** $$sort_aux or $$use_threads and $$sort, based on whether threads
 ** are enabled with $$use_threads:
 ** .pp
-** \fC%?T?%s/%S&%T/%s?\fP
+** \fC%<T?%s/%S&%T/%s>\fP
 ** .pp
 ** You can force the result of any \fCprintf(3)\fP-like sequence to be lowercase
 ** by prefixing the sequence character with an underscore ("_") sign.
@@ -5395,7 +5412,7 @@
 ** Most terminal emulators emulate the status line in the window title.
 */
 
-{ "ts_icon_format", DT_STRING, "M%?n?AIL&ail?" },
+{ "ts_icon_format", DT_STRING, "M%<n?AIL&ail>" },
 /*
 ** .pp
 ** Controls the format of the icon title, as long as "$$ts_enabled" is set.
@@ -5403,7 +5420,7 @@
 ** "$$status_format".
 */
 
-{ "ts_status_format", DT_STRING, "NeoMutt with %?m?%m messages&no messages?%?n? [%n NEW]?" },
+{ "ts_status_format", DT_STRING, "NeoMutt with %<m?%m messages&no messages>%<n? [%n NEW]>" },
 /*
 ** .pp
 ** Controls the format of the terminal status line (or window title),

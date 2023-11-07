@@ -48,7 +48,7 @@
 
 #ifdef USE_SASL_GNU
 /**
- * pop_auth_gsasl - POP GNU SASL authenticator - Implements PopAuth::authenticate()
+ * pop_auth_gsasl - POP GNU SASL authenticator - Implements PopAuth::authenticate() - @ingroup pop_authenticate
  */
 static enum PopAuthRes pop_auth_gsasl(struct PopAccountData *adata, const char *method)
 {
@@ -140,7 +140,7 @@ fail:
 
 #ifdef USE_SASL_CYRUS
 /**
- * pop_auth_sasl - POP SASL authenticator - Implements PopAuth::authenticate()
+ * pop_auth_sasl - POP SASL authenticator - Implements PopAuth::authenticate() - @ingroup pop_authenticate
  */
 static enum PopAuthRes pop_auth_sasl(struct PopAccountData *adata, const char *method)
 {
@@ -222,7 +222,12 @@ static enum PopAuthRes pop_auth_sasl(struct PopAccountData *adata, const char *m
       goto bail;
     }
 
-    if (!client_start)
+    if (client_start)
+    {
+      olen = client_start;
+      client_start = 0;
+    }
+    else
     {
       while (true)
       {
@@ -231,11 +236,6 @@ static enum PopAuthRes pop_auth_sasl(struct PopAccountData *adata, const char *m
           break;
         mutt_sasl_interact(interaction);
       }
-    }
-    else
-    {
-      olen = client_start;
-      client_start = 0;
     }
 
     /* Even if sasl_client_step() returns SASL_OK, we should send at
@@ -310,11 +310,11 @@ void pop_apop_timestamp(struct PopAccountData *adata, char *buf)
 }
 
 /**
- * pop_auth_apop - APOP authenticator - Implements PopAuth::authenticate()
+ * pop_auth_apop - APOP authenticator - Implements PopAuth::authenticate() - @ingroup pop_authenticate
  */
 static enum PopAuthRes pop_auth_apop(struct PopAccountData *adata, const char *method)
 {
-  struct Md5Ctx md5ctx;
+  struct Md5Ctx md5ctx = { 0 };
   unsigned char digest[16];
   char hash[33] = { 0 };
   char buf[1024] = { 0 };
@@ -359,7 +359,7 @@ static enum PopAuthRes pop_auth_apop(struct PopAccountData *adata, const char *m
 }
 
 /**
- * pop_auth_user - USER authenticator - Implements PopAuth::authenticate()
+ * pop_auth_user - USER authenticator - Implements PopAuth::authenticate() - @ingroup pop_authenticate
  */
 static enum PopAuthRes pop_auth_user(struct PopAccountData *adata, const char *method)
 {
@@ -417,7 +417,7 @@ static enum PopAuthRes pop_auth_user(struct PopAccountData *adata, const char *m
 }
 
 /**
- * pop_auth_oauth - Authenticate a POP connection using OAUTHBEARER - Implements PopAuth::authenticate()
+ * pop_auth_oauth - Authenticate a POP connection using OAUTHBEARER - Implements PopAuth::authenticate() - @ingroup pop_authenticate
  */
 static enum PopAuthRes pop_auth_oauth(struct PopAccountData *adata, const char *method)
 {
@@ -433,9 +433,8 @@ static enum PopAuthRes pop_auth_oauth(struct PopAccountData *adata, const char *
   if (!oauthbearer)
     return POP_A_FAILURE;
 
-  size_t auth_cmd_len = strlen(oauthbearer) + 30;
-  char *auth_cmd = mutt_mem_malloc(auth_cmd_len);
-  snprintf(auth_cmd, auth_cmd_len, "AUTH OAUTHBEARER %s\r\n", oauthbearer);
+  char *auth_cmd = NULL;
+  mutt_str_asprintf(&auth_cmd, "AUTH OAUTHBEARER %s\r\n", oauthbearer);
   FREE(&oauthbearer);
 
   int rc = pop_query_d(adata, auth_cmd, strlen(auth_cmd),
@@ -514,10 +513,10 @@ bool pop_auth_is_valid(const char *authenticator)
  * pop_authenticate - Authenticate with a POP server
  * @param adata POP Account data
  * @retval num Result, e.g. #POP_A_SUCCESS
- * @retval  0 Successful
- * @retval -1 Connection lost
- * @retval -2 Login failed
- * @retval -3 Authentication cancelled
+ * @retval   0 Successful
+ * @retval  -1 Connection lost
+ * @retval  -2 Login failed
+ * @retval  -3 Authentication cancelled
  */
 int pop_authenticate(struct PopAccountData *adata)
 {

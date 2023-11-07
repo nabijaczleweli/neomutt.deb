@@ -33,10 +33,13 @@
 #include "edata.h"
 
 /**
- * nntp_edata_free - Free the private Email data - Implements Email::edata_free()
+ * nntp_edata_free - Free the private Email data - Implements Email::edata_free() - @ingroup email_edata_free
  */
 void nntp_edata_free(void **ptr)
 {
+  if (!ptr || !*ptr)
+    return;
+
   FREE(ptr);
 }
 

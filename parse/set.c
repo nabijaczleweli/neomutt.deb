@@ -28,10 +28,8 @@
 
 #include "config.h"
 #include <assert.h>
-#include <ctype.h>
+#include <stdbool.h>
 #include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
@@ -65,7 +63,7 @@ static void command_set_expand_value(uint32_t type, struct Buffer *value)
     if (type & (DT_PATH_DIR | DT_PATH_FILE))
       buf_expand_path(value);
     else
-      mutt_path_tilde(value->data, value->dsize, HomeDir);
+      mutt_path_tilde(value, HomeDir);
   }
   else if (IS_MAILBOX(type))
   {
@@ -250,7 +248,9 @@ static enum CommandResult command_set_unset(struct Buffer *name, struct Buffer *
 
   int rc = CSR_ERR_CODE;
   if (DTYPE(he->type) == DT_MYVAR)
+  {
     rc = cs_subset_he_delete(NeoMutt->sub, he, err);
+  }
   else if ((DTYPE(he->type) == DT_BOOL) || (DTYPE(he->type) == DT_QUAD))
   {
     rc = cs_subset_he_native_set(NeoMutt->sub, he, false, err);
@@ -306,7 +306,9 @@ static enum CommandResult command_set_reset(struct Buffer *name, struct Buffer *
 
   int rc = CSR_ERR_CODE;
   if (DTYPE(he->type) == DT_MYVAR)
+  {
     rc = cs_subset_he_delete(NeoMutt->sub, he, err);
+  }
   else
   {
     rc = cs_subset_he_reset(NeoMutt->sub, he, err);
@@ -531,7 +533,7 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
       }
       else
       {
-        buf_printf(err, _("'+' and '-' must be followed by '='"), set_commands[data]);
+        buf_printf(err, _("'+' and '-' must be followed by '='"));
         return MUTT_CMD_WARNING;
       }
     }

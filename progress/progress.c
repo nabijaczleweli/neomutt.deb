@@ -45,7 +45,7 @@ struct Progress;
 /**
  * choose_increment - Choose the right increment given a ProgressType
  * @param type ProgressType
- * @retval Increment value
+ * @retval num Increment value
  */
 static size_t choose_increment(enum ProgressType type)
 {
@@ -72,6 +72,9 @@ static size_t choose_increment(enum ProgressType type)
  */
 bool progress_update(struct Progress *progress, size_t pos, int percent)
 {
+  if (!progress)
+    return false;
+
   // Decloak an opaque pointer
   struct MuttWindow *win = (struct MuttWindow *) progress;
   const bool updated = progress_window_update(win, pos, percent);
@@ -126,7 +129,7 @@ struct Progress *progress_new(const char *msg, enum ProgressType type, size_t si
   const size_t size_inc = choose_increment(type);
   if (size_inc == 0) // The user has disabled the progress bar
   {
-    mutt_message(msg);
+    mutt_message("%s", msg);
     return NULL;
   }
 

@@ -5,6 +5,7 @@ config.log
 conftest__
 conftest__.c
 Makefile
+jimsh0
 
 # Binaries
 docs/makedoc
@@ -46,6 +47,8 @@ hcache/hcversion.h
 *.tmp
 *~
 tags
+asan.*
+.env
 
 # Clangd
 .cache/clangd

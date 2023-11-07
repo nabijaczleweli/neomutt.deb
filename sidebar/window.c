@@ -244,11 +244,11 @@ static size_t add_indent(char *buf, size_t buflen, const struct SbEntry *sbe)
  * @param m         Mailbox
  * @param current   true, if this is the current Mailbox
  * @param highlight true, if this Mailbox has the highlight on it
- * @retval num ColorId, e.g. #MT_COLOR_SIDEBAR_NEW
+ * @retval enum #ColorId, e.g. #MT_COLOR_SIDEBAR_NEW
  */
-static struct AttrColor *calc_color(const struct Mailbox *m, bool current, bool highlight)
+static const struct AttrColor *calc_color(const struct Mailbox *m, bool current, bool highlight)
 {
-  struct AttrColor *ac = NULL;
+  const struct AttrColor *ac = NULL;
 
   const char *const c_spool_file = cs_subset_string(NeoMutt->sub, "spool_file");
   if (simple_color_is_set(MT_COLOR_SIDEBAR_SPOOLFILE) &&
@@ -277,7 +277,7 @@ static struct AttrColor *calc_color(const struct Mailbox *m, bool current, bool 
     ac = simple_color_get(MT_COLOR_SIDEBAR_ORDINARY);
   }
 
-  struct AttrColor *ac_bg = simple_color_get(MT_COLOR_NORMAL);
+  const struct AttrColor *ac_bg = simple_color_get(MT_COLOR_NORMAL);
   ac_bg = merged_color_overlay(ac_bg, simple_color_get(MT_COLOR_SIDEBAR_BACKGROUND));
   ac = merged_color_overlay(ac_bg, ac);
 
@@ -332,6 +332,7 @@ static int calc_path_depth(const char *mbox, const char *delims, const char **la
  * | Expando | Description
  * | :------ | :-------------------------------------------------------
  * | \%!     | 'n!' Flagged messages
+ * | \%a     | Alert: 1 if user is notified of new mail
  * | \%B     | Name of the mailbox
  * | \%D     | Description of the mailbox
  * | \%d     | Number of deleted messages
@@ -340,6 +341,7 @@ static int calc_path_depth(const char *mbox, const char *delims, const char **la
  * | \%n     | "N" if mailbox has new mail, " " (space) otherwise
  * | \%N     | Number of unread messages in the mailbox
  * | \%o     | Number of old unread messages in the mailbox
+ * | \%p     | Poll: 1 if Mailbox is checked for new mail
  * | \%r     | Number of read messages in the mailbox
  * | \%S     | Size of mailbox (total number of messages)
  * | \%t     | Number of tagged messages
@@ -372,6 +374,19 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
 
   switch (op)
   {
+    case 'a':
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
+        snprintf(buf, buflen, fmt, m->notify_user);
+      }
+      else
+      {
+        if (m->notify_user == 0)
+          optional = false;
+      }
+      break;
+
     case 'B':
     case 'D':
     {
@@ -391,7 +406,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(buf, buflen, fmt, c ? m_cur->msg_deleted : 0);
       }
       else if ((c && (m_cur->msg_deleted == 0)) || !c)
+      {
         optional = false;
+      }
       break;
 
     case 'F':
@@ -401,7 +418,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(buf, buflen, fmt, m->msg_flagged);
       }
       else if (m->msg_flagged == 0)
+      {
         optional = false;
+      }
       break;
 
     case 'L':
@@ -411,7 +430,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(buf, buflen, fmt, c ? m_cur->vcount : m->msg_count);
       }
       else if ((c && (m_cur->vcount == m->msg_count)) || !c)
+      {
         optional = false;
+      }
       break;
 
     case 'N':
@@ -421,7 +442,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(buf, buflen, fmt, m->msg_unread);
       }
       else if (m->msg_unread == 0)
+      {
         optional = false;
+      }
       break;
 
     case 'n':
@@ -431,7 +454,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(buf, buflen, fmt, m->has_new ? 'N' : ' ');
       }
       else if (m->has_new == false)
+      {
         optional = false;
+      }
       break;
 
     case 'o':
@@ -441,7 +466,22 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(buf, buflen, fmt, m->msg_unread - m->msg_new);
       }
       else if ((c && (m_cur->msg_unread - m_cur->msg_new) == 0) || !c)
+      {
         optional = false;
+      }
+      break;
+
+    case 'p':
+      if (!optional)
+      {
+        snprintf(fmt, sizeof(fmt), "%%%sd", prec);
+        snprintf(buf, buflen, fmt, m->poll_new_mail);
+      }
+      else
+      {
+        if (m->poll_new_mail == 0)
+          optional = false;
+      }
       break;
 
     case 'r':
@@ -451,7 +491,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(buf, buflen, fmt, m->msg_count - m->msg_unread);
       }
       else if ((c && (m_cur->msg_count - m_cur->msg_unread) == 0) || !c)
+      {
         optional = false;
+      }
       break;
 
     case 'S':
@@ -461,7 +503,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(buf, buflen, fmt, m->msg_count);
       }
       else if (m->msg_count == 0)
+      {
         optional = false;
+      }
       break;
 
     case 't':
@@ -471,7 +515,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(buf, buflen, fmt, c ? m_cur->msg_tagged : 0);
       }
       else if ((c && (m_cur->msg_tagged == 0)) || !c)
+      {
         optional = false;
+      }
       break;
 
     case 'Z':
@@ -481,16 +527,24 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
         snprintf(buf, buflen, fmt, m->msg_new);
       }
       else if ((c && (m_cur->msg_new) == 0) || !c)
+      {
         optional = false;
+      }
       break;
 
     case '!':
       if (m->msg_flagged == 0)
+      {
         mutt_format_s(buf, buflen, prec, "");
+      }
       else if (m->msg_flagged == 1)
+      {
         mutt_format_s(buf, buflen, prec, "!");
+      }
       else if (m->msg_flagged == 2)
+      {
         mutt_format_s(buf, buflen, prec, "!!");
+      }
       else
       {
         snprintf(fmt, sizeof(fmt), "%d!", m->msg_flagged);
@@ -695,9 +749,9 @@ static bool prepare_sidebar(struct SidebarWindowData *wdata, int page_size)
       }
     }
   }
-  /* Otherwise we can just calculate the interval */
   else
   {
+    /* Otherwise we can just calculate the interval */
     wdata->top_index = (wdata->hil_index / page_size) * page_size;
     wdata->bot_index = wdata->top_index + page_size - 1;
   }
@@ -804,7 +858,9 @@ int sb_recalc(struct MuttWindow *win)
         entry->depth -= c_sidebar_component_depth;
     }
     else if (!c_sidebar_folder_indent)
+    {
       entry->depth = 0;
+    }
 
     mutt_str_copy(entry->box, short_path, sizeof(entry->box));
     make_sidebar_entry(entry->display, sizeof(entry->display), width, entry, shared);
@@ -844,7 +900,7 @@ static int draw_divider(struct SidebarWindowData *wdata, struct MuttWindow *win,
   const int width = wdata->divider_width;
   const char *const c_sidebar_divider_char = cs_subset_string(NeoMutt->sub, "sidebar_divider_char");
 
-  struct AttrColor *ac = simple_color_get(MT_COLOR_NORMAL);
+  const struct AttrColor *ac = simple_color_get(MT_COLOR_NORMAL);
   ac = merged_color_overlay(ac, simple_color_get(MT_COLOR_SIDEBAR_BACKGROUND));
   ac = merged_color_overlay(ac, simple_color_get(MT_COLOR_SIDEBAR_DIVIDER));
   mutt_curses_set_color(ac);
@@ -880,7 +936,7 @@ static void fill_empty_space(struct MuttWindow *win, int first_row,
                              int num_rows, int div_width, int num_cols)
 {
   /* Fill the remaining rows with blank space */
-  struct AttrColor *ac = simple_color_get(MT_COLOR_NORMAL);
+  const struct AttrColor *ac = simple_color_get(MT_COLOR_NORMAL);
   ac = merged_color_overlay(ac, simple_color_get(MT_COLOR_SIDEBAR_BACKGROUND));
   mutt_curses_set_color(ac);
 

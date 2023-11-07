@@ -34,7 +34,7 @@
 #include "menu/lib.h"
 
 bool ErrorBufMessage; ///< true if the last message was an error
-char ErrorBuf[256];   ///< Copy of the last error message
+char ErrorBuf[1024];  ///< Copy of the last error message
 
 char *HomeDir = NULL;       ///< User's home directory
 char *ShortHostname = NULL; ///< Short version of the hostname
@@ -63,15 +63,12 @@ enum MenuType CurrentMenu; ///< Current Menu, e.g. #MENU_PAGER
 
 /* pseudo options */
 // clang-format off
-bool OptAttachMsg;          ///< (pseudo) used by attach-message
 #ifdef USE_AUTOCRYPT
 bool OptAutocryptGpgme;     ///< (pseudo) use Autocrypt context inside ncrypt/crypt_gpgme.c
 #endif
 bool OptDontHandlePgpKeys;  ///< (pseudo) used to extract PGP keys
 bool OptForceRefresh;       ///< (pseudo) refresh even during macros
-bool OptIgnoreMacroEvents;  ///< (pseudo) don't process macro/push/exec events while set
 bool OptKeepQuiet;          ///< (pseudo) shut up the message and refresh functions while we are executing an external program
-bool OptMenuPopClearScreen; ///< (pseudo) clear the screen when popping the last menu
 bool OptMsgErr;             ///< (pseudo) used by mutt_error/mutt_message
 bool OptNeedRescore;        ///< (pseudo) set when the 'score' command is used
 bool OptNeedResort;         ///< (pseudo) used to force a re-sort
@@ -80,11 +77,8 @@ bool OptNews;               ///< (pseudo) used to change reader mode
 bool OptNewsSend;           ///< (pseudo) used to change behavior when posting
 #endif
 bool OptNoCurses;           ///< (pseudo) when sending in batch mode
-bool OptPgpCheckTrust;      ///< (pseudo) used by dlg_select_pgp_key()
-bool OptRedrawTree;         ///< (pseudo) redraw the thread tree
+bool OptPgpCheckTrust;      ///< (pseudo) used by dlg_pgp()
 bool OptResortInit;         ///< (pseudo) used to force the next resort to be from scratch
-bool OptSearchInvalid;      ///< (pseudo) used to invalidate the search pattern
-bool OptSearchReverse;      ///< (pseudo) used by ci_search_command
 bool OptSortSubthreads;     ///< (pseudo) used when $sort_aux changes
 // clang-format on
 

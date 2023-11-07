@@ -23,8 +23,8 @@
 #ifndef MUTT_BROWSER_PRIVATE_DATA_H
 #define MUTT_BROWSER_PRIVATE_DATA_H
 
-#include <stdbool.h>
 #include <limits.h>
+#include <stdbool.h>
 #include "lib.h"
 
 /**
@@ -32,7 +32,7 @@
  */
 struct BrowserPrivateData
 {
-  // Parameters passed to buf_select_file()
+  // Parameters passed to dlg_browser()
   struct Buffer *file;            ///< Buffer for the result
   struct Mailbox *mailbox;        ///< Mailbox
   char ***files;                  ///< Array of selected files

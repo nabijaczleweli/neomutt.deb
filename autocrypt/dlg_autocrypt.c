@@ -29,9 +29,9 @@
  *
  * ## Windows
  *
- * | Name                     | Type             | See Also                       |
- * | :----------------------- | :--------------- | :----------------------------- |
- * | Autocrypt Account Dialog | WT_DLG_AUTOCRYPT | dlg_select_autocrypt_account() |
+ * | Name                     | Type             | See Also        |
+ * | :----------------------- | :--------------- | :-------------- |
+ * | Autocrypt Account Dialog | WT_DLG_AUTOCRYPT | dlg_autocrypt() |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -75,16 +75,15 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "format_flags.h"
 #include "functions.h"
-#include "keymap.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "opcodes.h"
 
 /// Help Bar for the Autocrypt Account selection dialog
-static const struct Mapping AutocryptAcctHelp[] = {
+static const struct Mapping AutocryptHelp[] = {
   // clang-format off
   { N_("Exit"),       OP_EXIT },
   /* L10N: Autocrypt Account Menu Help line:
@@ -132,7 +131,7 @@ static const char *autocrypt_format_str(char *buf, size_t buflen, size_t col, in
   switch (op)
   {
     case 'a':
-      mutt_format_s(buf, buflen, prec, entry->addr->mailbox);
+      mutt_format_s(buf, buflen, prec, buf_string(entry->addr->mailbox));
       break;
     case 'k':
       mutt_format_s(buf, buflen, prec, entry->account->keyid);
@@ -176,7 +175,7 @@ static const char *autocrypt_format_str(char *buf, size_t buflen, size_t col, in
 }
 
 /**
- * autocrypt_make_entry - Create a line for the Autocrypt account menu - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * autocrypt_make_entry - Format an Autocrypt Account for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  *
  * @sa $autocrypt_acct_format, autocrypt_format_str()
  */
@@ -237,7 +236,7 @@ bool populate_menu(struct Menu *menu)
     entries[i].account = accounts[i];
 
     entries[i].addr = mutt_addr_new();
-    entries[i].addr->mailbox = mutt_str_dup(accounts[i]->email_addr);
+    entries[i].addr->mailbox = buf_new(accounts[i]->email_addr);
     mutt_addr_to_local(entries[i].addr);
   }
   FREE(&accounts);
@@ -293,7 +292,7 @@ static int autocrypt_window_observer(struct NotifyCallback *nc)
 
   struct Menu *menu = win_menu->wdata;
 
-  notify_observer_remove(NeoMutt->notify, autocrypt_config_observer, menu);
+  notify_observer_remove(NeoMutt->sub->notify, autocrypt_config_observer, menu);
   notify_observer_remove(win_menu->notify, autocrypt_window_observer, win_menu);
 
   mutt_debug(LL_DEBUG5, "window delete done\n");
@@ -301,9 +300,11 @@ static int autocrypt_window_observer(struct NotifyCallback *nc)
 }
 
 /**
- * dlg_select_autocrypt_account - Display the Autocrypt account Menu
+ * dlg_autocrypt - Display the Autocrypt account Menu - @ingroup gui_dlg
+ *
+ * The Autocrypt Dialog lets the user select an Autocrypt Account to use.
  */
-void dlg_select_autocrypt_account(void)
+void dlg_autocrypt(void)
 {
   const bool c_autocrypt = cs_subset_bool(NeoMutt->sub, "autocrypt");
   if (!c_autocrypt)
@@ -312,8 +313,7 @@ void dlg_select_autocrypt_account(void)
   if (mutt_autocrypt_init(false))
     return;
 
-  struct MuttWindow *dlg = simple_dialog_new(MENU_AUTOCRYPT_ACCT,
-                                             WT_DLG_AUTOCRYPT, AutocryptAcctHelp);
+  struct MuttWindow *dlg = simple_dialog_new(MENU_AUTOCRYPT, WT_DLG_AUTOCRYPT, AutocryptHelp);
 
   struct Menu *menu = dlg->wdata;
   menu->make_entry = autocrypt_make_entry;
@@ -328,9 +328,10 @@ void dlg_select_autocrypt_account(void)
   sbar_set_title(sbar, _("Autocrypt Accounts"));
 
   // NT_COLOR is handled by the SimpleDialog
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, autocrypt_config_observer, menu);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, autocrypt_config_observer, menu);
   notify_observer_add(menu->win->notify, NT_WINDOW, autocrypt_window_observer, menu->win);
 
+  struct MuttWindow *old_focus = window_set_focus(menu->win);
   // ---------------------------------------------------------------------------
   // Event Loop
   int op = OP_NULL;
@@ -339,13 +340,13 @@ void dlg_select_autocrypt_account(void)
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    op = km_dokey(MENU_AUTOCRYPT_ACCT);
+    op = km_dokey(MENU_AUTOCRYPT, GETCH_NO_FLAGS);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
     if (op == OP_NULL)
     {
-      km_error_key(MENU_AUTOCRYPT_ACCT);
+      km_error_key(MENU_AUTOCRYPT);
       continue;
     }
     mutt_clear_error();
@@ -359,5 +360,6 @@ void dlg_select_autocrypt_account(void)
   } while (!ad.done);
   // ---------------------------------------------------------------------------
 
+  window_set_focus(old_focus);
   simple_dialog_free(&dlg);
 }

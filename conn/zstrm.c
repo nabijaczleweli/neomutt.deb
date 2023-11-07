@@ -2,7 +2,7 @@
  * @file
  * Zlib compression of network traffic
  *
- * Copyright(C) 2019 Fabian Groffen <grobian@gentoo.org>
+ * Copyright (C) 2019 Fabian Groffen <grobian@gentoo.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -33,7 +33,7 @@
 #include <zlib.h>
 #include "mutt/lib.h"
 #include "zstrm.h"
-#include "lib.h"
+#include "connection.h"
 
 /**
  * struct ZstrmDirection - A stream of data being (de-)compressed
@@ -206,7 +206,7 @@ retry:
 }
 
 /**
- * zstrm_poll - Checks whether reads would block - Implements Connection::poll() - @ingroup connection_poll
+ * zstrm_poll - Check if any data is waiting on a socket - Implements Connection::poll() - @ingroup connection_poll
  */
 static int zstrm_poll(struct Connection *conn, time_t wait_secs)
 {

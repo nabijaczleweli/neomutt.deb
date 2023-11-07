@@ -30,9 +30,9 @@
  *
  * ## Windows
  *
- * | Name                     | Type           | See Also             |
- * | :----------------------- | :------------- | :------------------- |
- * | History Selection Dialog | WT_DLG_HISTORY | dlg_select_history() |
+ * | Name                     | Type           | See Also      |
+ * | :----------------------- | :------------- | :------------ |
+ * | History Selection Dialog | WT_DLG_HISTORY | dlg_history() |
  *
  * **Parent**
  * - @ref gui_dialog
@@ -63,13 +63,12 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
+#include "key/lib.h"
 #include "menu/lib.h"
 #include "format_flags.h"
 #include "functions.h"
-#include "keymap.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
-#include "opcodes.h"
 
 /// Help Bar for the History Selection dialog
 static const struct Mapping HistoryHelp[] = {
@@ -105,7 +104,7 @@ static const char *history_format_str(char *buf, size_t buflen, size_t col, int 
 }
 
 /**
- * history_make_entry - Format a menu item for the history list - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * history_make_entry - Format a History Item for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  *
  * @sa history_format_str()
  */
@@ -118,13 +117,16 @@ static void history_make_entry(struct Menu *menu, char *buf, size_t buflen, int 
 }
 
 /**
- * dlg_select_history - Select an item from a history list
+ * dlg_history - Select an item from a history list - @ingroup gui_dlg
  * @param[in]  buf         Buffer in which to save string
  * @param[in]  buflen      Buffer length
  * @param[out] matches     Items to choose from
  * @param[in]  match_count Number of items
+ *
+ * The History Dialog lets the user select from the history of commands,
+ * functions or files.
  */
-void dlg_select_history(char *buf, size_t buflen, char **matches, int match_count)
+void dlg_history(char *buf, size_t buflen, char **matches, int match_count)
 {
   struct MuttWindow *dlg = simple_dialog_new(MENU_GENERIC, WT_DLG_HISTORY, HistoryHelp);
 
@@ -143,6 +145,7 @@ void dlg_select_history(char *buf, size_t buflen, char **matches, int match_coun
                             menu,  matches, match_count };
   dlg->wdata = &hd;
 
+  struct MuttWindow *old_focus = window_set_focus(menu->win);
   // ---------------------------------------------------------------------------
   // Event Loop
   int op = OP_NULL;
@@ -151,12 +154,7 @@ void dlg_select_history(char *buf, size_t buflen, char **matches, int match_coun
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 
-    struct KeyEvent event = km_dokey_event(MENU_GENERIC);
-    if (event.ch == 'q')
-      op = OP_EXIT;
-    else
-      op = event.op;
-
+    op = km_dokey(MENU_DIALOG, GETCH_NO_FLAGS);
     mutt_debug(LL_DEBUG1, "Got op %s (%d)\n", opcodes_get_name(op), op);
     if (op < 0)
       continue;
@@ -168,7 +166,6 @@ void dlg_select_history(char *buf, size_t buflen, char **matches, int match_coun
     mutt_clear_error();
 
     int rc = history_function_dispatcher(dlg, op);
-
     if (rc == FR_UNKNOWN)
       rc = menu_function_dispatcher(menu->win, op);
     if (rc == FR_UNKNOWN)
@@ -176,5 +173,6 @@ void dlg_select_history(char *buf, size_t buflen, char **matches, int match_coun
   } while (!hd.done);
   // ---------------------------------------------------------------------------
 
+  window_set_focus(old_focus);
   simple_dialog_free(&dlg);
 }

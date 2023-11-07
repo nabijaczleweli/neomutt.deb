@@ -34,7 +34,6 @@
 
 #include "config.h"
 #include <stddef.h>
-#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include "mutt/lib.h"
@@ -58,13 +57,16 @@ static char *path_tidy(const char *path, bool is_dir)
   if (!path || (*path == '\0'))
     return NULL;
 
-  char buf[PATH_MAX] = { 0 };
-  mutt_str_copy(buf, path, sizeof(buf));
+  struct Buffer *buf = buf_pool_get();
+  buf_strcpy(buf, path);
 
-  mutt_path_tilde(buf, sizeof(buf), HomeDir);
+  mutt_path_tilde(buf, HomeDir);
   mutt_path_tidy(buf, is_dir);
 
-  return mutt_str_dup(buf);
+  char *tidy_path = buf_strdup(buf);
+  buf_pool_release(&buf);
+
+  return tidy_path;
 }
 
 /**

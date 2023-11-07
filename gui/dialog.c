@@ -24,7 +24,12 @@
  * @page gui_dialog Dialog Windows
  *
  * A Dialog is an interactive set of windows allowing the user to perform some
- * task, e.g. @ref alias_dlg_alias
+ * task.  See @ref gui_dlg
+ *
+ * @defgroup gui_dlg GUI: Dialog Windows
+ *
+ * A Dialog is an interactive set of windows allowing the user to perform some
+ * task.
  *
  * The All Dialogs window is a container window and not visible.  All active dialogs
  * will be children of this window, though only one will be active at a time.
@@ -43,7 +48,7 @@
  * The All Dialogs window has many possible children, e.g.
  *
  * - @ref alias_dlg_alias
- * - @ref compose_dialog
+ * - @ref compose_dlg_compose
  * - @ref crypt_dlg_gpgme
  * - ...
  *
@@ -66,7 +71,8 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include "mutt/lib.h"
-#include "lib.h"
+#include "dialog.h"
+#include "mutt_window.h"
 #ifdef USE_DEBUG_WINDOW
 #include "debug/lib.h"
 #endif
@@ -114,14 +120,13 @@ void dialog_push(struct MuttWindow *dlg)
 
   // Notify the world, allowing plugins to integrate
   mutt_debug(LL_NOTIFY, "NT_WINDOW_DIALOG visible: %s, %p\n",
-             mutt_window_win_name(dlg), dlg);
+             mutt_window_win_name(dlg), (void *) dlg);
   struct EventWindow ev_w = { dlg, WN_VISIBLE };
   notify_send(dlg->notify, NT_WINDOW, NT_WINDOW_DIALOG, &ev_w);
 
   dlg->state.visible = true;
   dlg->parent = AllDialogsWindow;
   mutt_window_reflow(AllDialogsWindow);
-  window_set_focus(dlg);
 
 #ifdef USE_DEBUG_WINDOW
   debug_win_dump();
@@ -145,7 +150,7 @@ void dialog_pop(void)
 
   // Notify the world, allowing plugins to clean up
   mutt_debug(LL_NOTIFY, "NT_WINDOW_DIALOG hidden: %s, %p\n",
-             mutt_window_win_name(last), last);
+             mutt_window_win_name(last), (void *) last);
   struct EventWindow ev_w = { last, WN_HIDDEN };
   notify_send(last->notify, NT_WINDOW, NT_WINDOW_DIALOG, &ev_w);
 
@@ -158,7 +163,6 @@ void dialog_pop(void)
   {
     last->state.visible = true;
     mutt_window_reflow(AllDialogsWindow);
-    window_set_focus(last);
   }
   else
   {
@@ -214,23 +218,4 @@ struct MuttWindow *alldialogs_new(void)
   AllDialogsWindow = win_alldlgs;
 
   return win_alldlgs;
-}
-
-/**
- * alldialogs_get_current - Get the currently active Dialog
- * @retval ptr Active Dialog
- */
-struct MuttWindow *alldialogs_get_current(void)
-{
-  if (!AllDialogsWindow)
-    return NULL;
-
-  struct MuttWindow *np = NULL;
-  TAILQ_FOREACH(np, &AllDialogsWindow->children, entries)
-  {
-    if (mutt_window_is_visible(np))
-      return np;
-  }
-
-  return NULL;
 }

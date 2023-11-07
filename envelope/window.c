@@ -32,7 +32,7 @@
  * | Envelope Window | WT_CUSTOM | env_window_new()  |
  *
  * **Parent**
- * - @ref compose_dialog
+ * - @ref compose_dlg_compose
  *
  * **Children**
  *
@@ -435,7 +435,9 @@ static int draw_crypt_lines(struct MuttWindow *win, struct EnvelopeWindowData *w
         mutt_window_addstr(win, _(" (PGP/MIME)"));
     }
     else if (((WithCrypto & APPLICATION_SMIME) != 0) && (e->security & APPLICATION_SMIME))
+    {
       mutt_window_addstr(win, _(" (S/MIME)"));
+    }
   }
 
   const bool c_crypt_opportunistic_encrypt = cs_subset_bool(wdata->sub, "crypt_opportunistic_encrypt");
@@ -524,7 +526,7 @@ static void draw_mix_line(struct ListHead *chain, struct MuttWindow *win, int ro
     if (t && (t[0] == '0') && (t[1] == '\0'))
       t = "<random>";
 
-    if (c + mutt_str_len(t) + 2 >= win->state.cols)
+    if ((c + mutt_str_len(t) + 2) >= win->state.cols)
       break;
 
     mutt_window_addstr(win, NONULL(t));
@@ -599,22 +601,22 @@ static int draw_envelope_addr(int field, struct AddressList *al,
     mutt_debug(LL_DEBUG3, "text: '%s'  len: %d\n", more, more_len);
 
     int reserve = ((count > 0) && (lines_used == max_lines)) ? more_len : 0;
-    mutt_debug(LL_DEBUG3, "processing: %s (al:%d, wl:%d, r:%d, lu:%d)\n", buf,
-               addr_len, width_left, reserve, lines_used);
+    mutt_debug(LL_DEBUG3, "processing: %s (al:%zu, wl:%d, r:%d, lu:%d)\n",
+               buf_string(buf), addr_len, width_left, reserve, lines_used);
     if (addr_len >= (width_left - reserve))
     {
       mutt_debug(LL_DEBUG3, "not enough space\n");
       if (lines_used == max_lines)
       {
         mutt_debug(LL_DEBUG3, "no more lines\n");
-        mutt_debug(LL_DEBUG3, "truncating: %s\n", buf);
+        mutt_debug(LL_DEBUG3, "truncating: %s\n", buf_string(buf));
         mutt_paddstr(win, width_left, buf_string(buf));
         break;
       }
 
       if (width_left == (win->state.cols - MaxHeaderWidth))
       {
-        mutt_debug(LL_DEBUG3, "couldn't print: %s\n", buf);
+        mutt_debug(LL_DEBUG3, "couldn't print: %s\n", buf_string(buf));
         mutt_paddstr(win, width_left, buf_string(buf));
         break;
       }
@@ -630,7 +632,7 @@ static int draw_envelope_addr(int field, struct AddressList *al,
 
     if (addr_len < width_left)
     {
-      mutt_debug(LL_DEBUG3, "space for: %s\n", buf);
+      mutt_debug(LL_DEBUG3, "space for: %s\n", buf_string(buf));
       mutt_window_addstr(win, buf_string(buf));
       mutt_window_addstr(win, sep);
       width_left -= addr_len;
@@ -976,9 +978,9 @@ static int env_window_observer(struct NotifyCallback *nc)
   {
     struct EnvelopeWindowData *wdata = win_env->wdata;
 
-    notify_observer_remove(NeoMutt->notify, env_color_observer, win_env);
+    mutt_color_observer_remove(env_color_observer, win_env);
     notify_observer_remove(wdata->email->notify, env_email_observer, win_env);
-    notify_observer_remove(NeoMutt->notify, env_config_observer, win_env);
+    notify_observer_remove(NeoMutt->sub->notify, env_config_observer, win_env);
     notify_observer_remove(NeoMutt->notify, env_header_observer, win_env);
     notify_observer_remove(win_env->notify, env_window_observer, win_env);
     mutt_debug(LL_DEBUG5, "window delete done\n");
@@ -1002,9 +1004,9 @@ struct MuttWindow *env_window_new(struct Email *e, struct Buffer *fcc, struct Co
                                                MUTT_WIN_SIZE_FIXED, MUTT_WIN_SIZE_UNLIMITED,
                                                HDR_ATTACH_TITLE - 1);
 
-  notify_observer_add(NeoMutt->notify, NT_COLOR, env_color_observer, win_env);
+  mutt_color_observer_add(env_color_observer, win_env);
   notify_observer_add(e->notify, NT_ALL, env_email_observer, win_env);
-  notify_observer_add(NeoMutt->notify, NT_CONFIG, env_config_observer, win_env);
+  notify_observer_add(NeoMutt->sub->notify, NT_CONFIG, env_config_observer, win_env);
   notify_observer_add(NeoMutt->notify, NT_HEADER, env_header_observer, win_env);
   notify_observer_add(win_env->notify, NT_WINDOW, env_window_observer, win_env);
 

@@ -31,12 +31,10 @@
 #include "config.h"
 #include <stddef.h>
 #include <stdbool.h>
-#include <stdint.h>
 #include "mutt/lib.h"
 #include "attr.h"
 #include "color.h"
 #include "curses2.h"
-#include "debug.h"
 
 struct AttrColorList MergedColors; ///< Array of user colours
 
@@ -49,9 +47,9 @@ void merged_colors_init(void)
 }
 
 /**
- * merged_colors_clear - Free the list of Merged colours
+ * merged_colors_cleanup - Free the list of Merged colours
  */
-void merged_colors_clear(void)
+void merged_colors_cleanup(void)
 {
   struct AttrColor *ac = NULL;
   struct AttrColor *tmp = NULL;
@@ -71,7 +69,7 @@ void merged_colors_clear(void)
  * @param attrs Attributes, e.g. A_UNDERLINE
  * @retval ptr Matching Merged colour
  */
-static struct AttrColor *merged_colors_find(int fg, int bg, int attrs)
+static struct AttrColor *merged_colors_find(color_t fg, color_t bg, int attrs)
 {
   struct AttrColor *ac = NULL;
   TAILQ_FOREACH(ac, &MergedColors, entries)
@@ -106,7 +104,8 @@ static struct AttrColor *merged_colors_find(int fg, int bg, int attrs)
  * base colour will show through.  The attributes of both base and overlay will
  * be OR'd together.
  */
-struct AttrColor *merged_color_overlay(struct AttrColor *base, struct AttrColor *over)
+const struct AttrColor *merged_color_overlay(const struct AttrColor *base,
+                                             const struct AttrColor *over)
 {
   if (!attr_color_is_set(over))
     return base;
@@ -116,8 +115,8 @@ struct AttrColor *merged_color_overlay(struct AttrColor *base, struct AttrColor 
   struct CursesColor *cc_base = base->curses_color;
   struct CursesColor *cc_over = over->curses_color;
 
-  uint32_t fg = COLOR_DEFAULT;
-  uint32_t bg = COLOR_DEFAULT;
+  color_t fg = COLOR_DEFAULT;
+  color_t bg = COLOR_DEFAULT;
 
   if (cc_over)
   {
@@ -142,8 +141,9 @@ struct AttrColor *merged_color_overlay(struct AttrColor *base, struct AttrColor 
   ac = attr_color_new();
   ac->curses_color = curses_color_new(fg, bg);
   ac->attrs = attrs;
+  ac->fg = (base->fg.color == COLOR_DEFAULT) ? over->fg : base->fg;
+  ac->bg = (base->bg.color == COLOR_DEFAULT) ? over->bg : base->bg;
   TAILQ_INSERT_TAIL(&MergedColors, ac, entries);
-  merged_colors_dump();
 
   return ac;
 }
