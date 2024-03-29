@@ -9,10 +9,10 @@ from the default only on Debian systems.
  1 file changed, 19 insertions(+)
 
 diff --git a/docs/config.c b/docs/config.c
-index 97bb1ce..64a6814 100644
+index 6e9c424..97069be 100644
 --- a/docs/config.c
 +++ b/docs/config.c
-@@ -450,6 +450,9 @@
+@@ -452,6 +452,9 @@
  ** .pp
  ** When this variable is \fIset\fP, NeoMutt will include Delivered-To headers when
  ** bouncing messages.  Postfix users may wish to \fIunset\fP this variable.
@@ -22,7 +22,7 @@ index 97bb1ce..64a6814 100644
  */
  
  { "braille_friendly", DT_BOOL, false },
-@@ -1749,6 +1752,9 @@
+@@ -1772,6 +1775,9 @@
  ** Optionally, NeoMutt can be compiled with a fixed domain name.
  ** .pp
  ** Also see $$use_domain and $$hidden_host.
@@ -32,7 +32,7 @@ index 97bb1ce..64a6814 100644
  */
  
  #ifdef HAVE_LIBIDN
-@@ -2592,6 +2598,9 @@
+@@ -2608,6 +2614,9 @@
  ** system.  It is used with various sets of parameters to gather the
  ** list of known remailers, and to finally send a message through the
  ** mixmaster chain.
@@ -42,7 +42,7 @@ index 97bb1ce..64a6814 100644
  */
  #endif
  
-@@ -4591,6 +4600,10 @@
+@@ -4598,6 +4607,10 @@
  ** .pp
  ** Encrypt the message to $$smime_default_key too.
  ** (S/MIME only)
@@ -53,7 +53,7 @@ index 97bb1ce..64a6814 100644
  */
  #endif
  
-@@ -4987,6 +5000,9 @@
+@@ -4985,6 +4998,9 @@
  ** .ts
  ** set ssl_ca_certificates_file=/etc/ssl/certs/ca-certificates.crt
  ** .te
@@ -63,7 +63,7 @@ index 97bb1ce..64a6814 100644
  */
  #endif
  
-@@ -5651,6 +5667,9 @@
+@@ -5647,6 +5663,9 @@
  ** Note this option only affects the sending of messages.  Fcc'ed
  ** copies of a message will always contain the "Bcc:" header if
  ** one exists.

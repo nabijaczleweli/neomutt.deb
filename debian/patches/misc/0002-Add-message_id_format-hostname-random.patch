@@ -20,10 +20,10 @@ Closes #4070
  3 files changed, 40 insertions(+), 3 deletions(-)
 
 diff --git a/docs/config.c b/docs/config.c
-index 64a6814..48df02a 100644
+index 97069be..f465946 100644
 --- a/docs/config.c
 +++ b/docs/config.c
-@@ -1643,6 +1643,15 @@
+@@ -1651,6 +1651,15 @@
  ** when adding the domain part to addresses.
  */
  
@@ -40,10 +40,10 @@ index 64a6814..48df02a 100644
  /*
  ** .pp
 diff --git a/send/config.c b/send/config.c
-index bc27937b1..8d1a89e57 100644
+index acbe3d6..71049db 100644
 --- a/send/config.c
 +++ b/send/config.c
-@@ -102,6 +102,22 @@ static int simple_command_validator(const struct ConfigSet *cs, const struct Con
+@@ -106,6 +106,22 @@ static int simple_command_validator(const struct ConfigSet *cs, const struct Con
    return CSR_ERR_INVALID;
  }
  
@@ -66,7 +66,7 @@ index bc27937b1..8d1a89e57 100644
  /**
   * SendVars - Config definitions for the send library
   */
-@@ -224,6 +240,9 @@ static struct ConfigDef SendVars[] = {
+@@ -234,6 +250,9 @@ static struct ConfigDef SendVars[] = {
    { "hidden_host", DT_BOOL, false, 0, NULL,
      "Don't use the hostname, just the domain, when generating the message id"
    },
@@ -77,10 +77,10 @@ index bc27937b1..8d1a89e57 100644
      "Honour the 'Mail-Followup-To' header when group replying"
    },
 diff --git a/send/sendlib.c b/send/sendlib.c
-index b2100acc5..776818d40 100644
+index f4d06d0..05ca6b3 100644
 --- a/send/sendlib.c
 +++ b/send/sendlib.c
-@@ -754,14 +754,23 @@ static char *gen_msgid(void)
+@@ -755,14 +755,23 @@ static char *gen_msgid(void)
    const int ID_RIGHT_LEN = 12;
    char rnd_id_left[ID_LEFT_LEN + 1];
    char rnd_id_right[ID_RIGHT_LEN + 1];
@@ -107,6 +107,3 @@ index b2100acc5..776818d40 100644
    return ret;
  }
  
--- 
-2.39.2
-

@@ -10,10 +10,10 @@ X-Mutt-PGP: OS
  1 file changed, 3 insertions(+), 3 deletions(-)
 
 diff --git a/send/sendlib.c b/send/sendlib.c
-index f193d1eb2..b2100acc5 100644
+index 600230b..f4d06d0 100644
 --- a/send/sendlib.c
 +++ b/send/sendlib.c
-@@ -754,15 +754,15 @@ static char *gen_msgid(void)
+@@ -755,15 +755,15 @@ static char *gen_msgid(void)
    const int ID_RIGHT_LEN = 12;
    char rnd_id_left[ID_LEFT_LEN + 1];
    char rnd_id_right[ID_RIGHT_LEN + 1];
@@ -32,6 +32,3 @@ index f193d1eb2..b2100acc5 100644
  }
  
  /**
--- 
-2.39.2
-
