@@ -3,7 +3,8 @@
  * RocksDB backend for the key/value Store
  *
  * @authors
- * Copyright (C) 2020 Tino Reichardt <milky-neomutt@mcmilk.de>
+ * Copyright (C) 2020 Tino Reichardt <github@mcmilk.de>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -102,8 +103,10 @@ static StoreHandle *store_rocksdb_open(const char *path)
   sdata->db = rocksdb_open(sdata->options, path, &sdata->err);
   if (sdata->err)
   {
-    rocksdb_free(sdata->err);
-    FREE(&sdata);
+    rocksdb_options_destroy(sdata->options);
+    rocksdb_readoptions_destroy(sdata->read_options);
+    rocksdb_writeoptions_destroy(sdata->write_options);
+    rocksdb_sdata_free(&sdata);
     return NULL;
   }
 

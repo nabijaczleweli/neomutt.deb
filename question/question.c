@@ -3,7 +3,8 @@
  * Ask the user a question
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2022 Gerrit Rüsing <gerrit@macclub-os.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -40,6 +41,9 @@
 #include "gui/lib.h"
 #include "color/lib.h"
 #include "key/lib.h"
+#ifdef HAVE_SYS_PARAM_H
+#include <sys/param.h> // IWYU pragma: keep
+#endif
 
 /**
  * mw_multi_choice - Offer the user a multiple choice question - @ingroup gui_mw
@@ -65,21 +69,14 @@ int mw_multi_choice(const char *prompt, const char *letters)
 
   int choice = 0;
 
-  const struct AttrColor *ac_opts = NULL;
+  const struct AttrColor *ac_normal = simple_color_get(MT_COLOR_NORMAL);
+  const struct AttrColor *ac_prompt = merged_color_overlay(ac_normal,
+                                                           simple_color_get(MT_COLOR_PROMPT));
+
   if (simple_color_is_set(MT_COLOR_OPTIONS))
   {
-    const struct AttrColor *ac_base = simple_color_get(MT_COLOR_NORMAL);
-    ac_base = merged_color_overlay(ac_base, simple_color_get(MT_COLOR_PROMPT));
-
-    ac_opts = simple_color_get(MT_COLOR_OPTIONS);
-    ac_opts = merged_color_overlay(ac_base, ac_opts);
-  }
-
-  const struct AttrColor *ac_normal = simple_color_get(MT_COLOR_NORMAL);
-  const struct AttrColor *ac_prompt = simple_color_get(MT_COLOR_PROMPT);
-
-  if (ac_opts)
-  {
+    const struct AttrColor *ac_opts = merged_color_overlay(ac_prompt,
+                                                           simple_color_get(MT_COLOR_OPTIONS));
     char *cur = NULL;
 
     while ((cur = strchr(prompt, '(')))

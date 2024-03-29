@@ -6,7 +6,9 @@
  * Copyright (C) 1996-1998,2010,2012-2013 Michael R. Elkins <me@mutt.org>
  * Copyright (C) 1996-1999 Brandon Long <blong@fiction.net>
  * Copyright (C) 1999-2009,2012 Brendan Cully <brendan@kublai.com>
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018 Mehdi Abaakouk <sileht@sileht.net>
+ * Copyright (C) 2018-2022 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -52,7 +54,7 @@
 #include "question/lib.h"
 #include "adata.h"
 #include "edata.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "mdata.h"
 #include "msn.h"
 #include "mutt_account.h"
@@ -252,7 +254,8 @@ static void imap_msn_index_to_uid_seqset(struct Buffer *buf, struct ImapMboxData
       {
         case 1: /* single: convert to a range */
           state = 2;
-          /* fall through */
+          FALLTHROUGH;
+
         case 2: /* extend range ending */
           range_end = cur_uid;
           break;
@@ -356,9 +359,9 @@ struct Email *imap_hcache_get(struct ImapMboxData *mdata, unsigned int uid)
 
   char key[16] = { 0 };
 
-  snprintf(key, sizeof(key), "/%u", uid);
-  struct HCacheEntry hce = hcache_fetch(mdata->hcache, key, mutt_str_len(key),
-                                        mdata->uidvalidity);
+  snprintf(key, sizeof(key), "%u", uid);
+  struct HCacheEntry hce = hcache_fetch_email(mdata->hcache, key, mutt_str_len(key),
+                                              mdata->uidvalidity);
   if (!hce.email && hce.uidvalidity)
   {
     mutt_debug(LL_DEBUG3, "hcache uidvalidity mismatch: %u\n", hce.uidvalidity);
@@ -381,8 +384,8 @@ int imap_hcache_put(struct ImapMboxData *mdata, struct Email *e)
 
   char key[16] = { 0 };
 
-  snprintf(key, sizeof(key), "/%u", imap_edata_get(e)->uid);
-  return hcache_store(mdata->hcache, key, mutt_str_len(key), e, mdata->uidvalidity);
+  snprintf(key, sizeof(key), "%u", imap_edata_get(e)->uid);
+  return hcache_store_email(mdata->hcache, key, mutt_str_len(key), e, mdata->uidvalidity);
 }
 
 /**
@@ -399,8 +402,8 @@ int imap_hcache_del(struct ImapMboxData *mdata, unsigned int uid)
 
   char key[16] = { 0 };
 
-  snprintf(key, sizeof(key), "/%u", uid);
-  return hcache_delete_record(mdata->hcache, key, mutt_str_len(key));
+  snprintf(key, sizeof(key), "%u", uid);
+  return hcache_delete_email(mdata->hcache, key, mutt_str_len(key));
 }
 
 /**
@@ -418,8 +421,8 @@ int imap_hcache_store_uid_seqset(struct ImapMboxData *mdata)
   struct Buffer buf = buf_make(8192);
   imap_msn_index_to_uid_seqset(&buf, mdata);
 
-  int rc = hcache_store_raw(mdata->hcache, "/UIDSEQSET", 10, buf.data, buf_len(&buf) + 1);
-  mutt_debug(LL_DEBUG3, "Stored /UIDSEQSET %s\n", buf.data);
+  int rc = hcache_store_raw(mdata->hcache, "UIDSEQSET", 9, buf.data, buf_len(&buf) + 1);
+  mutt_debug(LL_DEBUG3, "Stored UIDSEQSET %s\n", buf.data);
   buf_dealloc(&buf);
   return rc;
 }
@@ -435,7 +438,7 @@ int imap_hcache_clear_uid_seqset(struct ImapMboxData *mdata)
   if (!mdata->hcache)
     return -1;
 
-  return hcache_delete_record(mdata->hcache, "/UIDSEQSET", 10);
+  return hcache_delete_raw(mdata->hcache, "UIDSEQSET", 9);
 }
 
 /**
@@ -449,8 +452,8 @@ char *imap_hcache_get_uid_seqset(struct ImapMboxData *mdata)
   if (!mdata->hcache)
     return NULL;
 
-  char *seqset = hcache_fetch_str(mdata->hcache, "/UIDSEQSET", 10);
-  mutt_debug(LL_DEBUG3, "Retrieved /UIDSEQSET %s\n", NONULL(seqset));
+  char *seqset = hcache_fetch_raw_str(mdata->hcache, "UIDSEQSET", 9);
+  mutt_debug(LL_DEBUG3, "Retrieved UIDSEQSET %s\n", NONULL(seqset));
 
   return seqset;
 }
@@ -622,7 +625,7 @@ void imap_pretty_mailbox(char *path, size_t pathlen, const char *folder)
     *path++ = '+';
     /* copy remaining path, skipping delimiter */
     if (hlen != 0)
-      ++hlen;
+      hlen++;
     memcpy(path, target_mailbox + hlen, tlen - hlen);
     path[tlen - hlen] = '\0';
     return;

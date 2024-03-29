@@ -3,7 +3,8 @@
  * Set the terminal title/icon
  *
  * @authors
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -33,7 +34,7 @@
 #include "terminal.h"
 #include "mutt_curses.h"
 #ifdef HAVE_NCURSESW_NCURSES_H
-#include <ncursesw/term.h> // IWYU pragma: keep
+#include <ncursesw/term.h>
 #elif defined(HAVE_NCURSES_NCURSES_H)
 #include <ncurses/term.h>
 #endif

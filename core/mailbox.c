@@ -3,9 +3,9 @@
  * Representation of a mailbox
  *
  * @authors
- * Copyright (C) 1996-2000,2010,2013 Michael R. Elkins <me@mutt.org>
  * Copyright (C) 2016-2017 Kevin J. McCarthy <kevin@8t8.us>
- * Copyright (C) 2018-2019 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2022 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -116,6 +116,14 @@ void mailbox_free(struct Mailbox **ptr)
 
   for (size_t i = 0; i < m->email_max; i++)
     email_free(&m->emails[i]);
+
+  m->email_max = 0;
+  m->msg_count = 0;
+  m->msg_deleted = 0;
+  m->msg_flagged = 0;
+  m->msg_new = 0;
+  m->msg_tagged = 0;
+  m->msg_unread = 0;
 
   if (m->mdata_free && m->mdata)
     m->mdata_free(&m->mdata);

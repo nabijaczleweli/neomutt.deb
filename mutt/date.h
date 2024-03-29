@@ -3,7 +3,9 @@
  * Time and date handling routines
  *
  * @authors
- * Copyright (C) 1996-2000 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2017-2024 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019 Victor Fernandes <criw@pm.me>
+ * Copyright (C) 2019-2020 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -32,6 +34,7 @@
 #endif
 
 struct Buffer;
+struct timespec;
 
 /* theoretically time_t can be float but it is integer on most (if not all) systems */
 #define TIME_T_MAX ((((time_t) 1 << (sizeof(time_t) * 8 - 2)) - 1) * 2 + 1)
@@ -68,5 +71,6 @@ void      mutt_date_normalize_time(struct tm *tm);
 time_t    mutt_date_parse_date(const char *s, struct Tz *tz_out);
 time_t    mutt_date_parse_imap(const char *s);
 void      mutt_date_sleep_ms(size_t ms);
+void      mutt_time_now(struct timespec *tp);
 
 #endif /* MUTT_MUTT_DATE_H */

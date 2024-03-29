@@ -3,7 +3,7 @@
  * Compose Attachments
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -215,7 +215,7 @@ static int compose_attach_tag(struct Menu *menu, int sel, int act)
  *
  * @sa $attach_format, attach_format_str()
  */
-static void compose_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
+static void compose_make_entry(struct Menu *menu, int line, struct Buffer *buf)
 {
   struct ComposeAttachData *adata = menu->mdata;
   struct AttachCtx *actx = adata->actx;
@@ -223,8 +223,9 @@ static void compose_make_entry(struct Menu *menu, char *buf, size_t buflen, int 
   struct ConfigSubset *sub = shared->sub;
 
   const char *const c_attach_format = cs_subset_string(sub, "attach_format");
-  mutt_expando_format(buf, buflen, 0, menu->win->state.cols, NONULL(c_attach_format),
-                      attach_format_str, (intptr_t) (actx->idx[actx->v2r[line]]),
+  mutt_expando_format(buf->data, buf->dsize, 0, menu->win->state.cols,
+                      NONULL(c_attach_format), attach_format_str,
+                      (intptr_t) (actx->idx[actx->v2r[line]]),
                       MUTT_FORMAT_STAT_FILE | MUTT_FORMAT_ARROWCURSOR);
 }
 

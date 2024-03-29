@@ -3,8 +3,8 @@
  * Pattern Selection Dialog
  *
  * @authors
- * Copyright (C) 1996-2000,2006-2007,2010 Michael R. Elkins <me@mutt.org>
  * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -113,10 +113,10 @@ static const char *pattern_format_str(char *buf, size_t buflen, size_t col, int 
   switch (op)
   {
     case 'd':
-      mutt_format_s(buf, buflen, prec, NONULL(entry->desc));
+      mutt_format(buf, buflen, prec, NONULL(entry->desc), false);
       break;
     case 'e':
-      mutt_format_s(buf, buflen, prec, NONULL(entry->expr));
+      mutt_format(buf, buflen, prec, NONULL(entry->expr), false);
       break;
     case 'n':
     {
@@ -131,17 +131,18 @@ static const char *pattern_format_str(char *buf, size_t buflen, size_t col, int 
 }
 
 /**
- * make_pattern_entry - Create a Pattern for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
+ * pattern_make_entry - Create a Pattern for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  *
  * @sa $pattern_format, pattern_format_str()
  */
-static void make_pattern_entry(struct Menu *menu, char *buf, size_t buflen, int num)
+static void pattern_make_entry(struct Menu *menu, int line, struct Buffer *buf)
 {
-  struct PatternEntry *entry = &((struct PatternEntry *) menu->mdata)[num];
+  struct PatternEntry *entry = &((struct PatternEntry *) menu->mdata)[line];
 
   const char *const c_pattern_format = cs_subset_string(NeoMutt->sub, "pattern_format");
-  mutt_expando_format(buf, buflen, 0, menu->win->state.cols, NONULL(c_pattern_format),
-                      pattern_format_str, (intptr_t) entry, MUTT_FORMAT_ARROWCURSOR);
+  mutt_expando_format(buf->data, buf->dsize, 0, menu->win->state.cols,
+                      NONULL(c_pattern_format), pattern_format_str,
+                      (intptr_t) entry, MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**
@@ -178,7 +179,7 @@ static struct Menu *create_pattern_menu(struct MuttWindow *dlg)
   struct PatternEntry *entries = mutt_mem_calloc(num_entries, sizeof(struct PatternEntry));
 
   struct Menu *menu = dlg->wdata;
-  menu->make_entry = make_pattern_entry;
+  menu->make_entry = pattern_make_entry;
   menu->mdata = entries;
   menu->mdata_free = free_pattern_menu;
   menu->max = num_entries;

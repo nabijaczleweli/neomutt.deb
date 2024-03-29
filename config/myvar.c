@@ -2,6 +2,10 @@
  * @file
  * Type representing a user-defined variable "my_var"
  *
+ * @authors
+ * Copyright (C) 2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Rayford Shireman
+ *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
  * the terms of the GNU General Public License as published by the Free Software
@@ -74,10 +78,10 @@ static int myvar_string_set(const struct ConfigSet *cs, void *var, struct Config
   }
   else
   {
-    if (cdef->type & DT_INITIAL_SET)
+    if (cdef->type & D_INTERNAL_INITIAL_SET)
       FREE(&cdef->initial);
 
-    cdef->type |= DT_INITIAL_SET;
+    cdef->type |= D_INTERNAL_INITIAL_SET;
     cdef->initial = (intptr_t) mutt_str_dup(value);
   }
 

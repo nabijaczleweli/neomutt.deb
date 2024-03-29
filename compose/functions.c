@@ -3,7 +3,9 @@
  * Compose functions
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2021-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2022 David Purton <dcpurton@marshwiggle.net>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -50,22 +52,26 @@
 #include "browser/lib.h"
 #include "editor/lib.h"
 #include "history/lib.h"
+#include "imap/lib.h"
 #include "index/lib.h"
 #include "key/lib.h"
 #include "menu/lib.h"
 #include "ncrypt/lib.h"
+#include "nntp/lib.h"
+#include "pop/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "attach_data.h"
 #include "external.h"
 #include "functions.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "hook.h"
 #include "mutt_header.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
 #include "mview.h"
 #include "mx.h"
+#include "nntp/adata.h" // IWYU pragma: keep
 #include "protos.h"
 #include "rfc3676.h"
 #include "shared_data.h"
@@ -74,16 +80,6 @@
 #endif
 #ifdef MIXMASTER
 #include "mixmaster/lib.h"
-#endif
-#ifdef USE_NNTP
-#include "nntp/lib.h"
-#include "nntp/adata.h" // IWYU pragma: keep
-#endif
-#ifdef USE_POP
-#include "pop/lib.h"
-#endif
-#ifdef USE_IMAP
-#include "imap/lib.h"
 #endif
 #endif
 
@@ -95,9 +91,7 @@ const struct MenuFuncOp OpCompose[] = { /* map: compose */
   { "attach-file",                   OP_ATTACHMENT_ATTACH_FILE },
   { "attach-key",                    OP_ATTACHMENT_ATTACH_KEY },
   { "attach-message",                OP_ATTACHMENT_ATTACH_MESSAGE },
-#ifdef USE_NNTP
   { "attach-news-message",           OP_ATTACHMENT_ATTACH_NEWS_MESSAGE },
-#endif
 #ifdef USE_AUTOCRYPT
   { "autocrypt-menu",                OP_COMPOSE_AUTOCRYPT_MENU },
 #endif
@@ -111,24 +105,18 @@ const struct MenuFuncOp OpCompose[] = { /* map: compose */
   { "edit-encoding",                 OP_ATTACHMENT_EDIT_ENCODING },
   { "edit-fcc",                      OP_ENVELOPE_EDIT_FCC },
   { "edit-file",                     OP_COMPOSE_EDIT_FILE },
-#ifdef USE_NNTP
   { "edit-followup-to",              OP_ENVELOPE_EDIT_FOLLOWUP_TO },
-#endif
   { "edit-from",                     OP_ENVELOPE_EDIT_FROM },
   { "edit-headers",                  OP_ENVELOPE_EDIT_HEADERS },
   { "edit-language",                 OP_ATTACHMENT_EDIT_LANGUAGE },
   { "edit-message",                  OP_COMPOSE_EDIT_MESSAGE },
   { "edit-mime",                     OP_ATTACHMENT_EDIT_MIME },
-#ifdef USE_NNTP
   { "edit-newsgroups",               OP_ENVELOPE_EDIT_NEWSGROUPS },
-#endif
   { "edit-reply-to",                 OP_ENVELOPE_EDIT_REPLY_TO },
   { "edit-subject",                  OP_ENVELOPE_EDIT_SUBJECT },
   { "edit-to",                       OP_ENVELOPE_EDIT_TO },
   { "edit-type",                     OP_ATTACHMENT_EDIT_TYPE },
-#ifdef USE_NNTP
   { "edit-x-comment-to",             OP_ENVELOPE_EDIT_X_COMMENT_TO },
-#endif
   { "exit",                          OP_EXIT },
   { "filter-entry",                  OP_ATTACHMENT_FILTER },
   { "forget-passphrase",             OP_FORGET_PASSPHRASE },
@@ -356,8 +344,8 @@ static int delete_attachment(struct AttachCtx *actx, int aidx)
     return -1;
 
   struct AttachPtr **idx = actx->idx;
-  struct Body *bptr_previous = NULL;
-  struct Body *bptr_parent = NULL;
+  struct Body *b_previous = NULL;
+  struct Body *b_parent = NULL;
 
   if (aidx == 0)
   {
@@ -371,9 +359,9 @@ static int delete_attachment(struct AttachCtx *actx, int aidx)
 
   if (idx[aidx]->level > 0)
   {
-    if (attach_body_parent(idx[0]->body, NULL, idx[aidx]->body, &bptr_parent))
+    if (attach_body_parent(idx[0]->body, NULL, idx[aidx]->body, &b_parent))
     {
-      if (attach_body_count(bptr_parent->parts, false) < 3)
+      if (attach_body_count(b_parent->parts, false) < 3)
       {
         mutt_error(_("Can't leave group with only one attachment"));
         return -1;
@@ -384,10 +372,10 @@ static int delete_attachment(struct AttachCtx *actx, int aidx)
   // reorder body pointers
   if (aidx > 0)
   {
-    if (attach_body_previous(idx[0]->body, idx[aidx]->body, &bptr_previous))
-      bptr_previous->next = idx[aidx]->body->next;
-    else if (attach_body_parent(idx[0]->body, NULL, idx[aidx]->body, &bptr_parent))
-      bptr_parent->parts = idx[aidx]->body->next;
+    if (attach_body_previous(idx[0]->body, idx[aidx]->body, &b_previous))
+      b_previous->next = idx[aidx]->body->next;
+    else if (attach_body_parent(idx[0]->body, NULL, idx[aidx]->body, &b_parent))
+      b_parent->parts = idx[aidx]->body->next;
   }
 
   // free memory
@@ -468,19 +456,19 @@ static void compose_attach_swap(struct Email *e, struct AttachCtx *actx, int fir
   else
   {
     // find previous attachment
-    struct Body *bptr_previous = NULL;
-    struct Body *bptr_parent = NULL;
-    if (attach_body_previous(e->body, idx[first]->body, &bptr_previous))
+    struct Body *b_previous = NULL;
+    struct Body *b_parent = NULL;
+    if (attach_body_previous(e->body, idx[first]->body, &b_previous))
     {
       idx[first]->body->next = idx[second]->body->next;
       idx[second]->body->next = idx[first]->body;
-      bptr_previous->next = idx[second]->body;
+      b_previous->next = idx[second]->body;
     }
-    else if (attach_body_parent(e->body, NULL, idx[first]->body, &bptr_parent))
+    else if (attach_body_parent(e->body, NULL, idx[first]->body, &b_parent))
     {
       idx[first]->body->next = idx[second]->body->next;
       idx[second]->body->next = idx[first]->body;
-      bptr_parent->parts = idx[second]->body;
+      b_parent->parts = idx[second]->body;
     }
   }
 
@@ -830,7 +818,6 @@ static int op_attachment_attach_message(struct ComposeSharedData *shared, int op
 {
   char *prompt = _("Open mailbox to attach message from");
 
-#ifdef USE_NNTP
   OptNews = false;
   if (shared->mailbox && (op == OP_ATTACHMENT_ATTACH_NEWS_MESSAGE))
   {
@@ -842,14 +829,11 @@ static int op_attachment_attach_message(struct ComposeSharedData *shared, int op
     prompt = _("Open newsgroup to attach message from");
     OptNews = true;
   }
-#endif
 
   struct Buffer *fname = buf_pool_get();
   if (shared->mailbox)
   {
-#ifdef USE_NNTP
     if ((op == OP_ATTACHMENT_ATTACH_MESSAGE) ^ (shared->mailbox->type == MUTT_NNTP))
-#endif
     {
       buf_strcpy(fname, mailbox_path(shared->mailbox));
       buf_pretty_mailbox(fname);
@@ -864,21 +848,17 @@ static int op_attachment_attach_message(struct ComposeSharedData *shared, int op
     return FR_NO_ACTION;
   }
 
-#ifdef USE_NNTP
   if (OptNews)
     nntp_expand_path(fname->data, fname->dsize, &CurrentNewsSrv->conn->account);
   else
-#endif
     buf_expand_path(fname);
-#ifdef USE_IMAP
+
   if (imap_path_probe(buf_string(fname), NULL) != MUTT_IMAP)
-#endif
-#ifdef USE_POP
+  {
     if (pop_path_probe(buf_string(fname), NULL) != MUTT_POP)
-#endif
-#ifdef USE_NNTP
+    {
       if (!OptNews && (nntp_path_probe(buf_string(fname), NULL) != MUTT_NNTP))
-#endif
+      {
         if (mx_path_probe(buf_string(fname)) != MUTT_NOTMUCH)
         {
           /* check to make sure the file exists and is readable */
@@ -889,6 +869,9 @@ static int op_attachment_attach_message(struct ComposeSharedData *shared, int op
             return FR_ERROR;
           }
         }
+      }
+    }
+  }
 
   menu_queue_redraw(shared->adata->menu, MENU_REDRAW_FULL);
 
@@ -1670,20 +1653,20 @@ static int op_attachment_ungroup(struct ComposeSharedData *shared, int op)
 
   int aidx = shared->adata->menu->current;
   struct AttachCtx *actx = shared->adata->actx;
-  struct Body *bptr = actx->idx[aidx]->body;
-  struct Body *bptr_next = bptr->next;
-  struct Body *bptr_previous = NULL;
-  struct Body *bptr_parent = NULL;
+  struct Body *b = actx->idx[aidx]->body;
+  struct Body *b_next = b->next;
+  struct Body *b_previous = NULL;
+  struct Body *b_parent = NULL;
   int parent_type = actx->idx[aidx]->parent_type;
   int level = actx->idx[aidx]->level;
 
   // reorder body pointers
-  if (attach_body_previous(shared->email->body, bptr, &bptr_previous))
-    bptr_previous->next = bptr->parts;
-  else if (attach_body_parent(shared->email->body, NULL, bptr, &bptr_parent))
-    bptr_parent->parts = bptr->parts;
+  if (attach_body_previous(shared->email->body, b, &b_previous))
+    b_previous->next = b->parts;
+  else if (attach_body_parent(shared->email->body, NULL, b, &b_parent))
+    b_parent->parts = b->parts;
   else
-    shared->email->body = bptr->parts;
+    shared->email->body = b->parts;
 
   // update attachment list
   int i = aidx + 1;
@@ -1695,7 +1678,7 @@ static int op_attachment_ungroup(struct ComposeSharedData *shared, int op)
       actx->idx[i]->parent_type = parent_type;
       // set body->next for final attachment in group
       if (!actx->idx[i]->body->next)
-        actx->idx[i]->body->next = bptr_next;
+        actx->idx[i]->body->next = b_next;
     }
     i++;
     if (i == actx->idxlen)
@@ -2004,14 +1987,50 @@ static int op_compose_write_message(struct ComposeSharedData *shared, int op)
  *
  * This function handles:
  * - OP_ATTACHMENT_VIEW
+ * - OP_ATTACHMENT_VIEW_MAILCAP
+ * - OP_ATTACHMENT_VIEW_PAGER
+ * - OP_ATTACHMENT_VIEW_TEXT
  * - OP_DISPLAY_HEADERS
  */
 static int op_display_headers(struct ComposeSharedData *shared, int op)
 {
   if (!check_count(shared->adata->actx))
     return FR_NO_ACTION;
-  mutt_attach_display_loop(shared->sub, shared->adata->menu, op, shared->email,
-                           shared->adata->actx, false);
+
+  enum ViewAttachMode mode = MUTT_VA_REGULAR;
+
+  switch (op)
+  {
+    case OP_ATTACHMENT_VIEW:
+    case OP_DISPLAY_HEADERS:
+      break;
+
+    case OP_ATTACHMENT_VIEW_MAILCAP:
+      mode = MUTT_VA_MAILCAP;
+      break;
+
+    case OP_ATTACHMENT_VIEW_PAGER:
+      mode = MUTT_VA_PAGER;
+      break;
+
+    case OP_ATTACHMENT_VIEW_TEXT:
+      mode = MUTT_VA_AS_TEXT;
+      break;
+  }
+
+  if (mode == MUTT_VA_REGULAR)
+  {
+    mutt_attach_display_loop(shared->sub, shared->adata->menu, op,
+                             shared->email, shared->adata->actx, false);
+  }
+  else
+  {
+    struct AttachPtr *cur_att = current_attachment(shared->adata->actx,
+                                                   shared->adata->menu);
+    mutt_view_attachment(NULL, cur_att->body, mode, shared->email,
+                         shared->adata->actx, shared->adata->menu->win);
+  }
+
   menu_queue_redraw(shared->adata->menu, MENU_REDRAW_FULL);
   /* no send2hook, since this doesn't modify the message */
   return FR_SUCCESS;
@@ -2097,6 +2116,9 @@ static const struct ComposeFunction ComposeFunctions[] = {
   { OP_ATTACHMENT_UNGROUP,                op_attachment_ungroup },
   { OP_ATTACHMENT_UPDATE_ENCODING,        op_attachment_update_encoding },
   { OP_ATTACHMENT_VIEW,                   op_display_headers },
+  { OP_ATTACHMENT_VIEW_MAILCAP,           op_display_headers },
+  { OP_ATTACHMENT_VIEW_PAGER,             op_display_headers },
+  { OP_ATTACHMENT_VIEW_TEXT,              op_display_headers },
   { OP_COMPOSE_EDIT_FILE,                 op_compose_edit_file },
   { OP_COMPOSE_EDIT_MESSAGE,              op_compose_edit_message },
   { OP_COMPOSE_ISPELL,                    op_compose_ispell },

@@ -3,7 +3,9 @@
  * Config used by libsidebar
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Aditya De Saha <adityadesaha@gmail.com>
+ * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -68,7 +70,7 @@ static struct ConfigDef SidebarVars[] = {
   { "sidebar_folder_indent", DT_BOOL, false, 0, NULL,
     "(sidebar) Indent nested folders"
   },
-  { "sidebar_format", DT_STRING|DT_NOT_EMPTY, IP "%D%*  %n", 0, NULL,
+  { "sidebar_format", DT_STRING|D_NOT_EMPTY, IP "%D%*  %n", 0, NULL,
     "(sidebar) printf-like format string for the sidebar panel"
   },
   { "sidebar_indent_string", DT_STRING, IP "  ", 0, NULL,
@@ -95,7 +97,7 @@ static struct ConfigDef SidebarVars[] = {
   { "sidebar_visible", DT_BOOL, false, 0, NULL,
     "(sidebar) Show the sidebar"
   },
-  { "sidebar_width", DT_NUMBER|DT_NOT_NEGATIVE, 30, 0, NULL,
+  { "sidebar_width", DT_NUMBER|D_INTEGER_NOT_NEGATIVE, 30, 0, NULL,
     "(sidebar) Width of the sidebar"
   },
   { NULL },
@@ -107,5 +109,5 @@ static struct ConfigDef SidebarVars[] = {
  */
 bool config_init_sidebar(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, SidebarVars, DT_NO_FLAGS);
+  return cs_register_variables(cs, SidebarVars);
 }

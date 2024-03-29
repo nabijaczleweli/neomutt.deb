@@ -3,7 +3,8 @@
  * Test code for the Enum object
  *
  * @authors
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -81,6 +82,7 @@ static struct ConfigDef Vars[] = {
   { "Mango",      DT_ENUM, ANIMAL_ANTELOPE, IP &AnimalDef, validator_warn,    },
   { "Nectarine",  DT_ENUM, ANIMAL_ANTELOPE, IP &AnimalDef, validator_fail,    },
   { "Olive",      DT_ENUM, ANIMAL_ANTELOPE, IP &AnimalDef, NULL,              }, /* test_inherit */
+  { "Papaya",     DT_ENUM | D_ON_STARTUP, ANIMAL_ANTELOPE, IP &AnimalDef, NULL, }, /* startup */
   { NULL },
 };
 // clang-format on
@@ -251,6 +253,13 @@ static bool test_string_set(struct ConfigSubset *sub, struct Buffer *err)
     return false;
   }
 
+  name = "Papaya";
+  rc = cs_str_string_set(cs, name, "Antelope", err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  rc = cs_str_string_set(cs, name, "Badger", err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   log_line(__func__);
   return true;
 }
@@ -377,6 +386,13 @@ static bool test_native_set(struct ConfigSubset *sub, struct Buffer *err)
     return false;
   }
 
+  name = "Papaya";
+  rc = cs_str_native_set(cs, name, ANIMAL_ANTELOPE, err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  rc = cs_str_native_set(cs, name, ANIMAL_BADGER, err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   log_line(__func__);
   return true;
 }
@@ -472,6 +488,18 @@ static bool test_reset(struct ConfigSubset *sub, struct Buffer *err)
     TEST_MSG("%s", buf_string(err));
     return false;
   }
+
+  name = "Papaya";
+  rc = cs_str_reset(cs, name, err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  StartupComplete = false;
+  rc = cs_str_native_set(cs, name, ANIMAL_BADGER, err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+  StartupComplete = true;
+
+  rc = cs_str_reset(cs, name, err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
 
   log_line(__func__);
   return true;
@@ -671,8 +699,10 @@ void test_config_enum(void)
   struct ConfigSubset *sub = NeoMutt->sub;
   struct ConfigSet *cs = sub->cs;
 
-  if (!TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS)))
+  StartupComplete = false;
+  if (!TEST_CHECK(cs_register_variables(cs, Vars)))
     return;
+  StartupComplete = true;
 
   notify_observer_add(NeoMutt->notify, NT_CONFIG, log_observer, 0);
 

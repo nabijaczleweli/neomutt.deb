@@ -3,7 +3,9 @@
  * Index functions
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2021-2024 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -46,17 +48,20 @@
 #include "browser/lib.h"
 #include "editor/lib.h"
 #include "history/lib.h"
+#include "imap/lib.h"
 #include "key/lib.h"
 #include "menu/lib.h"
 #include "ncrypt/lib.h"
+#include "nntp/lib.h"
 #include "pager/lib.h"
 #include "pattern/lib.h"
+#include "pop/lib.h"
 #include "progress/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "external.h"
 #include "functions.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "hook.h"
 #include "mutt_header.h"
 #include "mutt_mailbox.h"
@@ -64,6 +69,7 @@
 #include "muttlib.h"
 #include "mview.h"
 #include "mx.h"
+#include "nntp/mdata.h"
 #include "private_data.h"
 #include "protos.h"
 #include "shared_data.h"
@@ -73,16 +79,6 @@
 #endif
 #ifdef USE_NOTMUCH
 #include "notmuch/lib.h"
-#endif
-#ifdef USE_IMAP
-#include "imap/lib.h"
-#endif
-#ifdef USE_NNTP
-#include "nntp/lib.h"
-#include "nntp/mdata.h"
-#endif
-#ifdef USE_POP
-#include "pop/lib.h"
 #endif
 #ifdef ENABLE_NLS
 #include <libintl.h>
@@ -103,15 +99,11 @@ const struct MenuFuncOp OpIndex[] = { /* map: index */
 #endif
   { "bounce-message",                OP_BOUNCE_MESSAGE },
   { "break-thread",                  OP_MAIN_BREAK_THREAD },
-#ifdef USE_NNTP
   { "catchup",                       OP_CATCHUP },
-#endif
   { "change-folder",                 OP_MAIN_CHANGE_FOLDER },
   { "change-folder-readonly",        OP_MAIN_CHANGE_FOLDER_READONLY },
-#ifdef USE_NNTP
   { "change-newsgroup",              OP_MAIN_CHANGE_GROUP },
   { "change-newsgroup-readonly",     OP_MAIN_CHANGE_GROUP_READONLY },
-#endif
 #ifdef USE_NOTMUCH
   { "change-vfolder",                OP_MAIN_CHANGE_VFOLDER },
 #endif
@@ -143,27 +135,19 @@ const struct MenuFuncOp OpIndex[] = { /* map: index */
 #endif
   { "exit",                          OP_EXIT },
   { "extract-keys",                  OP_EXTRACT_KEYS },
-#ifdef USE_POP
   { "fetch-mail",                    OP_MAIN_FETCH_MAIL },
-#endif
   { "flag-message",                  OP_FLAG_MESSAGE },
-#ifdef USE_NNTP
   { "followup-message",              OP_FOLLOWUP },
-#endif
   { "forget-passphrase",             OP_FORGET_PASSPHRASE },
   { "forward-message",               OP_FORWARD_MESSAGE },
-#ifdef USE_NNTP
   { "forward-to-group",              OP_FORWARD_TO_GROUP },
   { "get-children",                  OP_GET_CHILDREN },
   { "get-message",                   OP_GET_MESSAGE },
   { "get-parent",                    OP_GET_PARENT },
-#endif
   { "group-chat-reply",              OP_GROUP_CHAT_REPLY },
   { "group-reply",                   OP_GROUP_REPLY },
-#ifdef USE_IMAP
   { "imap-fetch-mail",               OP_MAIN_IMAP_FETCH },
   { "imap-logout-all",               OP_MAIN_IMAP_LOGOUT_ALL },
-#endif
   { "limit",                         OP_MAIN_LIMIT },
   { "limit-current-thread",          OP_LIMIT_CURRENT_THREAD },
   { "link-threads",                  OP_MAIN_LINK_THREADS },
@@ -188,9 +172,7 @@ const struct MenuFuncOp OpIndex[] = { /* map: index */
   { "parent-message",                OP_MAIN_PARENT_MESSAGE },
   { "pipe-entry",                    OP_PIPE },
   { "pipe-message",                  OP_PIPE },
-#ifdef USE_NNTP
   { "post-message",                  OP_POST },
-#endif
   { "previous-new",                  OP_MAIN_PREV_NEW },
   { "previous-new-then-unread",      OP_MAIN_PREV_NEW_THEN_UNREAD },
   { "previous-subthread",            OP_MAIN_PREV_SUBTHREAD },
@@ -206,16 +188,13 @@ const struct MenuFuncOp OpIndex[] = { /* map: index */
   { "read-subthread",                OP_MAIN_READ_SUBTHREAD },
   { "read-thread",                   OP_MAIN_READ_THREAD },
   { "recall-message",                OP_RECALL_MESSAGE },
-#ifdef USE_NNTP
   { "reconstruct-thread",            OP_RECONSTRUCT_THREAD },
-#endif
   { "reply",                         OP_REPLY },
   { "resend-message",                OP_RESEND },
   { "root-message",                  OP_MAIN_ROOT_MESSAGE },
   { "save-message",                  OP_SAVE },
   { "set-flag",                      OP_MAIN_SET_FLAG },
   { "show-limit",                    OP_MAIN_SHOW_LIMIT },
-#ifdef USE_SIDEBAR
   { "sidebar-first",                 OP_SIDEBAR_FIRST },
   { "sidebar-last",                  OP_SIDEBAR_LAST },
   { "sidebar-next",                  OP_SIDEBAR_NEXT },
@@ -227,7 +206,6 @@ const struct MenuFuncOp OpIndex[] = { /* map: index */
   { "sidebar-prev-new",              OP_SIDEBAR_PREV_NEW },
   { "sidebar-toggle-virtual",        OP_SIDEBAR_TOGGLE_VIRTUAL },
   { "sidebar-toggle-visible",        OP_SIDEBAR_TOGGLE_VISIBLE },
-#endif
   { "sort-mailbox",                  OP_SORT },
   { "sort-reverse",                  OP_SORT_REVERSE },
   { "sync-mailbox",                  OP_MAIN_SYNC_FOLDER },
@@ -294,17 +272,13 @@ const struct MenuOpSeq IndexDefaultBindings[] = { /* map: index */
   { OP_MAIN_BREAK_THREAD,                  "#" },
   { OP_MAIN_CHANGE_FOLDER,                 "c" },
   { OP_MAIN_CHANGE_FOLDER_READONLY,        "\033c" },          // <Alt-c>
-#ifdef USE_NNTP
   { OP_MAIN_CHANGE_GROUP,                  "i" },
   { OP_MAIN_CHANGE_GROUP_READONLY,         "\033i" },          // <Alt-i>
-#endif
   { OP_MAIN_CLEAR_FLAG,                    "W" },
   { OP_MAIN_COLLAPSE_ALL,                  "\033V" },          // <Alt-V>
   { OP_MAIN_COLLAPSE_THREAD,               "\033v" },          // <Alt-v>
   { OP_MAIN_DELETE_PATTERN,                "D" },
-#ifdef USE_POP
   { OP_MAIN_FETCH_MAIL,                    "G" },
-#endif
   { OP_MAIN_LIMIT,                         "l" },
   { OP_MAIN_LINK_THREADS,                  "&" },
   { OP_MAIN_NEXT_NEW_THEN_UNREAD,          "\t" },             // <Tab>
@@ -1256,7 +1230,7 @@ static int op_main_limit(struct IndexSharedData *shared, struct IndexPrivateData
   int old_index = shared->email ? shared->email->index : -1;
   if (op == OP_TOGGLE_READ)
   {
-    char buf2[1024];
+    char buf2[1024] = { 0 };
 
     if (!lmt || !mutt_strn_equal(shared->mailbox_view->pattern, "!~R!~D~s", 8))
     {
@@ -1391,12 +1365,12 @@ static int op_main_modify_tags(struct IndexSharedData *shared,
     goto done;
   }
 
-  char *tags = NULL;
+  struct Buffer *tags = buf_pool_get();
   if (!priv->tag_prefix)
-    tags = driver_tags_get_with_hidden(&shared->email->tags);
+    driver_tags_get_with_hidden(&shared->email->tags, tags);
   buf = buf_pool_get();
-  int rc2 = mx_tags_edit(m, tags, buf);
-  FREE(&tags);
+  int rc2 = mx_tags_edit(m, buf_string(tags), buf);
+  buf_pool_release(&tags);
   if (rc2 < 0)
   {
     goto done;
@@ -1413,7 +1387,8 @@ static int op_main_modify_tags(struct IndexSharedData *shared,
 
     if (m->verbose)
     {
-      progress = progress_new(_("Update tags..."), MUTT_PROGRESS_WRITE, m->msg_tagged);
+      progress = progress_new(MUTT_PROGRESS_WRITE, m->msg_tagged);
+      progress_set_message(progress, _("Update tags..."));
     }
 
 #ifdef USE_NOTMUCH
@@ -1856,7 +1831,7 @@ static int op_main_show_limit(struct IndexSharedData *shared,
 {
   if (mview_has_limit(shared->mailbox_view))
   {
-    char buf2[256];
+    char buf2[256] = { 0 };
     /* L10N: ask for a limit to apply */
     snprintf(buf2, sizeof(buf2), _("Limit: %s"), shared->mailbox_view->pattern);
     mutt_message("%s", buf2);
@@ -1937,6 +1912,9 @@ static int op_main_sync_folder(struct IndexSharedData *shared,
 
   priv->menu->max = shared->mailbox->vcount;
   menu_queue_redraw(priv->menu, MENU_REDRAW_FULL);
+
+  struct EventMailbox ev_m = { shared->mailbox };
+  notify_send(shared->mailbox->notify, NT_MAILBOX, NT_MAILBOX_CHANGE, &ev_m);
 
   return FR_SUCCESS;
 }
@@ -2068,7 +2046,6 @@ static int op_pipe(struct IndexSharedData *shared, struct IndexPrivateData *priv
   mutt_pipe_message(shared->mailbox, &ea);
   ARRAY_FREE(&ea);
 
-#ifdef USE_IMAP
   /* in an IMAP folder index with imap_peek=no, piping could change
    * new or old messages status to read. Redraw what's needed.  */
   const bool c_imap_peek = cs_subset_bool(shared->sub, "imap_peek");
@@ -2076,7 +2053,6 @@ static int op_pipe(struct IndexSharedData *shared, struct IndexPrivateData *priv
   {
     menu_queue_redraw(priv->menu, (priv->tag_prefix ? MENU_REDRAW_INDEX : MENU_REDRAW_CURRENT));
   }
-#endif
 
   return FR_SUCCESS;
 }
@@ -2107,7 +2083,6 @@ static int op_print(struct IndexSharedData *shared, struct IndexPrivateData *pri
   mutt_print_message(shared->mailbox, &ea);
   ARRAY_FREE(&ea);
 
-#ifdef USE_IMAP
   /* in an IMAP folder index with imap_peek=no, printing could change
    * new or old messages status to read. Redraw what's needed.  */
   const bool c_imap_peek = cs_subset_bool(shared->sub, "imap_peek");
@@ -2115,7 +2090,6 @@ static int op_print(struct IndexSharedData *shared, struct IndexPrivateData *pri
   {
     menu_queue_redraw(priv->menu, (priv->tag_prefix ? MENU_REDRAW_INDEX : MENU_REDRAW_CURRENT));
   }
-#endif
 
   return FR_SUCCESS;
 }
@@ -2546,7 +2520,6 @@ static int op_autocrypt_acct_menu(struct IndexSharedData *shared,
 }
 #endif
 
-#ifdef USE_IMAP
 /**
  * op_main_imap_fetch - Force retrieval of mail from IMAP server - Implements ::index_function_t - @ingroup index_function_api
  */
@@ -2591,9 +2564,7 @@ static int op_main_imap_logout_all(struct IndexSharedData *shared,
 
   return FR_SUCCESS;
 }
-#endif
 
-#ifdef USE_NNTP
 /**
  * op_catchup - Mark all articles in newsgroup as read - Implements ::index_function_t - @ingroup index_function_api
  */
@@ -2910,7 +2881,6 @@ static int op_post(struct IndexSharedData *shared, struct IndexPrivateData *priv
 
   return op_reply(shared, priv, OP_REPLY);
 }
-#endif
 
 #ifdef USE_NOTMUCH
 /**
@@ -3073,7 +3043,6 @@ static int op_main_windowed_vfolder(struct IndexSharedData *shared,
 }
 #endif
 
-#ifdef USE_POP
 /**
  * op_main_fetch_mail - Retrieve mail from POP server - Implements ::index_function_t - @ingroup index_function_api
  */
@@ -3084,7 +3053,6 @@ static int op_main_fetch_mail(struct IndexSharedData *shared,
   menu_queue_redraw(priv->menu, MENU_REDRAW_FULL);
   return FR_SUCCESS;
 }
-#endif
 
 // -----------------------------------------------------------------------------
 
@@ -3149,6 +3117,7 @@ static const struct IndexFunction IndexFunctions[] = {
   { OP_ALIAS_DIALOG,                        op_alias_dialog,                      CHECK_NO_FLAGS },
   { OP_ATTACHMENT_EDIT_TYPE,                op_attachment_edit_type,              CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_BOUNCE_MESSAGE,                      op_bounce_message,                    CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
+  { OP_CATCHUP,                             op_catchup,                           CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY },
   { OP_CHECK_TRADITIONAL,                   op_check_traditional,                 CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_COMPOSE_TO_SENDER,                   op_compose_to_sender,                 CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_COPY_MESSAGE,                        op_save,                              CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
@@ -3170,8 +3139,13 @@ static const struct IndexFunction IndexFunctions[] = {
   { OP_EXIT,                                op_exit,                              CHECK_NO_FLAGS },
   { OP_EXTRACT_KEYS,                        op_extract_keys,                      CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_FLAG_MESSAGE,                        op_flag_message,                      CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY | CHECK_VISIBLE },
+  { OP_FOLLOWUP,                            op_post,                              CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_FORGET_PASSPHRASE,                   op_forget_passphrase,                 CHECK_NO_FLAGS },
   { OP_FORWARD_MESSAGE,                     op_forward_message,                   CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
+  { OP_FORWARD_TO_GROUP,                    op_post,                              CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
+  { OP_GET_CHILDREN,                        op_get_children,                      CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY | CHECK_VISIBLE },
+  { OP_GET_MESSAGE,                         op_get_message,                       CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_READONLY },
+  { OP_GET_PARENT,                          op_get_message,                       CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_GROUP_CHAT_REPLY,                    op_group_reply,                       CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_GROUP_REPLY,                         op_group_reply,                       CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_JUMP,                                op_jump,                              CHECK_IN_MAILBOX },
@@ -3194,10 +3168,15 @@ static const struct IndexFunction IndexFunctions[] = {
   { OP_MAIN_BREAK_THREAD,                   op_main_break_thread,                 CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY | CHECK_VISIBLE },
   { OP_MAIN_CHANGE_FOLDER,                  op_main_change_folder,                CHECK_NO_FLAGS },
   { OP_MAIN_CHANGE_FOLDER_READONLY,         op_main_change_folder,                CHECK_NO_FLAGS },
+  { OP_MAIN_CHANGE_GROUP,                   op_main_change_group,                 CHECK_NO_FLAGS },
+  { OP_MAIN_CHANGE_GROUP_READONLY,          op_main_change_group,                 CHECK_NO_FLAGS },
   { OP_MAIN_CLEAR_FLAG,                     op_main_set_flag,                     CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY | CHECK_VISIBLE },
   { OP_MAIN_COLLAPSE_ALL,                   op_main_collapse_all,                 CHECK_IN_MAILBOX },
   { OP_MAIN_COLLAPSE_THREAD,                op_main_collapse_thread,              CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_MAIN_DELETE_PATTERN,                 op_main_delete_pattern,               CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_READONLY },
+  { OP_MAIN_FETCH_MAIL,                     op_main_fetch_mail,                   CHECK_ATTACH },
+  { OP_MAIN_IMAP_FETCH,                     op_main_imap_fetch,                   CHECK_NO_FLAGS },
+  { OP_MAIN_IMAP_LOGOUT_ALL,                op_main_imap_logout_all,              CHECK_NO_FLAGS },
   { OP_MAIN_LIMIT,                          op_main_limit,                        CHECK_IN_MAILBOX },
   { OP_MAIN_LINK_THREADS,                   op_main_link_threads,                 CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY | CHECK_VISIBLE },
   { OP_MAIN_MODIFY_TAGS,                    op_main_modify_tags,                  CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY | CHECK_VISIBLE },
@@ -3229,6 +3208,7 @@ static const struct IndexFunction IndexFunctions[] = {
   { OP_MARK_MSG,                            op_mark_msg,                          CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_NEXT_ENTRY,                          op_next_entry,                        CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_PIPE,                                op_pipe,                              CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
+  { OP_POST,                                op_post,                              CHECK_ATTACH | CHECK_IN_MAILBOX },
   { OP_PREV_ENTRY,                          op_prev_entry,                        CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_PRINT,                               op_print,                             CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_PURGE_MESSAGE,                       op_delete,                            CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY | CHECK_VISIBLE },
@@ -3236,6 +3216,7 @@ static const struct IndexFunction IndexFunctions[] = {
   { OP_QUERY,                               op_query,                             CHECK_ATTACH },
   { OP_QUIT,                                op_quit,                              CHECK_NO_FLAGS },
   { OP_RECALL_MESSAGE,                      op_recall_message,                    CHECK_ATTACH },
+  { OP_RECONSTRUCT_THREAD,                  op_get_children,                      CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY | CHECK_VISIBLE },
   { OP_REPLY,                               op_reply,                             CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_RESEND,                              op_resend,                            CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
   { OP_SAVE,                                op_save,                              CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
@@ -3259,22 +3240,6 @@ static const struct IndexFunction IndexFunctions[] = {
 #ifdef USE_AUTOCRYPT
   { OP_AUTOCRYPT_ACCT_MENU,                 op_autocrypt_acct_menu,               CHECK_NO_FLAGS },
 #endif
-#ifdef USE_IMAP
-  { OP_MAIN_IMAP_FETCH,                     op_main_imap_fetch,                   CHECK_NO_FLAGS },
-  { OP_MAIN_IMAP_LOGOUT_ALL,                op_main_imap_logout_all,              CHECK_NO_FLAGS },
-#endif
-#ifdef USE_NNTP
-  { OP_CATCHUP,                             op_catchup,                           CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY },
-  { OP_FOLLOWUP,                            op_post,                              CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
-  { OP_FORWARD_TO_GROUP,                    op_post,                              CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
-  { OP_GET_CHILDREN,                        op_get_children,                      CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY | CHECK_VISIBLE },
-  { OP_GET_MESSAGE,                         op_get_message,                       CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_READONLY },
-  { OP_GET_PARENT,                          op_get_message,                       CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
-  { OP_MAIN_CHANGE_GROUP,                   op_main_change_group,                 CHECK_NO_FLAGS },
-  { OP_MAIN_CHANGE_GROUP_READONLY,          op_main_change_group,                 CHECK_NO_FLAGS },
-  { OP_POST,                                op_post,                              CHECK_ATTACH | CHECK_IN_MAILBOX },
-  { OP_RECONSTRUCT_THREAD,                  op_get_children,                      CHECK_ATTACH | CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_READONLY | CHECK_VISIBLE },
-#endif
 #ifdef USE_NOTMUCH
   { OP_MAIN_CHANGE_VFOLDER,                 op_main_change_folder,                CHECK_NO_FLAGS },
   { OP_MAIN_ENTIRE_THREAD,                  op_main_entire_thread,                CHECK_IN_MAILBOX | CHECK_MSGCOUNT | CHECK_VISIBLE },
@@ -3283,9 +3248,6 @@ static const struct IndexFunction IndexFunctions[] = {
   { OP_MAIN_WINDOWED_VFOLDER_BACKWARD,      op_main_windowed_vfolder,             CHECK_IN_MAILBOX },
   { OP_MAIN_WINDOWED_VFOLDER_FORWARD,       op_main_windowed_vfolder,             CHECK_IN_MAILBOX },
   { OP_MAIN_WINDOWED_VFOLDER_RESET,         op_main_windowed_vfolder,             CHECK_IN_MAILBOX },
-#endif
-#ifdef USE_POP
-  { OP_MAIN_FETCH_MAIL,                     op_main_fetch_mail,                   CHECK_ATTACH },
 #endif
   { 0, NULL, CHECK_NO_FLAGS },
   // clang-format on

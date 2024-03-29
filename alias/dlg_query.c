@@ -3,9 +3,9 @@
  * Routines for querying an external address book
  *
  * @authors
- * Copyright (C) 1996-2000,2003,2013 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -91,7 +91,7 @@
 #include "alias.h"
 #include "format_flags.h"
 #include "functions.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "gui.h"
 #include "mutt_logging.h"
 #include "muttlib.h"
@@ -148,6 +148,7 @@ bool alias_to_addrlist(struct AddressList *al, struct Alias *alias)
  * | \%e     | Extra information
  * | \%n     | Destination name
  * | \%t     | `*` if current entry is tagged, a space otherwise
+ * | \%Y     | Comma-separated tags
  */
 static const char *query_format_str(char *buf, size_t buflen, size_t col, int cols,
                                     char op, const char *src, const char *prec,
@@ -175,7 +176,7 @@ static const char *query_format_str(char *buf, size_t buflen, size_t col, int co
         tmp[len] = '>';
         tmp[len + 1] = '\0';
       }
-      mutt_format_s(buf, buflen, prec, tmp);
+      mutt_format(buf, buflen, prec, tmp, false);
       break;
     }
     case 'c':
@@ -184,17 +185,25 @@ static const char *query_format_str(char *buf, size_t buflen, size_t col, int co
       break;
     case 'e':
       if (!optional)
-        mutt_format_s(buf, buflen, prec, NONULL(alias->comment));
+        mutt_format(buf, buflen, prec, NONULL(alias->comment), false);
       else if (!alias->comment || (*alias->comment == '\0'))
         optional = false;
       break;
     case 'n':
-      mutt_format_s(buf, buflen, prec, NONULL(alias->name));
+      mutt_format(buf, buflen, prec, NONULL(alias->name), false);
       break;
     case 't':
       snprintf(fmt, sizeof(fmt), "%%%sc", prec);
       snprintf(buf, buflen, fmt, av->is_tagged ? '*' : ' ');
       break;
+    case 'Y':
+    {
+      struct Buffer *tags = buf_pool_get();
+      alias_tags_to_buffer(&av->alias->tags, tags);
+      mutt_format(buf, buflen, prec, buf_string(tags), false);
+      buf_pool_release(&tags);
+      break;
+    }
     default:
       snprintf(fmt, sizeof(fmt), "%%%sc", prec);
       snprintf(buf, buflen, fmt, op);
@@ -221,7 +230,7 @@ static const char *query_format_str(char *buf, size_t buflen, size_t col, int co
  *
  * @sa $query_format, query_format_str()
  */
-static void query_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
+static void query_make_entry(struct Menu *menu, int line, struct Buffer *buf)
 {
   const struct AliasMenuData *mdata = menu->mdata;
   const struct AliasViewArray *ava = &mdata->ava;
@@ -229,7 +238,7 @@ static void query_make_entry(struct Menu *menu, char *buf, size_t buflen, int li
 
   const char *const c_query_format = cs_subset_string(mdata->sub, "query_format");
 
-  mutt_expando_format(buf, buflen, 0, menu->win->state.cols, NONULL(c_query_format),
+  mutt_expando_format(buf->data, buf->dsize, 0, menu->win->state.cols, NONULL(c_query_format),
                       query_format_str, (intptr_t) av, MUTT_FORMAT_ARROWCURSOR);
 }
 
@@ -298,7 +307,7 @@ int query_run(const char *s, bool verbose, struct AliasList *al, const struct Co
       {
         alias->name = mutt_str_dup(p);
         p = strtok(NULL, "\t\n");
-        alias->comment = mutt_str_dup(p);
+        parse_alias_comments(alias, p);
       }
       TAILQ_INSERT_TAIL(al, alias, entries);
     }
@@ -526,7 +535,7 @@ done:
   FREE(&mdata.title);
   FREE(&mdata.limit);
   search_state_free(&mdata.search_state);
-  aliaslist_free(&al);
+  aliaslist_clear(&al);
   return 0;
 }
 
@@ -594,6 +603,6 @@ done:
   FREE(&mdata.title);
   FREE(&mdata.limit);
   search_state_free(&mdata.search_state);
-  aliaslist_free(&al);
+  aliaslist_clear(&al);
   buf_pool_release(&buf);
 }

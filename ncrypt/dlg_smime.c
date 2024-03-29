@@ -3,7 +3,7 @@
  * SMIME Key Selection Dialog
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -107,7 +107,7 @@ static char *smime_key_flags(KeyFlags flags)
 /**
  * smime_make_entry - Format an S/MIME Key for the Menu - Implements Menu::make_entry() - @ingroup menu_make_entry
  */
-static void smime_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
+static void smime_make_entry(struct Menu *menu, int line, struct Buffer *buf)
 {
   struct SmimeKey **table = menu->mdata;
   struct SmimeKey *key = table[line];
@@ -170,8 +170,8 @@ static void smime_make_entry(struct Menu *menu, char *buf, size_t buflen, int li
          Expired, Invalid, Revoked, Trusted, Unverified, Verified, and Unknown.  */
       truststate = _("Unknown   ");
   }
-  snprintf(buf, buflen, " 0x%s %s %s %-35.35s %s", key->hash,
-           smime_key_flags(key->flags), truststate, key->email, key->label);
+  buf_printf(buf, " 0x%s %s %s %-35.35s %s", key->hash,
+             smime_key_flags(key->flags), truststate, key->email, key->label);
 }
 
 /**

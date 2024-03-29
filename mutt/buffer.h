@@ -4,7 +4,9 @@
  *
  * @authors
  * Copyright (C) 2017 Ian Zimmerman <itz@primate.net>
- * Copyright (C) 2017-2019 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Anna Figueiredo Gomes <navi@vlhl.dev>
+ * Copyright (C) 2023 Simon Reichel <simonreichel@giese-optik.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -57,6 +59,7 @@ bool           buf_str_equal       (const struct Buffer *a, const struct Buffer 
 bool           buf_istr_equal      (const struct Buffer *a, const struct Buffer *b);
 int            buf_coll            (const struct Buffer *a, const struct Buffer *b);
 size_t         buf_startswith      (const struct Buffer *buf, const char *prefix);
+const char    *buf_rfind           (const struct Buffer *buf, const char *str);
 
 // Functions that APPEND to a Buffer
 size_t         buf_addch           (struct Buffer *buf, char c);
@@ -64,6 +67,7 @@ size_t         buf_addstr          (struct Buffer *buf, const char *s);
 size_t         buf_addstr_n        (struct Buffer *buf, const char *s, size_t len);
 int            buf_add_printf      (struct Buffer *buf, const char *fmt, ...)
                                     __attribute__((__format__(__printf__, 2, 3)));
+void           buf_join_str        (struct Buffer *str, const char *item, char sep);
 
 // Functions that INSERT into a Buffer
 size_t         buf_insert          (struct Buffer *buf, size_t offset, const char *s);
@@ -79,7 +83,7 @@ size_t         buf_strcpy_n        (struct Buffer *buf, const char *s, size_t le
 size_t         buf_substrcpy       (struct Buffer *buf, const char *beg, const char *end);
 void           buf_dequote_comment (struct Buffer *buf);
 void           buf_lower           (struct Buffer *buf);
-void           buf_upper           (struct Buffer *buf);
+void           buf_inline_replace  (struct Buffer *buf, size_t pos, size_t len, const char *str);
 
 /**
  * buf_string - Convert a buffer to a const char * "string"

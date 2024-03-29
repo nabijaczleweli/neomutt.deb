@@ -3,7 +3,8 @@
  * SASL authentication support
  *
  * @authors
- * Copyright (C) 2000-2008,2012,2014 Brendan Cully <brendan@kublai.com>
+ * Copyright (C) 2017-2024 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019 Ian Zimmerman <itz@no-use.mooo.com>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -273,7 +274,7 @@ static int mutt_sasl_cb_log(void *context, int priority, const char *message)
  *
  * Call before doing an SASL exchange (initialises library if necessary).
  */
-static int mutt_sasl_start(void)
+int mutt_sasl_start(void)
 {
   static bool sasl_init = false;
 

@@ -3,7 +3,8 @@
  * Config used by libcompose
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Matthew Hughes <matthewhughes934@gmail.com>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -52,7 +53,7 @@ static struct ConfigDef ComposeVars[] = {
   { "edit_headers", DT_BOOL, false, 0, NULL,
     "Let the user edit the email headers whilst editing an email"
   },
-  { "ispell", DT_STRING|DT_COMMAND, IP ISPELL, 0, NULL,
+  { "ispell", DT_STRING|D_STRING_COMMAND, IP ISPELL, 0, NULL,
     "External command to perform spell-checking"
   },
   { "postpone", DT_QUAD, MUTT_ASKYES, 0, NULL,
@@ -67,5 +68,5 @@ static struct ConfigDef ComposeVars[] = {
  */
 bool config_init_compose(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, ComposeVars, DT_NO_FLAGS);
+  return cs_register_variables(cs, ComposeVars);
 }

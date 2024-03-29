@@ -3,7 +3,7 @@
  * Edit a string
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2022-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -23,7 +23,7 @@
 /**
  * @page lib_editor Edit a string
  *
- * Select a Mailbox from a list
+ * Edit a string
  *
  * | File                | Description                |
  * | :------------------ | :------------------------- |

@@ -3,7 +3,8 @@
  * Browser functions
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -30,7 +31,6 @@
 #ifdef _MAKEDOC
 #include "docs/makedoc_defs.h"
 #else
-#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -45,25 +45,21 @@
 #include "attach/lib.h"
 #include "editor/lib.h"
 #include "history/lib.h"
+#include "imap/lib.h"
 #include "key/lib.h"
 #include "menu/lib.h"
+#include "nntp/lib.h"
 #include "pattern/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "functions.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "mutt_mailbox.h"
 #include "muttlib.h"
 #include "mx.h"
-#include "private_data.h"
-#ifdef USE_IMAP
-#include "imap/lib.h"
-#endif
-#ifdef USE_NNTP
-#include "nntp/lib.h"
 #include "nntp/adata.h"
 #include "nntp/mdata.h"
-#endif
+#include "private_data.h"
 #endif
 
 /// Error message for unavailable functions
@@ -76,15 +72,11 @@ static int op_subscribe_pattern(struct BrowserPrivateData *priv, int op);
  * OpBrowser - Functions for the file Browser Menu
  */
 const struct MenuFuncOp OpBrowser[] = { /* map: browser */
-#ifdef USE_NNTP
   { "catchup",                       OP_CATCHUP },
-#endif
   { "change-dir",                    OP_CHANGE_DIRECTORY },
   { "check-new",                     OP_CHECK_NEW },
-#ifdef USE_IMAP
   { "create-mailbox",                OP_CREATE_MAILBOX },
   { "delete-mailbox",                OP_DELETE_MAILBOX },
-#endif
   { "descend-directory",             OP_DESCEND_DIRECTORY },
   { "display-filename",              OP_BROWSER_TELL },
   { "enter-mask",                    OP_ENTER_MASK },
@@ -92,34 +84,18 @@ const struct MenuFuncOp OpBrowser[] = { /* map: browser */
   { "goto-folder",                   OP_BROWSER_GOTO_FOLDER },
   { "goto-parent",                   OP_GOTO_PARENT },
   { "mailbox-list",                  OP_MAILBOX_LIST },
-#ifdef USE_NNTP
   { "reload-active",                 OP_LOAD_ACTIVE },
-#endif
-#ifdef USE_IMAP
   { "rename-mailbox",                OP_RENAME_MAILBOX },
-#endif
   { "select-new",                    OP_BROWSER_NEW_FILE },
   { "sort",                          OP_SORT },
   { "sort-reverse",                  OP_SORT_REVERSE },
-#if defined(USE_IMAP) || defined(USE_NNTP)
   { "subscribe",                     OP_BROWSER_SUBSCRIBE },
-#endif
-#ifdef USE_NNTP
   { "subscribe-pattern",             OP_SUBSCRIBE_PATTERN },
-#endif
   { "toggle-mailboxes",              OP_TOGGLE_MAILBOXES },
-#ifdef USE_IMAP
   { "toggle-subscribed",             OP_BROWSER_TOGGLE_LSUB },
-#endif
-#ifdef USE_NNTP
   { "uncatchup",                     OP_UNCATCHUP },
-#endif
-#if defined(USE_IMAP) || defined(USE_NNTP)
   { "unsubscribe",                   OP_BROWSER_UNSUBSCRIBE },
-#endif
-#ifdef USE_NNTP
   { "unsubscribe-pattern",           OP_UNSUBSCRIBE_PATTERN },
-#endif
   { "view-file",                     OP_BROWSER_VIEW_FILE },
   // Deprecated
   { "buffy-list",                    OP_MAILBOX_LIST },
@@ -132,31 +108,19 @@ const struct MenuFuncOp OpBrowser[] = { /* map: browser */
 const struct MenuOpSeq BrowserDefaultBindings[] = { /* map: browser */
   { OP_BROWSER_GOTO_FOLDER,                "=" },
   { OP_BROWSER_NEW_FILE,                   "N" },
-#if defined(USE_IMAP) || defined(USE_NNTP)
   { OP_BROWSER_SUBSCRIBE,                  "s" },
-#endif
   { OP_BROWSER_TELL,                       "@" },
-#ifdef USE_IMAP
   { OP_BROWSER_TOGGLE_LSUB,                "T" },
-#endif
-#if defined(USE_IMAP) || defined(USE_NNTP)
   { OP_BROWSER_UNSUBSCRIBE,                "u" },
-#endif
   { OP_BROWSER_VIEW_FILE,                  " " },              // <Space>
   { OP_CHANGE_DIRECTORY,                   "c" },
-#ifdef USE_IMAP
   { OP_CREATE_MAILBOX,                     "C" },
   { OP_DELETE_MAILBOX,                     "d" },
-#endif
   { OP_ENTER_MASK,                         "m" },
   { OP_EXIT,                               "q" },
   { OP_GOTO_PARENT,                        "p" },
-#ifdef USE_NNTP
-#endif
   { OP_MAILBOX_LIST,                       "." },
-#ifdef USE_IMAP
   { OP_RENAME_MAILBOX,                     "r" },
-#endif
   { OP_SORT,                               "o" },
   { OP_SORT_REVERSE,                       "O" },
   { OP_TOGGLE_MAILBOXES,                   "\t" },             // <Tab>
@@ -179,10 +143,7 @@ void destroy_state(struct BrowserState *state)
     FREE(&ff->desc);
   }
   ARRAY_FREE(&state->entry);
-
-#ifdef USE_IMAP
   FREE(&state->folder);
-#endif
 }
 
 // -----------------------------------------------------------------------------
@@ -210,7 +171,6 @@ static int op_browser_new_file(struct BrowserPrivateData *priv, int op)
   return FR_DONE;
 }
 
-#if defined(USE_IMAP) || defined(USE_NNTP)
 /**
  * op_browser_subscribe - Subscribe to current mbox (IMAP/NNTP only) - Implements ::browser_function_t - @ingroup browser_function_api
  *
@@ -249,7 +209,6 @@ static int op_browser_subscribe(struct BrowserPrivateData *priv, int op)
     nntp_clear_cache(adata);
     nntp_newsrc_close(adata);
   }
-#ifdef USE_IMAP
   else
   {
     if (ARRAY_EMPTY(&priv->state.entry))
@@ -258,17 +217,15 @@ static int op_browser_subscribe(struct BrowserPrivateData *priv, int op)
       return FR_ERROR;
     }
 
-    char tmp2[256];
+    char tmp2[256] = { 0 };
     int index = menu_get_index(priv->menu);
     struct FolderFile *ff = ARRAY_GET(&priv->state.entry, index);
     mutt_str_copy(tmp2, ff->name, sizeof(tmp2));
     mutt_expand_path(tmp2, sizeof(tmp2));
     imap_subscribe(tmp2, (op == OP_BROWSER_SUBSCRIBE));
   }
-#endif
   return FR_SUCCESS;
 }
-#endif
 
 /**
  * op_browser_tell - Display the currently selected file's name - Implements ::browser_function_t - @ingroup browser_function_api
@@ -283,7 +240,6 @@ static int op_browser_tell(struct BrowserPrivateData *priv, int op)
   return FR_SUCCESS;
 }
 
-#ifdef USE_IMAP
 /**
  * op_browser_toggle_lsub - Toggle view all/subscribed mailboxes (IMAP only) - Implements ::browser_function_t - @ingroup browser_function_api
  */
@@ -294,7 +250,6 @@ static int op_browser_toggle_lsub(struct BrowserPrivateData *priv, int op)
   mutt_unget_op(OP_CHECK_NEW);
   return FR_SUCCESS;
 }
-#endif
 
 /**
  * op_browser_view_file - View file - Implements ::browser_function_t - @ingroup browser_function_api
@@ -309,17 +264,14 @@ static int op_browser_view_file(struct BrowserPrivateData *priv, int op)
 
   int index = menu_get_index(priv->menu);
   struct FolderFile *ff = ARRAY_GET(&priv->state.entry, index);
-#ifdef USE_IMAP
   if (ff->selectable)
   {
     buf_strcpy(priv->file, ff->name);
     priv->done = true;
     return FR_DONE;
   }
-  else
-#endif
-      if (S_ISDIR(ff->mode) ||
-          (S_ISLNK(ff->mode) && link_is_dir(buf_string(&LastDir), ff->name)))
+  else if (S_ISDIR(ff->mode) ||
+           (S_ISLNK(ff->mode) && link_is_dir(buf_string(&LastDir), ff->name)))
   {
     mutt_error(_("Can't view a directory"));
     return FR_ERROR;
@@ -344,7 +296,6 @@ static int op_browser_view_file(struct BrowserPrivateData *priv, int op)
   return FR_ERROR;
 }
 
-#ifdef USE_NNTP
 /**
  * op_catchup - Mark all articles in newsgroup as read - Implements ::browser_function_t - @ingroup browser_function_api
  */
@@ -380,7 +331,6 @@ static int op_catchup(struct BrowserPrivateData *priv, int op)
   nntp_newsrc_close(CurrentNewsSrv);
   return FR_ERROR;
 }
-#endif
 
 /**
  * op_change_directory - Change directories - Implements ::browser_function_t - @ingroup browser_function_api
@@ -391,16 +341,12 @@ static int op_catchup(struct BrowserPrivateData *priv, int op)
  */
 static int op_change_directory(struct BrowserPrivateData *priv, int op)
 {
-#ifdef USE_NNTP
   if (OptNews)
     return FR_NOT_IMPL;
-#endif
 
   struct Buffer *buf = buf_pool_get();
   buf_copy(buf, &LastDir);
-#ifdef USE_IMAP
   if (!priv->state.imap_browse)
-#endif
   {
     /* add '/' at the end of the directory name if not already there */
     size_t len = buf_len(buf);
@@ -428,7 +374,6 @@ static int op_change_directory(struct BrowserPrivateData *priv, int op)
   {
     priv->state.is_mailbox_list = false;
     buf_expand_path(buf);
-#ifdef USE_IMAP
     if (imap_path_probe(buf_string(buf), NULL) == MUTT_IMAP)
     {
       buf_copy(&LastDir, buf);
@@ -443,7 +388,6 @@ static int op_change_directory(struct BrowserPrivateData *priv, int op)
       init_menu(&priv->state, priv->menu, priv->mailbox, priv->sbar);
     }
     else
-#endif
     {
       if (buf_string(buf)[0] != '/')
       {
@@ -502,7 +446,6 @@ static int op_change_directory(struct BrowserPrivateData *priv, int op)
   return FR_ERROR;
 }
 
-#ifdef USE_IMAP
 /**
  * op_create_mailbox - Create a new mailbox (IMAP only) - Implements ::browser_function_t - @ingroup browser_function_api
  */
@@ -531,9 +474,7 @@ static int op_create_mailbox(struct BrowserPrivateData *priv, int op)
 
   return FR_SUCCESS;
 }
-#endif
 
-#ifdef USE_IMAP
 /**
  * op_delete_mailbox - Delete the current mailbox (IMAP only) - Implements ::browser_function_t - @ingroup browser_function_api
  */
@@ -581,7 +522,6 @@ static int op_delete_mailbox(struct BrowserPrivateData *priv, int op)
 
   return FR_SUCCESS;
 }
-#endif
 
 /**
  * op_enter_mask - Enter a file mask - Implements ::browser_function_t - @ingroup browser_function_api
@@ -604,22 +544,21 @@ static int op_enter_mask(struct BrowserPrivateData *priv, int op)
   if (buf_is_empty(buf))
     buf_strcpy(buf, ".");
 
-  struct Buffer errmsg = buf_make(256);
-  int rc = cs_subset_str_string_set(NeoMutt->sub, "mask", buf_string(buf), &errmsg);
+  struct Buffer *errmsg = buf_pool_get();
+  int rc = cs_subset_str_string_set(NeoMutt->sub, "mask", buf_string(buf), errmsg);
   buf_pool_release(&buf);
   if (CSR_RESULT(rc) != CSR_SUCCESS)
   {
-    if (!buf_is_empty(&errmsg))
+    if (!buf_is_empty(errmsg))
     {
-      mutt_error("%s", buf_string(&errmsg));
-      buf_dealloc(&errmsg);
+      mutt_error("%s", buf_string(errmsg));
+      buf_pool_release(&errmsg);
     }
     return FR_ERROR;
   }
-  buf_dealloc(&errmsg);
+  buf_pool_release(&errmsg);
 
   destroy_state(&priv->state);
-#ifdef USE_IMAP
   if (priv->state.imap_browse)
   {
     init_state(&priv->state, NULL);
@@ -630,10 +569,8 @@ static int op_enter_mask(struct BrowserPrivateData *priv, int op)
     priv->menu->mdata_free = NULL; // Menu doesn't own the data
     init_menu(&priv->state, priv->menu, priv->mailbox, priv->sbar);
   }
-  else
-#endif
-      if (examine_directory(priv->mailbox, priv->menu, &priv->state,
-                            buf_string(&LastDir), NULL) == 0)
+  else if (examine_directory(priv->mailbox, priv->menu, &priv->state,
+                             buf_string(&LastDir), NULL) == 0)
   {
     init_menu(&priv->state, priv->menu, priv->mailbox, priv->sbar);
   }
@@ -712,11 +649,7 @@ static int op_generic_select_entry(struct BrowserPrivateData *priv, int op)
   int index = menu_get_index(priv->menu);
   struct FolderFile *ff = ARRAY_GET(&priv->state.entry, index);
   if (S_ISDIR(ff->mode) ||
-      (S_ISLNK(ff->mode) && link_is_dir(buf_string(&LastDir), ff->name))
-#ifdef USE_IMAP
-      || ff->inferiors
-#endif
-  )
+      (S_ISLNK(ff->mode) && link_is_dir(buf_string(&LastDir), ff->name)) || ff->inferiors)
   {
     /* make sure this isn't a MH or maildir mailbox */
     struct Buffer *buf = buf_pool_get();
@@ -725,12 +658,10 @@ static int op_generic_select_entry(struct BrowserPrivateData *priv, int op)
       buf_strcpy(buf, ff->name);
       buf_expand_path(buf);
     }
-#ifdef USE_IMAP
     else if (priv->state.imap_browse)
     {
       buf_strcpy(buf, ff->name);
     }
-#endif
     else
     {
       buf_concat_path(buf, buf_string(&LastDir), ff->name);
@@ -739,11 +670,8 @@ static int op_generic_select_entry(struct BrowserPrivateData *priv, int op)
     enum MailboxType type = mx_path_probe(buf_string(buf));
     buf_pool_release(&buf);
 
-    if ((op == OP_DESCEND_DIRECTORY) || (type == MUTT_MAILBOX_ERROR) || (type == MUTT_UNKNOWN)
-#ifdef USE_IMAP
-        || ff->inferiors
-#endif
-    )
+    if ((op == OP_DESCEND_DIRECTORY) || (type == MUTT_MAILBOX_ERROR) ||
+        (type == MUTT_UNKNOWN) || ff->inferiors)
     {
       /* save the old directory */
       buf_copy(priv->OldLastDir, &LastDir);
@@ -780,7 +708,6 @@ static int op_generic_select_entry(struct BrowserPrivateData *priv, int op)
         buf_strcpy(&LastDir, ff->name);
         buf_expand_path(&LastDir);
       }
-#ifdef USE_IMAP
       else if (priv->state.imap_browse)
       {
         buf_strcpy(&LastDir, ff->name);
@@ -794,7 +721,6 @@ static int op_generic_select_entry(struct BrowserPrivateData *priv, int op)
         }
         url_free(&url);
       }
-#endif
       else
       {
         struct Buffer *tmp = buf_pool_get();
@@ -810,7 +736,6 @@ static int op_generic_select_entry(struct BrowserPrivateData *priv, int op)
         priv->kill_prefix = false;
       }
       priv->state.is_mailbox_list = false;
-#ifdef USE_IMAP
       if (priv->state.imap_browse)
       {
         init_state(&priv->state, NULL);
@@ -821,7 +746,6 @@ static int op_generic_select_entry(struct BrowserPrivateData *priv, int op)
         priv->menu->mdata_free = NULL; // Menu doesn't own the data
       }
       else
-#endif
       {
         if (examine_directory(priv->mailbox, priv->menu, &priv->state,
                               buf_string(&LastDir), buf_string(priv->prefix)) == -1)
@@ -831,7 +755,7 @@ static int op_generic_select_entry(struct BrowserPrivateData *priv, int op)
           if (examine_directory(priv->mailbox, priv->menu, &priv->state,
                                 buf_string(&LastDir), buf_string(priv->prefix)) == -1)
           {
-            buf_strcpy(&LastDir, NONULL(HomeDir));
+            buf_strcpy(&LastDir, HomeDir);
             priv->done = true;
             return FR_DONE;
           }
@@ -853,15 +777,15 @@ static int op_generic_select_entry(struct BrowserPrivateData *priv, int op)
     return FR_ERROR;
   }
 
-  if (priv->state.is_mailbox_list || OptNews) /* USE_NNTP */
+  if (priv->state.is_mailbox_list || OptNews)
   {
     buf_strcpy(priv->file, ff->name);
     buf_expand_path(priv->file);
   }
-#ifdef USE_IMAP
   else if (priv->state.imap_browse)
+  {
     buf_strcpy(priv->file, ff->name);
-#endif
+  }
   else
   {
     buf_concat_path(priv->file, buf_string(&LastDir), ff->name);
@@ -870,7 +794,6 @@ static int op_generic_select_entry(struct BrowserPrivateData *priv, int op)
   return op_exit(priv, op);
 }
 
-#ifdef USE_NNTP
 /**
  * op_load_active - Load list of all newsgroups from NNTP server - Implements ::browser_function_t - @ingroup browser_function_api
  */
@@ -907,7 +830,6 @@ static int op_load_active(struct BrowserPrivateData *priv, int op)
   init_menu(&priv->state, priv->menu, priv->mailbox, priv->sbar);
   return FR_SUCCESS;
 }
-#endif
 
 /**
  * op_mailbox_list - List mailboxes with new mail - Implements ::browser_function_t - @ingroup browser_function_api
@@ -918,7 +840,6 @@ static int op_mailbox_list(struct BrowserPrivateData *priv, int op)
   return FR_SUCCESS;
 }
 
-#ifdef USE_IMAP
 /**
  * op_rename_mailbox - Rename the current mailbox (IMAP only) - Implements ::browser_function_t - @ingroup browser_function_api
  */
@@ -947,7 +868,6 @@ static int op_rename_mailbox(struct BrowserPrivateData *priv, int op)
 
   return FR_SUCCESS;
 }
-#endif
 
 /**
  * op_sort - Sort messages - Implements ::browser_function_t - @ingroup browser_function_api
@@ -1014,7 +934,6 @@ static int op_sort(struct BrowserPrivateData *priv, int op)
   return FR_SUCCESS;
 }
 
-#ifdef USE_NNTP
 /**
  * op_subscribe_pattern - Subscribe to newsgroups matching a pattern - Implements ::browser_function_t - @ingroup browser_function_api
  *
@@ -1031,7 +950,7 @@ static int op_subscribe_pattern(struct BrowserPrivateData *priv, int op)
   regex_t rx = { 0 };
   int index = menu_get_index(priv->menu);
 
-  char tmp2[256];
+  char tmp2[256] = { 0 };
 
   struct Buffer *buf = buf_pool_get();
   if (op == OP_SUBSCRIBE_PATTERN)
@@ -1099,7 +1018,6 @@ static int op_subscribe_pattern(struct BrowserPrivateData *priv, int op)
   regfree(&rx);
   return FR_SUCCESS;
 }
-#endif
 
 /**
  * op_toggle_mailboxes - Toggle whether to browse mailboxes or all files - Implements ::browser_function_t - @ingroup browser_function_api
@@ -1154,7 +1072,6 @@ static int op_toggle_mailboxes(struct BrowserPrivateData *priv, int op)
   {
     examine_mailboxes(priv->mailbox, priv->menu, &priv->state);
   }
-#ifdef USE_IMAP
   else if (imap_path_probe(buf_string(&LastDir), NULL) == MUTT_IMAP)
   {
     init_state(&priv->state, NULL);
@@ -1164,7 +1081,6 @@ static int op_toggle_mailboxes(struct BrowserPrivateData *priv, int op)
     priv->menu->mdata = &priv->state.entry;
     priv->menu->mdata_free = NULL; // Menu doesn't own the data
   }
-#endif
   else if (examine_directory(priv->mailbox, priv->menu, &priv->state,
                              buf_string(&LastDir), buf_string(priv->prefix)) == -1)
   {
@@ -1186,48 +1102,30 @@ static const struct BrowserFunction BrowserFunctions[] = {
   // clang-format off
   { OP_BROWSER_GOTO_FOLDER,  op_toggle_mailboxes },
   { OP_BROWSER_NEW_FILE,     op_browser_new_file },
-#if defined(USE_IMAP) || defined(USE_NNTP)
   { OP_BROWSER_SUBSCRIBE,    op_browser_subscribe },
-#endif
   { OP_BROWSER_TELL,         op_browser_tell },
-#ifdef USE_IMAP
   { OP_BROWSER_TOGGLE_LSUB,  op_browser_toggle_lsub },
-#endif
-#if defined(USE_IMAP) || defined(USE_NNTP)
   { OP_BROWSER_UNSUBSCRIBE,  op_browser_subscribe },
-#endif
   { OP_BROWSER_VIEW_FILE,    op_browser_view_file },
-#ifdef USE_NNTP
   { OP_CATCHUP,              op_catchup },
-#endif
   { OP_CHANGE_DIRECTORY,     op_change_directory },
   { OP_CHECK_NEW,            op_toggle_mailboxes },
-#ifdef USE_IMAP
   { OP_CREATE_MAILBOX,       op_create_mailbox },
   { OP_DELETE_MAILBOX,       op_delete_mailbox },
-#endif
   { OP_DESCEND_DIRECTORY,    op_generic_select_entry },
   { OP_ENTER_MASK,           op_enter_mask },
   { OP_EXIT,                 op_exit },
   { OP_GENERIC_SELECT_ENTRY, op_generic_select_entry },
   { OP_GOTO_PARENT,          op_change_directory },
-#ifdef USE_NNTP
   { OP_LOAD_ACTIVE,          op_load_active },
-#endif
   { OP_MAILBOX_LIST,         op_mailbox_list },
-#ifdef USE_IMAP
   { OP_RENAME_MAILBOX,       op_rename_mailbox },
-#endif
   { OP_SORT,                 op_sort },
   { OP_SORT_REVERSE,         op_sort },
-#ifdef USE_NNTP
   { OP_SUBSCRIBE_PATTERN,    op_subscribe_pattern },
-#endif
   { OP_TOGGLE_MAILBOXES,     op_toggle_mailboxes },
-#ifdef USE_NNTP
   { OP_UNCATCHUP,            op_catchup },
   { OP_UNSUBSCRIBE_PATTERN,  op_subscribe_pattern },
-#endif
   { 0, NULL },
   // clang-format on
 };

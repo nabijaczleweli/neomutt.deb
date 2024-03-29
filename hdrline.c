@@ -4,9 +4,15 @@
  *
  * @authors
  * Copyright (C) 1996-2000,2002,2007 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2016 Richard Russon <rich@flatcap.org>
  * Copyright (C) 2016 Ian Zimmerman <itz@primate.net>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2016-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017 Stefan Assmann <sassmann@kpanic.de>
+ * Copyright (C) 2019 Victor Fernandes <criw@pm.me>
+ * Copyright (C) 2019-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2021 Ashish Panigrahi <ashish.panigrahi@protonmail.com>
+ * Copyright (C) 2023 Tóth János <gomba007@gmail.com>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
+ * Copyright (C) 2024 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -396,8 +402,9 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
                                     intptr_t data, MuttFormatFlags flags)
 {
   struct HdrFormatInfo *hfi = (struct HdrFormatInfo *) data;
-  char fmt[128], tmp[1024];
-  char *p = NULL, *tags = NULL;
+  char fmt[128] = { 0 };
+  char tmp[1024] = { 0 };
+  char *p = NULL;
   bool optional = (flags & MUTT_FORMAT_OPTIONAL);
   const bool threads = mutt_using_threads();
   int is_index = (flags & MUTT_FORMAT_INDEX);
@@ -430,8 +437,8 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         if (reply_to && reply_to->mailbox)
         {
           colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_AUTHOR);
-          mutt_format_s(buf + colorlen, buflen - colorlen, prec,
-                        mutt_addr_for_display(reply_to));
+          mutt_format(buf + colorlen, buflen - colorlen, prec,
+                      mutt_addr_for_display(reply_to), false);
           add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
           break;
         }
@@ -441,22 +448,23 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         if (mutt_mb_get_initials(mutt_get_name(from), tmp, sizeof(tmp)))
         {
           colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_AUTHOR);
-          mutt_format_s(buf + colorlen, buflen - colorlen, prec, tmp);
+          mutt_format(buf + colorlen, buflen - colorlen, prec, tmp, false);
           add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
           break;
         }
       }
-      /* fallthrough */
+      FALLTHROUGH;
 
     case 'a':
       colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_AUTHOR);
       if (from && from->mailbox)
       {
-        mutt_format_s(buf + colorlen, buflen - colorlen, prec, mutt_addr_for_display(from));
+        mutt_format(buf + colorlen, buflen - colorlen, prec,
+                    mutt_addr_for_display(from), false);
       }
       else
       {
-        mutt_format_s(buf + colorlen, buflen - colorlen, prec, "");
+        mutt_format(buf + colorlen, buflen - colorlen, prec, "", false);
       }
       add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       break;
@@ -467,7 +475,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
           first_mailing_list(buf, buflen, &e->env->cc))
       {
         mutt_str_copy(tmp, buf, sizeof(tmp));
-        mutt_format_s(buf, buflen, prec, tmp);
+        mutt_format(buf, buflen, prec, tmp, false);
       }
       else if (optional)
       {
@@ -478,27 +486,29 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
     case 'b':
       if (m)
       {
-        p = strrchr(mailbox_path(m), '/');
+        p = NULL;
 #ifdef USE_NOTMUCH
         if (m->type == MUTT_NOTMUCH)
         {
-          char *rel_path = nm_email_get_folder_rel_db(m, e);
-          if (rel_path)
-            p = rel_path;
+          p = nm_email_get_folder_rel_db(m, e);
         }
 #endif
-
-        if (p)
-          mutt_str_copy(buf, p + 1, buflen);
-        else
-          mutt_str_copy(buf, mailbox_path(m), buflen);
+        if (!p)
+        {
+          p = strrchr(mailbox_path(m), '/');
+          if (p)
+          {
+            p++;
+          }
+        }
+        mutt_str_copy(buf, p ? p : mailbox_path(m), buflen);
       }
       else
       {
         mutt_str_copy(buf, "(null)", buflen);
       }
       mutt_str_copy(tmp, buf, sizeof(tmp));
-      mutt_format_s(buf, buflen, prec, tmp);
+      mutt_format(buf, buflen, prec, tmp, false);
       break;
 
     case 'c':
@@ -512,7 +522,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       {
         mutt_str_pretty_size(tmp, sizeof(tmp), e->body->length);
       }
-      mutt_format_s(buf + colorlen, buflen - colorlen, prec, tmp);
+      mutt_format(buf + colorlen, buflen - colorlen, prec, tmp, false);
       add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       break;
 
@@ -711,7 +721,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
           strftime(tmp, sizeof(tmp), buf, &tm);
 
         colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_DATE);
-        mutt_format_s(buf + colorlen, buflen - colorlen, prec, tmp);
+        mutt_format(buf + colorlen, buflen - colorlen, prec, tmp, false);
         add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
 
         if ((len > 0) && (op != 'd') && (op != 'D')) /* Skip ending op */
@@ -742,7 +752,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       mutt_addrlist_write(&e->env->from, tmpbuf, true);
       mutt_str_copy(tmp, buf_string(tmpbuf), sizeof(tmp));
       buf_pool_release(&tmpbuf);
-      mutt_format_s(buf, buflen, prec, tmp);
+      mutt_format(buf, buflen, prec, tmp, false);
       break;
     }
 
@@ -753,7 +763,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_AUTHOR);
         make_from(e->env, tmp, sizeof(tmp), false,
                   (is_plain ? MUTT_FORMAT_PLAIN : MUTT_FORMAT_NO_FLAGS));
-        mutt_format_s(buf + colorlen, buflen - colorlen, prec, tmp);
+        mutt_format(buf + colorlen, buflen - colorlen, prec, tmp, false);
         add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
 
         if (is_plain)
@@ -766,19 +776,22 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       break;
 
     case 'g':
-      tags = driver_tags_get_transformed(&e->tags);
+    {
+      struct Buffer *tags = buf_pool_get();
+      driver_tags_get_transformed(&e->tags, tags);
       if (!optional)
       {
         colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_TAGS);
-        mutt_format_s(buf + colorlen, buflen - colorlen, prec, NONULL(tags));
+        mutt_format(buf + colorlen, buflen - colorlen, prec, buf_string(tags), false);
         add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       }
-      else if (!tags)
+      else if (buf_is_empty(tags))
       {
         optional = false;
       }
-      FREE(&tags);
+      buf_pool_release(&tags);
       break;
+    }
 
     case 'G':
     {
@@ -794,11 +807,12 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         tag = mutt_hash_find(TagFormats, format);
         if (tag)
         {
-          tags = driver_tags_get_transformed_for(&e->tags, tag);
+          struct Buffer *tags = buf_pool_get();
+          driver_tags_get_transformed_for(&e->tags, tag, tags);
           colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_TAG);
-          mutt_format_s(buf + colorlen, buflen - colorlen, prec, NONULL(tags));
+          mutt_format(buf + colorlen, buflen - colorlen, prec, buf_string(tags), false);
           add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
-          FREE(&tags);
+          buf_pool_release(&tags);
         }
         src++;
       }
@@ -811,10 +825,11 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         tag = mutt_hash_find(TagFormats, format);
         if (tag)
         {
-          tags = driver_tags_get_transformed_for(&e->tags, tag);
-          if (!tags)
+          struct Buffer *tags = buf_pool_get();
+          driver_tags_get_transformed_for(&e->tags, tag, tags);
+          if (buf_is_empty(tags))
             optional = false;
-          FREE(&tags);
+          buf_pool_release(&tags);
         }
       }
       break;
@@ -825,34 +840,36 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       if (optional)
         optional = !buf_is_empty(&e->env->spam);
 
-      mutt_format_s(buf, buflen, prec, buf_string(&e->env->spam));
+      mutt_format(buf, buflen, prec, buf_string(&e->env->spam), false);
       break;
 
     case 'i':
-      mutt_format_s(buf, buflen, prec, e->env->message_id ? e->env->message_id : "<no.id>");
+      mutt_format(buf, buflen, prec,
+                  e->env->message_id ? e->env->message_id : "<no.id>", false);
       break;
 
     case 'J':
     {
       bool have_tags = true;
-      tags = driver_tags_get_transformed(&e->tags);
-      if (tags)
+      struct Buffer *tags = buf_pool_get();
+      driver_tags_get_transformed(&e->tags, tags);
+      if (!buf_is_empty(tags))
       {
         if (flags & MUTT_FORMAT_TREE)
         {
-          char *parent_tags = NULL;
+          struct Buffer *parent_tags = buf_pool_get();
           if (e->thread->prev && e->thread->prev->message)
           {
-            parent_tags = driver_tags_get_transformed(&e->thread->prev->message->tags);
+            driver_tags_get_transformed(&e->thread->prev->message->tags, parent_tags);
           }
-          if (!parent_tags && e->thread->parent && e->thread->parent->message)
+          if (buf_is_empty(parent_tags) && e->thread->parent &&
+              e->thread->parent->message)
           {
-            parent_tags = driver_tags_get_transformed(
-                &e->thread->parent->message->tags);
+            driver_tags_get_transformed(&e->thread->parent->message->tags, parent_tags);
           }
-          if (parent_tags && mutt_istr_equal(tags, parent_tags))
+          if (!buf_is_empty(parent_tags) && buf_istr_equal(tags, parent_tags))
             have_tags = false;
-          FREE(&parent_tags);
+          buf_pool_release(&parent_tags);
         }
       }
       else
@@ -865,11 +882,11 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
       colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_TAGS);
       if (have_tags)
-        mutt_format_s(buf + colorlen, buflen - colorlen, prec, tags);
+        mutt_format(buf + colorlen, buflen - colorlen, prec, buf_string(tags), false);
       else
-        mutt_format_s(buf + colorlen, buflen - colorlen, prec, "");
+        mutt_format(buf + colorlen, buflen - colorlen, prec, "", false);
       add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
-      FREE(&tags);
+      buf_pool_release(&tags);
       break;
     }
 
@@ -892,7 +909,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       {
         colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_AUTHOR);
         make_from(e->env, tmp, sizeof(tmp), true, flags);
-        mutt_format_s(buf + colorlen, buflen - colorlen, prec, tmp);
+        mutt_format(buf + colorlen, buflen - colorlen, prec, tmp, false);
         add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       }
       else if (!check_for_mailing_list(&e->env->to, NULL, NULL, 0) &&
@@ -916,7 +933,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
     case 'n':
       colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_AUTHOR);
-      mutt_format_s(buf + colorlen, buflen - colorlen, prec, mutt_get_name(from));
+      mutt_format(buf + colorlen, buflen - colorlen, prec, mutt_get_name(from), false);
       add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       break;
 
@@ -932,7 +949,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         }
         else if (is_index && threads)
         {
-          mutt_format_s(buf + colorlen, buflen - colorlen, prec, " ");
+          mutt_format(buf + colorlen, buflen - colorlen, prec, " ", false);
           add_index_color(buf, buflen - colorlen, flags, MT_COLOR_INDEX);
         }
         else
@@ -967,7 +984,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         const bool c_save_address = cs_subset_bool(NeoMutt->sub, "save_address");
         if (!c_save_address && (p = strpbrk(tmp, "%@")))
           *p = '\0';
-        mutt_format_s(buf, buflen, prec, tmp);
+        mutt_format(buf, buflen, prec, tmp, false);
       }
       else if (!check_for_mailing_list_addr(&e->env->to, NULL, 0) &&
                !check_for_mailing_list_addr(&e->env->cc, NULL, 0))
@@ -980,11 +997,9 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       mutt_str_copy(buf, hfi->pager_progress, buflen);
       break;
 
-#ifdef USE_NNTP
     case 'q':
-      mutt_format_s(buf, buflen, prec, e->env->newsgroups ? e->env->newsgroups : "");
+      mutt_format(buf, buflen, prec, e->env->newsgroups ? e->env->newsgroups : "", false);
       break;
-#endif
 
     case 'r':
     {
@@ -994,7 +1009,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       buf_pool_release(&tmpbuf);
       if (optional && (tmp[0] == '\0'))
         optional = false;
-      mutt_format_s(buf, buflen, prec, tmp);
+      mutt_format(buf, buflen, prec, tmp, false);
       break;
     }
 
@@ -1006,7 +1021,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       buf_pool_release(&tmpbuf);
       if (optional && (tmp[0] == '\0'))
         optional = false;
-      mutt_format_s(buf, buflen, prec, tmp);
+      mutt_format(buf, buflen, prec, tmp, false);
       break;
     }
 
@@ -1023,20 +1038,20 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         if (flags & MUTT_FORMAT_FORCESUBJ)
         {
           colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_SUBJECT);
-          mutt_format_s(buf + colorlen, buflen - colorlen, "", NONULL(subj));
+          mutt_format(buf + colorlen, buflen - colorlen, "", NONULL(subj), false);
           add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
           snprintf(tmp, sizeof(tmp), "%s%s", e->tree, buf);
-          mutt_format_s_tree(buf, buflen, prec, tmp);
+          mutt_format(buf, buflen, prec, tmp, true);
         }
         else
         {
-          mutt_format_s_tree(buf, buflen, prec, e->tree);
+          mutt_format(buf, buflen, prec, e->tree, true);
         }
       }
       else
       {
         colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_SUBJECT);
-        mutt_format_s(buf + colorlen, buflen - colorlen, prec, NONULL(subj));
+        mutt_format(buf + colorlen, buflen - colorlen, prec, NONULL(subj), false);
         add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       }
       break;
@@ -1064,7 +1079,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
       snprintf(tmp, sizeof(tmp), "%s", wch);
       colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_FLAGS);
-      mutt_format_s(buf + colorlen, buflen - colorlen, prec, tmp);
+      mutt_format(buf + colorlen, buflen - colorlen, prec, tmp, false);
       add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       break;
     }
@@ -1079,7 +1094,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         else if (cc)
           snprintf(tmp, sizeof(tmp), "Cc %s", mutt_get_name(cc));
       }
-      mutt_format_s(buf, buflen, prec, tmp);
+      mutt_format(buf, buflen, prec, tmp, false);
       break;
 
     case 'T':
@@ -1105,33 +1120,34 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       {
         tmp[0] = '\0';
       }
-      mutt_format_s(buf, buflen, prec, tmp);
+      mutt_format(buf, buflen, prec, tmp, false);
       break;
 
     case 'v':
       if (mutt_addr_is_user(from))
       {
         if (to)
-          mutt_format_s(tmp, sizeof(tmp), prec, mutt_get_name(to));
+          mutt_format(tmp, sizeof(tmp), prec, mutt_get_name(to), false);
         else if (cc)
-          mutt_format_s(tmp, sizeof(tmp), prec, mutt_get_name(cc));
+          mutt_format(tmp, sizeof(tmp), prec, mutt_get_name(cc), false);
         else
           *tmp = '\0';
       }
       else
       {
-        mutt_format_s(tmp, sizeof(tmp), prec, mutt_get_name(from));
+        mutt_format(tmp, sizeof(tmp), prec, mutt_get_name(from), false);
       }
       p = strpbrk(tmp, " %@");
       if (p)
         *p = '\0';
-      mutt_format_s(buf, buflen, prec, tmp);
+      mutt_format(buf, buflen, prec, tmp, false);
       break;
 
     case 'W':
       if (!optional)
       {
-        mutt_format_s(buf, buflen, prec, e->env->organization ? e->env->organization : "");
+        mutt_format(buf, buflen, prec,
+                    e->env->organization ? e->env->organization : "", false);
       }
       else if (!e->env->organization)
       {
@@ -1139,18 +1155,17 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       }
       break;
 
-#ifdef USE_NNTP
     case 'x':
       if (!optional)
       {
-        mutt_format_s(buf, buflen, prec, e->env->x_comment_to ? e->env->x_comment_to : "");
+        mutt_format(buf, buflen, prec,
+                    e->env->x_comment_to ? e->env->x_comment_to : "", false);
       }
       else if (!e->env->x_comment_to)
       {
         optional = false;
       }
       break;
-#endif
 
     case 'X':
     {
@@ -1175,7 +1190,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         optional = (e->env->x_label != NULL);
 
       colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_LABEL);
-      mutt_format_s(buf + colorlen, buflen - colorlen, prec, NONULL(e->env->x_label));
+      mutt_format(buf + colorlen, buflen - colorlen, prec, NONULL(e->env->x_label), false);
       add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       break;
 
@@ -1209,9 +1224,9 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 
       colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_LABEL);
       if (label)
-        mutt_format_s(buf + colorlen, buflen - colorlen, prec, NONULL(e->env->x_label));
+        mutt_format(buf + colorlen, buflen - colorlen, prec, NONULL(e->env->x_label), false);
       else
-        mutt_format_s(buf + colorlen, buflen - colorlen, prec, "");
+        mutt_format(buf + colorlen, buflen - colorlen, prec, "", false);
       add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       break;
     }
@@ -1300,7 +1315,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
       }
 
       colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_FLAGS);
-      mutt_format_s(buf + colorlen, buflen - colorlen, prec, tmp);
+      mutt_format(buf + colorlen, buflen - colorlen, prec, tmp, false);
       add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       break;
 
@@ -1361,7 +1376,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
     }
 
       colorlen = add_index_color(buf, buflen, flags, MT_COLOR_INDEX_FLAGS);
-      mutt_format_s(buf + colorlen, buflen - colorlen, prec, tmp);
+      mutt_format(buf + colorlen, buflen - colorlen, prec, tmp, false);
       add_index_color(buf + colorlen, buflen - colorlen, flags, MT_COLOR_INDEX);
       break;
 
@@ -1382,14 +1397,14 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
         mutt_expando_format(tmp, sizeof(tmp), col, cols,
                             NONULL(mutt_idxfmt_hook(tmp, m, e)),
                             index_format_str, data, flags);
-        mutt_format_s_x(buf, buflen, prec, tmp, true);
+        mutt_format(buf, buflen, prec, tmp, true);
         recurse--;
 
         src = end + 1;
         break;
       }
     }
-      /* fallthrough */
+      FALLTHROUGH;
 
     default:
       snprintf(buf, buflen, "%%%s%c", prec, op);
@@ -1412,7 +1427,6 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
 /**
  * mutt_make_string - Create formatted strings using mailbox expandos
  * @param buf      Buffer for the result
- * @param buflen   Buffer length
  * @param cols     Number of screen columns (OPTIONAL)
  * @param s        printf-line format string
  * @param m        Mailbox
@@ -1423,7 +1437,7 @@ static const char *index_format_str(char *buf, size_t buflen, size_t col, int co
  *
  * @sa index_format_str()
  */
-void mutt_make_string(char *buf, size_t buflen, int cols, const char *s,
+void mutt_make_string(struct Buffer *buf, int cols, const char *s,
                       struct Mailbox *m, int inpgr, struct Email *e,
                       MuttFormatFlags flags, const char *progress)
 {
@@ -1434,5 +1448,6 @@ void mutt_make_string(char *buf, size_t buflen, int cols, const char *s,
   hfi.msg_in_pager = inpgr;
   hfi.pager_progress = progress;
 
-  mutt_expando_format(buf, buflen, 0, cols, s, index_format_str, (intptr_t) &hfi, flags);
+  mutt_expando_format(buf->data, buf->dsize, 0, cols, s, index_format_str,
+                      (intptr_t) &hfi, flags);
 }

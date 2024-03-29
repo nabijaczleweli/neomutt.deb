@@ -1,6 +1,6 @@
 /**
  * @file
- * Test code for editor_buffer_get_lastchar()
+ * Mh local mailbox type
  *
  * @authors
  * Copyright (C) 2023 Richard Russon <rich@flatcap.org>
@@ -20,33 +20,26 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define TEST_NO_MAIN
-#include "config.h"
-#include "acutest.h"
-#include <stddef.h>
-#include <stdbool.h>
-#include "email/lib.h"
+/**
+ * @page lib_mh Mh Mailbox
+ *
+ * Mh local mailbox type
+ *
+ * | File               | Description               |
+ * | :----------------- | :------------------------ |
+ * | mh/config.c        | @subpage mh_config        |
+ * | mh/mdata.c         | @subpage mh_mdata         |
+ * | mh/mh.c            | @subpage mh_mh            |
+ * | mh/mhemail.c       | @subpage mh_mdemail       |
+ * | mh/sequence.c      | @subpage mh_sequence      |
+ * | mh/shared.c        | @subpage mh_shared        |
+ */
+
+#ifndef MUTT_MH_LIB_H
+#define MUTT_MH_LIB_H
+
 #include "core/lib.h"
-#include "editor/lib.h"
 
-void test_editor_buffer_get_lastchar(void)
-{
-  // size_t editor_buffer_get_lastchar(struct EnterState *es);
+extern const struct MxOps MxMhOps;
 
-  {
-    TEST_CHECK(editor_buffer_get_lastchar(NULL) == 0);
-  }
-
-  {
-    struct EnterState *es = enter_state_new();
-    TEST_CHECK(editor_buffer_get_lastchar(es) == 0);
-    enter_state_free(&es);
-  }
-
-  {
-    struct EnterState *es = enter_state_new();
-    editor_buffer_set(es, "hello world");
-    TEST_CHECK(editor_buffer_get_lastchar(es) == 11);
-    enter_state_free(&es);
-  }
-}
+#endif /* MUTT_MH_LIB_H */

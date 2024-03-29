@@ -3,10 +3,10 @@
  * Usenet network mailbox type; talk to an NNTP server
  *
  * @authors
- * Copyright (C) 1998 Brandon Long <blong@fiction.net>
- * Copyright (C) 1999 Andrej Gritsenko <andrej@lucky.net>
- * Copyright (C) 2000-2017 Vsevolod Volkov <vvv@mutt.org.ua>
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2016-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2021 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2019 Ian Zimmerman <itz@no-use.mooo.com>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -435,7 +435,7 @@ static void nntp_log_binbuf(const char *buf, size_t len, const char *pfx, int db
 static int nntp_auth(struct NntpAccountData *adata)
 {
   struct Connection *conn = adata->conn;
-  char buf[1024] = { 0 };
+  char buf[1536] = { 0 };
   char authenticators[1024] = "USER";
   char *method = NULL, *a = NULL, *p = NULL;
   unsigned char flags = conn->account.flags;
@@ -806,7 +806,10 @@ static int nntp_fetch_lines(struct NntpMboxData *mdata, char *query, size_t qlen
     rc = 0;
 
     if (msg)
-      progress = progress_new(msg, MUTT_PROGRESS_READ, 0);
+    {
+      progress = progress_new(MUTT_PROGRESS_READ, 0);
+      progress_set_message(progress, "%s", msg);
+    }
 
     while (true)
     {
@@ -954,7 +957,7 @@ static void nntp_parse_xref(struct Mailbox *m, struct Email *e)
     if (!colon)
       continue;
     *colon++ = '\0';
-    if (sscanf(colon, ANUM, &anum) != 1)
+    if (sscanf(colon, ANUM_FMT, &anum) != 1)
       continue;
 
     nntp_article_status(m, e, grp, anum);
@@ -995,7 +998,7 @@ static int fetch_numbers(char *line, void *data)
 
   if (!line)
     return 0;
-  if (sscanf(line, ANUM, &anum) != 1)
+  if (sscanf(line, ANUM_FMT, &anum) != 1)
     return 0;
   if ((anum < fc->first) || (anum > fc->last))
     return 0;
@@ -1030,9 +1033,9 @@ static int parse_overview_line(char *line, void *data)
   field = strchr(line, '\t');
   if (field)
     *field++ = '\0';
-  if (sscanf(line, ANUM, &anum) != 1)
+  if (sscanf(line, ANUM_FMT, &anum) != 1)
     return 0;
-  mutt_debug(LL_DEBUG2, "" ANUM "\n", anum);
+  mutt_debug(LL_DEBUG2, "" ANUM_FMT "\n", anum);
 
   /* out of bounds */
   if ((anum < fc->first) || (anum > fc->last))
@@ -1093,11 +1096,11 @@ static int parse_overview_line(char *line, void *data)
     char buf[16] = { 0 };
 
     /* try to replace with header from cache */
-    snprintf(buf, sizeof(buf), ANUM, anum);
-    struct HCacheEntry hce = hcache_fetch(fc->hc, buf, strlen(buf), 0);
+    snprintf(buf, sizeof(buf), ANUM_FMT, anum);
+    struct HCacheEntry hce = hcache_fetch_email(fc->hc, buf, strlen(buf), 0);
     if (hce.email)
     {
-      mutt_debug(LL_DEBUG2, "hcache_fetch %s\n", buf);
+      mutt_debug(LL_DEBUG2, "hcache_fetch_email %s\n", buf);
       email_free(&e);
       e = hce.email;
       m->emails[m->msg_count] = e;
@@ -1119,8 +1122,8 @@ static int parse_overview_line(char *line, void *data)
     else
     {
       /* not cached yet, store header */
-      mutt_debug(LL_DEBUG2, "hcache_store %s\n", buf);
-      hcache_store(fc->hc, buf, strlen(buf), e, 0);
+      mutt_debug(LL_DEBUG2, "hcache_store_email %s\n", buf);
+      hcache_store_email(fc->hc, buf, strlen(buf), e, 0);
     }
   }
 #endif
@@ -1201,7 +1204,7 @@ static int nntp_fetch_headers(struct Mailbox *m, void *hc, anum_t first, anum_t 
       mutt_message(_("Fetching list of articles..."));
     if (mdata->adata->hasLISTGROUPrange)
     {
-      snprintf(buf, sizeof(buf), "LISTGROUP %s " ANUM "-" ANUM "\r\n",
+      snprintf(buf, sizeof(buf), "LISTGROUP %s " ANUM_FMT "-" ANUM_FMT "\r\n",
                mdata->group, first, last);
     }
     else
@@ -1220,7 +1223,7 @@ static int nntp_fetch_headers(struct Mailbox *m, void *hc, anum_t first, anum_t 
         if (fc.messages[current - first])
           continue;
 
-        snprintf(buf, sizeof(buf), ANUM, current);
+        snprintf(buf, sizeof(buf), ANUM_FMT, current);
         if (mdata->bcache)
         {
           mutt_debug(LL_DEBUG2, "#1 mutt_bcache_del %s\n", buf);
@@ -1230,8 +1233,8 @@ static int nntp_fetch_headers(struct Mailbox *m, void *hc, anum_t first, anum_t 
 #ifdef USE_HCACHE
         if (fc.hc)
         {
-          mutt_debug(LL_DEBUG2, "hcache_delete_record %s\n", buf);
-          hcache_delete_record(fc.hc, buf, strlen(buf));
+          mutt_debug(LL_DEBUG2, "hcache_delete_email %s\n", buf);
+          hcache_delete_email(fc.hc, buf, strlen(buf));
         }
 #endif
       }
@@ -1246,15 +1249,15 @@ static int nntp_fetch_headers(struct Mailbox *m, void *hc, anum_t first, anum_t 
   /* fetching header from cache or server, or fallback to fetch overview */
   if (m->verbose)
   {
-    fc.progress = progress_new(_("Fetching message headers..."),
-                               MUTT_PROGRESS_READ, last - first + 1);
+    fc.progress = progress_new(MUTT_PROGRESS_READ, last - first + 1);
+    progress_set_message(fc.progress, _("Fetching message headers..."));
   }
   for (current = first; (current <= last) && (rc == 0); current++)
   {
     progress_update(fc.progress, current - first + 1, -1);
 
 #ifdef USE_HCACHE
-    snprintf(buf, sizeof(buf), ANUM, current);
+    snprintf(buf, sizeof(buf), ANUM_FMT, current);
 #endif
 
     /* delete header from cache that does not exist on server */
@@ -1266,10 +1269,10 @@ static int nntp_fetch_headers(struct Mailbox *m, void *hc, anum_t first, anum_t 
 
 #ifdef USE_HCACHE
     /* try to fetch header from cache */
-    struct HCacheEntry hce = hcache_fetch(fc.hc, buf, strlen(buf), 0);
+    struct HCacheEntry hce = hcache_fetch_email(fc.hc, buf, strlen(buf), 0);
     if (hce.email)
     {
-      mutt_debug(LL_DEBUG2, "hcache_fetch %s\n", buf);
+      mutt_debug(LL_DEBUG2, "hcache_fetch_email %s\n", buf);
       e = hce.email;
       m->emails[m->msg_count] = e;
       e->edata = NULL;
@@ -1315,7 +1318,7 @@ static int nntp_fetch_headers(struct Mailbox *m, void *hc, anum_t first, anum_t 
         break;
       }
 
-      snprintf(buf, sizeof(buf), "HEAD " ANUM "\r\n", current);
+      snprintf(buf, sizeof(buf), "HEAD " ANUM_FMT "\r\n", current);
       rc = nntp_fetch_lines(mdata, buf, sizeof(buf), NULL, fetch_tempfile, fp);
       if (rc)
       {
@@ -1333,7 +1336,7 @@ static int nntp_fetch_headers(struct Mailbox *m, void *hc, anum_t first, anum_t 
         /* no such article */
         if (mdata->bcache)
         {
-          snprintf(buf, sizeof(buf), ANUM, current);
+          snprintf(buf, sizeof(buf), ANUM_FMT, current);
           mutt_debug(LL_DEBUG2, "#3 mutt_bcache_del %s\n", buf);
           mutt_bcache_del(mdata->bcache, buf);
         }
@@ -1379,7 +1382,7 @@ static int nntp_fetch_headers(struct Mailbox *m, void *hc, anum_t first, anum_t 
   if ((current <= last) && (rc == 0) && !mdata->deleted)
   {
     char *cmd = mdata->adata->hasOVER ? "OVER" : "XOVER";
-    snprintf(buf, sizeof(buf), "%s " ANUM "-" ANUM "\r\n", cmd, current, last);
+    snprintf(buf, sizeof(buf), "%s " ANUM_FMT "-" ANUM_FMT "\r\n", cmd, current, last);
     rc = nntp_fetch_lines(mdata, buf, sizeof(buf), NULL, parse_overview_line, &fc);
     if (rc > 0)
     {
@@ -1411,7 +1414,7 @@ static int nntp_group_poll(struct NntpMboxData *mdata, bool update_stat)
   /* use GROUP command to poll newsgroup */
   if (nntp_query(mdata, buf, sizeof(buf)) < 0)
     return -1;
-  if (sscanf(buf, "211 " ANUM " " ANUM " " ANUM, &count, &first, &last) != 3)
+  if (sscanf(buf, "211 " ANUM_FMT " " ANUM_FMT " " ANUM_FMT, &count, &first, &last) != 3)
     return 0;
   if ((first == mdata->first_message) && (last == mdata->last_message))
     return 0;
@@ -1531,13 +1534,13 @@ static enum MxStatus check_mailbox(struct Mailbox *m)
         if ((anum >= first) && (anum <= mdata->last_loaded))
           messages[anum - first] = 1;
 
-        snprintf(buf, sizeof(buf), ANUM, anum);
-        struct HCacheEntry hce = hcache_fetch(hc, buf, strlen(buf), 0);
+        snprintf(buf, sizeof(buf), ANUM_FMT, anum);
+        struct HCacheEntry hce = hcache_fetch_email(hc, buf, strlen(buf), 0);
         if (hce.email)
         {
           bool deleted;
 
-          mutt_debug(LL_DEBUG2, "#1 hcache_fetch %s\n", buf);
+          mutt_debug(LL_DEBUG2, "#1 hcache_fetch_email %s\n", buf);
           e = hce.email;
           e->edata = NULL;
           deleted = e->deleted;
@@ -1576,11 +1579,11 @@ static enum MxStatus check_mailbox(struct Mailbox *m)
       if (messages[anum - first])
         continue;
 
-      snprintf(buf, sizeof(buf), ANUM, anum);
-      struct HCacheEntry hce = hcache_fetch(hc, buf, strlen(buf), 0);
+      snprintf(buf, sizeof(buf), ANUM_FMT, anum);
+      struct HCacheEntry hce = hcache_fetch_email(hc, buf, strlen(buf), 0);
       if (hce.email)
       {
-        mutt_debug(LL_DEBUG2, "#2 hcache_fetch %s\n", buf);
+        mutt_debug(LL_DEBUG2, "#2 hcache_fetch_email %s\n", buf);
         mx_alloc_memory(m, m->msg_count);
 
         e = hce.email;
@@ -1683,7 +1686,7 @@ static int nntp_date(struct NntpAccountData *adata, time_t *now)
       *now = timegm(&tm);
       if (*now >= 0)
       {
-        mutt_debug(LL_DEBUG1, "server time is %lu\n", *now);
+        mutt_debug(LL_DEBUG1, "server time is %llu\n", (unsigned long long) *now);
         return 0;
       }
     }
@@ -1703,7 +1706,7 @@ static int fetch_children(char *line, void *data)
   struct ChildCtx *cc = data;
   anum_t anum;
 
-  if (!line || (sscanf(line, ANUM, &anum) != 1))
+  if (!line || (sscanf(line, ANUM_FMT, &anum) != 1))
     return 0;
   for (unsigned int i = 0; i < cc->mailbox->msg_count; i++)
   {
@@ -2128,8 +2131,8 @@ int nntp_check_new_groups(struct Mailbox *m, struct NntpAccountData *adata)
     if (c_nntp_load_description)
     {
       unsigned int count = 0;
-      struct Progress *progress = progress_new(_("Loading descriptions..."), MUTT_PROGRESS_READ,
-                                               adata->groups_num - i);
+      struct Progress *progress = progress_new(MUTT_PROGRESS_READ, adata->groups_num - i);
+      progress_set_message(progress, _("Loading descriptions..."));
 
       for (i = groups_num; i < adata->groups_num; i++)
       {
@@ -2211,7 +2214,7 @@ int nntp_check_msgid(struct Mailbox *m, const char *msgid)
       email_free(&e);
       return -1;
     }
-    sscanf(buf + 4, ANUM, &nntp_edata_get(e)->article_num);
+    sscanf(buf + 4, ANUM_FMT, &nntp_edata_get(e)->article_num);
   }
 
   /* reset flags */
@@ -2255,7 +2258,7 @@ int nntp_check_children(struct Mailbox *m, const char *msgid)
   cc.child = mutt_mem_malloc(sizeof(anum_t) * cc.max);
 
   /* fetch numbers of child messages */
-  snprintf(buf, sizeof(buf), "XPAT References " ANUM "-" ANUM " *%s*\r\n",
+  snprintf(buf, sizeof(buf), "XPAT References " ANUM_FMT "-" ANUM_FMT " *%s*\r\n",
            mdata->first_message, mdata->last_loaded, msgid);
   rc = nntp_fetch_lines(mdata, buf, sizeof(buf), NULL, fetch_children, &cc);
   if (rc)
@@ -2427,7 +2430,7 @@ static enum MxOpenReturns nntp_mbox_open(struct Mailbox *m)
   else
   {
     /* parse newsgroup info */
-    if (sscanf(buf, "211 " ANUM " " ANUM " " ANUM, &count, &first, &last) != 3)
+    if (sscanf(buf, "211 " ANUM_FMT " " ANUM_FMT " " ANUM_FMT, &count, &first, &last) != 3)
     {
       nntp_newsrc_close(adata);
       mutt_error("GROUP: %s", buf);
@@ -2533,7 +2536,7 @@ static enum MxStatus nntp_mbox_sync(struct Mailbox *m)
 
     char buf[16] = { 0 };
 
-    snprintf(buf, sizeof(buf), ANUM, nntp_edata_get(e)->article_num);
+    snprintf(buf, sizeof(buf), ANUM_FMT, nntp_edata_get(e)->article_num);
     if (mdata->bcache && e->deleted)
     {
       mutt_debug(LL_DEBUG2, "mutt_bcache_del %s\n", buf);
@@ -2545,8 +2548,8 @@ static enum MxStatus nntp_mbox_sync(struct Mailbox *m)
     {
       if (e->deleted && !e->read)
         mdata->unread--;
-      mutt_debug(LL_DEBUG2, "hcache_store %s\n", buf);
-      hcache_store(hc, buf, strlen(buf), e, 0);
+      mutt_debug(LL_DEBUG2, "hcache_store_email %s\n", buf);
+      hcache_store_email(hc, buf, strlen(buf), e, 0);
     }
 #endif
   }
@@ -2614,7 +2617,7 @@ static bool nntp_msg_open(struct Mailbox *m, struct Message *msg, struct Email *
       FREE(&acache->path);
     }
   }
-  snprintf(article, sizeof(article), ANUM, nntp_edata_get(e)->article_num);
+  snprintf(article, sizeof(article), ANUM_FMT, nntp_edata_get(e)->article_num);
   msg->fp = mutt_bcache_get(mdata->bcache, article);
   if (msg->fp)
   {
@@ -2752,15 +2755,6 @@ static int nntp_path_canon(struct Buffer *path)
 }
 
 /**
- * nntp_path_parent - Find the parent of a Mailbox path - Implements MxOps::path_parent() - @ingroup mx_path_parent
- */
-static int nntp_path_parent(struct Buffer *path)
-{
-  /* Succeed, but don't do anything, for now */
-  return 0;
-}
-
-/**
  * MxNntpOps - NNTP Mailbox - Implements ::MxOps - @ingroup mx_api
  */
 const struct MxOps MxNntpOps = {
@@ -2786,6 +2780,5 @@ const struct MxOps MxNntpOps = {
   .tags_commit      = NULL,
   .path_probe       = nntp_path_probe,
   .path_canon       = nntp_path_canon,
-  .path_parent      = nntp_path_parent,
   // clang-format on
 };

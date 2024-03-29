@@ -3,7 +3,9 @@
  * Connection Credentials
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021 Ryan Kavanagh <rak@rak.ac>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -151,7 +153,7 @@ int mutt_account_getpass(struct ConnAccount *cac)
   }
   else
   {
-    char prompt[256] = { 0 };
+    char prompt[512] = { 0 };
     snprintf(prompt, sizeof(prompt), _("Password for %s@%s: "),
              (cac->flags & MUTT_ACCT_LOGIN) ? cac->login : cac->user, cac->host);
     cac->pass[0] = '\0';
@@ -237,7 +239,7 @@ char *mutt_account_getoauthbearer(struct ConnAccount *cac, bool xoauth2)
 
   if ((!xoauth2 && (token_size > 512)) || (xoauth2 && (token_size > 4096)))
   {
-    mutt_error(_("OAUTH token is too big: %ld"), token_size);
+    mutt_error(_("OAUTH token is too big: %ld"), (long) token_size);
     FREE(&token);
     return NULL;
   }

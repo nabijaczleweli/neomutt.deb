@@ -3,8 +3,12 @@
  * Definitions of config variables
  *
  * @authors
- * Copyright (C) 1996-2002,2007,2010,2012-2013,2016 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2004 g10 Code GmbH
+ * Copyright (C) 2020 Aditya De Saha <adityadesaha@gmail.com>
+ * Copyright (C) 2020 Louis Brauer <louis@openbooking.ch>
+ * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021 Ashish Panigrahi <ashish.panigrahi@protonmail.com>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -117,25 +121,25 @@ static struct ConfigDef MainVars[] = {
   { "abort_backspace", DT_BOOL, true, 0, NULL,
     "Hitting backspace against an empty prompt aborts the prompt"
   },
-  { "abort_key", DT_STRING|DT_NOT_EMPTY, IP "\007", 0, NULL,
+  { "abort_key", DT_STRING|D_NOT_EMPTY|D_ON_STARTUP, IP "\007", 0, NULL,
     "String representation of key to abort prompts"
   },
   { "arrow_cursor", DT_BOOL, false, 0, NULL,
     "Use an arrow '->' instead of highlighting in the index"
   },
-  { "arrow_string", DT_STRING|DT_NOT_EMPTY, IP "->", 0, NULL,
+  { "arrow_string", DT_STRING|D_NOT_EMPTY, IP "->", 0, NULL,
     "Use an custom string for arrow_cursor"
   },
-  { "ascii_chars", DT_BOOL|R_INDEX, false, 0, NULL,
+  { "ascii_chars", DT_BOOL, false, 0, NULL,
     "Use plain ASCII characters, when drawing email threads"
   },
-  { "assumed_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY, 0, 0, charset_slist_validator,
+  { "assumed_charset", DT_SLIST|D_SLIST_SEP_COLON|D_SLIST_ALLOW_EMPTY, 0, 0, charset_slist_validator,
     "If a message is missing a character set, assume this character set"
   },
-  { "attach_format", DT_STRING|DT_NOT_EMPTY, IP "%u%D%I %t%4n %T%d %> [%.7m/%.10M, %.6e%<C?, %C>, %s] ", 0, NULL,
+  { "attach_format", DT_STRING|D_NOT_EMPTY, IP "%u%D%I %t%4n %T%d %> [%.7m/%.10M, %.6e%<C?, %C>, %s] ", 0, NULL,
     "printf-like format string for the attachment menu"
   },
-  { "attach_save_dir", DT_PATH|DT_PATH_DIR, IP "./", 0, NULL,
+  { "attach_save_dir", DT_PATH|D_PATH_DIR, IP "./", 0, NULL,
     "Default directory where attachments are saved"
   },
   { "attach_save_without_prompting", DT_BOOL, false, 0, NULL,
@@ -168,7 +172,7 @@ static struct ConfigDef MainVars[] = {
   { "braille_friendly", DT_BOOL, false, 0, NULL,
     "Move the cursor to the beginning of the line"
   },
-  { "charset", DT_STRING|DT_NOT_EMPTY|DT_CHARSET_SINGLE, 0, 0, charset_validator,
+  { "charset", DT_STRING|D_NOT_EMPTY|D_CHARSET_SINGLE, 0, 0, charset_validator,
     "Default character set for displaying text on screen"
   },
   { "collapse_flagged", DT_BOOL, true, 0, NULL,
@@ -177,7 +181,7 @@ static struct ConfigDef MainVars[] = {
   { "collapse_unread", DT_BOOL, true, 0, NULL,
     "Prevent the collapse of threads with unread emails"
   },
-  { "color_directcolor", DT_BOOL, false, 0, NULL,
+  { "color_directcolor", DT_BOOL|D_ON_STARTUP, false, 0, NULL,
     "Use 24bit colors (aka truecolor aka directcolor)"
   },
   { "config_charset", DT_STRING, 0, 0, charset_validator,
@@ -195,13 +199,13 @@ static struct ConfigDef MainVars[] = {
   { "count_alternatives", DT_BOOL, false, 0, NULL,
     "Recurse inside multipart/alternatives while counting attachments"
   },
-  { "crypt_chars", DT_MBTABLE|R_INDEX, IP "SPsK ", 0, NULL,
+  { "crypt_chars", DT_MBTABLE, IP "SPsK ", 0, NULL,
     "User-configurable crypto flags: signed, encrypted etc."
   },
-  { "date_format", DT_STRING|DT_NOT_EMPTY, IP "!%a, %b %d, %Y at %I:%M:%S%p %Z", 0, NULL,
+  { "date_format", DT_STRING|D_NOT_EMPTY, IP "!%a, %b %d, %Y at %I:%M:%S%p %Z", 0, NULL,
     "strftime format string for the `%d` expando"
   },
-  { "debug_file", DT_PATH|DT_PATH_FILE, IP "~/.neomuttdebug", 0, NULL,
+  { "debug_file", DT_PATH|D_PATH_FILE, IP "~/.neomuttdebug", 0, NULL,
     "File to save debug logs"
   },
   { "debug_level", DT_NUMBER, 0, 0, level_validator,
@@ -219,19 +223,19 @@ static struct ConfigDef MainVars[] = {
   { "digest_collapse", DT_BOOL, true, 0, NULL,
     "Hide the subparts of a multipart/digest"
   },
-  { "duplicate_threads", DT_BOOL|R_RESORT|R_RESORT_INIT|R_INDEX, true, 0, NULL,
+  { "duplicate_threads", DT_BOOL, true, 0, NULL,
     "Highlight messages with duplicated message IDs"
   },
-  { "editor", DT_STRING|DT_NOT_EMPTY|DT_COMMAND, 0, 0, NULL,
+  { "editor", DT_STRING|D_NOT_EMPTY|D_STRING_COMMAND, 0, 0, NULL,
     "External command to use as an email editor"
   },
-  { "flag_chars", DT_MBTABLE|R_INDEX, IP "*!DdrONon- ", 0, NULL,
+  { "flag_chars", DT_MBTABLE, IP "*!DdrONon- ", 0, NULL,
     "User-configurable index flags: tagged, new, etc"
   },
   { "flag_safe", DT_BOOL, false, 0, NULL,
     "Protect flagged messages from deletion"
   },
-  { "folder", DT_STRING|DT_MAILBOX, IP "~/Mail", 0, NULL,
+  { "folder", DT_STRING|D_STRING_MAILBOX, IP "~/Mail", 0, NULL,
     "Base folder for a set of mailboxes"
   },
   { "force_name", DT_BOOL, false, 0, NULL,
@@ -246,7 +250,7 @@ static struct ConfigDef MainVars[] = {
   { "from", DT_ADDRESS, 0, 0, NULL,
     "Default 'From' address to use, if isn't otherwise set"
   },
-  { "from_chars", DT_MBTABLE|R_INDEX, 0, 0, NULL,
+  { "from_chars", DT_MBTABLE, 0, 0, NULL,
     "User-configurable index flags: to address, cc address, etc"
   },
   { "gecos_mask", DT_REGEX, IP "^[^,]*", 0, NULL,
@@ -255,22 +259,22 @@ static struct ConfigDef MainVars[] = {
   { "header", DT_BOOL, false, 0, NULL,
     "Include the message headers in the reply email (Weed applies)"
   },
-  { "hidden_tags", DT_SLIST|SLIST_SEP_COMMA, IP "unread,draft,flagged,passed,replied,attachment,signed,encrypted", 0, NULL,
+  { "hidden_tags", DT_SLIST|D_SLIST_SEP_COMMA, IP "unread,draft,flagged,passed,replied,attachment,signed,encrypted", 0, NULL,
     "List of tags that shouldn't be displayed on screen (comma-separated)"
   },
-  { "hide_limited", DT_BOOL|R_INDEX, false, 0, NULL,
+  { "hide_limited", DT_BOOL, false, 0, NULL,
     "Don't indicate hidden messages, in the thread tree"
   },
-  { "hide_missing", DT_BOOL|R_INDEX, true, 0, NULL,
+  { "hide_missing", DT_BOOL, true, 0, NULL,
     "Don't indicate missing messages, in the thread tree"
   },
-  { "hide_thread_subject", DT_BOOL|R_INDEX, true, 0, NULL,
+  { "hide_thread_subject", DT_BOOL, true, 0, NULL,
     "Hide subjects that are similar to that of the parent message"
   },
-  { "hide_top_limited", DT_BOOL|R_INDEX, false, 0, NULL,
+  { "hide_top_limited", DT_BOOL, false, 0, NULL,
     "Don't indicate hidden top message, in the thread tree"
   },
-  { "hide_top_missing", DT_BOOL|R_INDEX, true, 0, NULL,
+  { "hide_top_missing", DT_BOOL, true, 0, NULL,
     "Don't indicate missing top message, in the thread tree"
   },
   { "honor_disposition", DT_BOOL, false, 0, NULL,
@@ -291,7 +295,7 @@ static struct ConfigDef MainVars[] = {
   { "indent_string", DT_STRING, IP "> ", 0, NULL,
     "String used to indent 'reply' text"
   },
-  { "index_format", DT_STRING|DT_NOT_EMPTY|R_INDEX, IP "%4C %Z %{%b %d} %-15.15L (%<l?%4l&%4c>) %s", 0, NULL,
+  { "index_format", DT_STRING|D_NOT_EMPTY, IP "%4C %Z %{%b %d} %-15.15L (%<l?%4l&%4c>) %s", 0, NULL,
     "printf-like format string for the index menu (emails)"
   },
   { "keep_flagged", DT_BOOL, false, 0, NULL,
@@ -300,7 +304,7 @@ static struct ConfigDef MainVars[] = {
   { "local_date_header", DT_BOOL, true, 0, NULL,
     "Convert the date in the Date header of sent emails into local timezone, UTC otherwise"
   },
-  { "mail_check", DT_NUMBER|DT_NOT_NEGATIVE, 5, 0, NULL,
+  { "mail_check", DT_NUMBER|D_INTEGER_NOT_NEGATIVE, 5, 0, NULL,
     "Number of seconds before NeoMutt checks for new mail"
   },
   { "mail_check_recent", DT_BOOL, true, 0, NULL,
@@ -309,22 +313,22 @@ static struct ConfigDef MainVars[] = {
   { "mail_check_stats", DT_BOOL, false, 0, NULL,
     "Periodically check for new mail"
   },
-  { "mail_check_stats_interval", DT_NUMBER|DT_NOT_NEGATIVE, 60, 0, NULL,
+  { "mail_check_stats_interval", DT_NUMBER|D_INTEGER_NOT_NEGATIVE, 60, 0, NULL,
     "How often to check for new mail"
   },
-  { "mailcap_path", DT_SLIST|SLIST_SEP_COLON, IP "~/.mailcap:" PKGDATADIR "/mailcap:" SYSCONFDIR "/mailcap:/etc/mailcap:/usr/etc/mailcap:/usr/local/etc/mailcap", 0, NULL,
+  { "mailcap_path", DT_SLIST|D_SLIST_SEP_COLON, IP "~/.mailcap:" PKGDATADIR "/mailcap:" SYSCONFDIR "/mailcap:/etc/mailcap:/usr/etc/mailcap:/usr/local/etc/mailcap", 0, NULL,
     "List of mailcap files (colon-separated)"
   },
   { "mailcap_sanitize", DT_BOOL, true, 0, NULL,
     "Restrict the possible characters in mailcap expandos"
   },
-  { "mark_old", DT_BOOL|R_INDEX, true, 0, NULL,
+  { "mark_old", DT_BOOL, true, 0, NULL,
     "Mark new emails as old when leaving the mailbox"
   },
   { "markers", DT_BOOL, true, 0, NULL,
     "Display a '+' at the beginning of wrapped lines in the pager"
   },
-  { "mbox", DT_STRING|DT_MAILBOX|R_INDEX, IP "~/mbox", 0, NULL,
+  { "mbox", DT_STRING|D_STRING_MAILBOX, IP "~/mbox", 0, NULL,
     "Folder that receives read emails (see Move)"
   },
   { "mbox_type", DT_ENUM, MUTT_MBOX, IP &MboxTypeDef, NULL,
@@ -333,10 +337,10 @@ static struct ConfigDef MainVars[] = {
   { "message_cache_clean", DT_BOOL, false, 0, NULL,
     "(imap/pop) Clean out obsolete entries from the message cache"
   },
-  { "message_cache_dir", DT_PATH|DT_PATH_DIR, 0, 0, NULL,
+  { "message_cache_dir", DT_PATH|D_PATH_DIR, 0, 0, NULL,
     "(imap/pop) Directory for the message cache"
   },
-  { "message_format", DT_STRING|DT_NOT_EMPTY, IP "%s", 0, NULL,
+  { "message_format", DT_STRING|D_NOT_EMPTY, IP "%s", 0, NULL,
     "printf-like format string for listing attached messages"
   },
   { "meta_key", DT_BOOL, false, 0, NULL,
@@ -351,13 +355,13 @@ static struct ConfigDef MainVars[] = {
   { "move", DT_QUAD, MUTT_NO, 0, NULL,
     "Move emails from `$spool_file` to `$mbox` when read"
   },
-  { "narrow_tree", DT_BOOL|R_INDEX, false, 0, NULL,
+  { "narrow_tree", DT_BOOL, false, 0, NULL,
     "Draw a narrower thread tree in the index"
   },
-  { "net_inc", DT_NUMBER|DT_NOT_NEGATIVE, 10, 0, NULL,
+  { "net_inc", DT_NUMBER|D_INTEGER_NOT_NEGATIVE, 10, 0, NULL,
     "(socket) Update the progress bar after this many KB sent/received (0 to disable)"
   },
-  { "new_mail_command", DT_STRING|DT_COMMAND, 0, 0, NULL,
+  { "new_mail_command", DT_STRING|D_STRING_COMMAND, 0, 0, NULL,
     "External command to run when new mail arrives"
   },
   { "pipe_decode", DT_BOOL, false, 0, NULL,
@@ -372,16 +376,16 @@ static struct ConfigDef MainVars[] = {
   { "pipe_split", DT_BOOL, false, 0, NULL,
     "Run the pipe command on each message separately"
   },
-  { "postponed", DT_STRING|DT_MAILBOX|R_INDEX, IP "~/postponed", 0, NULL,
+  { "postponed", DT_STRING|D_STRING_MAILBOX, IP "~/postponed", 0, NULL,
     "Folder to store postponed messages"
   },
-  { "preferred_languages", DT_SLIST|SLIST_SEP_COMMA, 0, 0, NULL,
+  { "preferred_languages", DT_SLIST|D_SLIST_SEP_COMMA, 0, 0, NULL,
     "List of Preferred Languages for multilingual MIME (comma-separated)"
   },
   { "print", DT_QUAD, MUTT_ASKNO, 0, NULL,
     "Confirm before printing a message"
   },
-  { "print_command", DT_STRING|DT_COMMAND, IP "lpr", 0, NULL,
+  { "print_command", DT_STRING|D_STRING_COMMAND, IP "lpr", 0, NULL,
     "External command to print a message"
   },
   { "print_decode", DT_BOOL, true, 0, NULL,
@@ -399,16 +403,16 @@ static struct ConfigDef MainVars[] = {
   { "quote_regex", DT_REGEX, IP "^([ \t]*[|>:}#])+", 0, NULL,
     "Regex to match quoted text in a reply"
   },
-  { "read_inc", DT_NUMBER|DT_NOT_NEGATIVE, 10, 0, NULL,
+  { "read_inc", DT_NUMBER|D_INTEGER_NOT_NEGATIVE, 10, 0, NULL,
     "Update the progress bar after this many records read (0 to disable)"
   },
   { "read_only", DT_BOOL, false, 0, NULL,
     "Open folders in read-only mode"
   },
-  { "real_name", DT_STRING|R_INDEX, 0, 0, NULL,
+  { "real_name", DT_STRING, 0, 0, NULL,
     "Real name of the user"
   },
-  { "record", DT_STRING|DT_MAILBOX, IP "~/sent", 0, NULL,
+  { "record", DT_STRING|D_STRING_MAILBOX, IP "~/sent", 0, NULL,
     "Folder to save 'sent' messages"
   },
   { "reflow_space_quotes", DT_BOOL, true, 0, NULL,
@@ -420,7 +424,7 @@ static struct ConfigDef MainVars[] = {
   { "reflow_wrap", DT_NUMBER, 78, 0, NULL,
     "Maximum paragraph width for reformatting 'format=flowed' text"
   },
-  { "reply_regex", DT_REGEX|R_INDEX|R_RESORT, IP "^((re|aw|sv)(\\[[0-9]+\\])*:[ \t]*)*", 0, NULL,
+  { "reply_regex", DT_REGEX, IP "^((re|aw|sv)(\\[[0-9]+\\])*:[ \t]*)*", 0, NULL,
     "Regex to match message reply subjects like 're: '"
   },
   { "resolve", DT_BOOL, true, 0, NULL,
@@ -429,7 +433,7 @@ static struct ConfigDef MainVars[] = {
   { "resume_edited_draft_files", DT_BOOL, true, 0, NULL,
     "Resume editing previously saved draft files"
   },
-  { "reverse_alias", DT_BOOL|R_INDEX, false, 0, NULL,
+  { "reverse_alias", DT_BOOL, false, 0, NULL,
     "Display the alias in the index, rather than the message's sender"
   },
   { "rfc2047_parameters", DT_BOOL, true, 0, NULL,
@@ -456,10 +460,10 @@ static struct ConfigDef MainVars[] = {
   { "score_threshold_read", DT_NUMBER, -1, 0, NULL,
     "Messages with a lower score will be automatically marked read"
   },
-  { "send_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY|DT_CHARSET_STRICT, IP "us-ascii:iso-8859-1:utf-8", 0, charset_slist_validator,
+  { "send_charset", DT_SLIST|D_SLIST_SEP_COLON|D_SLIST_ALLOW_EMPTY|D_CHARSET_STRICT, IP "us-ascii:iso-8859-1:utf-8", 0, charset_slist_validator,
     "Character sets for outgoing mail"
   },
-  { "shell", DT_STRING|DT_COMMAND, IP "/bin/sh", 0, NULL,
+  { "shell", DT_STRING|D_STRING_COMMAND, IP "/bin/sh", 0, NULL,
     "External command to run subshells in"
   },
   { "show_multipart_alternative", DT_STRING, 0, 0, multipart_validator,
@@ -480,34 +484,34 @@ static struct ConfigDef MainVars[] = {
   { "size_units_on_left", DT_BOOL, false, 0, NULL,
     "Show the units as a prefix to the size"
   },
-  { "sleep_time", DT_NUMBER|DT_NOT_NEGATIVE, 1, 0, NULL,
+  { "sleep_time", DT_NUMBER|D_INTEGER_NOT_NEGATIVE, 1, 0, NULL,
     "Time to pause after certain info messages"
   },
-  { "sort", DT_SORT|DT_SORT_REVERSE|DT_SORT_LAST|R_INDEX|R_RESORT, SORT_DATE, IP SortMethods, sort_validator,
+  { "sort", DT_SORT|D_SORT_REVERSE|D_SORT_LAST, SORT_DATE, IP SortMethods, sort_validator,
     "Sort method for the index"
   },
-  { "sort_aux", DT_SORT|DT_SORT_REVERSE|DT_SORT_LAST|R_INDEX|R_RESORT|R_RESORT_SUB, SORT_DATE, IP SortAuxMethods, NULL,
+  { "sort_aux", DT_SORT|D_SORT_REVERSE|D_SORT_LAST, SORT_DATE, IP SortAuxMethods, NULL,
     "Secondary sort method for the index"
   },
-  { "sort_re", DT_BOOL|R_INDEX|R_RESORT|R_RESORT_INIT, true, 0, NULL,
+  { "sort_re", DT_BOOL, true, 0, NULL,
     "Whether $reply_regex must be matched when not $strict_threads"
   },
   { "spam_separator", DT_STRING, IP ",", 0, NULL,
     "Separator for multiple spam headers"
   },
-  { "spool_file", DT_STRING|DT_MAILBOX, 0, 0, NULL,
+  { "spool_file", DT_STRING|D_STRING_MAILBOX, 0, 0, NULL,
     "Inbox"
   },
-  { "status_chars", DT_MBTABLE|R_INDEX, IP "-*%A", 0, NULL,
+  { "status_chars", DT_MBTABLE, IP "-*%A", 0, NULL,
     "Indicator characters for the status bar"
   },
-  { "status_format", DT_STRING|R_INDEX, IP "-%r-NeoMutt: %D [Msgs:%<M?%M/>%m%<n? New:%n>%<o? Old:%o>%<d? Del:%d>%<F? Flag:%F>%<t? Tag:%t>%<p? Post:%p>%<b? Inc:%b>%<l? %l>]---(%<T?%T/>%s/%S)-%>-(%P)---", 0, NULL,
+  { "status_format", DT_STRING, IP "-%r-NeoMutt: %D [Msgs:%<M?%M/>%m%<n? New:%n>%<o? Old:%o>%<d? Del:%d>%<F? Flag:%F>%<t? Tag:%t>%<p? Post:%p>%<b? Inc:%b>%<l? %l>]---(%<T?%T/>%s/%S)-%>-(%P)---", 0, NULL,
     "printf-like format string for the index's status line"
   },
   { "status_on_top", DT_BOOL, false, 0, NULL,
     "Display the status bar at the top"
   },
-  { "strict_threads", DT_BOOL|R_RESORT|R_RESORT_INIT|R_INDEX, false, 0, NULL,
+  { "strict_threads", DT_BOOL, false, 0, NULL,
     "Thread messages using 'In-Reply-To' and 'References' headers"
   },
   { "suspend", DT_BOOL, true, 0, NULL,
@@ -516,37 +520,37 @@ static struct ConfigDef MainVars[] = {
   { "text_flowed", DT_BOOL, false, 0, NULL,
     "Generate 'format=flowed' messages"
   },
-  { "thread_received", DT_BOOL|R_RESORT|R_RESORT_INIT|R_INDEX, false, 0, NULL,
+  { "thread_received", DT_BOOL, false, 0, NULL,
     "Sort threaded messages by their received date"
   },
-  { "time_inc", DT_NUMBER|DT_NOT_NEGATIVE, 0, 0, NULL,
+  { "time_inc", DT_NUMBER|D_INTEGER_NOT_NEGATIVE, 0, 0, NULL,
     "Frequency of progress bar updates (milliseconds)"
   },
-  { "timeout", DT_NUMBER|DT_NOT_NEGATIVE, 600, 0, NULL,
+  { "timeout", DT_NUMBER|D_INTEGER_NOT_NEGATIVE, 600, 0, NULL,
     "Time to wait for user input in menus"
   },
-  { "tmp_dir", DT_PATH|DT_PATH_DIR|DT_NOT_EMPTY, IP TMPDIR, 0, NULL,
+  { "tmp_dir", DT_PATH|D_PATH_DIR|D_NOT_EMPTY, IP TMPDIR, 0, NULL,
     "Directory for temporary files"
   },
-  { "to_chars", DT_MBTABLE|R_INDEX, IP " +TCFLR", 0, NULL,
+  { "to_chars", DT_MBTABLE, IP " +TCFLR", 0, NULL,
     "Indicator characters for the 'To' field in the index"
   },
-  { "trash", DT_STRING|DT_MAILBOX, 0, 0, NULL,
+  { "trash", DT_STRING|D_STRING_MAILBOX, 0, 0, NULL,
     "Folder to put deleted emails"
   },
-  { "ts_enabled", DT_BOOL|R_INDEX, false, 0, NULL,
+  { "ts_enabled", DT_BOOL, false, 0, NULL,
     "Allow NeoMutt to set the terminal status line and icon"
   },
-  { "ts_icon_format", DT_STRING|R_INDEX, IP "M%<n?AIL&ail>", 0, NULL,
+  { "ts_icon_format", DT_STRING, IP "M%<n?AIL&ail>", 0, NULL,
     "printf-like format string for the terminal's icon title"
   },
-  { "ts_status_format", DT_STRING|R_INDEX, IP "NeoMutt with %<m?%m messages&no messages>%<n? [%n NEW]>", 0, NULL,
+  { "ts_status_format", DT_STRING, IP "NeoMutt with %<m?%m messages&no messages>%<n? [%n NEW]>", 0, NULL,
     "printf-like format string for the terminal's status (window title)"
   },
   { "use_domain", DT_BOOL, true, 0, NULL,
     "Qualify local addresses using this domain"
   },
-  { "use_threads", DT_ENUM|R_INDEX|R_RESORT, UT_UNSET, IP &UseThreadsTypeDef, NULL,
+  { "use_threads", DT_ENUM, UT_UNSET, IP &UseThreadsTypeDef, NULL,
     "Whether to use threads for the index"
   },
   { "wait_key", DT_BOOL, true, 0, NULL,
@@ -561,13 +565,13 @@ static struct ConfigDef MainVars[] = {
   { "wrap_search", DT_BOOL, true, 0, NULL,
     "Wrap around when the search hits the end"
   },
-  { "write_inc", DT_NUMBER|DT_NOT_NEGATIVE, 10, 0, NULL,
+  { "write_inc", DT_NUMBER|D_INTEGER_NOT_NEGATIVE, 10, 0, NULL,
     "Update the progress bar after this many records written (0 to disable)"
   },
 
-  { "escape",                    DT_DEPRECATED|DT_STRING, 0, IP "2021-03-18" },
-  { "ignore_linear_white_space", DT_DEPRECATED|DT_BOOL,   0, IP "2021-03-18" },
-  { "visual",                    DT_DEPRECATED|DT_STRING, 0, IP "2021-03-18" },
+  { "escape",                    D_INTERNAL_DEPRECATED|DT_STRING, 0, IP "2021-03-18" },
+  { "ignore_linear_white_space", D_INTERNAL_DEPRECATED|DT_BOOL,   0, IP "2021-03-18" },
+  { "visual",                    D_INTERNAL_DEPRECATED|DT_STRING, 0, IP "2021-03-18" },
 
   { "autoedit",                  DT_SYNONYM, IP "auto_edit",                  IP "2021-03-21" },
   { "confirmappend",             DT_SYNONYM, IP "confirm_append",             IP "2021-03-21" },
@@ -607,10 +611,10 @@ static struct ConfigDef MainVars[] = {
  */
 static struct ConfigDef MainVarsMixmaster[] = {
   // clang-format off
-  { "mix_entry_format", DT_STRING|DT_NOT_EMPTY, IP "%4n %c %-16s %a", 0, NULL,
+  { "mix_entry_format", DT_STRING|D_NOT_EMPTY, IP "%4n %c %-16s %a", 0, NULL,
     "(mixmaster) printf-like format string for the mixmaster chain"
   },
-  { "mixmaster", DT_STRING|DT_COMMAND, IP MIXMASTER_DEFAULT, 0, NULL,
+  { "mixmaster", DT_STRING|D_STRING_COMMAND, IP MIXMASTER_DEFAULT, 0, NULL,
     "(mixmaster) External command to route a mixmaster message"
   },
   { NULL },
@@ -640,14 +644,14 @@ static struct ConfigDef MainVarsIdn[] = {
  */
 static bool config_init_main(struct ConfigSet *cs)
 {
-  bool rc = cs_register_variables(cs, MainVars, DT_NO_FLAGS);
+  bool rc = cs_register_variables(cs, MainVars);
 
 #if defined(MIXMASTER)
-  rc |= cs_register_variables(cs, MainVarsMixmaster, DT_NO_FLAGS);
+  rc |= cs_register_variables(cs, MainVarsMixmaster);
 #endif
 
 #if defined(HAVE_LIBIDN)
-  rc |= cs_register_variables(cs, MainVarsIdn, DT_NO_FLAGS);
+  rc |= cs_register_variables(cs, MainVarsIdn);
 #endif
 
   return rc;
@@ -696,29 +700,22 @@ static void init_variables(struct ConfigSet *cs)
 #endif
   CONFIG_INIT_VARS(cs, helpbar);
   CONFIG_INIT_VARS(cs, history);
-#if defined(USE_IMAP)
   CONFIG_INIT_VARS(cs, imap);
-#endif
   CONFIG_INIT_VARS(cs, index);
   CONFIG_INIT_VARS(cs, maildir);
+  CONFIG_INIT_VARS(cs, mh);
   CONFIG_INIT_VARS(cs, mbox);
   CONFIG_INIT_VARS(cs, menu);
   CONFIG_INIT_VARS(cs, ncrypt);
-#if defined(USE_NNTP)
   CONFIG_INIT_VARS(cs, nntp);
-#endif
 #if defined(USE_NOTMUCH)
   CONFIG_INIT_VARS(cs, notmuch);
 #endif
   CONFIG_INIT_VARS(cs, pager);
   CONFIG_INIT_VARS(cs, pattern);
-#if defined(USE_POP)
   CONFIG_INIT_VARS(cs, pop);
-#endif
   CONFIG_INIT_VARS(cs, send);
-#if defined(USE_SIDEBAR)
   CONFIG_INIT_VARS(cs, sidebar);
-#endif
 }
 
 /**

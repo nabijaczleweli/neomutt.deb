@@ -3,7 +3,8 @@
  * View of a Mailbox
  *
  * @authors
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2021 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -308,10 +309,8 @@ static void update_tables(struct MailboxView *mv)
         mutt_hash_delete(m->id_hash, m->emails[i]->env->message_id, m->emails[i]);
       mutt_label_hash_remove(m, m->emails[i]);
 
-#ifdef USE_IMAP
       if (m->type == MUTT_IMAP)
         imap_notify_delete_email(m, m->emails[i]);
-#endif
 
       mailbox_gc_add(m->emails[i]);
       m->emails[i] = NULL;

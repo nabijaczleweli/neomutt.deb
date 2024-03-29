@@ -3,8 +3,15 @@
  * Test code hub
  *
  * @authors
- * Copyright (C) 2018-2019 Pietro Cerutti <gahr@gahr.ch>
- * Copyright (C) 2019-2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2019 Simon Symeonidis <lethaljellybean@gmail.com>
+ * Copyright (C) 2019-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021 Austin Ray <austin@austinray.io>
+ * Copyright (C) 2021 Eric Blake <eblake@redhat.com>
+ * Copyright (C) 2022 Michal Siedlaczek <michal@siedlaczek.me>
+ * Copyright (C) 2023 Anna Figueiredo Gomes <navi@vlhl.dev>
+ * Copyright (C) 2023 Rayford Shireman
+ * Copyright (C) 2023-2024 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -110,9 +117,11 @@ void test_fini(void);
   NEOMUTT_TEST_ITEM(test_buf_fix_dptr)                                         \
   NEOMUTT_TEST_ITEM(test_buf_free)                                             \
   NEOMUTT_TEST_ITEM(test_buf_init)                                             \
+  NEOMUTT_TEST_ITEM(test_buf_inline_replace)                                   \
   NEOMUTT_TEST_ITEM(test_buf_insert)                                           \
   NEOMUTT_TEST_ITEM(test_buf_istr_equal)                                       \
   NEOMUTT_TEST_ITEM(test_buf_is_empty)                                         \
+  NEOMUTT_TEST_ITEM(test_buf_join_str)                                         \
   NEOMUTT_TEST_ITEM(test_buf_len)                                              \
   NEOMUTT_TEST_ITEM(test_buf_lower)                                            \
   NEOMUTT_TEST_ITEM(test_buf_make)                                             \
@@ -122,13 +131,14 @@ void test_fini(void);
   NEOMUTT_TEST_ITEM(test_buf_pool_release)                                     \
   NEOMUTT_TEST_ITEM(test_buf_printf)                                           \
   NEOMUTT_TEST_ITEM(test_buf_reset)                                            \
+  NEOMUTT_TEST_ITEM(test_buf_rfind)                                            \
+  NEOMUTT_TEST_ITEM(test_buf_seek)                                             \
   NEOMUTT_TEST_ITEM(test_buf_startswith)                                       \
   NEOMUTT_TEST_ITEM(test_buf_strcpy)                                           \
   NEOMUTT_TEST_ITEM(test_buf_strcpy_n)                                         \
   NEOMUTT_TEST_ITEM(test_buf_strdup)                                           \
   NEOMUTT_TEST_ITEM(test_buf_str_equal)                                        \
   NEOMUTT_TEST_ITEM(test_buf_substrcpy)                                        \
-  NEOMUTT_TEST_ITEM(test_buf_upper)                                            \
                                                                                \
   /* charset */                                                                \
   NEOMUTT_TEST_ITEM(test_mutt_ch_canonical_charset)                            \
@@ -228,11 +238,7 @@ void test_fini(void);
   NEOMUTT_TEST_ITEM(test_editor_backward_char)                                 \
   NEOMUTT_TEST_ITEM(test_editor_backward_word)                                 \
   NEOMUTT_TEST_ITEM(test_editor_bol)                                           \
-  NEOMUTT_TEST_ITEM(test_editor_buffer_get_cursor)                             \
-  NEOMUTT_TEST_ITEM(test_editor_buffer_get_lastchar)                           \
   NEOMUTT_TEST_ITEM(test_editor_buffer_is_empty)                               \
-  NEOMUTT_TEST_ITEM(test_editor_buffer_set)                                    \
-  NEOMUTT_TEST_ITEM(test_editor_buffer_set_cursor)                             \
   NEOMUTT_TEST_ITEM(test_editor_case_word)                                     \
   NEOMUTT_TEST_ITEM(test_editor_delete_char)                                   \
   NEOMUTT_TEST_ITEM(test_editor_eol)                                           \
@@ -280,10 +286,8 @@ void test_fini(void);
   NEOMUTT_TEST_ITEM(test_buf_file_expand_fmt_quote)                            \
   NEOMUTT_TEST_ITEM(test_buf_quote_filename)                                   \
   NEOMUTT_TEST_ITEM(test_mutt_file_check_empty)                                \
-  NEOMUTT_TEST_ITEM(test_mutt_file_chmod)                                      \
   NEOMUTT_TEST_ITEM(test_mutt_file_chmod_add)                                  \
   NEOMUTT_TEST_ITEM(test_mutt_file_chmod_add_stat)                             \
-  NEOMUTT_TEST_ITEM(test_mutt_file_chmod_rm)                                   \
   NEOMUTT_TEST_ITEM(test_mutt_file_chmod_rm_stat)                              \
   NEOMUTT_TEST_ITEM(test_mutt_file_copy_bytes)                                 \
   NEOMUTT_TEST_ITEM(test_mutt_file_copy_stream)                                \
@@ -382,7 +386,7 @@ void test_fini(void);
                                                                                \
   /* list */                                                                   \
   NEOMUTT_TEST_ITEM(test_mutt_list_clear)                                      \
-  NEOMUTT_TEST_ITEM(test_mutt_list_compare)                                    \
+  NEOMUTT_TEST_ITEM(test_mutt_list_equal)                                      \
   NEOMUTT_TEST_ITEM(test_mutt_list_find)                                       \
   NEOMUTT_TEST_ITEM(test_mutt_list_free)                                       \
   NEOMUTT_TEST_ITEM(test_mutt_list_free_type)                                  \
@@ -394,7 +398,6 @@ void test_fini(void);
                                                                                \
   /* logging */                                                                \
   NEOMUTT_TEST_ITEM(test_log_disp_file)                                        \
-  NEOMUTT_TEST_ITEM(test_log_disp_null)                                        \
   NEOMUTT_TEST_ITEM(test_log_disp_queue)                                       \
   NEOMUTT_TEST_ITEM(test_log_disp_terminal)                                    \
   NEOMUTT_TEST_ITEM(test_log_file_close)                                       \
@@ -507,7 +510,6 @@ void test_fini(void);
   NEOMUTT_TEST_ITEM(test_mutt_path_dirname)                                    \
   NEOMUTT_TEST_ITEM(test_mutt_path_escape)                                     \
   NEOMUTT_TEST_ITEM(test_mutt_path_getcwd)                                     \
-  NEOMUTT_TEST_ITEM(test_mutt_path_parent)                                     \
   NEOMUTT_TEST_ITEM(test_mutt_path_realpath)                                   \
   NEOMUTT_TEST_ITEM(test_mutt_path_tidy)                                       \
   NEOMUTT_TEST_ITEM(test_mutt_path_tidy_dotdot)                                \
@@ -524,7 +526,6 @@ void test_fini(void);
   NEOMUTT_TEST_ITEM(test_mutt_prex_cleanup)                                    \
                                                                                \
   /* random */                                                                 \
-  NEOMUTT_TEST_ITEM(test_mutt_rand32)                                          \
   NEOMUTT_TEST_ITEM(test_mutt_rand64)                                          \
   NEOMUTT_TEST_ITEM(test_mutt_rand_base32)                                     \
                                                                                \
@@ -569,11 +570,9 @@ void test_fini(void);
   NEOMUTT_TEST_ITEM(test_mutt_sig_unblock_system)                              \
                                                                                \
   /* slist */                                                                  \
-  NEOMUTT_TEST_ITEM(test_slist_add_list)                                       \
   NEOMUTT_TEST_ITEM(test_slist_add_string)                                     \
-  NEOMUTT_TEST_ITEM(test_slist_compare)                                        \
   NEOMUTT_TEST_ITEM(test_slist_dup)                                            \
-  NEOMUTT_TEST_ITEM(test_slist_empty)                                          \
+  NEOMUTT_TEST_ITEM(test_slist_equal)                                          \
   NEOMUTT_TEST_ITEM(test_slist_free)                                           \
   NEOMUTT_TEST_ITEM(test_slist_is_empty)                                       \
   NEOMUTT_TEST_ITEM(test_slist_is_member)                                      \
@@ -592,7 +591,6 @@ void test_fini(void);
   NEOMUTT_TEST_ITEM(test_mutt_istrn_equal)                                     \
   NEOMUTT_TEST_ITEM(test_mutt_istrn_rfind)                                     \
   NEOMUTT_TEST_ITEM(test_mutt_str_adjust)                                      \
-  NEOMUTT_TEST_ITEM(test_mutt_str_append_item)                                 \
   NEOMUTT_TEST_ITEM(test_mutt_str_asprintf)                                    \
   NEOMUTT_TEST_ITEM(test_mutt_str_atoi)                                        \
   NEOMUTT_TEST_ITEM(test_mutt_str_atol)                                        \
@@ -603,20 +601,16 @@ void test_fini(void);
   NEOMUTT_TEST_ITEM(test_mutt_str_cat)                                         \
   NEOMUTT_TEST_ITEM(test_mutt_str_coll)                                        \
   NEOMUTT_TEST_ITEM(test_mutt_str_copy)                                        \
-  NEOMUTT_TEST_ITEM(test_mutt_str_dequote_comment)                             \
   NEOMUTT_TEST_ITEM(test_mutt_str_dup)                                         \
   NEOMUTT_TEST_ITEM(test_mutt_str_equal)                                       \
   NEOMUTT_TEST_ITEM(test_mutt_str_find_word)                                   \
   NEOMUTT_TEST_ITEM(test_mutt_str_getenv)                                      \
   NEOMUTT_TEST_ITEM(test_mutt_str_hyphenate)                                   \
-  NEOMUTT_TEST_ITEM(test_mutt_str_inline_replace)                              \
   NEOMUTT_TEST_ITEM(test_mutt_str_is_ascii)                                    \
   NEOMUTT_TEST_ITEM(test_mutt_str_is_email_wsp)                                \
   NEOMUTT_TEST_ITEM(test_mutt_str_len)                                         \
   NEOMUTT_TEST_ITEM(test_mutt_str_lower)                                       \
   NEOMUTT_TEST_ITEM(test_mutt_str_lws_len)                                     \
-  NEOMUTT_TEST_ITEM(test_mutt_str_lws_rlen)                                    \
-  NEOMUTT_TEST_ITEM(test_mutt_str_next_word)                                   \
   NEOMUTT_TEST_ITEM(test_mutt_str_remove_trailing_ws)                          \
   NEOMUTT_TEST_ITEM(test_mutt_str_replace)                                     \
   NEOMUTT_TEST_ITEM(test_mutt_str_sep)                                         \
@@ -629,7 +623,6 @@ void test_fini(void);
   NEOMUTT_TEST_ITEM(test_mutt_strn_copy)                                       \
   NEOMUTT_TEST_ITEM(test_mutt_strn_dup)                                        \
   NEOMUTT_TEST_ITEM(test_mutt_strn_equal)                                      \
-  NEOMUTT_TEST_ITEM(test_mutt_strn_rfind)                                      \
                                                                                \
   /* tags */                                                                   \
   NEOMUTT_TEST_ITEM(test_driver_tags_free)                                     \

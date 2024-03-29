@@ -1,9 +1,9 @@
 /**
  * @file
- * Test code for editor_buffer_get_cursor()
+ * Maildir Account
  *
  * @authors
- * Copyright (C) 2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2024 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -20,29 +20,29 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define TEST_NO_MAIN
+/**
+ * @page maildir_account Maildir Account
+ *
+ * Maildir Account
+ */
+
 #include "config.h"
-#include "acutest.h"
-#include <stddef.h>
-#include <stdbool.h>
-#include "email/lib.h"
-#include "core/lib.h"
-#include "editor/lib.h"
+#include "account.h"
 
-void test_editor_buffer_get_cursor(void)
+// Mailbox API -----------------------------------------------------------------
+
+/**
+ * maildir_ac_add - Add a Mailbox to an Account - Implements MxOps::ac_add() - @ingroup mx_ac_add
+ */
+bool maildir_ac_add(struct Account *a, struct Mailbox *m)
 {
-  // size_t editor_buffer_get_cursor(struct EnterState *es);
+  return true;
+}
 
-  {
-    TEST_CHECK(editor_buffer_get_cursor(NULL) == 0);
-  }
-
-  {
-    const size_t pos = 8;
-    struct EnterState *es = enter_state_new();
-    editor_buffer_set(es, "hello world");
-    editor_buffer_set_cursor(es, pos);
-    TEST_CHECK(editor_buffer_get_cursor(es) == pos);
-    enter_state_free(&es);
-  }
+/**
+ * maildir_ac_owns_path - Check whether an Account owns a Mailbox path - Implements MxOps::ac_owns_path() - @ingroup mx_ac_owns_path
+ */
+bool maildir_ac_owns_path(struct Account *a, const char *path)
+{
+  return true;
 }

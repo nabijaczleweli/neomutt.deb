@@ -3,7 +3,8 @@
  * Linear Array data structure
  *
  * @authors
- * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2020-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -289,10 +290,13 @@
       true)                                                                    \
    : false)
 
+#ifndef __COVERITY__
+#define __coverity_escape__(x) 0
+#endif
 #define ARRAY_ADD_NORESERVE(head, elem)                                        \
   ((head)->capacity > (head)->size                                             \
    ? (((head)->entries[(head)->size++] = (elem)),                              \
-      true)                                                                    \
-   : false)
+     ((void)__coverity_escape__(elem), true))                                  \
+   : ((void)__coverity_escape__(elem), false))
 
 #endif /* MUTT_MUTT_ARRAY_H */

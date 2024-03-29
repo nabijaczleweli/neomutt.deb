@@ -3,10 +3,8 @@
  * Compose Email Dialog
  *
  * @authors
- * Copyright (C) 1996-2000,2002,2007,2010,2012 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2004 g10 Code GmbH
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -84,7 +82,7 @@
 #include "attach_data.h"
 #include "cbar.h"
 #include "functions.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "hook.h"
 #include "mutt_logging.h"
 #include "shared_data.h"
@@ -107,7 +105,6 @@ static const struct Mapping ComposeHelp[] = {
   // clang-format on
 };
 
-#ifdef USE_NNTP
 /// Help Bar for the News Compose dialog
 static const struct Mapping ComposeNewsHelp[] = {
   // clang-format off
@@ -121,7 +118,6 @@ static const struct Mapping ComposeNewsHelp[] = {
   { NULL, 0 },
   // clang-format on
 };
-#endif
 
 /**
  * compose_config_observer - Notification that a Config Variable has changed - Implements ::observer_t - @ingroup observer_api
@@ -190,24 +186,24 @@ static int compose_window_observer(struct NotifyCallback *nc)
 /**
  * gen_attach_list - Generate the attachment list for the compose screen
  * @param actx        Attachment context
- * @param m           Attachment
+ * @param b           Attachment
  * @param parent_type Attachment type, e.g #TYPE_MULTIPART
  * @param level       Nesting depth of attachment
  */
-static void gen_attach_list(struct AttachCtx *actx, struct Body *m, int parent_type, int level)
+static void gen_attach_list(struct AttachCtx *actx, struct Body *b, int parent_type, int level)
 {
-  for (; m; m = m->next)
+  for (; b; b = b->next)
   {
     struct AttachPtr *ap = mutt_aptr_new();
     mutt_actx_add_attach(actx, ap);
-    ap->body = m;
-    m->aptr = ap;
+    ap->body = b;
+    b->aptr = ap;
     ap->parent_type = parent_type;
     ap->level = level;
-    if ((m->type == TYPE_MULTIPART) && m->parts &&
-        (!(WithCrypto & APPLICATION_PGP) || !mutt_is_multipart_encrypted(m)))
+    if ((b->type == TYPE_MULTIPART) && b->parts &&
+        (!(WithCrypto & APPLICATION_PGP) || !mutt_is_multipart_encrypted(b)))
     {
-      gen_attach_list(actx, m->parts, m->type, level + 1);
+      gen_attach_list(actx, b->parts, b->type, level + 1);
     }
   }
 }
@@ -322,11 +318,9 @@ int dlg_compose(struct Email *e, struct Buffer *fcc, uint8_t flags, struct Confi
   notify_observer_add(e->notify, NT_ALL, compose_email_observer, shared);
   notify_observer_add(dlg->notify, NT_WINDOW, compose_window_observer, dlg);
 
-#ifdef USE_NNTP
   if (OptNewsSend)
     dlg->help_data = ComposeNewsHelp;
   else
-#endif
     dlg->help_data = ComposeHelp;
   dlg->help_menu = MENU_COMPOSE;
 
@@ -344,9 +338,7 @@ int dlg_compose(struct Email *e, struct Buffer *fcc, uint8_t flags, struct Confi
   int op = OP_NULL;
   do
   {
-#ifdef USE_NNTP
     OptNews = false; /* for any case */
-#endif
     menu_tagging_dispatcher(menu->win, op);
     window_redraw(NULL);
 

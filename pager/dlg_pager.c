@@ -3,8 +3,11 @@
  * Pager Dialog
  *
  * @authors
- * Copyright (C) 1996-2002,2007,2010,2012-2013 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
  * Copyright (C) 2020 R Primus <rprimus@gmail.com>
+ * Copyright (C) 2020-2021 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2021 Eric Blake <eblake@redhat.com>
+ * Copyright (C) 2021 Ihor Antonov <ihor@antonovs.family>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -35,7 +38,6 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -51,9 +53,9 @@
 #include "key/lib.h"
 #include "menu/lib.h"
 #include "pattern/lib.h"
+#include "sidebar/lib.h"
 #include "display.h"
 #include "functions.h"
-#include "globals.h" // IWYU pragma: keep
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
 #include "mview.h"
@@ -61,9 +63,6 @@
 #include "private_data.h"
 #include "protos.h"
 #include "status.h"
-#ifdef USE_SIDEBAR
-#include "sidebar/lib.h"
-#endif
 
 /// Braille display: row to leave the cursor
 int BrailleRow = -1;
@@ -106,7 +105,6 @@ static const struct Mapping PagerNormalHelp[] = {
   // clang-format on
 };
 
-#ifdef USE_NNTP
 /// Help Bar for the Pager of an NNTP Mailbox
 static const struct Mapping PagerNewsHelp[] = {
   // clang-format off
@@ -121,7 +119,6 @@ static const struct Mapping PagerNewsHelp[] = {
   { NULL, 0 },
   // clang-format on
 };
-#endif
 
 /**
  * pager_queue_redraw - Queue a request for a redraw
@@ -323,7 +320,7 @@ int dlg_pager(struct PagerView *pview)
   pview->win_pager->size = MUTT_WIN_SIZE_MAXIMISE;
   priv->lines_max = LINES; // number of lines on screen, from curses
   priv->lines = mutt_mem_calloc(priv->lines_max, sizeof(struct Line));
-  priv->fp = fopen(pview->pdata->fname, "r");
+  priv->fp = mutt_file_fopen(pview->pdata->fname, "r");
   priv->has_types = ((pview->mode == PAGER_MODE_EMAIL) || (pview->flags & MUTT_SHOWCOLOR)) ?
                         MUTT_TYPES :
                         0; // main message or rfc822 attachment
@@ -453,11 +450,11 @@ int dlg_pager(struct PagerView *pview)
         const char *const c_new_mail_command = cs_subset_string(NeoMutt->sub, "new_mail_command");
         if (c_new_mail_command)
         {
-          char cmd[1024] = { 0 };
-          menu_status_line(cmd, sizeof(cmd), shared, NULL, sizeof(cmd),
-                           NONULL(c_new_mail_command));
-          if (mutt_system(cmd) != 0)
-            mutt_error(_("Error running \"%s\""), cmd);
+          struct Buffer *cmd = buf_pool_get();
+          menu_status_line(cmd, shared, NULL, cmd->dsize, NONULL(c_new_mail_command));
+          if (mutt_system(buf_string(cmd)) != 0)
+            mutt_error(_("Error running \"%s\""), buf_string(cmd));
+          buf_pool_release(&cmd);
         }
       }
     }
@@ -541,10 +538,8 @@ int dlg_pager(struct PagerView *pview)
     {
       if ((rc == FR_UNKNOWN) && priv->pview->win_index)
         rc = index_function_dispatcher(priv->pview->win_index, op);
-#ifdef USE_SIDEBAR
       if (rc == FR_UNKNOWN)
         rc = sb_function_dispatcher(win_sidebar, op);
-#endif
     }
     if (rc == FR_UNKNOWN)
       rc = global_function_dispatcher(NULL, op);

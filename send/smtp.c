@@ -3,9 +3,13 @@
  * Send email to an SMTP server
  *
  * @authors
- * Copyright (C) 2002 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2005-2009 Brendan Cully <brendan@kublai.com>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2020 Yousef Akbar <yousef@yhakbar.com>
+ * Copyright (C) 2021 Ryan Kavanagh <rak@rak.ac>
+ * Copyright (C) 2023 Alejandro Colomar <alx@kernel.org>
+ * Copyright (C) 2023 Anna Figueiredo Gomes <navi@vlhl.dev>
+ * Copyright (C) 2023 Rayford Shireman
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -47,7 +51,7 @@
 #include "smtp.h"
 #include "progress/lib.h"
 #include "question/lib.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "mutt_account.h"
 #include "mutt_socket.h"
 #include "sendlib.h"
@@ -242,7 +246,7 @@ static int smtp_data(struct SmtpAccountData *adata, const char *msgfile)
   int term = 0;
   size_t buflen = 0;
 
-  FILE *fp = fopen(msgfile, "r");
+  FILE *fp = mutt_file_fopen(msgfile, "r");
   if (!fp)
   {
     mutt_error(_("SMTP session failed: unable to open %s"), msgfile);
@@ -255,7 +259,8 @@ static int smtp_data(struct SmtpAccountData *adata, const char *msgfile)
     return -1;
   }
   unlink(msgfile);
-  progress = progress_new(_("Sending message..."), MUTT_PROGRESS_NET, size);
+  progress = progress_new(MUTT_PROGRESS_NET, size);
+  progress_set_message(progress, _("Sending message..."));
 
   snprintf(buf, sizeof(buf), "DATA\r\n");
   if (mutt_socket_send(adata->conn, buf) == -1)
@@ -447,7 +452,7 @@ static int smtp_code(const struct Buffer *buf, int *n)
   if (buf_len(buf) < 3)
     return false;
 
-  char code[4];
+  char code[4] = { 0 };
   const char *str = buf_string(buf);
 
   code[0] = str[0];
@@ -488,13 +493,13 @@ static int smtp_get_auth_response(struct Connection *conn, struct Buffer *input_
     if (*smtp_rc != SMTP_READY)
       break;
 
-    const char *smtp_response = buf_string(input_buf) + 3;
+    const char *smtp_response = input_buf->data + 3;
     if (*smtp_response)
     {
       smtp_response++;
       buf_addstr(response_buf, smtp_response);
     }
-  } while (buf_string(input_buf)[3] == '-');
+  } while (input_buf->data[3] == '-');
 
   return 0;
 }

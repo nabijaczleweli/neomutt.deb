@@ -3,7 +3,7 @@
  * GUI present the user with a selectable list
  *
  * @authors
- * Copyright (C) 1996-2000,2002,2012 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
  * Copyright (C) 2020 R Primus <rprimus@gmail.com>
  *
  * @copyright
@@ -54,10 +54,13 @@ static const struct AttrColor *default_color(struct Menu *menu, int line)
  */
 static int generic_search(struct Menu *menu, regex_t *rx, int line)
 {
-  char buf[1024] = { 0 };
+  struct Buffer *buf = buf_pool_get();
 
-  menu->make_entry(menu, buf, sizeof(buf), line);
-  return regexec(rx, buf, 0, NULL, 0);
+  menu->make_entry(menu, line, buf);
+  int rc = regexec(rx, buf->data, 0, NULL, 0);
+  buf_pool_release(&buf);
+
+  return rc;
 }
 
 /**

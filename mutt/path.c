@@ -3,7 +3,10 @@
  * Path manipulation functions
  *
  * @authors
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018 Ian Zimmerman <itz@no-use.mooo.com>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -378,35 +381,6 @@ size_t mutt_path_realpath(struct Buffer *path)
     return 0;
 
   return buf_strcpy(path, s);
-}
-
-/**
- * mutt_path_parent - Find the parent of a path
- * @param  path  Buffer for the result
- * @retval true  Success
- */
-bool mutt_path_parent(struct Buffer *path)
-{
-  if (buf_is_empty(path))
-    return false;
-
-  int n = buf_len(path);
-  if (n < 2)
-    return false;
-
-  if (buf_at(path, n - 1) == '/')
-    n--;
-
-  // Find the previous '/'
-  for (n--; ((n >= 0) && (buf_at(path, n) != '/')); n--)
-    ; // do nothing
-
-  if (n == 0) // Always keep at least one '/'
-    n++;
-
-  path->data[n] = '\0';
-  buf_fix_dptr(path);
-  return true;
 }
 
 /**

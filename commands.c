@@ -5,7 +5,13 @@
  * @authors
  * Copyright (C) 1996-2002,2007,2010,2012-2013,2016 Michael R. Elkins <me@mutt.org>
  * Copyright (C) 2004 g10 Code GmbH
+ * Copyright (C) 2019-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Aditya De Saha <adityadesaha@gmail.com>
+ * Copyright (C) 2020 Matthew Hughes <matthewhughes934@gmail.com>
  * Copyright (C) 2020 R Primus <rprimus@gmail.com>
+ * Copyright (C) 2020-2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2022 Marco Sirabella <marco@sirabella.org>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -30,7 +36,6 @@
 
 #include "config.h"
 #include <errno.h>
-#include <inttypes.h> // IWYU pragma: keep
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -54,7 +59,7 @@
 #include "parse/lib.h"
 #include "store/lib.h"
 #include "alternates.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "muttlib.h"
 #include "mx.h"
 #include "score.h"
@@ -350,7 +355,7 @@ static enum CommandResult parse_cd(struct Buffer *buf, struct Buffer *s,
 {
   parse_extract_token(buf, s, TOKEN_NO_FLAGS);
   buf_expand_path(buf);
-  if (buf_len(buf) == 0)
+  if (buf_is_empty(buf))
   {
     if (HomeDir)
     {
@@ -837,7 +842,7 @@ enum CommandResult parse_my_hdr(struct Buffer *buf, struct Buffer *s,
 }
 
 /**
- * set_dump - Dump list of config variables into a file/pager.
+ * set_dump - Dump list of config variables into a file/pager
  * @param flags what configs to dump: see #ConfigDumpFlags
  * @param err buffer for error message
  * @return num See #CommandResult
@@ -951,7 +956,7 @@ static enum CommandResult parse_setenv(struct Buffer *buf, struct Buffer *s,
 
     if (unset)
     {
-      buf_printf(err, _("Can't query a variable with the '%s' command"), "unsetenv");
+      buf_printf(err, _("Can't query option with the '%s' command"), "unsetenv");
       return MUTT_CMD_WARNING;
     }
 
@@ -965,7 +970,7 @@ static enum CommandResult parse_setenv(struct Buffer *buf, struct Buffer *s,
   {
     if (unset)
     {
-      buf_printf(err, _("Can't query a variable with the '%s' command"), "unsetenv");
+      buf_printf(err, _("Can't query option with the '%s' command"), "unsetenv");
       return MUTT_CMD_WARNING;
     }
 
@@ -1195,7 +1200,6 @@ bail:
   return MUTT_CMD_ERROR;
 }
 
-#ifdef USE_IMAP
 /**
  * parse_subscribe_to - Parse the 'subscribe-to' command - Implements Command::parse() - @ingroup command_parse
  *
@@ -1241,7 +1245,6 @@ enum CommandResult parse_subscribe_to(struct Buffer *buf, struct Buffer *s,
   buf_addstr(err, _("No folder specified"));
   return MUTT_CMD_WARNING;
 }
-#endif
 
 /**
  * parse_tag_formats - Parse the 'tag-formats' command - Implements Command::parse() - @ingroup command_parse
@@ -1534,7 +1537,6 @@ static enum CommandResult parse_unsubscribe(struct Buffer *buf, struct Buffer *s
   return MUTT_CMD_SUCCESS;
 }
 
-#ifdef USE_IMAP
 /**
  * parse_unsubscribe_from - Parse the 'unsubscribe-from' command - Implements Command::parse() - @ingroup command_parse
  *
@@ -1578,7 +1580,6 @@ enum CommandResult parse_unsubscribe_from(struct Buffer *buf, struct Buffer *s,
   buf_addstr(err, _("No folder specified"));
   return MUTT_CMD_WARNING;
 }
-#endif
 
 /**
  * parse_version - Parse the 'version' command - Implements Command::parse() - @ingroup command_parse

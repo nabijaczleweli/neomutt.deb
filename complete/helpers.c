@@ -3,7 +3,9 @@
  * Auto-completion helpers
  *
  * @authors
- * Copyright (C) 2022 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2022-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Anna Figueiredo Gomes <navi@vlhl.dev>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -194,7 +196,7 @@ int mutt_command_complete(struct CompletionData *cd, struct Buffer *buf, int pos
         he = he_list[i];
         const int type = DTYPE(he->type);
 
-        if ((type == DT_SYNONYM) || (type & DT_DEPRECATED))
+        if ((type == DT_SYNONYM) || (type & D_INTERNAL_DEPRECATED))
           continue;
 
         candidate(cd, cd->user_typed, he->key.strkey, cd->completed, sizeof(cd->completed));
@@ -400,19 +402,19 @@ int mutt_var_value_complete(struct CompletionData *cd, struct Buffer *buf, int p
     if (!he)
       return 0; /* no such variable. */
 
-    struct Buffer value = buf_make(256);
-    struct Buffer pretty = buf_make(256);
-    int rc = cs_subset_he_string_get(NeoMutt->sub, he, &value);
+    struct Buffer *value = buf_pool_get();
+    struct Buffer *pretty = buf_pool_get();
+    int rc = cs_subset_he_string_get(NeoMutt->sub, he, value);
     if (CSR_RESULT(rc) == CSR_SUCCESS)
     {
-      pretty_var(value.data, &pretty);
-      snprintf(pt, buf->dsize - (pt - buf->data), "%s=%s", var, pretty.data);
-      buf_dealloc(&value);
-      buf_dealloc(&pretty);
+      pretty_var(value->data, pretty);
+      snprintf(pt, buf->dsize - (pt - buf->data), "%s=%s", var, pretty->data);
+      buf_pool_release(&value);
+      buf_pool_release(&pretty);
       return 0;
     }
-    buf_dealloc(&value);
-    buf_dealloc(&pretty);
+    buf_pool_release(&value);
+    buf_pool_release(&pretty);
     return 1;
   }
   return 0;

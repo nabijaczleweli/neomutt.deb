@@ -3,7 +3,9 @@
  * Test code for the ConfigSet object
  *
  * @authors
- * Copyright (C) 2017-2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2024 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Jakub Jindra <jakub.jindra@socialbakers.com>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -29,9 +31,8 @@
 #include <stdio.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
-#include "core/lib.h"
-#include "common.h" // IWYU pragma: keep
-#include "test_common.h"
+#include "common.h"      // IWYU pragma: keep
+#include "test_common.h" // IWYU pragma: keep
 
 // clang-format off
 static struct ConfigDef Vars[] = {
@@ -90,7 +91,7 @@ void dummy_destroy(const struct ConfigSet *cs, void *var, const struct ConfigDef
 bool degenerate_tests(struct ConfigSet *cs)
 {
   const struct ConfigSetType CstDummy = {
-    DT_NUMBER, "dummy", NULL, NULL, NULL, NULL, NULL, NULL,
+    DT_REGEX, "dummy", NULL, NULL, NULL, NULL, NULL, NULL,
   };
 
   struct HashElem *he = cs_get_elem(cs, "Banana");
@@ -102,9 +103,9 @@ bool degenerate_tests(struct ConfigSet *cs)
     return false;
   if (!TEST_CHECK(cs_register_type(cs, NULL) == false))
     return false;
-  if (!TEST_CHECK(cs_register_variables(cs, NULL, DT_NO_FLAGS) == false))
+  if (!TEST_CHECK(cs_register_variables(cs, NULL) == false))
     return false;
-  if (!TEST_CHECK(cs_register_variables(NULL, Vars, DT_NO_FLAGS) == false))
+  if (!TEST_CHECK(cs_register_variables(NULL, Vars) == false))
     return false;
 
   if (!TEST_CHECK(cs_str_native_get(NULL, "apple", NULL) == INT_MIN))
@@ -240,6 +241,8 @@ bool invalid_tests(struct ConfigSet *cs)
     return false;
   if (!TEST_CHECK(cs_he_string_minus_equals(cs, he, "42", NULL) != CSR_SUCCESS))
     return false;
+
+  he->type = DT_BOOL;
 
   return true;
 }
@@ -391,7 +394,7 @@ void test_config_set(void)
   cs_register_type(cs, &CstBool);
   cs_register_type(cs, &CstBool); /* second one should fail */
 
-  if (TEST_CHECK(!cs_register_variables(cs, Vars, DT_NO_FLAGS)))
+  if (TEST_CHECK(!cs_register_variables(cs, Vars)))
   {
     TEST_MSG("Expected error");
   }

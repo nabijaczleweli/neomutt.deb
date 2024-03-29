@@ -3,7 +3,8 @@
  * Test code for mutt_path_realpath()
  *
  * @authors
- * Copyright (C) 2019 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -24,6 +25,8 @@
 #include "config.h"
 #include "acutest.h"
 #include <stddef.h>
+#include <limits.h>
+#include <stdio.h>
 #include "mutt/lib.h"
 #include "test_common.h"
 

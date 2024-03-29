@@ -3,7 +3,9 @@
  * GPGME Key Selection Dialog
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Rayford Shireman
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -98,15 +100,6 @@ static const struct Mapping GpgmeHelp[] = {
   { N_("Help"),      OP_HELP },
   { NULL, 0 },
   // clang-format on
-};
-
-/**
- * struct CryptEntry - An entry in the Select-Key menu
- */
-struct CryptEntry
-{
-  size_t num;               ///< Index number
-  struct CryptKeyInfo *key; ///< Key
 };
 
 /**
@@ -459,7 +452,7 @@ static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int co
 
     case '[':
     {
-      char buf2[128];
+      char buf2[128] = { 0 };
       bool use_c_locale = false;
       struct tm tm = { 0 };
 
@@ -539,7 +532,7 @@ static const char *crypt_format_str(char *buf, size_t buflen, size_t col, int co
  *
  * @sa $pgp_entry_format, crypt_format_str()
  */
-static void crypt_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
+static void crypt_make_entry(struct Menu *menu, int line, struct Buffer *buf)
 {
   struct CryptKeyInfo **key_table = menu->mdata;
   struct CryptEntry entry = { 0 };
@@ -548,8 +541,9 @@ static void crypt_make_entry(struct Menu *menu, char *buf, size_t buflen, int li
   entry.num = line + 1;
 
   const char *const c_pgp_entry_format = cs_subset_string(NeoMutt->sub, "pgp_entry_format");
-  mutt_expando_format(buf, buflen, 0, menu->win->state.cols, NONULL(c_pgp_entry_format),
-                      crypt_format_str, (intptr_t) &entry, MUTT_FORMAT_ARROWCURSOR);
+  mutt_expando_format(buf->data, buf->dsize, 0, menu->win->state.cols,
+                      NONULL(c_pgp_entry_format), crypt_format_str,
+                      (intptr_t) &entry, MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**

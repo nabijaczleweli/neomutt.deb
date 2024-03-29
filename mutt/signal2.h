@@ -3,7 +3,7 @@
  * Signal handling
  *
  * @authors
- * Copyright (C) 2017 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2024 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -23,7 +23,12 @@
 #ifndef MUTT_MUTT_SIGNAL2_H
 #define MUTT_MUTT_SIGNAL2_H
 
+#include "config.h"
+#include <signal.h>
 #include <stdbool.h>
+
+extern volatile sig_atomic_t SigInt;   ///< true after SIGINT is received
+extern volatile sig_atomic_t SigWinch; ///< true after SIGWINCH is received
 
 /**
  * @defgroup sig_handler_api Signal Handling API

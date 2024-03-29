@@ -3,7 +3,7 @@
  * Common code for store tests
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -26,7 +26,6 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include "mutt/lib.h"
 #include "store/lib.h"
 #include "test_common.h"
 

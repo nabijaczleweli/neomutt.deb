@@ -25,8 +25,6 @@
 #include "acutest.h"
 #include <stddef.h>
 #include <stdbool.h>
-#include <stdlib.h>
-#include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
@@ -51,7 +49,7 @@ void test_color_dump(void)
   regex_colors_init();
   simple_colors_init();
 
-  TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars, DT_NO_FLAGS));
+  TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, Vars));
 
   struct AttrColor ac = { 0 };
 

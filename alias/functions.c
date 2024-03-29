@@ -3,7 +3,8 @@
  * Alias functions
  *
  * @authors
- * Copyright (C) 2022 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2022-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -265,7 +266,7 @@ static int op_query(struct AliasMenuData *mdata, int op)
   if (op == OP_QUERY)
   {
     ARRAY_FREE(&mdata->ava);
-    aliaslist_free(mdata->al);
+    aliaslist_clear(mdata->al);
   }
 
   struct Menu *menu = mdata->menu;

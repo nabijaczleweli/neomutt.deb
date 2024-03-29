@@ -4,6 +4,7 @@
  *
  * @authors
  * Copyright (C) 2022 Michal Siedlaczek <michal@siedlaczek.me>
+ * Copyright (C) 2022-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -63,7 +64,9 @@
 size_t mutt_convert_file_to(FILE *fp, const char *fromcode, struct Slist const *const tocodes,
                             int *tocode, struct Content *info)
 {
-  char bufi[256], bufu[512], bufo[4 * sizeof(bufi)];
+  char bufi[256] = { 0 };
+  char bufu[512] = { 0 };
+  char bufo[4 * sizeof(bufi)] = { 0 };
   size_t rc;
 
   const iconv_t cd1 = mutt_ch_iconv_open("utf-8", fromcode, MUTT_ICONV_NO_FLAGS);

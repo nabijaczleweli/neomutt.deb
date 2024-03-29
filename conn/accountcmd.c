@@ -4,6 +4,7 @@
  *
  * @authors
  * Copyright (C) 2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -35,11 +36,11 @@
 #include "core/lib.h"
 #include "accountcmd.h"
 #include "connaccount.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "mutt_account.h"
 
 /**
- * make_cmd - Build the command line for the external account command.
+ * make_cmd - Build the command line for the external account command
  * @param buf Buffer to fill with a command line
  * @param cac ConnAccount to read params from
  * @param cmd Account command from the user config

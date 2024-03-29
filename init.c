@@ -4,7 +4,9 @@
  *
  * @authors
  * Copyright (C) 1996-2002,2010,2013,2016 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2018-2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2018-2024 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Rayford Shireman
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -45,31 +47,25 @@
 #include "gui/lib.h"
 #include "init.h"
 #include "color/lib.h"
+#include "compmbox/lib.h"
 #include "history/lib.h"
+#include "imap/lib.h"
 #include "key/lib.h"
+#include "menu/lib.h"
 #include "notmuch/lib.h"
 #include "parse/lib.h"
+#include "sidebar/lib.h"
 #include "commands.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "hook.h"
 #include "mutt_logging.h"
+#include "muttlib.h"
+#include "protos.h"
 #ifndef DOMAIN
 #include "conn/lib.h"
 #endif
 #ifdef USE_LUA
 #include "mutt_lua.h"
-#endif
-#include "menu/lib.h"
-#include "muttlib.h"
-#include "protos.h"
-#ifdef USE_SIDEBAR
-#include "sidebar/lib.h"
-#endif
-#ifdef USE_COMP_MBOX
-#include "compmbox/lib.h"
-#endif
-#ifdef USE_IMAP
-#include "imap/lib.h"
 #endif
 
 /**
@@ -268,9 +264,7 @@ void mutt_opts_cleanup(void)
   source_stack_cleanup();
 
   alias_cleanup();
-#ifdef USE_SIDEBAR
   sb_cleanup();
-#endif
 
   mutt_regexlist_free(&MailLists);
   mutt_regexlist_free(&NoSpamList);
@@ -333,21 +327,15 @@ int mutt_init(struct ConfigSet *cs, const char *dlevel, const char *dfile,
   alias_init();
   commands_init();
   hooks_init();
-#ifdef USE_COMP_MBOX
   mutt_comp_init();
-#endif
-#ifdef USE_IMAP
   imap_init();
-#endif
 #ifdef USE_LUA
   mutt_lua_init();
 #endif
   driver_tags_init();
 
   menu_init();
-#ifdef USE_SIDEBAR
   sb_init();
-#endif
 #ifdef USE_NOTMUCH
   nm_init();
 #endif
@@ -396,12 +384,12 @@ int mutt_init(struct ConfigSet *cs, const char *dlevel, const char *dfile,
   p = mutt_str_getenv("REPLYTO");
   if (p)
   {
-    struct Buffer token;
+    struct Buffer *token = buf_pool_get();
 
     buf_printf(&buf, "Reply-To: %s", p);
-    buf_init(&token);
-    parse_my_hdr(&token, &buf, 0, &err); /* adds to UserHeader */
-    FREE(&token.data);
+    buf_seek(&buf, 0);
+    parse_my_hdr(token, &buf, 0, &err); /* adds to UserHeader */
+    buf_pool_release(&token);
   }
 
   p = mutt_str_getenv("EMAIL");
@@ -644,9 +632,9 @@ int mutt_query_variables(struct ListHead *queries, bool show_docs)
     struct HashElem *he = cs_subset_lookup(NeoMutt->sub, np->data);
     if (he)
     {
-      if (he->type & DT_DEPRECATED)
+      if (he->type & D_INTERNAL_DEPRECATED)
       {
-        mutt_warning(_("Config variable '%s' is deprecated"), np->data);
+        mutt_warning(_("Option %s is deprecated"), np->data);
         rc = 1;
         continue;
       }
@@ -674,7 +662,7 @@ int mutt_query_variables(struct ListHead *queries, bool show_docs)
       continue;
     }
 
-    mutt_warning(_("No such variable: %s"), np->data);
+    mutt_warning(_("Unknown option %s"), np->data);
     rc = 1;
   }
 

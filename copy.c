@@ -4,7 +4,9 @@
  *
  * @authors
  * Copyright (C) 1996-2000,2002,2014 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2024 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -46,7 +48,7 @@
 #include "pager/lib.h"
 #include "send/lib.h"
 #include "format_flags.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "handler.h"
 #include "hdrline.h"
 #include "mx.h"
@@ -517,14 +519,16 @@ int mutt_copy_header(FILE *fp_in, struct Email *e, FILE *fp_out,
     }
   }
 #endif
-  char *tags = driver_tags_get(&e->tags);
-  if (tags && !(c_weed && mutt_matches_ignore("tags")))
+
+  struct Buffer *tags = buf_pool_get();
+  driver_tags_get(&e->tags, tags);
+  if (!buf_is_empty(tags) && !(c_weed && mutt_matches_ignore("tags")))
   {
     fputs("Tags: ", fp_out);
-    fputs(tags, fp_out);
+    fputs(buf_string(tags), fp_out);
     fputc('\n', fp_out);
   }
-  FREE(&tags);
+  buf_pool_release(&tags);
 
   const struct Slist *const c_send_charset = cs_subset_slist(NeoMutt->sub, "send_charset");
   const short c_wrap = cs_subset_number(NeoMutt->sub, "wrap");
@@ -650,7 +654,7 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
                          CopyMessageFlags cmflags, CopyHeaderFlags chflags, int wraplen)
 {
   struct Body *body = e->body;
-  char prefix[128] = { 0 };
+  struct Buffer *prefix = buf_pool_get();
   LOFF_T new_offset = -1;
   int rc = 0;
 
@@ -659,7 +663,7 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
     const bool c_text_flowed = cs_subset_bool(NeoMutt->sub, "text_flowed");
     if (c_text_flowed)
     {
-      mutt_str_copy(prefix, ">", sizeof(prefix));
+      buf_strcpy(prefix, ">");
     }
     else
     {
@@ -667,8 +671,8 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
       const char *const c_indent_string = cs_subset_string(NeoMutt->sub, "indent_string");
       struct Mailbox *m_cur = get_current_mailbox();
       setlocale(LC_TIME, NONULL(c_attribution_locale));
-      mutt_make_string(prefix, sizeof(prefix), wraplen, NONULL(c_indent_string),
-                       m_cur, -1, e, MUTT_FORMAT_NO_FLAGS, NULL);
+      mutt_make_string(prefix, wraplen, NONULL(c_indent_string), m_cur, -1, e,
+                       MUTT_FORMAT_NO_FLAGS, NULL);
       setlocale(LC_TIME, "");
     }
   }
@@ -730,7 +734,7 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
       {
         mutt_error(ngettext("The length calculation was wrong by %ld byte",
                             "The length calculation was wrong by %ld bytes", fail),
-                   fail);
+                   (long) fail);
         new_length += fail;
       }
 
@@ -749,13 +753,15 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
 
     attach_del_cleanup:
       buf_pool_release(&quoted_date);
-      return rc_attach_del;
+      rc = rc_attach_del;
+      goto done;
     }
 
     if (mutt_copy_header(fp_in, e, fp_out, chflags,
-                         (chflags & CH_PREFIX) ? prefix : NULL, wraplen) == -1)
+                         (chflags & CH_PREFIX) ? buf_string(prefix) : NULL, wraplen) == -1)
     {
-      return -1;
+      rc = -1;
+      goto done;
     }
 
     new_offset = ftello(fp_out);
@@ -768,7 +774,7 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
     state.fp_in = fp_in;
     state.fp_out = fp_out;
     if (cmflags & MUTT_CM_PREFIX)
-      state.prefix = prefix;
+      state.prefix = buf_string(prefix);
     if (cmflags & MUTT_CM_DISPLAY)
     {
       state.flags |= STATE_DISPLAY;
@@ -800,7 +806,10 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
         (e->security & APPLICATION_PGP) && (e->body->type == TYPE_MULTIPART))
     {
       if (crypt_pgp_decrypt_mime(fp_in, &fp, e->body, &cur))
-        return -1;
+      {
+        rc = 1;
+        goto done;
+      }
       fputs("MIME-Version: 1.0\n", fp_out);
     }
 
@@ -808,25 +817,34 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
         (e->security & APPLICATION_SMIME) && (e->body->type == TYPE_APPLICATION))
     {
       if (crypt_smime_decrypt_mime(fp_in, &fp, e->body, &cur))
-        return -1;
+      {
+        rc = 1;
+        goto done;
+      }
     }
 
     if (!cur)
     {
       mutt_error(_("No decryption engine available for message"));
-      return -1;
+      rc = 1;
+      goto done;
     }
 
     mutt_write_mime_header(cur, fp_out, NeoMutt->sub);
     fputc('\n', fp_out);
 
     if (!mutt_file_seek(fp, cur->offset, SEEK_SET))
-      return -1;
+    {
+      rc = 1;
+      goto done;
+    }
+
     if (mutt_file_copy_bytes(fp, fp_out, cur->length) == -1)
     {
       mutt_file_fclose(&fp);
       mutt_body_free(&cur);
-      return -1;
+      rc = 1;
+      goto done;
     }
     mutt_body_free(&cur);
     mutt_file_fclose(&fp);
@@ -834,26 +852,30 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
   else
   {
     if (!mutt_file_seek(fp_in, body->offset, SEEK_SET))
-      return -1;
+    {
+      rc = 1;
+      goto done;
+    }
     if (cmflags & MUTT_CM_PREFIX)
     {
       int c;
       size_t bytes = body->length;
 
-      fputs(prefix, fp_out);
+      fputs(buf_string(prefix), fp_out);
 
       while (((c = fgetc(fp_in)) != EOF) && bytes--)
       {
         fputc(c, fp_out);
         if (c == '\n')
         {
-          fputs(prefix, fp_out);
+          fputs(buf_string(prefix), fp_out);
         }
       }
     }
     else if (mutt_file_copy_bytes(fp_in, fp_out, body->length) == -1)
     {
-      return -1;
+      rc = 1;
+      goto done;
     }
   }
 
@@ -864,6 +886,8 @@ int mutt_copy_message_fp(FILE *fp_out, FILE *fp_in, struct Email *e,
     mutt_body_free(&body->parts);
   }
 
+done:
+  buf_pool_release(&prefix);
   return rc;
 }
 

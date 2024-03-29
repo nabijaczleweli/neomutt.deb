@@ -3,7 +3,8 @@
  * History Selection Dialog
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Tóth János <gomba007@gmail.com>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -60,6 +61,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "mutt/lib.h"
+#include "config/lib.h"
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "lib.h"
@@ -86,6 +88,7 @@ static const struct Mapping HistoryHelp[] = {
  *
  * | Expando | Description
  * | :------ | :-------------
+ * | \%C     | Line number
  * | \%s     | History match
  */
 static const char *history_format_str(char *buf, size_t buflen, size_t col, int cols,
@@ -93,11 +96,22 @@ static const char *history_format_str(char *buf, size_t buflen, size_t col, int 
                                       const char *if_str, const char *else_str,
                                       intptr_t data, MuttFormatFlags flags)
 {
-  char *match = (char *) data;
+  struct HistoryEntry *h = (struct HistoryEntry *) data;
 
-  if (op == 's')
+  switch (op)
   {
-    mutt_format_s(buf, buflen, prec, match);
+    case 'C':
+    {
+      char tmp[32] = { 0 };
+      snprintf(tmp, sizeof(tmp), "%%%sd", prec);
+      snprintf(buf, buflen, tmp, h->num);
+      break;
+    }
+    case 's':
+    {
+      mutt_format(buf, buflen, prec, NONULL(h->history), false);
+      break;
+    }
   }
 
   return src;
@@ -108,12 +122,16 @@ static const char *history_format_str(char *buf, size_t buflen, size_t col, int 
  *
  * @sa history_format_str()
  */
-static void history_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
+static void history_make_entry(struct Menu *menu, int line, struct Buffer *buf)
 {
   char *entry = ((char **) menu->mdata)[line];
 
-  mutt_expando_format(buf, buflen, 0, menu->win->state.cols, "%s", history_format_str,
-                      (intptr_t) entry, MUTT_FORMAT_ARROWCURSOR);
+  struct HistoryEntry h = { line, entry };
+
+  const char *const c_history_format = cs_subset_string(NeoMutt->sub, "history_format");
+  mutt_expando_format(buf->data, buf->dsize, 0, menu->win->state.cols,
+                      NONULL(c_history_format), history_format_str,
+                      (intptr_t) &h, MUTT_FORMAT_ARROWCURSOR);
 }
 
 /**

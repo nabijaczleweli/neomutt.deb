@@ -8,15 +8,14 @@ vim: ts=2 sw=2 sts=2 expandtab:
   <bookinfo>
     <title>The NeoMutt E-Mail Client</title>
     <author>
-      <firstname>Michael</firstname>
-      <surname>Elkins</surname>
-      <email>me@cs.hmc.edu</email>
+      <firstname>Richard</firstname>
+      <surname>Russon</surname>
+      <email>rich@flatcap.org</email>
     </author>
     <releaseinfo>version @VERSION@</releaseinfo>
     <abstract>
       <para>
-        <quote>All mail clients suck. This one just sucks less.</quote>
-        &mdash; me, circa 1995
+        <quote>Teaching an old dog new tricks</quote>
       </para>
     </abstract>
   </bookinfo>
@@ -181,8 +180,8 @@ vim: ts=2 sw=2 sts=2 expandtab:
     <sect1 id="copyright">
       <title>Copyright</title>
       <para>
-        NeoMutt is Copyright © 1996-2021 Michael R. Elkins
-        <email>me@mutt.org</email> and others.
+        NeoMutt is Copyright © 2015-2024 Richard Russon
+        <email>rich@flatcap.org</email> and friends.
       </para>
       <para>
         This program is free software; you can redistribute it and/or modify it
@@ -3986,7 +3985,7 @@ set imap_pass="`gpg --batch -q --decrypt ~/.neomutt/account.gpg`"
           <para>
             Because NeoMutt first recodes a line before it attempts to parse
             it, a conversion introducing question marks or other characters as
-            part of errors (unconvertable characters, transliteration) may
+            part of errors (unconvertible characters, transliteration) may
             introduce syntax errors or silently change the meaning of certain
             tokens (e.g. inserting question marks into regular expressions).
           </para>
@@ -5457,8 +5456,7 @@ folder-hook work "set sort=threads"
         </itemizedlist>
         <para>
           If your terminal supports it, the special keyword
-          <emphasis>default</emphasis> can be used as a transparent color. The
-          value <emphasis>brightdefault</emphasis> is also valid.
+          <emphasis>default</emphasis> can be used as a transparent color.
           In this case <emphasis>default</emphasis> can be used to only set the
           foreground or background color.  The following sets the foreground
           and background color individually: the first command leaves the
@@ -6479,15 +6477,15 @@ unignore posted-to:
       </para>
       <para>
         Use <literal>-nonotify</literal> to disable notifying when new mail
-        arrives.  The <literal>-notify</literal> argument can be used to reenable
-        notifying for an existing mailbox.  If unspecified: a new
+        arrives.  The <literal>-notify</literal> argument can be used to
+        re-enable notifying for an existing mailbox.  If unspecified: a new
         mailbox will notify by default, while an existing mailbox will be
         unchanged.
       </para>
       <para>
         To disable polling, specify <literal>-nopoll</literal> before the
         mailbox name.  The <literal>-poll</literal> argument can be used to
-        reenable polling for an existing mailbox.  If unspecified: a new
+        re-enable polling for an existing mailbox.  If unspecified: a new
         mailbox will poll by default, while an existing mailbox will be
         unchanged.
       </para>
@@ -6661,8 +6659,8 @@ my_hdr Organization: A Really Big Company, Anytown, USA
 <screen>
 <emphasis role="comment"># default: save all to ~/Mail/&lt;author name&gt;</emphasis>
 save-hook . ~/Mail/%F
-<emphasis role="comment"># save from me@turing.cs.hmc.edu and me@cs.hmc.edu to $folder/elkins</emphasis>
-save-hook me@(turing\\.)?cs\\.hmc\\.edu$ +elkins
+<emphasis role="comment"># save from john@turing.ox.ac.uk and john@ox.ac.uk to $folder/smith</emphasis>
+save-hook john@(turing\\.)?ox\\.ac\\.uk$ +smith
 <emphasis role="comment"># save from aol.com to $folder/spam</emphasis>
 save-hook aol\\.com$ +spam
 </screen>
@@ -10071,7 +10069,7 @@ ma@yew.com      Murray Abraham  Oscar
         UNIX. All messages are stored in a single file. Each message has
         a line of the form:
       </para>
-      <screen>From me@cs.hmc.edu Fri, 11 Apr 1997 11:44:56 PST</screen>
+      <screen>From me@ox.ac.uk Fri, 11 Apr 1997 11:44:56 PST</screen>
       <para>
         to denote the start of a new message (this is often referred to as the
         <quote>From_</quote> line). The mbox format requires mailbox locking,
@@ -13173,7 +13171,7 @@ folder-hook imap://user@host2/ 'set folder=imap://host2/ ; set record=+INBOX/Sen
 
       <sect2 id="account-cmd-support">
         <title>Support</title>
-        <para><emphasis role="bold">Since:</emphasis> NeoMutt 2022-xx-yy</para>
+        <para><emphasis role="bold">Since:</emphasis> NeoMutt 2022-05-16</para>
         <para><emphasis role="bold">Dependencies:</emphasis> None</para>
       </sect2>
 
@@ -13375,6 +13373,85 @@ color   attach_headers     brightmagenta   default    "invalid node with packet 
         <title>Credits</title>
         <para>
           Guillaume Brogi
+        </para>
+      </sect2>
+    </sect1>
+
+    <sect1 id="cli-crypto">
+      <title>Command-line Crypto (-C) Feature</title>
+      <subtitle>Enable message security in modes that by default don't
+      enable it</subtitle>
+
+      <sect2 id="cli-crypto-support">
+        <title>Support</title>
+        <para>
+          <emphasis role="bold">Since:</emphasis> NeoMutt 2024-01-21
+        </para>
+        <para>
+          <emphasis role="bold">Dependencies:</emphasis> Gpgme
+        </para>
+      </sect2>
+
+      <sect2 id="cli-crypto-intro">
+        <title>Introduction</title>
+        <para>
+          This feature allows enabling message security in modes that
+          don't enable it by default.  Those include batch mode, sending
+          a postponed message, and resending a message.
+        </para>
+        <para>
+          This allows using NeoMutt as a driver for git-send-email(1),
+          to send patches in signed and/or encrypted mail.
+        </para>
+      </sect2>
+
+      <sect2 id="cli-crypto-usage">
+        <title>Usage</title>
+        <para>
+          To send an email from a file, enabling cryptographic
+          operations as when sending interactively, simply use the
+          <literal>-C</literal> flag.
+        </para>
+        <screen>$ neomutt -C -H - &lt; /mail/to/be/sent</screen>
+      </sect2>
+
+      <sect2 id="cli-crypto-neomuttrc">
+        <title>neomuttrc</title>
+
+<screen>
+<emphasis role="comment"># Example NeoMutt config file for the cli-crypto feature.</emphasis>
+
+set pgp_default_key = "1111111111111111111111111111111111111111"
+<emphasis role="comment"># Sign all mail</emphasis>
+set crypt_autosign = yes
+<emphasis role="comment"># Encrypt mail if all recipients have valid public keys</emphasis>
+set crypt_opportunistic_encrypt = yes
+<emphasis role="comment"># Sign/encrypt protected headers (Subject)</emphasis>
+set crypt_protected_headers_write = yes
+<emphasis role="comment"># Self encrypt mail</emphasis>
+set crypt_self_encrypt = yes
+
+<emphasis role="comment"># vim: syntax=neomuttrc</emphasis>
+</screen>
+
+      </sect2>
+
+      <sect2 id="cli-crypto-gitconfig">
+        <title>gitconfig</title>
+
+<screen>
+<emphasis role="comment"># Example .gitconfig config file for the cli-crypto feature.</emphasis>
+
+[sendemail]
+sendmailcmd = neomutt -C -H - &amp;&amp; true
+</screen>
+
+      </sect2>
+
+      <sect2 id="cli-crypto-credits">
+        <title>Credits</title>
+        <para>
+          Alejandro Colomar, Richard Russon, Jenya Sovetkin
         </para>
       </sect2>
     </sect1>
@@ -15184,7 +15261,7 @@ color index-object foreground background [pattern]
               </row>
               <row>
                 <entry><literal>index_tag</literal></entry>
-                <entry>Nessage tags, <literal>%G</literal></entry>
+                <entry>Message tags, <literal>%G</literal></entry>
               </row>
               <row>
                 <entry><literal>index_tags</literal></entry>
@@ -19544,6 +19621,14 @@ neomutt -a image.jpg *.png -- address1 address2
               <entry>-b <literal>address</literal></entry>
               <entry>
                 Specify a blind carbon copy (Bcc) recipient
+              </entry>
+            </row>
+            <row>
+              <entry>-C</entry>
+              <entry>
+                Enable cryptographic operations in the cases in which they're
+                disabled by default. Those include batch mode, sending a
+                postponed message, and resending a message.
               </entry>
             </row>
             <row>

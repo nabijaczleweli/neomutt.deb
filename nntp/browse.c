@@ -3,7 +3,8 @@
  * Browse NNTP groups
  *
  * @authors
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -59,7 +60,8 @@ const char *group_index_format_str(char *buf, size_t buflen, size_t col, int col
                                    const char *if_str, const char *else_str,
                                    intptr_t data, MuttFormatFlags flags)
 {
-  char fn[128], fmt[128];
+  char fn[128] = { 0 };
+  char fmt[128] = { 0 };
   struct Folder *folder = (struct Folder *) data;
   bool optional = (flags & MUTT_FORMAT_OPTIONAL);
 

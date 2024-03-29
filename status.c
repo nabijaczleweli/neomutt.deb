@@ -4,6 +4,11 @@
  *
  * @authors
  * Copyright (C) 1996-2000,2007 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018 Austin Ray <austin@austinray.io>
+ * Copyright (C) 2020-2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2021 Eric Blake <eblake@redhat.com>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -102,7 +107,8 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
                                      const char *if_str, const char *else_str,
                                      intptr_t data, MuttFormatFlags flags)
 {
-  char fmt[128], tmp[128];
+  char fmt[128] = { 0 };
+  char tmp[128] = { 0 };
   bool optional = (flags & MUTT_FORMAT_OPTIONAL);
   struct MenuStatusLineData *msld = (struct MenuStatusLineData *) data;
   struct IndexSharedData *shared = msld->shared;
@@ -152,17 +158,15 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
         snprintf(buf, buflen, fmt, tmp);
         break;
       }
-    /* fallthrough */
+      FALLTHROUGH;
+
     case 'f':
-#ifdef USE_COMP_MBOX
       if (m && m->compress_info && (m->realpath[0] != '\0'))
       {
         mutt_str_copy(tmp, m->realpath, sizeof(tmp));
         mutt_pretty_mailbox(tmp, sizeof(tmp));
       }
-      else
-#endif
-          if (m && (m->type == MUTT_NOTMUCH) && m->name)
+      else if (m && (m->type == MUTT_NOTMUCH) && m->name)
       {
         mutt_str_copy(tmp, m->name, sizeof(tmp));
       }
@@ -468,7 +472,6 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
 /**
  * menu_status_line - Create the status line
  * @param[out] buf      Buffer in which to save string
- * @param[in]  buflen   Buffer length
  * @param[in]  shared   Shared Index data
  * @param[in]  menu     Current menu
  * @param[in]  cols     Maximum number of columns to use
@@ -476,11 +479,11 @@ static const char *status_format_str(char *buf, size_t buflen, size_t col, int c
  *
  * @sa status_format_str()
  */
-void menu_status_line(char *buf, size_t buflen, struct IndexSharedData *shared,
+void menu_status_line(struct Buffer *buf, struct IndexSharedData *shared,
                       struct Menu *menu, int cols, const char *fmt)
 {
   struct MenuStatusLineData data = { shared, menu };
 
-  mutt_expando_format(buf, buflen, 0, cols, fmt, status_format_str,
+  mutt_expando_format(buf->data, buf->dsize, 0, cols, fmt, status_format_str,
                       (intptr_t) &data, MUTT_FORMAT_NO_FLAGS);
 }

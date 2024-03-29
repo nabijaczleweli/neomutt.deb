@@ -3,7 +3,7 @@
  * Handling of email attachments
  *
  * @authors
- * Copyright (C) 1996-2000 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -70,7 +70,7 @@ struct AttachCtx
 
 void              mutt_actx_add_attach  (struct AttachCtx *actx, struct AttachPtr *attach);
 void              mutt_actx_ins_attach  (struct AttachCtx *actx, struct AttachPtr *attach, int aidx);
-void              mutt_actx_add_body    (struct AttachCtx *actx, struct Body *new_body);
+void              mutt_actx_add_body    (struct AttachCtx *actx, struct Body *b);
 void              mutt_actx_add_fp      (struct AttachCtx *actx, FILE *fp_new);
 void              mutt_actx_free        (struct AttachCtx **ptr);
 void              mutt_actx_entries_free(struct AttachCtx *actx);

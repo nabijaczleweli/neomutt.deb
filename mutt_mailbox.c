@@ -2,7 +2,10 @@
  * @file
  * Mailbox helper functions
  *
- * Copyright (C) 2019 Richard Russon <rich@flatcap.org>
+ * @authors
+ * Copyright (C) 2019-2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2019-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021 Austin Ray <austin@austinray.io>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -28,7 +31,6 @@
 #include "config.h"
 #include <string.h>
 #include <sys/stat.h>
-#include <time.h>
 #include <utime.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
@@ -124,7 +126,8 @@ static void mailbox_check(struct Mailbox *m_cur, struct Mailbox *m_check,
         // and total counts per 'mbox_check_stats' docs.
         if ((flags & MUTT_MAILBOX_CHECK_FORCE_STATS) == 0)
           break;
-        /* fall through */
+        FALLTHROUGH;
+
       case MUTT_IMAP:
       case MUTT_MBOX:
       case MUTT_MMDF:
@@ -167,10 +170,8 @@ int mutt_mailbox_check(struct Mailbox *m_cur, CheckStatsFlags flags)
   if (TAILQ_EMPTY(&NeoMutt->accounts)) // fast return if there are no mailboxes
     return 0;
 
-#ifdef USE_IMAP
   if (flags & MUTT_MAILBOX_CHECK_FORCE)
     mutt_update_num_postponed();
-#endif
 
   const short c_mail_check = cs_subset_number(NeoMutt->sub, "mail_check");
   const bool c_mail_check_stats = cs_subset_bool(NeoMutt->sub, "mail_check_stats");
@@ -193,11 +194,8 @@ int mutt_mailbox_check(struct Mailbox *m_cur, CheckStatsFlags flags)
 
   /* check device ID and serial number instead of comparing paths */
   struct stat st_cur = { 0 };
-  if (!m_cur || (m_cur->type == MUTT_IMAP) || (m_cur->type == MUTT_POP)
-#ifdef USE_NNTP
-      || (m_cur->type == MUTT_NNTP)
-#endif
-      || stat(mailbox_path(m_cur), &st_cur) != 0)
+  if (!m_cur || (m_cur->type == MUTT_IMAP) || (m_cur->type == MUTT_POP) ||
+      (m_cur->type == MUTT_NNTP) || stat(mailbox_path(m_cur), &st_cur) != 0)
   {
     st_cur.st_dev = 0;
     st_cur.st_ino = 0;
@@ -307,16 +305,11 @@ void mutt_mailbox_set_notified(struct Mailbox *m)
     return;
 
   m->notified = true;
-#ifdef HAVE_CLOCK_GETTIME
-  clock_gettime(CLOCK_REALTIME, &m->last_visited);
-#else
-  m->last_visited.tv_sec = mutt_date_now();
-  m->last_visited.tv_nsec = 0;
-#endif
+  mutt_time_now(&m->last_visited);
 }
 
 /**
- * find_next_mailbox - Find the next mailbox with new or unread mail.
+ * find_next_mailbox - Find the next mailbox with new or unread mail
  * @param s         Buffer containing name of current mailbox
  * @param find_new  Boolean controlling new or unread check
  * @retval ptr Mailbox
@@ -334,10 +327,6 @@ static struct Mailbox *find_next_mailbox(struct Buffer *s, bool find_new)
     struct MailboxNode *np = NULL;
     STAILQ_FOREACH(np, &ml, entries)
     {
-      // Match only real mailboxes if looking for new mail.
-      if (find_new && np->mailbox->type == MUTT_NOTMUCH)
-        continue;
-
       buf_expand_path(&np->mailbox->pathbuf);
       struct Mailbox *m_cur = np->mailbox;
 

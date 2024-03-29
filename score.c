@@ -4,6 +4,9 @@
  *
  * @authors
  * Copyright (C) 1996-2000 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018 Victor Fernandes <criw@pm.me>
+ * Copyright (C) 2020-2021 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -38,7 +41,7 @@
 #include "index/lib.h"
 #include "parse/lib.h"
 #include "pattern/lib.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "mutt_thread.h"
 #include "protos.h"
 

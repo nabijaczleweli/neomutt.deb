@@ -3,7 +3,7 @@
  * Simple colour
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -59,9 +59,7 @@ void simple_colors_init(void)
   SimpleColors[MT_COLOR_ITALIC].attrs = A_ITALIC;
   SimpleColors[MT_COLOR_MARKERS].attrs = A_REVERSE;
   SimpleColors[MT_COLOR_SEARCH].attrs = A_REVERSE;
-#ifdef USE_SIDEBAR
   SimpleColors[MT_COLOR_SIDEBAR_HIGHLIGHT].attrs = A_UNDERLINE;
-#endif
   SimpleColors[MT_COLOR_STATUS].attrs = A_REVERSE;
   SimpleColors[MT_COLOR_STRIPE_EVEN].attrs = A_BOLD;
   SimpleColors[MT_COLOR_UNDERLINE].attrs = A_UNDERLINE;

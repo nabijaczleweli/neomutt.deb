@@ -3,8 +3,7 @@
  * Postponed Email Selection Dialog
  *
  * @authors
- * Copyright (C) 1996-2002,2012-2013 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 1999-2002,2004 Thomas Roessler <roessler@does-not-exist.org>
+ * Copyright (C) 2021-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -101,13 +100,13 @@ static const struct Mapping PostponedHelp[] = {
  *
  * @sa $index_format, index_format_str()
  */
-static void post_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
+static void post_make_entry(struct Menu *menu, int line, struct Buffer *buf)
 {
   struct MailboxView *mv = menu->mdata;
   struct Mailbox *m = mv->mailbox;
 
   const char *const c_index_format = cs_subset_string(NeoMutt->sub, "index_format");
-  mutt_make_string(buf, buflen, menu->win->state.cols, NONULL(c_index_format), m, -1,
+  mutt_make_string(buf, menu->win->state.cols, NONULL(c_index_format), m, -1,
                    m->emails[line], MUTT_FORMAT_INDEX | MUTT_FORMAT_ARROWCURSOR, NULL);
 }
 

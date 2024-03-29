@@ -3,7 +3,10 @@
  * Conversion between different character encodings
  *
  * @authors
- * Copyright (C) 1999-2002,2007 Thomas Roessler <roessler@does-not-exist.org>
+ * Copyright (C) 2017 Tobias Angele <toogley@mailbox.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 Steinar H Gunderson <steinar+neomutt@gunderson.no>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -373,7 +376,8 @@ void mutt_ch_canonical_charset(char *buf, size_t buflen, const char *name)
   if (!buf || !name)
     return;
 
-  char in[1024], scratch[1024 + 10];
+  char in[1024] = { 0 };
+  char scratch[1024 + 10] = { 0 };
 
   mutt_str_copy(in, name, sizeof(in));
   char *ext = strchr(in, '/');
@@ -588,8 +592,8 @@ const char *mutt_ch_charset_lookup(const char *chs)
  */
 iconv_t mutt_ch_iconv_open(const char *tocode, const char *fromcode, uint8_t flags)
 {
-  char tocode1[128];
-  char fromcode1[128];
+  char tocode1[128] = { 0 };
+  char fromcode1[128] = { 0 };
   const char *tocode2 = NULL, *fromcode2 = NULL;
   const char *tmp = NULL;
 
@@ -654,7 +658,7 @@ iconv_t mutt_ch_iconv_open(const char *tocode, const char *fromcode, uint8_t fla
     {
       iconv_close(IconvCache[IconvCacheUsed - 1].cd);
     }
-    --IconvCacheUsed;
+    IconvCacheUsed--;
   }
 
   /* make room for this one at the top */
@@ -663,7 +667,7 @@ iconv_t mutt_ch_iconv_open(const char *tocode, const char *fromcode, uint8_t fla
     IconvCache[j + 1] = IconvCache[j];
   }
 
-  ++IconvCacheUsed;
+  IconvCacheUsed++;
 
   mutt_debug(LL_DEBUG2, "iconv: adding %s -> %s to the cache\n", fromcode1, tocode1);
   IconvCache[0].fromcode1 = strdup(fromcode1);

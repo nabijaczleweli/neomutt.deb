@@ -3,7 +3,7 @@
  * Colour Debugging
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -35,7 +35,7 @@
 #include "attr.h"
 #include "curses2.h"
 #include "dump.h"
-#include "pager/private_data.h" // IWYU pragma: keep
+#include "pager/private_data.h"
 
 extern struct AttrColorList MergedColors;
 extern struct CursesColorList CursesColors;

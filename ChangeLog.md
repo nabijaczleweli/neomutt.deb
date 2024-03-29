@@ -1,3 +1,126 @@
+2024-03-29  Richard Russon  \<rich@flatcap.org\>
+* Bug Fixes
+  - #4185 c441f5957 Fix memory leak in trash_append()
+  - #4189 Fix off-by-one error in %b with notmuch
+  - #4190 Zero-out mailbox counters on delete
+  - #4204 colour: honour the normal colour
+  - #4205 match folder-hook also against mailbox name (fixes #4201)
+  - wrap colour in <show-log-messages>
+  - history: fix saving file
+  - history: improve error message format
+* Docs
+  - #4182 docs: -C: Fix some accidents
+  - #4188 Update oauth2 README
+  - #4193 Update oauth2 README
+  - fix typos, lots of tidying
+  - tidy license info
+* Build
+  - #4196 use FreeBSD 14.0 in Cirrus CI
+  - actions: update cpu count
+  - actions: use codeql v3
+* Code
+  - #4186 Buffer refactoring: make_entry()
+  - address: tidy config handling
+  - coverage: buf, slist
+  - graphviz: link labels
+  - tidy buf_strcpy() calls
+  - tidy char buffers
+  - test: default timezone to UTC
+
+2024-03-23  Richard Russon  \<rich@flatcap.org\>
+* Do NOT use this release
+
+2024-02-01  Richard Russon  \<rich@flatcap.org\>
+* Features
+  - #4134 Command-line Crypto (neomutt -C)
+* Bug Fixes
+  - #4065 track new-mail check time per mailbox
+  - #4141 fix(change-folder): don't exclude notmuch
+  - #4147 envelope: manage subject/real_subj together
+  - #4155 fix parsing of $REPLYTO
+  - #4158 status: fix refresh after sync-mailbox
+  - #4166 Fix two memory leaks in notmuch support
+  - progress: fix percentages
+* Translations
+  - 100% Czech
+  - 100% German
+  - 100% Lithuanian
+  - 100% Serbian
+  - 100% Slovak
+  - 100% Turkish
+* Docs
+  - #4172 Several fixes for the manual pages
+* Build
+  - build: openbsd workarounds
+* Code
+  - #4142 add mutt_time_now()
+  - #4146 config: factor out R_ flags
+  - #4154 file: upgrade mutt_file_fopen/fclose()
+  - #4159 upgrade mutt_str_append_item() to use struct Buffer
+  - #4161 maildir: encapsulate the header cache
+  - #4162 remove mutt_str_dequote_comment()
+  - #4165 bufferize mutt_str_inline_replace() as buf_inline_replace()
+  - #4167 bufferize mutt_strn_rfind() as buf_rfind()
+  - #4168 replace buf_len() checks with buf_is_empty()
+  - config: drop unused flags
+  - use message_new()/message_free()
+  - Reconsider the config type bitmap entirely
+
+2023-12-21  Richard Russon  \<rich@flatcap.org\>
+* Features
+  - #4126 - add alias 'tags:'
+* Bug Fixes
+  - #4115 - create HelpBar after colours
+  - #4116 - Fix Batch Sending of Emails
+  - #4119 - Fix Header Cache Key Handling
+  - #4121 - mutt_oauth2.py: error out if ENCRYPTION_PIPE was not supplied
+  - #4124 - config: fix flag overlaps
+  - #4125 - compose: restore view-text/pager/mailcap
+  - color: fix attr_color_copy()
+  - fix :color dump
+  - fix leak in completion
+  - force mail check on current mailbox after `<imap-fetch-mail>`
+  - Allow sending an empty mail
+  - mutt_oauth2.py: Use readline to overcome macOS input() restrictions
+* Changed Config
+  - add $history_format: '%s'
+* Translations
+  - 100% Czech
+  - 100% German
+  - 100% Lithuanian
+  - 100% Serbian
+  - 100% Slovak
+  - 100% Turkish
+  - 99% Spanish
+  - 99% Hungarian
+* Coverity defects
+  - #4111 Educate Coverity about ARRAYs
+  - fix defects
+* Build
+  - #4098 - build: use fallthrough attribute
+  - #4100 - build: split maildir and mh types
+  - #4101 - version: drop default features
+  - #4108 - strip non-conditionals
+  - #4122 - add github action to check for unused functions (xunused)
+  - update fedora action
+  - coverage: fix build for lcov v2
+  - tests: fix error cases
+* Code
+  - #4097 - config: add DT_ON_STARTUP
+  - #4104 - Change mutt_default_save() and addr_hook() to take a buffer
+  - #4105 - Use buffer pool in tests
+  - #4106 - Switch some buffers to use the buffer pool
+  - #4109 - Improve the Progress Bar
+  - #4117 - remove MxOps::path_parent() and mutt_path_parent()
+  - #4120 - remove unused functions
+  - #4131 - move editor test code
+  - #4133 - move log_disp_null() into test folder
+  - #4137 - move config string name functions into tests
+  - add: hook_new()/hook_free()
+  - fix more printf-style params
+  - rename compare to equal
+  - hcache: renaming for clarity
+
 2023-11-03  Richard Russon  \<rich@flatcap.org\>
 * Features
   - #4080 - info screen: enable \<save-message\>
@@ -65,7 +188,7 @@
   - #3988 - pager: fix search crash
   - #3999 - help: fix search highlight
   - #4049 - force mail check on current mailbox after `<shell-escape>`
-  - #4051 - openssl: continue if a signal interrupts an SSL read/write 
+  - #4051 - openssl: continue if a signal interrupts an SSL read/write
 * Config
   - #3881 - Rename `$imap_keepalive` to `$imap_keep_alive`
   - #3889 - Change defaults to use `%<...>` conditional syntax
@@ -722,7 +845,7 @@
   - Address book has a comment field
   - Query menu has a comment field
 * Contrib
-  - sample.neomuttrc-starter: Do not echo promted password
+  - sample.neomuttrc-starter: Do not echo prompted password
 * Bug Fixes
   - make "news://" and "nntp://" schemes interchangeable
   - Fix CRLF to LF conversion in base64 decoding
@@ -1712,7 +1835,7 @@
   - config: drop unused paginate command
   - script: split tests up into several
   - convert credits page to markdown
-  - simpify 404 page
+  - simplify 404 page
   - improve newbie tutorial
   - remove help.html and integrate its content elsewhere
   - make: "graphviz" program is needed for generating diagram

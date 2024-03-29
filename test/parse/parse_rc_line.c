@@ -2,6 +2,11 @@
  * @file
  * Test code for parsing "set" command
  *
+ * @authors
+ * Copyright (C) 2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Rayford Shireman
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
+ *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
  * the terms of the GNU General Public License as published by the Free Software
@@ -21,26 +26,29 @@
 #include "config.h"
 #include "acutest.h"
 #include <stddef.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include "mutt/lib.h"
+#include "config/common.h" // IWYU pragma: keep
 #include "config/lib.h"
 #include "core/lib.h"
 #include "parse/lib.h"
-#include "common.h"
+#include "common.h" // IWYU pragma: keep
 #include "test_common.h"
 
 // clang-format off
 static struct ConfigDef ConfigVars[] = {
-  { "Apple",      DT_BOOL,              true,            0, NULL, },
-  { "Banana",     DT_QUAD,              MUTT_ASKYES,     0, NULL, },
-  { "Cherry",     DT_NUMBER,            555,             0, NULL, },
-  { "Damson",     DT_STRING,            IP "damson",     0, NULL, },
-  { "Elderberry", DT_STRING|DT_MAILBOX, IP "elderberry", 0, NULL, },
-  { "Fig",        DT_STRING|DT_COMMAND, IP "fig",        0, NULL, },
-  { "Guava",      DT_PATH|DT_PATH_FILE, IP "guava",      0, NULL, },
+  { "Apple",      DT_BOOL,                    true,            0, NULL, },
+  { "Banana",     DT_QUAD,                    MUTT_ASKYES,     0, NULL, },
+  { "Cherry",     DT_NUMBER,                  555,             0, NULL, },
+  { "Damson",     DT_STRING,                  IP "damson",     0, NULL, },
+  { "Elderberry", DT_STRING|D_STRING_MAILBOX, IP "elderberry", 0, NULL, },
+  { "Fig",        DT_STRING|D_STRING_COMMAND, IP "fig",        0, NULL, },
+  { "Guava",      DT_PATH|D_PATH_FILE,        IP "guava",      0, NULL, },
   { NULL },
 };
 static struct ConfigDef MyVarDef =
-  { "my_var",     DT_MYVAR,        IP NULL,         0, NULL, };
+  { "my_var",     DT_MYVAR,                   IP NULL,         0, NULL, };
 // clang-format on
 
 /**
@@ -226,7 +234,7 @@ static bool test_set(struct Buffer *err)
       TEST_MSG("Failed to get %s: %s", "my_var", buf_string(err));
       return false;
     }
-    if (!TEST_CHECK(mutt_str_equal(err->data, "newbar")))
+    if (!TEST_CHECK_STR_EQ(err->data, "newbar"))
     {
       TEST_MSG("Variable not set %s: %s", "my_var", buf_string(err));
       return false;
@@ -544,7 +552,7 @@ static bool test_reset(struct Buffer *err)
         buf_pool_release(&buf);
         return false;
       }
-      if (!TEST_CHECK(mutt_str_equal(err->data, buf->data)))
+      if (!TEST_CHECK_STR_EQ(err->data, buf->data))
       {
         TEST_MSG("Variable not reset %s: %s != %s", ConfigVars[v].name,
                  buf_string(err), buf_string(buf));
@@ -1007,7 +1015,7 @@ static bool test_path_expanding(struct Buffer *err)
 
 void test_command_set(void)
 {
-  if (!TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, ConfigVars, DT_NO_FLAGS)))
+  if (!TEST_CHECK(cs_register_variables(NeoMutt->sub->cs, ConfigVars)))
   {
     TEST_MSG("Failed to register config variables");
     return;

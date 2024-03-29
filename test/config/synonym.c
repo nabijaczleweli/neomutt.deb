@@ -3,7 +3,8 @@
  * Test code for Config Synonyms
  *
  * @authors
- * Copyright (C) 2017-2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -191,10 +192,10 @@ void test_config_synonym(void)
   struct ConfigSubset *sub = NeoMutt->sub;
   struct ConfigSet *cs = sub->cs;
 
-  if (!TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS)))
+  if (!TEST_CHECK(cs_register_variables(cs, Vars)))
     return;
 
-  if (cs_register_variables(cs, Vars2, DT_NO_FLAGS))
+  if (cs_register_variables(cs, Vars2))
   {
     TEST_MSG("Test should have failed");
     return;

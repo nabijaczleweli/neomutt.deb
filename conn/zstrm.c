@@ -2,7 +2,10 @@
  * @file
  * Zlib compression of network traffic
  *
+ * @authors
  * Copyright (C) 2019 Fabian Groffen <grobian@gentoo.org>
+ * Copyright (C) 2020-2022 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -137,7 +140,7 @@ retry:
     return 0;
 
   /* when avail_out was 0 on last call, we need to call inflate again, because
-   * more data might be available using the current input, so avoid callling
+   * more data might be available using the current input, so avoid calling
    * read on the underlying stream in that case (for it might block) */
   if ((zctx->read.pos == 0) && !zctx->read.conn_eof)
   {
@@ -157,7 +160,7 @@ retry:
   zctx->read.z.next_out = (Bytef *) buf;
 
   zrc = inflate(&zctx->read.z, Z_SYNC_FLUSH);
-  mutt_debug(LL_DEBUG5, "rc=%d, consumed %u/%u bytes, produced %lu/%lu bytes\n",
+  mutt_debug(LL_DEBUG5, "rc=%d, consumed %u/%u bytes, produced %zu/%zu bytes\n",
              zrc, zctx->read.pos - zctx->read.z.avail_in, zctx->read.pos,
              len - zctx->read.z.avail_out, len);
 
@@ -243,7 +246,7 @@ static int zstrm_write(struct Connection *conn, const char *buf, size_t count)
       /* push out produced data to the underlying stream */
       zctx->write.pos = zctx->write.len - zctx->write.z.avail_out;
       char *wbufp = zctx->write.buf;
-      mutt_debug(LL_DEBUG5, "deflate consumed %lu/%lu bytes\n",
+      mutt_debug(LL_DEBUG5, "deflate consumed %zu/%zu bytes\n",
                  count - zctx->write.z.avail_in, count);
       while (zctx->write.pos > 0)
       {

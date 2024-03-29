@@ -3,7 +3,7 @@
  * Maildir-specific Email data
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2024 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -41,7 +41,7 @@ void maildir_edata_free(void **ptr)
     return;
 
   struct MaildirEmailData *edata = *ptr;
-  FREE(&edata->maildir_flags);
+  FREE(&edata->custom_flags);
 
   FREE(ptr);
 }

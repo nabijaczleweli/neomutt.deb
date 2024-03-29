@@ -3,8 +3,11 @@
  * Execute a Pattern
  *
  * @authors
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Romeu Vieira <romeu.bizz@gmail.com>
+ * Copyright (C) 2020-2024 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 Leon Philman
+ * Copyright (C) 2024 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -784,11 +787,7 @@ static bool pattern_needs_msg(const struct Mailbox *m, const struct Pattern *pat
 
   if ((pat->op == MUTT_PAT_WHOLE_MSG) || (pat->op == MUTT_PAT_BODY) || (pat->op == MUTT_PAT_HEADER))
   {
-#ifdef USE_IMAP
     return !((m->type == MUTT_IMAP) && pat->string_match);
-#else
-    return true;
-#endif
   }
 
   if ((pat->op == MUTT_PAT_AND) || (pat->op == MUTT_PAT_OR))
@@ -861,7 +860,8 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
     case MUTT_DELETED:
       return pat->pat_not ^ e->deleted;
     case MUTT_PAT_MESSAGE:
-      return pat->pat_not ^ ((EMSG(e) >= pat->min) && (EMSG(e) <= pat->max));
+      return pat->pat_not ^
+             ((email_msgno(e) >= pat->min) && (email_msgno(e) <= pat->max));
     case MUTT_PAT_DATE:
       if (pat->dynamic)
         match_update_dynamic_date(pat);
@@ -884,21 +884,17 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
        * This is also the case when message scoring.  */
       if (!m)
         return false;
-#ifdef USE_IMAP
       /* IMAP search sets e->matched at search compile time */
       if ((m->type == MUTT_IMAP) && pat->string_match)
         return e->matched;
-#endif
       return pat->pat_not ^ msg_search(pat, e, msg);
     case MUTT_PAT_SERVERSEARCH:
-#ifdef USE_IMAP
       if (!m)
         return false;
       if (m->type == MUTT_IMAP)
       {
         return (pat->string_match) ? e->matched : false;
       }
-#endif
       mutt_error(_("error: server custom search only supported with IMAP"));
       return false;
     case MUTT_PAT_SENDER:
@@ -1082,9 +1078,11 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
       return pat->pat_not ^ (e->env->x_label && patmatch(pat, e->env->x_label));
     case MUTT_PAT_DRIVER_TAGS:
     {
-      char *tags = driver_tags_get_with_hidden(&e->tags);
-      const bool rc = (pat->pat_not ^ (tags && patmatch(pat, tags)));
-      FREE(&tags);
+      struct Buffer *tags = buf_pool_get();
+      driver_tags_get_with_hidden(&e->tags, tags);
+      const bool rc = (pat->pat_not ^
+                       (!buf_is_empty(tags) && patmatch(pat, buf_string(tags))));
+      buf_pool_release(&tags);
       return rc;
     }
     case MUTT_PAT_HORMEL:
@@ -1109,12 +1107,10 @@ static bool pattern_exec(struct Pattern *pat, PatternExecFlags flags,
       return pat->pat_not ^ (e->thread && !e->thread->child);
     case MUTT_PAT_BROKEN:
       return pat->pat_not ^ (e->thread && e->thread->fake_thread);
-#ifdef USE_NNTP
     case MUTT_PAT_NEWSGROUPS:
       if (!e->env)
         return false;
       return pat->pat_not ^ (e->env->newsgroups && patmatch(pat, e->env->newsgroups));
-#endif
   }
   mutt_error(_("error: unknown op %d (report this error)"), pat->op);
   return false;
@@ -1179,6 +1175,24 @@ bool mutt_pattern_alias_exec(struct Pattern *pat, PatternExecFlags flags,
         return false;
       return pat->pat_not ^ match_addrlist(pat, (flags & MUTT_MATCH_FULL_ADDRESS),
                                            1, &av->alias->addr);
+    case MUTT_PAT_DRIVER_TAGS:
+    {
+      if (!av->alias)
+        return false;
+
+      struct Buffer *tags = buf_pool_get();
+      alias_tags_to_buffer(&av->alias->tags, tags);
+
+      bool rc = false;
+      if (!buf_is_empty(tags))
+      {
+        rc = (pat->pat_not ^ (patmatch(pat, buf_string(tags))));
+      }
+
+      buf_pool_release(&tags);
+      return rc;
+    }
+
     case MUTT_PAT_AND:
       return pat->pat_not ^ (perform_alias_and(pat->child, flags, av, cache) > 0);
     case MUTT_PAT_OR:

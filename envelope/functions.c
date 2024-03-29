@@ -3,7 +3,8 @@
  * Envelope functions
  *
  * @authors
- * Copyright (C) 2022 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2022-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -191,10 +192,8 @@ void update_crypt_info(struct EnvelopeWindowData *wdata)
  */
 static int op_envelope_edit_bcc(struct EnvelopeWindowData *wdata, int op)
 {
-#ifdef USE_NNTP
   if (wdata->is_news)
     return FR_NO_ACTION;
-#endif
   if (!edit_address_list(HDR_BCC, &wdata->email->env->bcc))
     return FR_NO_ACTION;
 
@@ -208,10 +207,8 @@ static int op_envelope_edit_bcc(struct EnvelopeWindowData *wdata, int op)
  */
 static int op_envelope_edit_cc(struct EnvelopeWindowData *wdata, int op)
 {
-#ifdef USE_NNTP
   if (wdata->is_news)
     return FR_NO_ACTION;
-#endif
   if (!edit_address_list(HDR_CC, &wdata->email->env->cc))
     return FR_NO_ACTION;
 
@@ -291,7 +288,7 @@ static int op_envelope_edit_subject(struct EnvelopeWindowData *wdata, int op)
   if (mutt_str_equal(wdata->email->env->subject, buf_string(buf)))
     goto done; // no change
 
-  mutt_str_replace(&wdata->email->env->subject, buf_string(buf));
+  mutt_env_set_subject(wdata->email->env, buf_string(buf));
   mutt_env_notify_send(wdata->email, NT_ENVELOPE_SUBJECT);
   rc = FR_SUCCESS;
 
@@ -305,10 +302,8 @@ done:
  */
 static int op_envelope_edit_to(struct EnvelopeWindowData *wdata, int op)
 {
-#ifdef USE_NNTP
   if (wdata->is_news)
     return FR_NO_ACTION;
-#endif
   if (!edit_address_list(HDR_TO, &wdata->email->env->to))
     return FR_NO_ACTION;
 
@@ -433,7 +428,6 @@ static int op_compose_autocrypt_menu(struct EnvelopeWindowData *wdata, int op)
 
 // -----------------------------------------------------------------------------
 
-#ifdef USE_NNTP
 /**
  * op_envelope_edit_followup_to - Edit the Followup-To field - Implements ::envelope_function_t - @ingroup envelope_function_api
  */
@@ -503,7 +497,6 @@ static int op_envelope_edit_x_comment_to(struct EnvelopeWindowData *wdata, int o
   buf_pool_release(&buf);
   return rc;
 }
-#endif
 
 #ifdef MIXMASTER
 /**
@@ -536,19 +529,13 @@ static const struct EnvelopeFunction EnvelopeFunctions[] = {
   { OP_ENVELOPE_EDIT_BCC,                 op_envelope_edit_bcc },
   { OP_ENVELOPE_EDIT_CC,                  op_envelope_edit_cc },
   { OP_ENVELOPE_EDIT_FCC,                 op_envelope_edit_fcc },
-#ifdef USE_NNTP
   { OP_ENVELOPE_EDIT_FOLLOWUP_TO,         op_envelope_edit_followup_to },
-#endif
   { OP_ENVELOPE_EDIT_FROM,                op_envelope_edit_from },
-#ifdef USE_NNTP
   { OP_ENVELOPE_EDIT_NEWSGROUPS,          op_envelope_edit_newsgroups },
-#endif
   { OP_ENVELOPE_EDIT_REPLY_TO,            op_envelope_edit_reply_to },
   { OP_ENVELOPE_EDIT_SUBJECT,             op_envelope_edit_subject },
   { OP_ENVELOPE_EDIT_TO,                  op_envelope_edit_to },
-#ifdef USE_NNTP
   { OP_ENVELOPE_EDIT_X_COMMENT_TO,        op_envelope_edit_x_comment_to },
-#endif
   { 0, NULL },
   // clang-format on
 };

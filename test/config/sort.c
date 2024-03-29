@@ -3,7 +3,10 @@
  * Test code for the Sort object
  *
  * @authors
- * Copyright (C) 2017-2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Aditya De Saha <adityadesaha@gmail.com>
+ * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -57,7 +60,7 @@ static struct ConfigDef Vars[] = {
   { "Apple",      DT_SORT,                              1,  IP SortTestMethods, NULL,              }, /* test_initial_values */
   { "Banana",     DT_SORT,                              2,  IP SortTestMethods, NULL,              },
   { "Cherry",     DT_SORT,                              1,  IP SortTestMethods, NULL,              },
-  { "Damson",     DT_SORT|DT_SORT_REVERSE|DT_SORT_LAST, 1,  IP SortTestMethods, NULL,              }, /* test_string_set */
+  { "Damson",     DT_SORT|D_SORT_REVERSE|D_SORT_LAST,   1,  IP SortTestMethods, NULL,              }, /* test_string_set */
   { "Elderberry", DT_SORT,                              11, IP SortTestMethods, NULL,              },
   { "Fig",        DT_SORT,                              1,  IP SortTestMethods, NULL,              },
   { "Guava",      DT_SORT,                              1,  IP SortTestMethods, NULL,              },
@@ -72,6 +75,7 @@ static struct ConfigDef Vars[] = {
   { "Papaya",     DT_SORT,                              1,  IP SortTestMethods, validator_warn,    },
   { "Quince",     DT_SORT,                              1,  IP SortTestMethods, validator_fail,    },
   { "Strawberry", DT_SORT,                              1,  IP SortTestMethods, NULL,              }, /* test_inherit */
+  { "Tangerine",  DT_SORT | D_ON_STARTUP,               1,  IP SortTestMethods, NULL,              }, /* startup */
   { NULL },
 };
 
@@ -269,6 +273,13 @@ static bool test_string_set(struct ConfigSubset *sub, struct Buffer *err)
     return false;
   }
 
+  name = "Tangerine";
+  rc = cs_str_string_set(cs, name, "date", err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  rc = cs_str_string_set(cs, name, "size", err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   log_line(__func__);
   return true;
 }
@@ -445,6 +456,13 @@ static bool test_native_set(struct ConfigSubset *sub, struct Buffer *err)
     return false;
   }
 
+  name = "Tangerine";
+  rc = cs_str_native_set(cs, name, SORT_DATE, err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  rc = cs_str_native_set(cs, name, SORT_SIZE, err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   log_line(__func__);
   return true;
 }
@@ -533,6 +551,18 @@ static bool test_reset(struct ConfigSubset *sub, struct Buffer *err)
   }
 
   TEST_MSG("Reset: %s = %d", name, VarNectarine);
+
+  name = "Tangerine";
+  rc = cs_str_reset(cs, name, err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  StartupComplete = false;
+  rc = cs_str_native_set(cs, name, SORT_SIZE, err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+  StartupComplete = true;
+
+  rc = cs_str_reset(cs, name, err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
 
   log_line(__func__);
   return true;
@@ -758,17 +788,19 @@ void test_config_sort(void)
   struct ConfigSubset *sub = NeoMutt->sub;
   struct ConfigSet *cs = sub->cs;
 
+  StartupComplete = false;
   dont_fail = true;
-  if (!TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS)))
+  if (!TEST_CHECK(cs_register_variables(cs, Vars)))
     return;
   dont_fail = false;
+  StartupComplete = true;
 
   notify_observer_add(NeoMutt->notify, NT_CONFIG, log_observer, 0);
 
   set_list(cs);
 
   /* Register a broken variable separately */
-  if (!TEST_CHECK(cs_register_variables(cs, Vars2, DT_NO_FLAGS)))
+  if (!TEST_CHECK(cs_register_variables(cs, Vars2)))
     return;
 
   struct Buffer *err = buf_pool_get();

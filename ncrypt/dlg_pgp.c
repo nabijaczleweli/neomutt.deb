@@ -3,7 +3,8 @@
  * PGP Key Selection Dialog
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -98,15 +99,6 @@ static const struct Mapping PgpHelp[] = {
   { N_("Help"),      OP_HELP },
   { NULL, 0 },
   // clang-format on
-};
-
-/**
- * struct PgpEntry - An entry in a PGP key menu
- */
-struct PgpEntry
-{
-  size_t num; ///< Index number
-  struct PgpUid *uid;
 };
 
 /// Characters used to show the trust level for PGP keys
@@ -370,7 +362,7 @@ static const char *pgp_entry_format_str(char *buf, size_t buflen, size_t col, in
       break;
     case '[':
     {
-      char buf2[128];
+      char buf2[128] = { 0 };
       bool use_c_locale = false;
       size_t len;
 
@@ -449,7 +441,7 @@ static const char *pgp_entry_format_str(char *buf, size_t buflen, size_t col, in
  *
  * @sa $pgp_entry_format, pgp_entry_format_str()
  */
-static void pgp_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
+static void pgp_make_entry(struct Menu *menu, int line, struct Buffer *buf)
 {
   struct PgpUid **key_table = menu->mdata;
 
@@ -458,7 +450,7 @@ static void pgp_make_entry(struct Menu *menu, char *buf, size_t buflen, int line
   entry.num = line + 1;
 
   const char *const c_pgp_entry_format = cs_subset_string(NeoMutt->sub, "pgp_entry_format");
-  mutt_expando_format(buf, buflen, 0, menu->win->state.cols,
+  mutt_expando_format(buf->data, buf->dsize, 0, menu->win->state.cols,
                       NONULL(c_pgp_entry_format), pgp_entry_format_str,
                       (intptr_t) &entry, MUTT_FORMAT_ARROWCURSOR);
 }

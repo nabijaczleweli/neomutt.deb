@@ -3,9 +3,11 @@
  * RFC2047 MIME extensions encoding / decoding routines
  *
  * @authors
- * Copyright (C) 1996-2000,2010 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2000-2002 Edmund Grimley Evans <edmundo@rano.org>
- * Copyright (C) 2018-2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2018 Federico Kircheis <federico.kircheis@gmail.com>
+ * Copyright (C) 2018-2020 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Anna Figueiredo Gomes <navi@vlhl.dev>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -48,7 +50,7 @@
 
 #define HSPACE(ch) (((ch) == '\0') || ((ch) == ' ') || ((ch) == '\t'))
 
-#define CONTINUATION_BYTE(ch) (((ch) &0xc0) == 0x80)
+#define CONTINUATION_BYTE(ch) (((ch) & 0xc0) == 0x80)
 
 /**
  * @defgroup encoder_api Mime Encoder API
@@ -635,7 +637,7 @@ void rfc2047_encode(char **pd, const char *specials, int col, const struct Slist
   struct Slist *fallback = NULL;
   if (!charsets)
   {
-    fallback = slist_parse("utf-8", SLIST_SEP_COLON);
+    fallback = slist_parse("utf-8", D_SLIST_SEP_COLON);
     charsets = fallback;
   }
 
@@ -838,7 +840,12 @@ void rfc2047_decode_envelope(struct Envelope *env)
   rfc2047_decode_addrlist(&env->return_path);
   rfc2047_decode_addrlist(&env->sender);
   rfc2047_decode(&env->x_label);
-  rfc2047_decode(&env->subject);
+
+  char *subj = env->subject;
+  *(char **) &env->subject = NULL;
+  rfc2047_decode(&subj);
+  mutt_env_set_subject(env, subj);
+  FREE(&subj);
 }
 
 /**
@@ -858,5 +865,10 @@ void rfc2047_encode_envelope(struct Envelope *env)
   rfc2047_encode_addrlist(&env->sender, "Sender");
   const struct Slist *const c_send_charset = cs_subset_slist(NeoMutt->sub, "send_charset");
   rfc2047_encode(&env->x_label, NULL, sizeof("X-Label:"), c_send_charset);
-  rfc2047_encode(&env->subject, NULL, sizeof("Subject:"), c_send_charset);
+
+  char *subj = env->subject;
+  *(char **) &env->subject = NULL;
+  rfc2047_encode(&subj, NULL, sizeof("Subject:"), c_send_charset);
+  mutt_env_set_subject(env, subj);
+  FREE(&subj);
 }

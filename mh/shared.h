@@ -1,9 +1,9 @@
 /**
  * @file
- * Maildir/MH private types
+ * MH shared functions
  *
  * @authors
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -20,18 +20,16 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MUTT_MAILDIR_PRIVATE_H
-#define MUTT_MAILDIR_PRIVATE_H
+#ifndef MUTT_MH_SHARED_H
+#define MUTT_MH_SHARED_H
 
 #include <stdbool.h>
 #include <stdio.h>
 #include <sys/types.h>
 
-struct MdEmailArray;
 struct Mailbox;
 
-int    maildir_move_to_mailbox(struct Mailbox *m, const struct MdEmailArray *mda);
-bool   mh_mkstemp             (struct Mailbox *m, FILE **fp, char **tgt);
-mode_t mh_umask               (struct Mailbox *m);
+bool   mh_mkstemp(struct Mailbox *m, FILE **fp, char **tgt);
+mode_t mh_umask  (struct Mailbox *m);
 
-#endif /* MUTT_MAILDIR_PRIVATE_H */
+#endif /* MUTT_MH_SHARED_H */

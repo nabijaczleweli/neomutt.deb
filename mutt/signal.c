@@ -3,7 +3,7 @@
  * Signal handling
  *
  * @authors
- * Copyright (C) 2017 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2024 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -59,6 +59,9 @@ static sig_handler_t SigHandler = mutt_sig_empty_handler;
 static sig_handler_t ExitHandler = mutt_sig_exit_handler;
 /// Function to handle SIGSEGV (11) signals
 static sig_handler_t SegvHandler = mutt_sig_exit_handler;
+
+volatile sig_atomic_t SigInt;   ///< true after SIGINT is received
+volatile sig_atomic_t SigWinch; ///< true after SIGWINCH is received
 
 /**
  * mutt_sig_empty_handler - Dummy signal handler
