@@ -1,3 +1,10 @@
+neomutt (20240329+dfsg-0.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * Revert commit that locks neomutt on startup
+
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Fri, 29 Mar 2024 19:45:23 +0100
+
 neomutt (20240329+dfsg-0.1) unstable; urgency=medium
 
   * Non-maintainer upload.
