@@ -1,3 +1,12 @@
+neomutt (20240329+dfsg-0.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * New upstream version 20240329+dfsg
+  * Refresh patches
+  * Update neomutt-test-files
+
+ -- наб <nabijaczleweli@nabijaczleweli.xyz>  Fri, 29 Mar 2024 16:45:07 +0100
+
 neomutt (20231103+dfsg-0.1) unstable; urgency=medium
 
   * Non-maintainer upload.
