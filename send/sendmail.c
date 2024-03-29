@@ -3,7 +3,9 @@
  * Send email using sendmail
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2020-2024 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021 Ihor Antonov <ihor@antonovs.family>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -43,13 +45,11 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "sendmail.h"
+#include "nntp/lib.h"
 #include "pager/lib.h"
 #include "format_flags.h"
 #include "globals.h"
 #include "muttlib.h"
-#ifdef USE_NNTP
-#include "nntp/lib.h"
-#endif
 #ifdef HAVE_SYSEXITS_H
 #include <sysexits.h>
 #else
@@ -61,7 +61,7 @@
 extern char **environ;
 #endif
 
-static SIG_ATOMIC_VOLATILE_T SigAlrm; ///< true after SIGALRM is received
+static volatile sig_atomic_t SigAlrm; ///< true after SIGALRM is received
 
 ARRAY_HEAD(SendmailArgArray, const char *);
 
@@ -304,7 +304,6 @@ int mutt_invoke_sendmail(struct Mailbox *m, struct AddressList *from,
   struct SendmailArgArray extra_args = ARRAY_HEAD_INITIALIZER;
   int i;
 
-#ifdef USE_NNTP
   if (OptNewsSend)
   {
     char cmd[1024] = { 0 };
@@ -322,7 +321,6 @@ int mutt_invoke_sendmail(struct Mailbox *m, struct AddressList *from,
     s = mutt_str_dup(cmd);
   }
   else
-#endif
   {
     const char *const c_sendmail = cs_subset_string(sub, "sendmail");
     s = mutt_str_dup(c_sendmail);
@@ -358,10 +356,8 @@ int mutt_invoke_sendmail(struct Mailbox *m, struct AddressList *from,
     i++;
   }
 
-#ifdef USE_NNTP
   if (!OptNewsSend)
   {
-#endif
     /* If $sendmail contained a "--", we save the recipients to append to
      * args after other possible options added below. */
     if (ps)
@@ -416,9 +412,7 @@ int mutt_invoke_sendmail(struct Mailbox *m, struct AddressList *from,
     add_args(&args, to);
     add_args(&args, cc);
     add_args(&args, bcc);
-#ifdef USE_NNTP
   }
-#endif
 
   ARRAY_ADD(&args, NULL);
 

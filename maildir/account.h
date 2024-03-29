@@ -1,9 +1,9 @@
 /**
  * @file
- * Test code for log_disp_null()
+ * Maildir Account
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2024 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -20,11 +20,15 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define TEST_NO_MAIN
-#include "config.h"
-#include "acutest.h"
+#ifndef MUTT_MAILDIR_ACCOUNT_H
+#define MUTT_MAILDIR_ACCOUNT_H
 
-void test_log_disp_null(void)
-{
-  // int log_disp_null(time_t stamp, const char *file, int line,;
-}
+#include <stdbool.h>
+
+struct Account;
+struct Mailbox;
+
+bool maildir_ac_add      (struct Account *a, struct Mailbox *m);
+bool maildir_ac_owns_path(struct Account *a, const char *path);
+
+#endif /* MUTT_MAILDIR_ACCOUNT_H */

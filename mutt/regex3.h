@@ -3,7 +3,8 @@
  * Manage regular expressions
  *
  * @authors
- * Copyright (C) 2017 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -30,11 +31,6 @@
 #include "queue.h"
 
 struct Buffer;
-
-/* ... DT_REGEX */
-#define DT_REGEX_MATCH_CASE (1 << 6)  ///< Case-sensitive matching
-#define DT_REGEX_ALLOW_NOT  (1 << 7)  ///< Regex can begin with '!'
-#define DT_REGEX_NOSUB      (1 << 8)  ///< Do not report what was matched (REG_NOSUB)
 
 /* This is a non-standard option supported by Solaris 2.5.x
  * which allows patterns of the form \<...\> */

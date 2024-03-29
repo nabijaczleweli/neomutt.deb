@@ -4,7 +4,8 @@
  *
  * @authors
  * Copyright (C) 2000-2003 Vsevolod Volkov <vvv@mutt.org.ua>
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2020 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -619,8 +620,8 @@ int pop_reconnect(struct Mailbox *m)
     int rc = pop_open_connection(adata);
     if (rc == 0)
     {
-      struct Progress *progress = progress_new(_("Verifying message indexes..."),
-                                               MUTT_PROGRESS_NET, 0);
+      struct Progress *progress = progress_new(MUTT_PROGRESS_NET, 0);
+      progress_set_message(progress, _("Verifying message indexes..."));
 
       for (int i = 0; i < m->msg_count; i++)
       {

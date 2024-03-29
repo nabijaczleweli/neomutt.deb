@@ -3,8 +3,12 @@
  * Index Dialog
  *
  * @authors
- * Copyright (C) 1996-2000,2002,2010,2012-2013 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2016-2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2016-2023 Richard Russon <rich@flatcap.org>
  * Copyright (C) 2020 R Primus <rprimus@gmail.com>
+ * Copyright (C) 2021 Eric Blake <eblake@redhat.com>
+ * Copyright (C) 2022 Igor Serebryany <igor47@moomers.org>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -56,6 +60,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 #include "private.h"
 #include "mutt/lib.h"
 #include "config/lib.h"
@@ -67,11 +72,13 @@
 #include "color/lib.h"
 #include "key/lib.h"
 #include "menu/lib.h"
+#include "nntp/lib.h"
 #include "pager/lib.h"
 #include "pattern/lib.h"
+#include "sidebar/lib.h"
 #include "format_flags.h"
 #include "functions.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "hdrline.h"
 #include "hook.h"
 #include "mutt_logging.h"
@@ -79,6 +86,7 @@
 #include "mutt_thread.h"
 #include "mview.h"
 #include "mx.h"
+#include "nntp/adata.h"
 #include "private_data.h"
 #include "protos.h"
 #include "shared_data.h"
@@ -87,15 +95,8 @@
 #ifdef USE_NOTMUCH
 #include "notmuch/lib.h"
 #endif
-#ifdef USE_NNTP
-#include "nntp/lib.h"
-#include "nntp/adata.h"
-#endif
 #ifdef USE_INOTIFY
 #include "monitor.h"
-#endif
-#ifdef USE_SIDEBAR
-#include "sidebar/lib.h"
 #endif
 
 /// Help Bar for the Index dialog
@@ -113,7 +114,6 @@ static const struct Mapping IndexHelp[] = {
   // clang-format on
 };
 
-#ifdef USE_NNTP
 /// Help Bar for the News Index dialog
 const struct Mapping IndexNewsHelp[] = {
   // clang-format off
@@ -128,7 +128,6 @@ const struct Mapping IndexNewsHelp[] = {
   { NULL, 0 },
   // clang-format on
 };
-#endif
 
 /**
  * check_acl - Check the ACLs for a function
@@ -629,11 +628,9 @@ void change_folder_mailbox(struct Menu *menu, struct Mailbox *m, int *oldcount,
 #ifdef USE_INOTIFY
     int monitor_remove_rc = mutt_monitor_remove(NULL);
 #endif
-#ifdef USE_COMP_MBOX
     if (shared->mailbox->compress_info && (shared->mailbox->realpath[0] != '\0'))
       new_last_folder = mutt_str_dup(shared->mailbox->realpath);
     else
-#endif
       new_last_folder = mutt_str_dup(mailbox_path(shared->mailbox));
     *oldcount = shared->mailbox->msg_count;
 
@@ -744,6 +741,8 @@ struct Mailbox *change_folder_notmuch(struct Menu *menu, char *buf, int buflen, 
 
   struct Mailbox *m_query = mx_path_resolve(buf);
   change_folder_mailbox(menu, m_query, oldcount, shared, read_only);
+  if (!shared->mailbox_view)
+    mailbox_free(&m_query);
   return m_query;
 }
 #endif
@@ -759,14 +758,12 @@ struct Mailbox *change_folder_notmuch(struct Menu *menu, char *buf, int buflen, 
 void change_folder_string(struct Menu *menu, struct Buffer *buf, int *oldcount,
                           struct IndexSharedData *shared, bool read_only)
 {
-#ifdef USE_NNTP
   if (OptNews)
   {
     OptNews = false;
     nntp_expand_path(buf->data, buf->dsize, &CurrentNewsSrv->conn->account);
   }
   else
-#endif
   {
     const char *const c_folder = cs_subset_string(shared->sub, "folder");
     mx_path_canon(buf, c_folder, NULL);
@@ -797,10 +794,8 @@ void change_folder_string(struct Menu *menu, struct Buffer *buf, int *oldcount,
  *
  * @sa $index_format, index_format_str()
  */
-void index_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
+void index_make_entry(struct Menu *menu, int line, struct Buffer *buf)
 {
-  buf[0] = '\0';
-
   if (!menu || !menu->mdata)
     return;
 
@@ -885,8 +880,8 @@ void index_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
 
   const char *const c_index_format = cs_subset_string(shared->sub, "index_format");
   int msg_in_pager = shared->mailbox_view ? shared->mailbox_view->msg_in_pager : 0;
-  mutt_make_string(buf, buflen, menu->win->state.cols, NONULL(c_index_format),
-                   m, msg_in_pager, e, flags, NULL);
+  mutt_make_string(buf, menu->win->state.cols, NONULL(c_index_format), m,
+                   msg_in_pager, e, flags, NULL);
 }
 
 /**
@@ -959,6 +954,7 @@ void mutt_draw_statusline(struct MuttWindow *win, int cols, const char *buf, siz
     STAILQ_FOREACH(cl, regex_colors_get_list(MT_COLOR_STATUS), entries)
     {
       regmatch_t pmatch[cl->match + 1];
+      memset(pmatch, 0, (cl->match + 1) * sizeof(regmatch_t));
 
       if (regexec(&cl->regex, buf + offset, cl->match + 1, pmatch, 0) != 0)
         continue; /* regex doesn't match the status bar */
@@ -1079,11 +1075,9 @@ struct Mailbox *dlg_index(struct MuttWindow *dlg, struct Mailbox *m_init)
 
   int op = OP_NULL;
 
-#ifdef USE_NNTP
   if (shared->mailbox && (shared->mailbox->type == MUTT_NNTP))
     dlg->help_data = IndexNewsHelp;
   else
-#endif
     dlg->help_data = IndexHelp;
   dlg->help_menu = MENU_INDEX;
 
@@ -1178,11 +1172,11 @@ struct Mailbox *dlg_index(struct MuttWindow *dlg, struct Mailbox *m_init)
               const char *const c_new_mail_command = cs_subset_string(shared->sub, "new_mail_command");
               if (c_new_mail_command)
               {
-                char cmd[1024] = { 0 };
-                menu_status_line(cmd, sizeof(cmd), shared, NULL, sizeof(cmd),
-                                 NONULL(c_new_mail_command));
-                if (mutt_system(cmd) != 0)
-                  mutt_error(_("Error running \"%s\""), cmd);
+                struct Buffer *cmd = buf_pool_get();
+                menu_status_line(cmd, shared, NULL, cmd->dsize, NONULL(c_new_mail_command));
+                if (mutt_system(buf_string(cmd)) != 0)
+                  mutt_error(_("Error running \"%s\""), buf_string(cmd));
+                buf_pool_release(&cmd);
               }
               break;
             }
@@ -1223,11 +1217,11 @@ struct Mailbox *dlg_index(struct MuttWindow *dlg, struct Mailbox *m_init)
           const char *const c_new_mail_command = cs_subset_string(shared->sub, "new_mail_command");
           if (c_new_mail_command)
           {
-            char cmd[1024] = { 0 };
-            menu_status_line(cmd, sizeof(cmd), shared, priv->menu, sizeof(cmd),
-                             NONULL(c_new_mail_command));
-            if (mutt_system(cmd) != 0)
-              mutt_error(_("Error running \"%s\""), cmd);
+            struct Buffer *cmd = buf_pool_get();
+            menu_status_line(cmd, shared, priv->menu, cmd->dsize, NONULL(c_new_mail_command));
+            if (mutt_system(buf_string(cmd)) != 0)
+              mutt_error(_("Error running \"%s\""), buf_string(cmd));
+            buf_pool_release(&cmd);
           }
         }
       }
@@ -1331,9 +1325,7 @@ struct Mailbox *dlg_index(struct MuttWindow *dlg, struct Mailbox *m_init)
 
     mutt_clear_error();
 
-#ifdef USE_NNTP
     OptNews = false; /* for any case */
-#endif
 
 #ifdef USE_NOTMUCH
     nm_db_debug_check(shared->mailbox);
@@ -1344,13 +1336,11 @@ struct Mailbox *dlg_index(struct MuttWindow *dlg, struct Mailbox *m_init)
     if (rc == FR_UNKNOWN)
       rc = menu_function_dispatcher(priv->win_index, op);
 
-#ifdef USE_SIDEBAR
     if (rc == FR_UNKNOWN)
     {
       struct MuttWindow *win_sidebar = window_find_child(dlg, WT_SIDEBAR);
       rc = sb_function_dispatcher(win_sidebar, op);
     }
-#endif
     if (rc == FR_UNKNOWN)
       rc = global_function_dispatcher(NULL, op);
 

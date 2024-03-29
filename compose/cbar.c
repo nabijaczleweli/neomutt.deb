@@ -3,7 +3,7 @@
  * Compose Bar (status)
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -75,7 +75,7 @@
 #include "attach_data.h"
 #include "cbar_data.h"
 #include "format_flags.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "muttlib.h"
 #include "shared_data.h"
 
@@ -84,7 +84,7 @@
  * @param adata Attachment data
  * @retval num Number of attachments
  */
-int num_attachments(struct ComposeAttachData *adata)
+static int num_attachments(const struct ComposeAttachData *adata)
 {
   if (!adata || !adata->menu)
     return 0;
@@ -106,7 +106,8 @@ static const char *compose_format_str(char *buf, size_t buflen, size_t col, int 
                                       const char *if_str, const char *else_str,
                                       intptr_t data, MuttFormatFlags flags)
 {
-  char fmt[128], tmp[128];
+  char fmt[128] = { 0 };
+  char tmp[128] = { 0 };
   bool optional = (flags & MUTT_FORMAT_OPTIONAL);
   struct ComposeSharedData *shared = (struct ComposeSharedData *) data;
 

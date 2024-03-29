@@ -5,7 +5,9 @@
  * @authors
  * Copyright (C) 1996-2000,2007,2010,2013 Michael R. Elkins <me@mutt.org>
  * Copyright (C) 1999-2008 Thomas Roessler <roessler@does-not-exist.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2016-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017 Aleksa Sarai <cyphar@cyphar.com>
+ * Copyright (C) 2017-2022 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -52,17 +54,15 @@
 #include "browser/lib.h"
 #include "editor/lib.h"
 #include "history/lib.h"
+#include "imap/lib.h"
 #include "ncrypt/lib.h"
 #include "parse/lib.h"
 #include "question/lib.h"
 #include "format_flags.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "hook.h"
 #include "mx.h"
 #include "protos.h"
-#ifdef USE_IMAP
-#include "imap/lib.h"
-#endif
 
 /// Accepted XDG environment variables
 static const char *XdgEnvVars[] = {
@@ -202,15 +202,15 @@ void buf_expand_path_regex(struct Buffer *buf, bool regex)
         if ((mb_type == MUTT_IMAP) && ((c_folder[strlen(c_folder) - 1] == '}') ||
                                        (c_folder[strlen(c_folder) - 1] == '/')))
         {
-          buf_strcpy(p, NONULL(c_folder));
+          buf_strcpy(p, c_folder);
         }
         else if (mb_type == MUTT_NOTMUCH)
         {
-          buf_strcpy(p, NONULL(c_folder));
+          buf_strcpy(p, c_folder);
         }
         else if (c_folder && (c_folder[strlen(c_folder) - 1] == '/'))
         {
-          buf_strcpy(p, NONULL(c_folder));
+          buf_strcpy(p, c_folder);
         }
         else
         {
@@ -233,10 +233,8 @@ void buf_expand_path_regex(struct Buffer *buf, bool regex)
           mutt_addrlist_copy(&e->env->from, al, false);
           mutt_addrlist_copy(&e->env->to, al, false);
 
-          /* TODO: fix mutt_default_save() to use Buffer */
           buf_alloc(p, PATH_MAX);
-          mutt_default_save(p->data, p->dsize, e);
-          buf_fix_dptr(p);
+          mutt_default_save(p, e);
 
           email_free(&e);
           /* Avoid infinite recursion if the resulting folder starts with '@' */
@@ -318,12 +316,10 @@ void buf_expand_path_regex(struct Buffer *buf, bool regex)
   buf_pool_release(&q);
   buf_pool_release(&tmp);
 
-#ifdef USE_IMAP
   /* Rewrite IMAP path in canonical form - aids in string comparisons of
    * folders. May possibly fail, in which case buf should be the same. */
   if (imap_path_probe(buf_string(buf), NULL) == MUTT_IMAP)
     imap_expand_path(buf);
-#endif
 }
 
 /**
@@ -373,8 +369,7 @@ char *mutt_expand_path_regex(char *buf, size_t buflen, bool regex)
  */
 char *mutt_gecos_name(char *dest, size_t destlen, struct passwd *pw)
 {
-  regmatch_t pat_match[1];
-  size_t pwnl;
+  regmatch_t pat_match[1] = { 0 };
   char *p = NULL;
 
   if (!pw || !pw->pw_gecos)
@@ -397,7 +392,7 @@ char *mutt_gecos_name(char *dest, size_t destlen, struct passwd *pw)
     mutt_str_copy(dest, pw->pw_gecos, destlen);
   }
 
-  pwnl = strlen(pw->pw_name);
+  size_t pwnl = strlen(pw->pw_name);
 
   for (int idx = 0; dest[idx]; idx++)
   {
@@ -415,22 +410,22 @@ char *mutt_gecos_name(char *dest, size_t destlen, struct passwd *pw)
 
 /**
  * mutt_needs_mailcap - Does this type need a mailcap entry do display
- * @param m Attachment body to be displayed
+ * @param b Attachment body to be displayed
  * @retval true  NeoMutt requires a mailcap entry to display
  * @retval false otherwise
  */
-bool mutt_needs_mailcap(struct Body *m)
+bool mutt_needs_mailcap(struct Body *b)
 {
-  switch (m->type)
+  switch (b->type)
   {
     case TYPE_TEXT:
-      if (mutt_istr_equal("plain", m->subtype))
+      if (mutt_istr_equal("plain", b->subtype))
         return false;
       break;
     case TYPE_APPLICATION:
-      if (((WithCrypto & APPLICATION_PGP) != 0) && mutt_is_application_pgp(m))
+      if (((WithCrypto & APPLICATION_PGP) != 0) && mutt_is_application_pgp(b))
         return false;
-      if (((WithCrypto & APPLICATION_SMIME) != 0) && mutt_is_application_smime(m))
+      if (((WithCrypto & APPLICATION_SMIME) != 0) && mutt_is_application_smime(b))
         return false;
       break;
 
@@ -745,15 +740,17 @@ void mutt_safe_path(struct Buffer *dest, const struct Address *a)
 void mutt_expando_format(char *buf, size_t buflen, size_t col, int cols, const char *src,
                          format_t callback, intptr_t data, MuttFormatFlags flags)
 {
-  char prefix[128], tmp[1024];
+  char prefix[128] = { 0 };
+  char tmp[1024] = { 0 };
   char *cp = NULL, *wptr = buf;
   char ch;
-  char if_str[128], else_str[128];
+  char if_str[128] = { 0 };
+  char else_str[128] = { 0 };
   size_t wlen, count, len, wid;
   FILE *fp_filter = NULL;
   char *recycler = NULL;
 
-  char src2[1024];
+  char src2[1024] = { 0 };
   mutt_str_copy(src2, src, mutt_str_len(src) + 1);
   src = src2;
 
@@ -1310,7 +1307,7 @@ FILE *mutt_open_read(const char *path, pid_t *thepid)
       errno = EINVAL;
       return NULL;
     }
-    fp = fopen(path, "r");
+    fp = mutt_file_fopen(path, "r");
     *thepid = -1;
   }
   return fp;
@@ -1330,13 +1327,11 @@ int mutt_save_confirm(const char *s, struct stat *st)
 
   enum MailboxType type = mx_path_probe(s);
 
-#ifdef USE_POP
   if (type == MUTT_POP)
   {
     mutt_error(_("Can't save message to POP mailbox"));
     return 1;
   }
-#endif
 
   if ((type != MUTT_MAILBOX_ERROR) && (type != MUTT_UNKNOWN) && (mx_access(s, W_OK) == 0))
   {
@@ -1355,13 +1350,11 @@ int mutt_save_confirm(const char *s, struct stat *st)
     }
   }
 
-#ifdef USE_NNTP
   if (type == MUTT_NNTP)
   {
     mutt_error(_("Can't save message to news server"));
     return 0;
   }
-#endif
 
   if (stat(s, st) != -1)
   {

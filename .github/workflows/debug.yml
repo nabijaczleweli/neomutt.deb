@@ -10,7 +10,7 @@ jobs:
   build:
     name: ${{ matrix.cfg.name }}
     runs-on: ubuntu-latest
-    container: ghcr.io/neomutt/docker-build
+    container: ghcr.io/neomutt/ubuntu
     continue-on-error: true
 
     env:
@@ -51,7 +51,7 @@ jobs:
 
     steps:
     - name: Get number of CPU cores
-      uses: SimenB/github-actions-cpu-cores@v1
+      uses: SimenB/github-actions-cpu-cores@v2
       id: cpu-cores
 
     - name: Checkout Code

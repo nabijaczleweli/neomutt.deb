@@ -3,7 +3,7 @@
  * Rich text handler
  *
  * @authors
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -463,7 +463,7 @@ static void enriched_set_flags(const wchar_t *tag, struct EnrichedState *enriche
  * text_enriched_handler - Handler for enriched text - Implements ::handler_t - @ingroup handler_api
  * @retval 0 Always
  */
-int text_enriched_handler(struct Body *a, struct State *state)
+int text_enriched_handler(struct Body *b_email, struct State *state)
 {
   enum
   {
@@ -476,7 +476,7 @@ int text_enriched_handler(struct Body *a, struct State *state)
     DONE
   } text_state = TEXT;
 
-  long bytes = a->length;
+  long bytes = b_email->length;
   struct EnrichedState enriched = { 0 };
   wint_t wc = 0;
   int tag_len = 0;
@@ -548,8 +548,9 @@ int text_enriched_handler(struct Body *a, struct State *state)
           tag_len = 0;
           text_state = TAG;
         }
-      /* Yes, (it wasn't a <<, so this char is first in TAG) */
-      /* fallthrough */
+        /* Yes, (it wasn't a <<, so this char is first in TAG) */
+        FALLTHROUGH;
+
       case TAG:
         if (wc == (wchar_t) '>')
         {

@@ -4,6 +4,7 @@
  *
  * @authors
  * Copyright (C) 1996-2000,2013 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -33,11 +34,9 @@
 #include <sys/wait.h> // IWYU pragma: keep
 #include <unistd.h>
 #include "mutt/lib.h"
+#include "imap/lib.h"
 #include "globals.h"
 #include "protos.h"
-#ifdef USE_IMAP
-#include "imap/lib.h"
-#endif
 
 /**
  * mutt_system - Run an external command
@@ -92,9 +91,7 @@ int mutt_system(const char *cmd)
   }
   else if (pid != -1)
   {
-#ifdef USE_IMAP
     rc = imap_wait_keep_alive(pid);
-#endif
   }
 
   sigaction(SIGCONT, &oldcont, NULL);

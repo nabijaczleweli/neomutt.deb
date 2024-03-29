@@ -4,6 +4,8 @@
  *
  * @authors
  * Copyright (C) 2019 Kevin J. McCarthy <kevin@8t8.us>
+ * Copyright (C) 2019-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2023 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -298,7 +300,7 @@ int mutt_autocrypt_gpgme_select_or_create_key(struct Address *addr, struct Buffe
          for some reason, we prompt to see if they want to create a key instead.  */
       if (query_yesorno(_("Create a new GPG key for this account, instead?"), MUTT_YES) != MUTT_YES)
         break;
-      /* fallthrough */
+      FALLTHROUGH;
 
     case 1: /* create new */
       rc = mutt_autocrypt_gpgme_create_key(addr, keyid, keydata);
@@ -319,11 +321,12 @@ int mutt_autocrypt_gpgme_import_key(const char *keydata, struct Buffer *keyid)
   int rc = -1;
   gpgme_ctx_t ctx = NULL;
   gpgme_data_t dh = NULL;
+  struct Buffer *raw_keydata = NULL;
 
   if (create_gpgme_context(&ctx))
     goto cleanup;
 
-  struct Buffer *raw_keydata = buf_pool_get();
+  raw_keydata = buf_pool_get();
   if (!mutt_b64_buffer_decode(raw_keydata, keydata))
     goto cleanup;
 

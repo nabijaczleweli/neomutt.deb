@@ -3,7 +3,9 @@
  * Parse colour commands
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021-2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2021-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -81,7 +83,6 @@ const struct Mapping ColorFields[] = {
   { "prompt",            MT_COLOR_PROMPT },
   { "quoted",            MT_COLOR_QUOTED },
   { "search",            MT_COLOR_SEARCH },
-#ifdef USE_SIDEBAR
   { "sidebar_background", MT_COLOR_SIDEBAR_BACKGROUND },
   { "sidebar_divider",   MT_COLOR_SIDEBAR_DIVIDER },
   { "sidebar_flagged",   MT_COLOR_SIDEBAR_FLAGGED },
@@ -92,7 +93,6 @@ const struct Mapping ColorFields[] = {
   { "sidebar_spool_file", MT_COLOR_SIDEBAR_SPOOLFILE },
   { "sidebar_spoolfile", MT_COLOR_SIDEBAR_SPOOLFILE }, // This will be deprecated
   { "sidebar_unread",    MT_COLOR_SIDEBAR_UNREAD },
-#endif
   { "signature",         MT_COLOR_SIGNATURE },
   { "status",            MT_COLOR_STATUS },
   { "stripe_even",       MT_COLOR_STRIPE_EVEN},
@@ -427,16 +427,16 @@ static enum CommandResult parse_color(struct Buffer *buf, struct Buffer *s,
 
     if (MoreArgs(s))
     {
-      struct Buffer tmp = buf_make(0);
-      parse_extract_token(&tmp, s, TOKEN_NO_FLAGS);
-      if (!mutt_str_atoui_full(tmp.data, &match))
+      struct Buffer *tmp = buf_pool_get();
+      parse_extract_token(tmp, s, TOKEN_NO_FLAGS);
+      if (!mutt_str_atoui_full(tmp->data, &match))
       {
-        buf_printf(err, _("%s: invalid number: %s"), color ? "color" : "mono", tmp.data);
-        buf_dealloc(&tmp);
+        buf_printf(err, _("%s: invalid number: %s"), color ? "color" : "mono", tmp->data);
+        buf_pool_release(&tmp);
         rc = MUTT_CMD_WARNING;
         goto done;
       }
-      buf_dealloc(&tmp);
+      buf_pool_release(&tmp);
     }
 
     if (MoreArgs(s))

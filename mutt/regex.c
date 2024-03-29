@@ -3,8 +3,11 @@
  * Manage regular expressions
  *
  * @authors
- * Copyright (C) 2017 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018 Bo Yu <tsu.yubo@gmail.com>
+ * Copyright (C) 2018-2021 Pietro Cerutti <gahr@gahr.ch>
  * Copyright (C) 2019 Simon Symeonidis <lethaljellybean@gmail.com>
+ * Copyright (C) 2022 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -35,6 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "config/types.h"
 #include "atoi.h"
 #include "buffer.h"
 #include "logging2.h"
@@ -68,7 +72,7 @@ struct Regex *mutt_regex_compile(const char *str, uint16_t flags)
 /**
  * mutt_regex_new - Create an Regex from a string
  * @param str   Regular expression
- * @param flags Type flags, e.g. #DT_REGEX_MATCH_CASE
+ * @param flags Type flags, e.g. #D_REGEX_MATCH_CASE
  * @param err   Buffer for error messages
  * @retval ptr New Regex object
  * @retval NULL Error
@@ -85,11 +89,11 @@ struct Regex *mutt_regex_new(const char *str, uint32_t flags, struct Buffer *err
   reg->pattern = mutt_str_dup(str);
 
   /* Should we use smart case matching? */
-  if (((flags & DT_REGEX_MATCH_CASE) == 0) && mutt_mb_is_lower(str))
+  if (((flags & D_REGEX_MATCH_CASE) == 0) && mutt_mb_is_lower(str))
     rflags |= REG_ICASE;
 
   /* Is a prefix of '!' allowed? */
-  if (((flags & DT_REGEX_ALLOW_NOT) != 0) && (str[0] == '!'))
+  if (((flags & D_REGEX_ALLOW_NOT) != 0) && (str[0] == '!'))
   {
     reg->pat_not = true;
     str++;
@@ -273,8 +277,7 @@ int mutt_replacelist_add(struct ReplaceList *rl, const char *pat,
   struct Regex *rx = mutt_regex_compile(pat, REG_ICASE);
   if (!rx)
   {
-    if (err)
-      buf_printf(err, _("Bad regex: %s"), pat);
+    buf_printf(err, _("Bad regex: %s"), pat);
     return -1;
   }
 

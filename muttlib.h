@@ -3,7 +3,7 @@
  * Some miscellaneous functions
  *
  * @authors
- * Copyright (C) 2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
  * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
@@ -54,7 +54,7 @@ void        mutt_get_parent_path(const char *path, char *buf, size_t buflen);
 int         mutt_inbox_cmp(const char *a, const char *b);
 bool        mutt_is_text_part(struct Body *b);
 const char *mutt_make_version(void);
-bool        mutt_needs_mailcap(struct Body *m);
+bool        mutt_needs_mailcap(struct Body *b);
 FILE *      mutt_open_read(const char *path, pid_t *thepid);
 void        mutt_pretty_mailbox(char *buf, size_t buflen);
 void        mutt_safe_path(struct Buffer *dest, const struct Address *a);

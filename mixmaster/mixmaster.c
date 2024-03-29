@@ -3,8 +3,8 @@
  * Mixmaster Remailer
  *
  * @authors
- * Copyright (C) 1999-2001 Thomas Roessler <roessler@does-not-exist.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2017-2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -38,7 +38,7 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "send/lib.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "protos.h"
 
 /**

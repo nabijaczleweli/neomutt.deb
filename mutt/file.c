@@ -3,7 +3,12 @@
  * File management functions
  *
  * @authors
- * Copyright (C) 2017 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017 Reis Radomil
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2018 Federico Kircheis <federico.kircheis@gmail.com>
+ * Copyright (C) 2018-2019 Ian Zimmerman <itz@no-use.mooo.com>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -24,6 +29,10 @@
  * @page mutt_file File management functions
  *
  * Commonly used file/dir management routines.
+ *
+ * The following unused functions were removed:
+ * - mutt_file_chmod()
+ * - mutt_file_chmod_rm()
  */
 
 #include "config.h"
@@ -68,7 +77,7 @@ const char FilenameSafeChars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst
 #endif
 
 /**
- * compare_stat - Compare the struct stat's of two files/dirs
+ * stat_equal - Compare the struct stat's of two files/dirs
  * @param st_old struct stat of the first file/dir
  * @param st_new struct stat of the second file/dir
  * @retval true They match
@@ -76,7 +85,7 @@ const char FilenameSafeChars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrst
  * This compares the device id (st_dev), inode number (st_ino) and special id
  * (st_rdev) of the files/dirs.
  */
-static bool compare_stat(struct stat *st_old, struct stat *st_new)
+static bool stat_equal(struct stat *st_old, struct stat *st_new)
 {
   return (st_old->st_dev == st_new->st_dev) && (st_old->st_ino == st_new->st_ino) &&
          (st_old->st_rdev == st_new->st_rdev);
@@ -96,7 +105,7 @@ static int mkwrapdir(const char *path, struct Buffer *newfile, struct Buffer *ne
   int rc = 0;
 
   struct Buffer parent = buf_make(PATH_MAX);
-  buf_strcpy(&parent, NONULL(path));
+  buf_strcpy(&parent, path);
 
   char *p = strrchr(parent.data, '/');
   if (p)
@@ -144,17 +153,28 @@ static int put_file_in_place(const char *path, const char *safe_file, const char
 }
 
 /**
- * mutt_file_fclose - Close a FILE handle (and NULL the pointer)
- * @param[out] fp FILE handle to close
+ * mutt_file_fclose_full - Close a FILE handle (and NULL the pointer)
+ * @param[out] fp    FILE handle to close
+ * @param[in]  file  Source file
+ * @param[in]  line  Source line number
+ * @param[in]  func  Source function
  * @retval 0   Success
  * @retval EOF Error, see errno
  */
-int mutt_file_fclose(FILE **fp)
+int mutt_file_fclose_full(FILE **fp, const char *file, int line, const char *func)
 {
   if (!fp || !*fp)
     return 0;
 
+  int fd = fileno(*fp);
   int rc = fclose(*fp);
+
+  if (rc == 0)
+    MuttLogger(0, file, line, func, LL_DEBUG2, "File closed (fd=%d)\n", fd);
+  else
+    MuttLogger(0, file, line, func, LL_DEBUG2, "File close failed (fd=%d), errno=%d, %s\n",
+               fd, errno, strerror(errno));
+
   *fp = NULL;
   return rc;
 }
@@ -325,7 +345,7 @@ int mutt_file_symlink(const char *oldpath, const char *newpath)
   }
 
   if ((stat(oldpath, &st_old) == -1) || (stat(newpath, &st_new) == -1) ||
-      !compare_stat(&st_old, &st_new))
+      !stat_equal(&st_old, &st_new))
   {
     unlink(newpath);
     return -1;
@@ -366,7 +386,7 @@ int mutt_file_safe_rename(const char *src, const char *target)
      * used lstat() further below for 20 years without issue, and I
      * believe was never intended to be used on a src symlink.  */
     if ((lstat(src, &st_src) == 0) && (lstat(target, &st_target) == 0) &&
-        (compare_stat(&st_src, &st_target) == 0))
+        (stat_equal(&st_src, &st_target) == 0))
     {
       mutt_debug(LL_DEBUG1, "link (%s, %s) reported failure: %s (%d) but actually succeeded\n",
                  src, target, strerror(errno), errno);
@@ -412,7 +432,7 @@ int mutt_file_safe_rename(const char *src, const char *target)
     return -1;
   }
 
-  /* Remove the compare_stat() check, because it causes problems with maildir
+  /* Remove the stat_equal() check, because it causes problems with maildir
    * on filesystems that don't properly support hard links, such as sshfs.  The
    * filesystem creates the link, but the resulting file is given a different
    * inode number by the sshfs layer.  This results in an infinite loop
@@ -433,7 +453,7 @@ int mutt_file_safe_rename(const char *src, const char *target)
 
   /* pretend that the link failed because the target file did already exist. */
 
-  if (!compare_stat(&st_src, &st_target))
+  if (!stat_equal(&st_src, &st_target))
   {
     mutt_debug(LL_DEBUG1, "stat blocks for %s and %s diverge; pretending EEXIST\n", src, target);
     errno = EEXIST;
@@ -592,7 +612,7 @@ int mutt_file_open(const char *path, uint32_t flags)
   struct stat st_old = { 0 };
   struct stat st_new = { 0 };
   if (((lstat(path, &st_old) < 0) || (fstat(fd, &st_new) < 0)) ||
-      !compare_stat(&st_old, &st_new))
+      !stat_equal(&st_old, &st_new))
   {
     close(fd);
     fd = -1;
@@ -624,20 +644,25 @@ DIR *mutt_file_opendir(const char *path, enum MuttOpenDirMode mode)
 }
 
 /**
- * mutt_file_fopen - Call fopen() safely
- * @param path Filename
- * @param mode Mode e.g. "r" readonly; "w" read-write
+ * mutt_file_fopen_full - Call fopen() safely
+ * @param path  Filename
+ * @param mode  Mode e.g. "r" readonly; "w" read-write
+ * @param file  Source file
+ * @param line  Source line number
+ * @param func  Source function
  * @retval ptr  FILE handle
  * @retval NULL Error, see errno
  *
  * When opening files for writing, make sure the file doesn't already exist to
  * avoid race conditions.
  */
-FILE *mutt_file_fopen(const char *path, const char *mode)
+FILE *mutt_file_fopen_full(const char *path, const char *mode, const char *file,
+                           int line, const char *func)
 {
   if (!path || !mode)
     return NULL;
 
+  FILE *fp = NULL;
   if (mode[0] == 'w')
   {
     uint32_t flags = O_CREAT | O_EXCL | O_NOFOLLOW;
@@ -648,15 +673,28 @@ FILE *mutt_file_fopen(const char *path, const char *mode)
       flags |= O_WRONLY;
 
     int fd = mutt_file_open(path, flags);
-    if (fd < 0)
-      return NULL;
-
-    return fdopen(fd, mode);
+    if (fd >= 0)
+    {
+      fp = fdopen(fd, mode);
+    }
   }
   else
   {
-    return fopen(path, mode);
+    fp = fopen(path, mode);
   }
+
+  if (fp)
+  {
+    MuttLogger(0, file, line, func, LL_DEBUG2, "File opened (fd=%d): %s\n",
+               fileno(fp), path);
+  }
+  else
+  {
+    MuttLogger(0, file, line, func, LL_DEBUG2, "File open failed (errno=%d, %s): %s\n",
+               errno, strerror(errno), path);
+  }
+
+  return fp;
 }
 
 /**
@@ -1100,22 +1138,6 @@ void mutt_file_touch_atime(int fd)
 }
 
 /**
- * mutt_file_chmod - Set permissions of a file
- * @param path Filename
- * @param mode the permissions to set
- * @retval num Same as chmod(2)
- *
- * This is essentially chmod(path, mode), see chmod(2).
- */
-int mutt_file_chmod(const char *path, mode_t mode)
-{
-  if (!path)
-    return -1;
-
-  return chmod(path, mode);
-}
-
-/**
  * mutt_file_chmod_add - Add permissions to a file
  * @param path Filename
  * @param mode the permissions to add
@@ -1169,28 +1191,6 @@ int mutt_file_chmod_add_stat(const char *path, mode_t mode, struct stat *st)
     st = &st2;
   }
   return chmod(path, st->st_mode | mode);
-}
-
-/**
- * mutt_file_chmod_rm - Remove permissions from a file
- * @param path Filename
- * @param mode the permissions to remove
- * @retval num Same as chmod(2)
- *
- * Removes the given permissions from the file. Permissions not mentioned in
- * mode will stay as they are. This function resembles the `chmod ugoa-rwxXst`
- * command family. Example:
- *
- *     mutt_file_chmod_rm(path, S_IWUSR | S_IWGRP | S_IWOTH);
- *
- * will remove write permissions from path but does not alter read and other
- * permissions.
- *
- * @sa mutt_file_chmod_rm_stat()
- */
-int mutt_file_chmod_rm(const char *path, mode_t mode)
-{
-  return mutt_file_chmod_rm_stat(path, mode, NULL);
 }
 
 /**
@@ -1418,7 +1418,7 @@ int mutt_file_rename(const char *oldfile, const char *newfile)
   if (access(newfile, F_OK) == 0)
     return 2;
 
-  FILE *fp_old = fopen(oldfile, "r");
+  FILE *fp_old = mutt_file_fopen(oldfile, "r");
   if (!fp_old)
     return 3;
   FILE *fp_new = mutt_file_fopen(newfile, "w");

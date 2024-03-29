@@ -4,6 +4,8 @@
  *
  * @authors
  * Copyright (C) 2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
+ * Copyright (C) 2023 Rayford Shireman
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -60,7 +62,7 @@ static void command_set_expand_value(uint32_t type, struct Buffer *value)
   assert(value);
   if (DTYPE(type) == DT_PATH)
   {
-    if (type & (DT_PATH_DIR | DT_PATH_FILE))
+    if (type & (D_PATH_DIR | D_PATH_FILE))
       buf_expand_path(value);
     else
       mutt_path_tilde(value, HomeDir);
@@ -71,16 +73,16 @@ static void command_set_expand_value(uint32_t type, struct Buffer *value)
   }
   else if (IS_COMMAND(type))
   {
-    struct Buffer scratch = buf_make(1024);
-    buf_copy(&scratch, value);
+    struct Buffer *scratch = buf_pool_get();
+    buf_copy(scratch, value);
 
     if (!mutt_str_equal(value->data, "builtin"))
     {
-      buf_expand_path(&scratch);
+      buf_expand_path(scratch);
     }
     buf_reset(value);
-    buf_addstr(value, buf_string(&scratch));
-    buf_dealloc(&scratch);
+    buf_addstr(value, buf_string(scratch));
+    buf_pool_release(&scratch);
   }
 }
 
@@ -116,7 +118,7 @@ static enum CommandResult command_set_set(struct Buffer *name,
     }
     else
     {
-      buf_printf(err, _("%s: unknown variable"), name->data);
+      buf_printf(err, _("Unknown option %s"), name->data);
       return MUTT_CMD_ERROR;
     }
   }
@@ -171,7 +173,7 @@ static enum CommandResult command_set_increment(struct Buffer *name,
     }
     else
     {
-      buf_printf(err, _("%s: unknown variable"), name->data);
+      buf_printf(err, _("Unknown option %s"), name->data);
       return MUTT_CMD_ERROR;
     }
   }
@@ -214,7 +216,7 @@ static enum CommandResult command_set_decrement(struct Buffer *name,
   struct HashElem *he = cs_subset_lookup(NeoMutt->sub, name->data);
   if (!he)
   {
-    buf_printf(err, _("%s: unknown variable"), name->data);
+    buf_printf(err, _("Unknown option %s"), name->data);
     return MUTT_CMD_ERROR;
   }
 
@@ -242,7 +244,7 @@ static enum CommandResult command_set_unset(struct Buffer *name, struct Buffer *
   struct HashElem *he = cs_subset_lookup(NeoMutt->sub, name->data);
   if (!he)
   {
-    buf_printf(err, _("%s: unknown variable"), name->data);
+    buf_printf(err, _("Unknown option %s"), name->data);
     return MUTT_CMD_ERROR;
   }
 
@@ -300,7 +302,7 @@ static enum CommandResult command_set_reset(struct Buffer *name, struct Buffer *
   struct HashElem *he = cs_subset_lookup(NeoMutt->sub, name->data);
   if (!he)
   {
-    buf_printf(err, _("%s: unknown variable"), name->data);
+    buf_printf(err, _("Unknown option %s"), name->data);
     return MUTT_CMD_ERROR;
   }
 
@@ -335,7 +337,7 @@ static enum CommandResult command_set_toggle(struct Buffer *name, struct Buffer 
   struct HashElem *he = cs_subset_lookup(NeoMutt->sub, name->data);
   if (!he)
   {
-    buf_printf(err, _("%s: unknown variable"), name->data);
+    buf_printf(err, _("Unknown option %s"), name->data);
     return MUTT_CMD_ERROR;
   }
 
@@ -392,7 +394,7 @@ static enum CommandResult command_set_query(struct Buffer *name, struct Buffer *
   struct HashElem *he = cs_subset_lookup(NeoMutt->sub, name->data);
   if (!he)
   {
-    buf_printf(err, _("%s: unknown variable"), name->data);
+    buf_printf(err, _("Unknown option %s"), name->data);
     return MUTT_CMD_ERROR;
   }
 
@@ -498,8 +500,7 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
 
       if (reset || unset || inv)
       {
-        buf_printf(err, _("Can't query a variable with the '%s' command"),
-                   set_commands[data]);
+        buf_printf(err, _("Can't query option with the '%s' command"), set_commands[data]);
         return MUTT_CMD_WARNING;
       }
 
@@ -516,8 +517,7 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
 
       if (reset || unset || inv)
       {
-        buf_printf(err, _("Can't set a variable with the '%s' command"),
-                   set_commands[data]);
+        buf_printf(err, _("Can't set option with the '%s' command"), set_commands[data]);
         return MUTT_CMD_WARNING;
       }
       if (*s->dptr == '+')
@@ -547,8 +547,7 @@ enum CommandResult parse_set(struct Buffer *buf, struct Buffer *s,
 
       if (reset || unset || inv)
       {
-        buf_printf(err, _("Can't set a variable with the '%s' command"),
-                   set_commands[data]);
+        buf_printf(err, _("Can't set option with the '%s' command"), set_commands[data]);
         return MUTT_CMD_WARNING;
       }
 

@@ -3,7 +3,7 @@
  * Maildir-specific Mailbox data
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -59,7 +59,8 @@ struct MaildirMboxData *maildir_mdata_new(void)
  */
 struct MaildirMboxData *maildir_mdata_get(struct Mailbox *m)
 {
-  if (!m || ((m->type != MUTT_MAILDIR) && (m->type != MUTT_MH)))
-    return NULL;
-  return m->mdata;
+  if (m && (m->type == MUTT_MAILDIR))
+    return m->mdata;
+
+  return NULL;
 }

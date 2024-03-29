@@ -3,7 +3,10 @@
  * Type representing a number
  *
  * @authors
- * Copyright (C) 2017-2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Jakub Jindra <jakub.jindra@socialbakers.com>
+ * Copyright (C) 2021 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -63,7 +66,7 @@ static int number_string_set(const struct ConfigSet *cs, void *var, struct Confi
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
-  if ((num < 0) && (cdef->type & DT_NOT_NEGATIVE))
+  if ((num < 0) && (cdef->type & D_INTEGER_NOT_NEGATIVE))
   {
     buf_printf(err, _("Option %s may not be negative"), cdef->name);
     return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
@@ -81,6 +84,9 @@ static int number_string_set(const struct ConfigSet *cs, void *var, struct Confi
       if (CSR_RESULT(rc) != CSR_SUCCESS)
         return rc | CSR_INV_VALIDATOR;
     }
+
+    if (startup_only(cdef, err))
+      return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
 
     *(short *) var = num;
   }
@@ -118,11 +124,11 @@ static int number_native_set(const struct ConfigSet *cs, void *var,
 {
   if ((value < SHRT_MIN) || (value > SHRT_MAX))
   {
-    buf_printf(err, _("Invalid number: %ld"), value);
+    buf_printf(err, _("Invalid number: %ld"), (long) value);
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
-  if ((value < 0) && (cdef->type & DT_NOT_NEGATIVE))
+  if ((value < 0) && (cdef->type & D_INTEGER_NOT_NEGATIVE))
   {
     buf_printf(err, _("Option %s may not be negative"), cdef->name);
     return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
@@ -138,6 +144,9 @@ static int number_native_set(const struct ConfigSet *cs, void *var,
     if (CSR_RESULT(rc) != CSR_SUCCESS)
       return rc | CSR_INV_VALIDATOR;
   }
+
+  if (startup_only(cdef, err))
+    return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
 
   *(short *) var = value;
   return CSR_SUCCESS;
@@ -173,7 +182,7 @@ static int number_string_plus_equals(const struct ConfigSet *cs, void *var,
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
-  if ((result < 0) && (cdef->type & DT_NOT_NEGATIVE))
+  if ((result < 0) && (cdef->type & D_INTEGER_NOT_NEGATIVE))
   {
     buf_printf(err, _("Option %s may not be negative"), cdef->name);
     return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
@@ -186,6 +195,9 @@ static int number_string_plus_equals(const struct ConfigSet *cs, void *var,
     if (CSR_RESULT(rc) != CSR_SUCCESS)
       return rc | CSR_INV_VALIDATOR;
   }
+
+  if (startup_only(cdef, err))
+    return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
 
   *(short *) var = result;
   return CSR_SUCCESS;
@@ -212,7 +224,7 @@ static int number_string_minus_equals(const struct ConfigSet *cs, void *var,
     return CSR_ERR_INVALID | CSR_INV_TYPE;
   }
 
-  if ((result < 0) && (cdef->type & DT_NOT_NEGATIVE))
+  if ((result < 0) && (cdef->type & D_INTEGER_NOT_NEGATIVE))
   {
     buf_printf(err, _("Option %s may not be negative"), cdef->name);
     return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
@@ -225,6 +237,9 @@ static int number_string_minus_equals(const struct ConfigSet *cs, void *var,
     if (CSR_RESULT(rc) != CSR_SUCCESS)
       return rc | CSR_INV_VALIDATOR;
   }
+
+  if (startup_only(cdef, err))
+    return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
 
   *(short *) var = result;
   return CSR_SUCCESS;
@@ -246,6 +261,9 @@ static int number_reset(const struct ConfigSet *cs, void *var,
     if (CSR_RESULT(rc) != CSR_SUCCESS)
       return rc | CSR_INV_VALIDATOR;
   }
+
+  if (startup_only(cdef, err))
+    return CSR_ERR_INVALID | CSR_INV_VALIDATOR;
 
   *(short *) var = cdef->initial;
   return CSR_SUCCESS;

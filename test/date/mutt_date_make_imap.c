@@ -3,7 +3,8 @@
  * Test code for mutt_date_make_imap()
  *
  * @authors
- * Copyright (C) 2019 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -25,15 +26,12 @@
 #include "acutest.h"
 #include <stdbool.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
 #include "mutt/lib.h"
 
 void test_mutt_date_make_imap(void)
 {
   // int mutt_date_make_imap(char *buf, size_t buflen, time_t timestamp);
-
-  setenv("TZ", "UTC", 1);
 
   {
     TEST_CHECK(mutt_date_make_imap(NULL, 10, 0) != 0);

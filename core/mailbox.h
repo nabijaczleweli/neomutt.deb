@@ -3,8 +3,8 @@
  * Representation of a mailbox
  *
  * @authors
- * Copyright (C) 1996-2000,2010,2013 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2018-2019 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2022 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -102,6 +102,7 @@ struct Mailbox
   enum MailboxType type;              ///< Mailbox type
   bool newly_created;                 ///< Mbox or mmdf just popped into existence
   struct timespec last_visited;       ///< Time of last exit from this mailbox
+  time_t last_checked;                ///< Last time we checked this mailbox for new mail
 
   const struct MxOps *mx_ops;         ///< MXAPI callback functions
 
@@ -117,9 +118,7 @@ struct Mailbox
 
   AclFlags rights;                    ///< ACL bits, see #AclFlags
 
-#ifdef USE_COMP_MBOX
   void *compress_info;                ///< Compressed mbox module private data
-#endif
 
   struct HashTable *id_hash;          ///< Hash Table: "message-id" -> Email
   struct HashTable *subj_hash;        ///< Hash Table: "subject" -> Email

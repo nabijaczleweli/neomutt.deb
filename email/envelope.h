@@ -3,8 +3,8 @@
  * Representation of an email header (envelope)
  *
  * @authors
- * Copyright (C) 2017 Richard Russon <rich@flatcap.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019-2021 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -67,20 +67,18 @@ struct Envelope
   char *list_post;                     ///< This stores a mailto URL, or nothing
   char *list_subscribe;                ///< This stores a mailto URL, or nothing
   char *list_unsubscribe;              ///< This stores a mailto URL, or nothing
-  char *subject;                       ///< Email's subject
-  char *real_subj;                     ///< Offset of the real subject
+  char *const subject;                 ///< Email's subject
+  char *const real_subj;               ///< Offset of the real subject
   char *disp_subj;                     ///< Display subject (modified copy of subject)
   char *message_id;                    ///< Message ID
   char *supersedes;                    ///< Supersedes header
   char *date;                          ///< Sent date
   char *x_label;                       ///< X-Label
   char *organization;                  ///< Organisation header
-#ifdef USE_NNTP
   char *newsgroups;                    ///< List of newsgroups
   char *xref;                          ///< List of cross-references
   char *followup_to;                   ///< List of 'followup-to' fields
   char *x_comment_to;                  ///< List of 'X-comment-to' fields
-#endif
   struct Buffer spam;                  ///< Spam header
   struct ListHead references;          ///< message references (in reverse order)
   struct ListHead in_reply_to;         ///< in-reply-to header content
@@ -120,6 +118,7 @@ void             mutt_env_free       (struct Envelope **ptr);
 void             mutt_env_merge      (struct Envelope *base, struct Envelope **extra);
 struct Envelope *mutt_env_new        (void);
 bool             mutt_env_notify_send(struct Email *e, enum NotifyEnvelope type);
+void             mutt_env_set_subject(struct Envelope *env, const char *subj);
 int              mutt_env_to_intl    (struct Envelope *env, const char **tag, char **err);
 void             mutt_env_to_local   (struct Envelope *env);
 

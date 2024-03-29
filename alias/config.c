@@ -3,7 +3,9 @@
  * Config used by libaddress
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Romeu Vieira <romeu.bizz@gmail.com>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -49,19 +51,19 @@ static const struct Mapping SortAliasMethods[] = {
  */
 static struct ConfigDef AliasVars[] = {
   // clang-format off
-  { "alias_file", DT_PATH|DT_PATH_FILE, IP "~/.neomuttrc", 0, NULL,
+  { "alias_file", DT_PATH|D_PATH_FILE, IP "~/.neomuttrc", 0, NULL,
     "Save new aliases to this file"
   },
-  { "alias_format", DT_STRING|DT_NOT_EMPTY, IP "%3n %f%t %-15a %-56r | %c", 0, NULL,
+  { "alias_format", DT_STRING|D_NOT_EMPTY, IP "%3n %f%t %-15a %-56r | %c", 0, NULL,
     "printf-like format string for the alias menu"
   },
-  { "sort_alias", DT_SORT|DT_SORT_REVERSE, SORT_ALIAS, IP SortAliasMethods, NULL,
+  { "sort_alias", DT_SORT|D_SORT_REVERSE, SORT_ALIAS, IP SortAliasMethods, NULL,
     "Sort method for the alias menu"
   },
-  { "query_command", DT_STRING|DT_COMMAND, 0, 0, NULL,
+  { "query_command", DT_STRING|D_STRING_COMMAND, 0, 0, NULL,
     "External command to query and external address book"
   },
-  { "query_format", DT_STRING|DT_NOT_EMPTY, IP "%3c %t %-25.25n %-25.25a | %e", 0, NULL,
+  { "query_format", DT_STRING|D_NOT_EMPTY, IP "%3c %t %-25.25n %-25.25a | %e", 0, NULL,
     "printf-like format string for the query menu (address book)"
   },
   { NULL },
@@ -73,5 +75,5 @@ static struct ConfigDef AliasVars[] = {
  */
 bool config_init_alias(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, AliasVars, DT_NO_FLAGS);
+  return cs_register_variables(cs, AliasVars);
 }

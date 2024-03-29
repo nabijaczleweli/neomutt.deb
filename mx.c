@@ -5,8 +5,12 @@
  * @authors
  * Copyright (C) 1996-2002,2010,2013 Michael R. Elkins <me@mutt.org>
  * Copyright (C) 1999-2003 Thomas Roessler <roessler@does-not-exist.org>
- * Copyright (C) 2016-2018 Richard Russon <rich@flatcap.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2016-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018 Mehdi Abaakouk <sileht@sileht.net>
+ * Copyright (C) 2018-2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2020 Austin Ray <austin@austinray.io>
+ * Copyright (C) 2020 Reto Brunner <reto@slightlybroken.com>
+ * Copyright (C) 2023-2024 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -44,42 +48,32 @@
 #include "gui/lib.h"
 #include "mutt.h"
 #include "mx.h"
+#include "compmbox/lib.h"
+#include "imap/lib.h"
 #include "key/lib.h"
 #include "maildir/lib.h"
 #include "mbox/lib.h"
 #include "menu/lib.h"
+#include "mh/lib.h"
+#include "nntp/lib.h"
+#include "pop/lib.h"
 #include "question/lib.h"
 #include "copy.h"
 #include "external.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "hook.h"
 #include "mutt_header.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
 #include "muttlib.h"
-#include "protos.h"
-#ifdef USE_COMP_MBOX
-#include "compmbox/lib.h"
-#endif
-#ifdef USE_IMAP
-#include "imap/lib.h"
-#endif
-#ifdef USE_POP
-#include "pop/lib.h"
-#endif
-#ifdef USE_NNTP
-#include "nntp/lib.h"
-#include "nntp/adata.h" // IWYU pragma: keep
 #include "nntp/mdata.h" // IWYU pragma: keep
-#endif
+#include "protos.h"
 #ifdef USE_NOTMUCH
 #include "notmuch/lib.h"
 #endif
 #ifdef ENABLE_NLS
 #include <libintl.h>
 #endif
-
-static time_t MailboxTime = 0; ///< last time we started checking for mail
 
 /// Lookup table of mailbox types
 static const struct Mapping MboxTypeMap[] = {
@@ -103,19 +97,13 @@ const struct EnumDef MboxTypeDef = {
  * MxOps - All the Mailbox backends
  */
 static const struct MxOps *MxOps[] = {
-/* These mailboxes can be recognised by their Url scheme */
-#ifdef USE_IMAP
+  /* These mailboxes can be recognised by their Url scheme */
   &MxImapOps,
-#endif
 #ifdef USE_NOTMUCH
   &MxNotmuchOps,
 #endif
-#ifdef USE_POP
   &MxPopOps,
-#endif
-#ifdef USE_NNTP
   &MxNntpOps,
-#endif
 
   /* Local mailboxes */
   &MxMaildirOps,
@@ -123,10 +111,8 @@ static const struct MxOps *MxOps[] = {
   &MxMhOps,
   &MxMmdfOps,
 
-/* If everything else fails... */
-#ifdef USE_COMP_MBOX
+  /* If everything else fails... */
   &MxCompOps,
-#endif
   NULL,
 };
 
@@ -181,10 +167,8 @@ static bool mutt_is_spool(const char *str)
  */
 int mx_access(const char *path, int flags)
 {
-#ifdef USE_IMAP
   if (imap_path_probe(path, NULL) == MUTT_IMAP)
     return imap_access(path);
-#endif
 
   return access(path, flags);
 }
@@ -227,11 +211,9 @@ static bool mx_open_mailbox_append(struct Mailbox *m, OpenMailboxFlags flags)
       {
         if (errno == ENOENT)
         {
-#ifdef USE_COMP_MBOX
           if (mutt_comp_can_append(m))
             m->type = MUTT_COMPRESSED;
           else
-#endif
             m->type = cs_subset_enum(NeoMutt->sub, "mbox_type");
           flags |= MUTT_APPENDNEW;
         }
@@ -554,13 +536,11 @@ static int trash_append(struct Mailbox *m)
     return 0; /* we are in the trash folder: simple sync */
   }
 
-#ifdef USE_IMAP
   if ((m->type == MUTT_IMAP) && (imap_path_probe(c_trash, NULL) == MUTT_IMAP))
   {
     if (imap_fast_trash(m, c_trash) == 0)
       return 0;
   }
-#endif
 
   struct Mailbox *m_trash = mx_path_resolve(c_trash);
   const bool old_append = m_trash->append;
@@ -586,6 +566,7 @@ static int trash_append(struct Mailbox *m)
         // L10N: Displayed if appending to $trash fails when syncing or closing a mailbox
         mutt_error(_("Unable to append to trash folder"));
         m_trash->append = old_append;
+        mailbox_free(&m_trash);
         return -1;
       }
     }
@@ -634,7 +615,6 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
   struct Buffer *mbox = NULL;
   struct Buffer *buf = buf_pool_get();
 
-#ifdef USE_NNTP
   if ((m->msg_unread != 0) && (m->type == MUTT_NNTP))
   {
     struct NntpMboxData *mdata = m->mdata;
@@ -649,7 +629,6 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
         mutt_newsgroup_catchup(m, mdata->adata, mdata->group);
     }
   }
-#endif
 
   const bool c_keep_flagged = cs_subset_bool(NeoMutt->sub, "keep_flagged");
   for (i = 0; i < m->msg_count; i++)
@@ -662,11 +641,9 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
       read_msgs++;
   }
 
-#ifdef USE_NNTP
   /* don't need to move articles from newsgroup */
   if (m->type == MUTT_NNTP)
     read_msgs = 0;
-#endif
 
   const enum QuadOption c_move = cs_subset_quad(NeoMutt->sub, "move");
   if ((read_msgs != 0) && (c_move != MUTT_NO))
@@ -731,7 +708,6 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
     if (m->verbose)
       mutt_message(_("Moving read messages to %s..."), buf_string(mbox));
 
-#ifdef USE_IMAP
     /* try to use server-side copy first */
     i = 1;
 
@@ -773,11 +749,14 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
     }
 
     if (i == 0) /* success */
+    {
       mutt_clear_error();
+    }
     else if (i == -1) /* horrible error, bail */
+    {
       goto cleanup;
+    }
     else /* use regular append-copy mode */
-#endif
     {
       struct Mailbox *m_read = mx_path_resolve(buf_string(mbox));
       if (!mx_mbox_open(m_read, MUTT_APPEND))
@@ -829,7 +808,6 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
       goto cleanup;
   }
 
-#ifdef USE_IMAP
   /* allow IMAP to preserve the deleted flag across sessions */
   if (m->type == MUTT_IMAP)
   {
@@ -841,7 +819,6 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
     }
   }
   else
-#endif
   {
     if (purge == MUTT_NO)
     {
@@ -889,7 +866,6 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
     mutt_file_unlink_empty(mailbox_path(m));
   }
 
-#ifdef USE_SIDEBAR
   if ((purge == MUTT_YES) && (m->msg_deleted != 0))
   {
     for (i = 0; i < m->msg_count; i++)
@@ -907,7 +883,6 @@ enum MxStatus mx_mbox_close(struct Mailbox *m)
         m->msg_flagged--;
     }
   }
-#endif
 
   mx_fastclose_mailbox(m, false);
 
@@ -937,7 +912,8 @@ enum MxStatus mx_mbox_sync(struct Mailbox *m)
 
   if (m->dontwrite)
   {
-    char buf[256], tmp[256];
+    char buf[512] = { 0 };
+    char tmp[256] = { 0 };
     if (km_expand_key(buf, sizeof(buf), km_find_func(MENU_INDEX, OP_TOGGLE_WRITE)))
       snprintf(tmp, sizeof(tmp), _(" Press '%s' to toggle write"), buf);
     else
@@ -1003,22 +979,18 @@ enum MxStatus mx_mbox_sync(struct Mailbox *m)
       return MX_STATUS_OK;
   }
 
-#ifdef USE_IMAP
   if (m->type == MUTT_IMAP)
     rc = imap_sync_mailbox(m, purge, false);
   else
-#endif
     rc = sync_mailbox(m);
   if (rc != MX_STATUS_ERROR)
   {
-#ifdef USE_IMAP
     if ((m->type == MUTT_IMAP) && !purge)
     {
       if (m->verbose)
         mutt_message(_("Mailbox checkpointed"));
     }
     else
-#endif
     {
       if (m->verbose)
         mutt_message(_("%d kept, %d deleted"), msgcount - deleted, deleted);
@@ -1077,7 +1049,7 @@ struct Message *mx_msg_open_new(struct Mailbox *m, const struct Email *e, MsgOpe
     return NULL;
   }
 
-  msg = mutt_mem_calloc(1, sizeof(struct Message));
+  msg = message_new();
   msg->write = true;
 
   if (e)
@@ -1117,7 +1089,7 @@ struct Message *mx_msg_open_new(struct Mailbox *m, const struct Email *e, MsgOpe
   }
   else
   {
-    FREE(&msg);
+    message_free(&msg);
   }
 
   return msg;
@@ -1136,10 +1108,10 @@ enum MxStatus mx_mbox_check(struct Mailbox *m)
   const short c_mail_check = cs_subset_number(NeoMutt->sub, "mail_check");
 
   time_t t = mutt_date_now();
-  if ((t - MailboxTime) < c_mail_check)
+  if ((t - m->last_checked) < c_mail_check)
     return MX_STATUS_OK;
 
-  MailboxTime = t;
+  m->last_checked = t;
 
   enum MxStatus rc = m->mx_ops->mbox_check(m);
   if ((rc == MX_STATUS_NEW_MAIL) || (rc == MX_STATUS_REOPENED))
@@ -1148,17 +1120,6 @@ enum MxStatus mx_mbox_check(struct Mailbox *m)
   }
 
   return rc;
-}
-
-/**
- * mx_mbox_reset_check - Reset last mail check time.
- *
- * @note This effectively forces a check on the next mx_mbox_check() call.
- */
-void mx_mbox_reset_check(void)
-{
-  const short c_mail_check = cs_subset_number(NeoMutt->sub, "mail_check");
-  MailboxTime = mutt_date_now() - c_mail_check - 1;
 }
 
 /**
@@ -1413,7 +1374,7 @@ int mx_path_canon(struct Buffer *path, const char *folder, enum MailboxType *typ
     {
       if (((buf_at(path, 2) == '/') || (buf_at(path, 2) == '\0')))
       {
-        mutt_str_inline_replace(path->data, path->dsize, 2, LastFolder);
+        buf_inline_replace(path, 0, 2, LastFolder);
       }
     }
     else if ((buf_at(path, 0) == '+') || (buf_at(path, 0) == '='))
@@ -1422,11 +1383,11 @@ int mx_path_canon(struct Buffer *path, const char *folder, enum MailboxType *typ
       if ((folder_len > 0) && (folder[folder_len - 1] != '/'))
       {
         path->data[0] = '/';
-        mutt_str_inline_replace(path->data, path->dsize, 0, folder);
+        buf_inline_replace(path, 0, 0, folder);
       }
       else
       {
-        mutt_str_inline_replace(path->data, path->dsize, 1, folder);
+        buf_inline_replace(path, 0, 1, folder);
       }
     }
     else if ((buf_at(path, 1) == '/') || (buf_at(path, 1) == '\0'))
@@ -1434,29 +1395,29 @@ int mx_path_canon(struct Buffer *path, const char *folder, enum MailboxType *typ
       if (buf_at(path, 0) == '!')
       {
         const char *const c_spool_file = cs_subset_string(NeoMutt->sub, "spool_file");
-        mutt_str_inline_replace(path->data, path->dsize, 1, c_spool_file);
+        buf_inline_replace(path, 0, 1, c_spool_file);
       }
       else if (buf_at(path, 0) == '-')
       {
-        mutt_str_inline_replace(path->data, path->dsize, 1, LastFolder);
+        buf_inline_replace(path, 0, 1, LastFolder);
       }
       else if (buf_at(path, 0) == '<')
       {
         const char *const c_record = cs_subset_string(NeoMutt->sub, "record");
-        mutt_str_inline_replace(path->data, path->dsize, 1, c_record);
+        buf_inline_replace(path, 0, 1, c_record);
       }
       else if (buf_at(path, 0) == '>')
       {
         const char *const c_mbox = cs_subset_string(NeoMutt->sub, "mbox");
-        mutt_str_inline_replace(path->data, path->dsize, 1, c_mbox);
+        buf_inline_replace(path, 0, 1, c_mbox);
       }
       else if (buf_at(path, 0) == '^')
       {
-        mutt_str_inline_replace(path->data, path->dsize, 1, CurrentFolder);
+        buf_inline_replace(path, 0, 1, CurrentFolder);
       }
       else if (buf_at(path, 0) == '~')
       {
-        mutt_str_inline_replace(path->data, path->dsize, 1, HomeDir);
+        buf_inline_replace(path, 0, 1, HomeDir);
       }
     }
     else if (buf_at(path, 0) == '@')
@@ -1470,7 +1431,7 @@ int mx_path_canon(struct Buffer *path, const char *folder, enum MailboxType *typ
       e->env = mutt_env_new();
       mutt_addrlist_copy(&e->env->from, al, false);
       mutt_addrlist_copy(&e->env->to, al, false);
-      mutt_default_save(path->data, path->dsize, e);
+      mutt_default_save(path, e);
       email_free(&e);
       break;
     }
@@ -1529,17 +1490,6 @@ int mx_path_canon2(struct Mailbox *m, const char *folder)
   }
 
   return rc;
-}
-
-/**
- * mx_path_parent - Find the parent of a mailbox path - Wrapper for MxOps::path_parent()
- */
-int mx_path_parent(struct Buffer *path)
-{
-  if (buf_is_empty(path))
-    return -1;
-
-  return 0;
 }
 
 /**

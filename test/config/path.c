@@ -3,7 +3,8 @@
  * Test code for the Path object
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -39,13 +40,13 @@ static struct ConfigDef Vars[] = {
   { "Cherry",     DT_PATH,              IP "cherry",     0, NULL,              },
   { "Damson",     DT_PATH,              0,               0, NULL,              }, /* test_string_set */
   { "Elderberry", DT_PATH,              IP "elderberry", 0, NULL,              },
-  { "Fig",        DT_PATH|DT_NOT_EMPTY, IP "fig",        0, NULL,              },
+  { "Fig",        DT_PATH|D_NOT_EMPTY,  IP "fig",        0, NULL,              },
   { "Guava",      DT_PATH,              0,               0, NULL,              }, /* test_string_get */
   { "Hawthorn",   DT_PATH,              IP "hawthorn",   0, NULL,              },
   { "Ilama",      DT_PATH,              0,               0, NULL,              },
   { "Jackfruit",  DT_PATH,              0,               0, NULL,              }, /* test_native_set */
   { "Kumquat",    DT_PATH,              IP "kumquat",    0, NULL,              },
-  { "Lemon",      DT_PATH|DT_NOT_EMPTY, IP "lemon",      0, NULL,              },
+  { "Lemon",      DT_PATH|D_NOT_EMPTY,  IP "lemon",      0, NULL,              },
   { "Mango",      DT_PATH,              0,               0, NULL,              }, /* test_native_get */
   { "Nectarine",  DT_PATH,              IP "nectarine",  0, NULL,              }, /* test_reset */
   { "Olive",      DT_PATH,              IP "olive",      0, validator_fail,    },
@@ -53,6 +54,7 @@ static struct ConfigDef Vars[] = {
   { "Quince",     DT_PATH,              IP "quince",     0, validator_warn,    },
   { "Raspberry",  DT_PATH,              IP "raspberry",  0, validator_fail,    },
   { "Strawberry", DT_PATH,              0,               0, NULL,              }, /* test_inherit */
+  { "Tangerine",  DT_PATH|D_ON_STARTUP, IP "tangerine",  0, NULL,              }, /* startup */
   { NULL },
 };
 // clang-format on
@@ -240,6 +242,13 @@ static bool test_string_set(struct ConfigSubset *sub, struct Buffer *err)
     TEST_MSG("%s = '%s', set by '%s'", name, NONULL(VarElderberry), NONULL(valid[i]));
   }
 
+  name = "Tangerine";
+  rc = cs_str_string_set(cs, name, "tangerine", err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  rc = cs_str_string_set(cs, name, "apple", err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   log_line(__func__);
   return true;
 }
@@ -365,6 +374,13 @@ static bool test_native_set(struct ConfigSubset *sub, struct Buffer *err)
     TEST_MSG("%s = '%s', set by '%s'", name, NONULL(VarKumquat), NONULL(valid[i]));
   }
 
+  name = "Tangerine";
+  rc = cs_str_native_set(cs, name, (intptr_t) "tangerine", err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  rc = cs_str_native_set(cs, name, (intptr_t) "apple", err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   log_line(__func__);
   return true;
 }
@@ -464,6 +480,18 @@ static bool test_reset(struct ConfigSubset *sub, struct Buffer *err)
   }
 
   TEST_MSG("Reset: %s = '%s'", name, VarOlive);
+
+  name = "Tangerine";
+  rc = cs_str_reset(cs, name, err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  StartupComplete = false;
+  rc = cs_str_native_set(cs, name, (intptr_t) "apple", err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+  StartupComplete = true;
+
+  rc = cs_str_reset(cs, name, err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
 
   log_line(__func__);
   return true;
@@ -648,10 +676,12 @@ void test_config_path(void)
   struct ConfigSubset *sub = NeoMutt->sub;
   struct ConfigSet *cs = sub->cs;
 
+  StartupComplete = false;
   dont_fail = true;
-  if (!TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS)))
+  if (!TEST_CHECK(cs_register_variables(cs, Vars)))
     return;
   dont_fail = false;
+  StartupComplete = true;
 
   notify_observer_add(NeoMutt->notify, NT_CONFIG, log_observer, 0);
 

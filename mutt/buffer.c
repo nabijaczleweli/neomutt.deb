@@ -7,6 +7,8 @@
  * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
  * Copyright (C) 2019-2023 Pietro Cerutti <gahr@gahr.ch>
  * Copyright (C) 2023 Anna Figueiredo Gomes <navi@vlhl.dev>
+ * Copyright (C) 2023 Simon Reichel <simonreichel@giese-optik.de>
+ * Copyright (C) 2024 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -27,6 +29,9 @@
  * @page mutt_buffer Helper object for storing and parsing strings
  *
  * The Buffer object make parsing and manipulating strings easier.
+ *
+ * The following unused functions were removed:
+ * - buf_upper()
  */
 
 #include "config.h"
@@ -406,7 +411,13 @@ void buf_dealloc(struct Buffer *buf)
  */
 size_t buf_strcpy(struct Buffer *buf, const char *s)
 {
+  if (!buf)
+    return 0;
+
   buf_reset(buf);
+  if (!s)
+    return 0;
+
   return buf_addstr(buf, s);
 }
 
@@ -421,7 +432,13 @@ size_t buf_strcpy(struct Buffer *buf, const char *s)
  */
 size_t buf_strcpy_n(struct Buffer *buf, const char *s, size_t len)
 {
+  if (!buf)
+    return 0;
+
   buf_reset(buf);
+  if (!s)
+    return 0;
+
   return buf_addstr_n(buf, s, len);
 }
 
@@ -433,10 +450,29 @@ size_t buf_strcpy_n(struct Buffer *buf, const char *s, size_t len)
  */
 void buf_dequote_comment(struct Buffer *buf)
 {
-  if (!buf)
+  if (!buf || !buf->data || (buf->dsize == 0))
     return;
 
-  mutt_str_dequote_comment(buf->data);
+  buf_seek(buf, 0);
+
+  char *s = buf->data;
+  for (; *buf->dptr; buf->dptr++)
+  {
+    if (*buf->dptr == '\\')
+    {
+      if (!*++buf->dptr)
+        break; /* error? */
+      *s++ = *buf->dptr;
+    }
+    else if (*buf->dptr != '\"')
+    {
+      if (s != buf->dptr)
+        *s = *buf->dptr;
+      s++;
+    }
+  }
+  *s = '\0';
+
   buf_fix_dptr(buf);
 }
 
@@ -451,7 +487,13 @@ void buf_dequote_comment(struct Buffer *buf)
  */
 size_t buf_substrcpy(struct Buffer *buf, const char *beg, const char *end)
 {
+  if (!buf)
+    return 0;
+
   buf_reset(buf);
+  if (!beg || !end)
+    return 0;
+
   if (end <= beg)
     return 0;
 
@@ -521,8 +563,12 @@ size_t buf_concat_path(struct Buffer *buf, const char *dir, const char *fname)
 size_t buf_concatn_path(struct Buffer *buf, const char *dir, size_t dirlen,
                         const char *fname, size_t fnamelen)
 {
-  size_t len = 0;
+  if (!buf)
+    return 0;
+
   buf_reset(buf);
+
+  size_t len = 0;
   if (dirlen != 0)
     len += buf_addstr_n(buf, dir, dirlen);
   if ((dirlen != 0) && (fnamelen != 0))
@@ -592,7 +638,10 @@ size_t buf_copy(struct Buffer *dst, const struct Buffer *src)
  */
 void buf_seek(struct Buffer *buf, size_t offset)
 {
-  if (buf && (offset < buf_len(buf)))
+  if (!buf)
+    return;
+
+  if ((offset < buf_len(buf)))
   {
     buf->dptr = buf->data ? buf->data + offset : NULL;
   }
@@ -676,6 +725,9 @@ bool buf_istr_equal(const struct Buffer *a, const struct Buffer *b)
  */
 size_t buf_startswith(const struct Buffer *buf, const char *prefix)
 {
+  if (!buf || !prefix)
+    return 0;
+
   return mutt_str_startswith(buf_string(buf), prefix);
 }
 
@@ -707,15 +759,76 @@ void buf_lower(struct Buffer *buf)
 }
 
 /**
- * buf_upper - Sets a buffer to  uppercase
- * @param[out] buf Buffer to transform to uppercase
- *
- * @note Modifies the buffer
+ * buf_join_str - Join a buffer with a string separated by sep
+ * @param buf Buffer to append to
+ * @param str String to append
+ * @param sep separator between string item
  */
-void buf_upper(struct Buffer *buf)
+void buf_join_str(struct Buffer *buf, const char *str, char sep)
 {
-  if (!buf)
+  if (!buf || !str)
     return;
 
-  mutt_str_upper(buf->data);
+  if (!buf_is_empty(buf) && mutt_str_len(str))
+    buf_addch(buf, sep);
+
+  buf_addstr(buf, str);
+}
+
+/*
+ * buf_inline_replace - Replace part of a string
+ * @param buf   Buffer to modify
+ * @param pos   Starting position of string to overwrite
+ * @param len   Length of string to overwrite
+ * @param str   Replacement string
+ *
+ * String (`11XXXOOOOOO`, 2, 3, `YYYY`) becomes `11YYYY000000`
+ */
+void buf_inline_replace(struct Buffer *buf, size_t pos, size_t len, const char *str)
+{
+  if (!buf || !str)
+    return;
+
+  size_t olen = buf->dsize;
+  size_t rlen = mutt_str_len(str);
+
+  size_t new_size = buf->dsize - len + rlen + 1;
+  if (new_size > buf->dsize)
+    buf_alloc(buf, new_size);
+
+  memmove(buf->data + pos + rlen, buf->data + pos + len, olen - pos - len);
+  memmove(buf->data + pos, str, rlen);
+
+  buf_fix_dptr(buf);
+}
+
+/**
+ * buf_rfind - Find last instance of a substring
+ * @param buf   Buffer to search through
+ * @param str   String to find
+ * @retval NULL String not found
+ * @retval ptr  Location of string
+ *
+ * Return the last instance of str in the buffer, or NULL.
+ */
+const char *buf_rfind(const struct Buffer *buf, const char *str)
+{
+  if (buf_is_empty(buf) || !str)
+    return NULL;
+
+  int len = strlen(str);
+  const char *end = buf->data + buf->dsize - len;
+
+  for (const char *p = end; p >= buf->data; --p)
+  {
+    for (size_t i = 0; i < len; i++)
+    {
+      if (p[i] != str[i])
+        goto next;
+    }
+    return p;
+
+  next:;
+  }
+  return NULL;
 }

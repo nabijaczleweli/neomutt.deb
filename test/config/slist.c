@@ -3,7 +3,10 @@
  * Test code for the Slist object
  *
  * @authors
- * Copyright (C) 2018-2019 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019-2024 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2022 Michal Siedlaczek <michal@siedlaczek.me>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -26,7 +29,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 #include "mutt/lib.h"
 #include "config/lib.h"
 #include "core/lib.h"
@@ -35,53 +37,57 @@
 
 // clang-format off
 struct ConfigDef VarsColon[] = {
-  { "Apple",      DT_SLIST|SLIST_SEP_COLON, IP "apple",               0, NULL, }, /* test_initial_values */
-  { "Banana",     DT_SLIST|SLIST_SEP_COLON, IP "apple:banana",        0, NULL, },
-  { "Cherry",     DT_SLIST|SLIST_SEP_COLON, IP "apple:banana:cherry", 0, NULL, },
-  { "Damson",     DT_SLIST|SLIST_SEP_COLON, IP "apple:banana",        0, NULL, }, /* test_string_set */
-  { "Elderberry", DT_SLIST|SLIST_SEP_COLON, 0,                        0, NULL, },
-  { "Fig",        DT_SLIST|SLIST_SEP_COLON, IP ":apple",              0, NULL, }, /* test_string_get */
-  { "Guava",      DT_SLIST|SLIST_SEP_COLON, IP "apple::cherry",       0, NULL, },
-  { "Hawthorn",   DT_SLIST|SLIST_SEP_COLON, IP "apple:",              0, NULL, },
+  { "Apple",      DT_SLIST|D_SLIST_SEP_COLON, IP "apple",               0, NULL, }, /* test_initial_values */
+  { "Banana",     DT_SLIST|D_SLIST_SEP_COLON, IP "apple:banana",        0, NULL, },
+  { "Cherry",     DT_SLIST|D_SLIST_SEP_COLON, IP "apple:banana:cherry", 0, NULL, },
+  { "Damson",     DT_SLIST|D_SLIST_SEP_COLON, IP "apple:banana",        0, NULL, }, /* test_string_set */
+  { "Elderberry", DT_SLIST|D_SLIST_SEP_COLON, 0,                        0, NULL, },
+  { "Fig",        DT_SLIST|D_SLIST_SEP_COLON, IP ":apple",              0, NULL, }, /* test_string_get */
+  { "Guava",      DT_SLIST|D_SLIST_SEP_COLON, IP "apple::cherry",       0, NULL, },
+  { "Hawthorn",   DT_SLIST|D_SLIST_SEP_COLON, IP "apple:",              0, NULL, },
+  { "Ilama",      DT_SLIST|D_SLIST_SEP_COLON|D_ON_STARTUP, IP "apple",  0, NULL, }, /* startup */
   { NULL },
 };
 
 struct ConfigDef VarsComma[] = {
-  { "Apple",      DT_SLIST|SLIST_SEP_COMMA, IP "apple",               0, NULL, }, /* test_initial_values */
-  { "Banana",     DT_SLIST|SLIST_SEP_COMMA, IP "apple,banana",        0, NULL, },
-  { "Cherry",     DT_SLIST|SLIST_SEP_COMMA, IP "apple,banana,cherry", 0, NULL, },
-  { "Damson",     DT_SLIST|SLIST_SEP_COLON, IP "apple,banana",        0, NULL, }, /* test_string_set */
-  { "Elderberry", DT_SLIST|SLIST_SEP_COLON, 0,                        0, NULL, },
-  { "Fig",        DT_SLIST|SLIST_SEP_COLON, IP ",apple",              0, NULL, }, /* test_string_get */
-  { "Guava",      DT_SLIST|SLIST_SEP_COLON, IP "apple,,cherry",       0, NULL, },
-  { "Hawthorn",   DT_SLIST|SLIST_SEP_COLON, IP "apple,",              0, NULL, },
+  { "Apple",      DT_SLIST|D_SLIST_SEP_COMMA, IP "apple",               0, NULL, }, /* test_initial_values */
+  { "Banana",     DT_SLIST|D_SLIST_SEP_COMMA, IP "apple,banana",        0, NULL, },
+  { "Cherry",     DT_SLIST|D_SLIST_SEP_COMMA, IP "apple,banana,cherry", 0, NULL, },
+  { "Damson",     DT_SLIST|D_SLIST_SEP_COLON, IP "apple,banana",        0, NULL, }, /* test_string_set */
+  { "Elderberry", DT_SLIST|D_SLIST_SEP_COLON, 0,                        0, NULL, },
+  { "Fig",        DT_SLIST|D_SLIST_SEP_COLON, IP ",apple",              0, NULL, }, /* test_string_get */
+  { "Guava",      DT_SLIST|D_SLIST_SEP_COLON, IP "apple,,cherry",       0, NULL, },
+  { "Hawthorn",   DT_SLIST|D_SLIST_SEP_COLON, IP "apple,",              0, NULL, },
+  { "Ilama",      DT_SLIST|D_SLIST_SEP_COMMA|D_ON_STARTUP, IP "apple",  0, NULL, }, /* startup */
   { NULL },
 };
 
 struct ConfigDef VarsSpace[] = {
-  { "Apple",      DT_SLIST|SLIST_SEP_SPACE, IP "apple",               0, NULL, }, /* test_initial_values */
-  { "Banana",     DT_SLIST|SLIST_SEP_SPACE, IP "apple banana",        0, NULL, },
-  { "Cherry",     DT_SLIST|SLIST_SEP_SPACE, IP "apple banana cherry", 0, NULL, },
-  { "Damson",     DT_SLIST|SLIST_SEP_COLON, IP "apple banana",        0, NULL, }, /* test_string_set */
-  { "Elderberry", DT_SLIST|SLIST_SEP_COLON, 0,                        0, NULL, },
-  { "Fig",        DT_SLIST|SLIST_SEP_COLON, IP " apple",              0, NULL, }, /* test_string_get */
-  { "Guava",      DT_SLIST|SLIST_SEP_COLON, IP "apple  cherry",       0, NULL, },
-  { "Hawthorn",   DT_SLIST|SLIST_SEP_COLON, IP "apple ",              0, NULL, },
+  { "Apple",      DT_SLIST|D_SLIST_SEP_SPACE, IP "apple",               0, NULL, }, /* test_initial_values */
+  { "Banana",     DT_SLIST|D_SLIST_SEP_SPACE, IP "apple banana",        0, NULL, },
+  { "Cherry",     DT_SLIST|D_SLIST_SEP_SPACE, IP "apple banana cherry", 0, NULL, },
+  { "Damson",     DT_SLIST|D_SLIST_SEP_COLON, IP "apple banana",        0, NULL, }, /* test_string_set */
+  { "Elderberry", DT_SLIST|D_SLIST_SEP_COLON, 0,                        0, NULL, },
+  { "Fig",        DT_SLIST|D_SLIST_SEP_COLON, IP " apple",              0, NULL, }, /* test_string_get */
+  { "Guava",      DT_SLIST|D_SLIST_SEP_COLON, IP "apple  cherry",       0, NULL, },
+  { "Hawthorn",   DT_SLIST|D_SLIST_SEP_COLON, IP "apple ",              0, NULL, },
+  { "Ilama",      DT_SLIST|D_SLIST_SEP_SPACE|D_ON_STARTUP, IP "apple",  0, NULL, }, /* startup */
   { NULL },
 };
 
 struct ConfigDef VarsOther[] = {
-  { "Ilama",      DT_SLIST|SLIST_SEP_COLON, 0,                        0, NULL,                    }, /* test_native_set */
-  { "Jackfruit",  DT_SLIST|SLIST_SEP_COLON, IP "apple:banana:cherry", 0, NULL,                    }, /* test_native_get */
-  { "Lemon",      DT_SLIST|SLIST_SEP_COLON, IP "lemon",               0, NULL,                    }, /* test_reset */
-  { "Mango",      DT_SLIST|SLIST_SEP_COLON, IP "mango",               0, validator_fail,          },
-  { "Nectarine",  DT_SLIST|SLIST_SEP_COLON, IP "nectarine",           0, validator_succeed,       }, /* test_validator */
-  { "Olive",      DT_SLIST|SLIST_SEP_COLON, IP "olive",               0, validator_warn,          },
-  { "Papaya",     DT_SLIST|SLIST_SEP_COLON, IP "papaya",              0, validator_fail,          },
-  { "Quince",     DT_SLIST|SLIST_SEP_COLON, 0,                        0, NULL,                    }, /* test_inherit */
-  { "Raspberry",  DT_SLIST|SLIST_SEP_COLON, 0,                        0, NULL,                    }, /* test_plus_equals */
-  { "Strawberry", DT_SLIST|SLIST_SEP_COLON, 0,                        0, NULL,                    }, /* test_minus_equals */
-  { "Wolfberry",  DT_SLIST|SLIST_SEP_COLON, IP "utf-8",               0, charset_slist_validator, }, /* test_charset_validator */
+  { "Ilama",      DT_SLIST|D_SLIST_SEP_COLON, 0,                        0, NULL,                    }, /* test_native_set */
+  { "Jackfruit",  DT_SLIST|D_SLIST_SEP_COLON, IP "apple:banana:cherry", 0, NULL,                    }, /* test_native_get */
+  { "Lemon",      DT_SLIST|D_SLIST_SEP_COLON, IP "lemon",               0, NULL,                    }, /* test_reset */
+  { "Mango",      DT_SLIST|D_SLIST_SEP_COLON, IP "mango",               0, validator_fail,          },
+  { "Nectarine",  DT_SLIST|D_SLIST_SEP_COLON, IP "nectarine",           0, validator_succeed,       }, /* test_validator */
+  { "Olive",      DT_SLIST|D_SLIST_SEP_COLON, IP "olive",               0, validator_warn,          },
+  { "Papaya",     DT_SLIST|D_SLIST_SEP_COLON, IP "papaya",              0, validator_fail,          },
+  { "Quince",     DT_SLIST|D_SLIST_SEP_COLON, 0,                        0, NULL,                    }, /* test_inherit */
+  { "Raspberry",  DT_SLIST|D_SLIST_SEP_COLON, 0,                        0, NULL,                    }, /* test_plus_equals */
+  { "Strawberry", DT_SLIST|D_SLIST_SEP_COLON, 0,                        0, NULL,                    }, /* test_minus_equals */
+  { "Wolfberry",  DT_SLIST|D_SLIST_SEP_COLON, IP "utf-8",               0, charset_slist_validator, }, /* test_charset_validator */
+  { "Xigua",      DT_SLIST|D_SLIST_SEP_COLON|D_ON_STARTUP, IP "apple",  0, NULL,                    }, /* startup */
   { NULL },
 };
 // clang-format on
@@ -91,15 +97,15 @@ static void slist_flags(unsigned int flags, struct Buffer *buf)
   if (!buf)
     return;
 
-  switch (flags & SLIST_SEP_MASK)
+  switch (flags & D_SLIST_SEP_MASK)
   {
-    case SLIST_SEP_SPACE:
+    case D_SLIST_SEP_SPACE:
       buf_addstr(buf, "SPACE");
       break;
-    case SLIST_SEP_COMMA:
+    case D_SLIST_SEP_COMMA:
       buf_addstr(buf, "COMMA");
       break;
-    case SLIST_SEP_COLON:
+    case D_SLIST_SEP_COLON:
       buf_addstr(buf, "COLON");
       break;
     default:
@@ -107,12 +113,12 @@ static void slist_flags(unsigned int flags, struct Buffer *buf)
       return;
   }
 
-  if (flags & SLIST_ALLOW_DUPES)
-    buf_addstr(buf, " | SLIST_ALLOW_DUPES");
-  if (flags & SLIST_ALLOW_EMPTY)
-    buf_addstr(buf, " | SLIST_ALLOW_EMPTY");
-  if (flags & SLIST_CASE_SENSITIVE)
-    buf_addstr(buf, " | SLIST_CASE_SENSITIVE");
+  if (flags & D_SLIST_ALLOW_DUPES)
+    buf_addstr(buf, " | D_SLIST_ALLOW_DUPES");
+  if (flags & D_SLIST_ALLOW_EMPTY)
+    buf_addstr(buf, " | D_SLIST_ALLOW_EMPTY");
+  if (flags & D_SLIST_CASE_SENSITIVE)
+    buf_addstr(buf, " | D_SLIST_CASE_SENSITIVE");
 }
 
 static void slist_dump(const struct Slist *list, struct Buffer *buf)
@@ -120,7 +126,7 @@ static void slist_dump(const struct Slist *list, struct Buffer *buf)
   if (!list || !buf)
     return;
 
-  buf_printf(buf, "[%ld] ", list->count);
+  buf_printf(buf, "[%zu] ", list->count);
 
   struct ListNode *np = NULL;
   STAILQ_FOREACH(np, &list->head, entries)
@@ -146,6 +152,7 @@ static bool test_slist_parse(struct Buffer *err)
     "apple",
     "apple:banana",
     "apple:banana:cherry",
+    "apple\\:banana:cherry",
     ":apple",
     "banana:",
     ":",
@@ -154,7 +161,7 @@ static bool test_slist_parse(struct Buffer *err)
     "apple::banana",
   };
 
-  uint32_t flags = SLIST_SEP_COLON | SLIST_ALLOW_EMPTY;
+  uint32_t flags = D_SLIST_SEP_COLON | D_SLIST_ALLOW_EMPTY;
   slist_flags(flags, err);
   TEST_MSG("Flags: %s", buf_string(err));
   TEST_MSG("");
@@ -163,7 +170,7 @@ static bool test_slist_parse(struct Buffer *err)
   struct Slist *list = NULL;
   for (size_t i = 0; i < mutt_array_size(init); i++)
   {
-    TEST_MSG(">>%s<<", init[i] ? init[i] : "NULL");
+    TEST_CASE_(">>%s<<", init[i] ? init[i] : "NULL");
     list = slist_parse(init[i], flags);
     slist_dump(list, err);
     slist_free(&list);
@@ -175,17 +182,26 @@ static bool test_slist_parse(struct Buffer *err)
 static bool test_slist_add_string(struct Buffer *err)
 {
   {
-    struct Slist *list = slist_parse(NULL, SLIST_ALLOW_EMPTY);
+    slist_add_string(NULL, NULL);
+  }
+
+  {
+    struct Slist *list = slist_parse(NULL, D_SLIST_ALLOW_EMPTY);
+    slist_dump(list, err);
+
+    slist_add_string(list, "");
+    slist_dump(list, err);
+
+    slist_free(&list);
+  }
+
+  {
+    struct Slist *list = slist_parse(NULL, D_SLIST_ALLOW_EMPTY);
     slist_dump(list, err);
 
     slist_add_string(list, NULL);
     slist_dump(list, err);
 
-    slist_empty(&list);
-    slist_add_string(list, "");
-    slist_dump(list, err);
-
-    slist_empty(&list);
     slist_add_string(list, "apple");
     slist_dump(list, err);
     slist_add_string(list, "banana");
@@ -211,7 +227,7 @@ static bool test_slist_remove_string(struct Buffer *err)
   {
     buf_reset(err);
 
-    uint32_t flags = SLIST_SEP_COLON | SLIST_ALLOW_EMPTY;
+    uint32_t flags = D_SLIST_SEP_COLON | D_SLIST_ALLOW_EMPTY;
     struct Slist *list = slist_parse("apple:banana::cherry", flags);
     slist_dump(list, err);
 
@@ -228,16 +244,9 @@ static bool test_slist_remove_string(struct Buffer *err)
   }
 
   {
-    struct Slist *list = slist_parse("apple:banana::cherry", SLIST_SEP_COLON);
+    struct Slist *list = slist_parse("apple:banana::cherry", D_SLIST_SEP_COLON);
     TEST_CHECK(slist_remove_string(NULL, "apple") == NULL);
     TEST_CHECK(slist_remove_string(list, NULL) == list);
-    slist_free(&list);
-  }
-
-  {
-    struct Slist *list = slist_parse("apple:ba\\:nana::cherry", SLIST_SEP_COLON);
-    slist_dump(list, err);
-    TEST_CHECK(slist_empty(&list) == NULL);
     slist_free(&list);
   }
 
@@ -251,7 +260,7 @@ static bool test_slist_is_member(struct Buffer *err)
 
     TEST_CHECK(slist_is_member(NULL, "apple") == false);
 
-    uint32_t flags = SLIST_SEP_COLON | SLIST_ALLOW_EMPTY;
+    uint32_t flags = D_SLIST_SEP_COLON | D_SLIST_ALLOW_EMPTY;
     struct Slist *list = slist_parse("apple:banana::cherry", flags);
     slist_dump(list, err);
 
@@ -273,69 +282,35 @@ static bool test_slist_is_member(struct Buffer *err)
   return true;
 }
 
-static bool test_slist_add_list(struct Buffer *err)
+static bool test_slist_equal(struct Buffer *err)
 {
-  buf_reset(err);
-
-  uint32_t flags = SLIST_SEP_COLON | SLIST_ALLOW_EMPTY;
-
-  struct Slist *list1 = slist_parse("apple:banana::cherry", flags);
+  struct Slist *list1 = slist_parse("apple:banana::cherry",
+                                    D_SLIST_SEP_COLON | D_SLIST_ALLOW_EMPTY);
   slist_dump(list1, err);
 
-  struct Slist *list2 = slist_parse("damson::apple:apple", flags);
-  slist_dump(list2, err);
-
-  list1 = slist_add_list(list1, list2);
-  slist_dump(list1, err);
-
-  list1 = slist_add_list(list1, NULL);
-  slist_dump(list1, err);
-
-  slist_free(&list1);
-  slist_free(&list2);
-
-  list1 = NULL;
-  slist_dump(list1, err);
-
-  list2 = slist_parse("damson::apple:apple", flags);
-  slist_dump(list2, err);
-
-  list1 = slist_add_list(list1, list2);
-  slist_dump(list1, err);
-
-  slist_free(&list1);
-  slist_free(&list2);
-
-  return true;
-}
-
-static bool test_slist_compare(struct Buffer *err)
-{
-  struct Slist *list1 = slist_parse("apple:banana::cherry", SLIST_SEP_COLON | SLIST_ALLOW_EMPTY);
-  slist_dump(list1, err);
-
-  struct Slist *list2 = slist_parse("apple,banana,,cherry", SLIST_SEP_COMMA | SLIST_ALLOW_EMPTY);
+  struct Slist *list2 = slist_parse("apple,banana,,cherry",
+                                    D_SLIST_SEP_COMMA | D_SLIST_ALLOW_EMPTY);
   slist_dump(list2, err);
 
   struct Slist *list3 = slist_parse("apple,banana,,cherry,damson",
-                                    SLIST_SEP_COMMA | SLIST_ALLOW_EMPTY);
+                                    D_SLIST_SEP_COMMA | D_SLIST_ALLOW_EMPTY);
   slist_dump(list2, err);
 
   bool result = true;
 
-  if (!TEST_CHECK(slist_compare(NULL, NULL) == true))
+  if (!TEST_CHECK(slist_equal(NULL, NULL) == true))
     result = false;
 
-  if (!TEST_CHECK(slist_compare(list1, NULL) == false))
+  if (!TEST_CHECK(slist_equal(list1, NULL) == false))
     result = false;
 
-  if (!TEST_CHECK(slist_compare(NULL, list2) == false))
+  if (!TEST_CHECK(slist_equal(NULL, list2) == false))
     result = false;
 
-  if (!TEST_CHECK(slist_compare(list1, list2) == true))
+  if (!TEST_CHECK(slist_equal(list1, list2) == true))
     result = false;
 
-  if (!TEST_CHECK(slist_compare(list1, list3) == false))
+  if (!TEST_CHECK(slist_equal(list1, list3) == false))
     result = false;
 
   slist_free(&list1);
@@ -481,6 +456,13 @@ static bool test_string_set(struct ConfigSubset *sub, struct Buffer *err)
     return false;
   }
 
+  name = "Ilama";
+  rc = cs_str_string_set(cs, name, "apple", err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  rc = cs_str_string_set(cs, name, "banana", err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   return true;
 }
 
@@ -577,7 +559,7 @@ static bool test_native_set(struct ConfigSubset *sub, struct Buffer *err)
   struct ConfigSet *cs = sub->cs;
   const char *init = "apple:banana::cherry";
   const char *name = "Ilama";
-  struct Slist *list = slist_parse(init, SLIST_SEP_COLON);
+  struct Slist *list = slist_parse(init, D_SLIST_SEP_COLON);
 
   buf_reset(err);
   int rc = cs_str_native_set(cs, name, (intptr_t) list, err);
@@ -605,6 +587,19 @@ static bool test_native_set(struct ConfigSubset *sub, struct Buffer *err)
     TEST_MSG("%s", buf_string(err));
     return false;
   }
+
+  slist_free(&list);
+  list = slist_parse("apple", D_SLIST_SEP_COLON);
+
+  name = "Xigua";
+  rc = cs_str_native_set(cs, name, (intptr_t) list, err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  slist_free(&list);
+  list = slist_parse("banana", D_SLIST_SEP_COLON);
+
+  rc = cs_str_native_set(cs, name, (intptr_t) list, err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
 
   slist_free(&list);
   return true;
@@ -699,6 +694,10 @@ static bool test_plus_equals(struct ConfigSubset *sub, struct Buffer *err)
     return false;
   }
 
+  name = "Xigua";
+  rc = cs_str_string_plus_equals(cs, name, "apple", err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   return true;
 }
 
@@ -773,6 +772,10 @@ static bool test_minus_equals(struct ConfigSubset *sub, struct Buffer *err)
     TEST_MSG("%s", buf_string(err));
     return false;
   }
+
+  name = "Xigua";
+  rc = cs_str_string_minus_equals(cs, name, "apple", err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
 
   return true;
 }
@@ -850,6 +853,18 @@ static bool test_reset(struct ConfigSubset *sub, struct Buffer *err)
   item = STAILQ_FIRST(&VarMango->head)->data;
   TEST_MSG("Reset: %s = '%s'", name, item);
 
+  name = "Xigua";
+  rc = cs_str_reset(cs, name, err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  StartupComplete = false;
+  rc = cs_str_string_set(cs, name, "banana", err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+  StartupComplete = true;
+
+  rc = cs_str_reset(cs, name, err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   log_line(__func__);
   return true;
 }
@@ -860,7 +875,7 @@ static bool test_validator(struct ConfigSubset *sub, struct Buffer *err)
 
   struct ConfigSet *cs = sub->cs;
   char *item = NULL;
-  struct Slist *list = slist_parse("apple", SLIST_SEP_COMMA);
+  struct Slist *list = slist_parse("apple", D_SLIST_SEP_COMMA);
   bool result = false;
 
   const char *name = "Nectarine";
@@ -969,7 +984,7 @@ static bool test_charset_validator(struct ConfigSubset *sub, struct Buffer *err)
 
   struct ConfigSet *cs = sub->cs;
   char *item = NULL;
-  struct Slist *list = slist_parse("utf-8", SLIST_SEP_COLON);
+  struct Slist *list = slist_parse("utf-8", D_SLIST_SEP_COLON);
   bool result = false;
 
   const char *name = "Wolfberry";
@@ -1128,9 +1143,11 @@ bool slist_test_separator(struct ConfigDef vars[], struct Buffer *err)
 
   buf_reset(err);
 
+  StartupComplete = false;
   cs_register_type(cs, &CstSlist);
-  if (!TEST_CHECK(cs_register_variables(cs, vars, DT_NO_FLAGS)))
+  if (!TEST_CHECK(cs_register_variables(cs, vars)))
     return false;
+  StartupComplete = true;
 
   notify_observer_add(NeoMutt->notify, NT_CONFIG, log_observer, 0);
 
@@ -1151,6 +1168,7 @@ bool slist_test_separator(struct ConfigDef vars[], struct Buffer *err)
   cs_str_delete(cs, "Fig", NULL);
   cs_str_delete(cs, "Guava", NULL);
   cs_str_delete(cs, "Hawthorn", NULL);
+  cs_str_delete(cs, "Ilama", NULL);
   return true;
 }
 
@@ -1163,8 +1181,7 @@ void test_config_slist(void)
   TEST_CHECK(test_slist_add_string(err));
   TEST_CHECK(test_slist_remove_string(err));
   TEST_CHECK(test_slist_is_member(err));
-  TEST_CHECK(test_slist_add_list(err));
-  TEST_CHECK(test_slist_compare(err));
+  TEST_CHECK(test_slist_equal(err));
 
   TEST_CHECK(slist_test_separator(VarsColon, err));
   TEST_CHECK(slist_test_separator(VarsComma, err));
@@ -1173,10 +1190,12 @@ void test_config_slist(void)
   struct ConfigSubset *sub = NeoMutt->sub;
   struct ConfigSet *cs = sub->cs;
 
+  StartupComplete = false;
   dont_fail = true;
-  if (!TEST_CHECK(cs_register_variables(cs, VarsOther, DT_NO_FLAGS)))
+  if (!TEST_CHECK(cs_register_variables(cs, VarsOther)))
     return;
   dont_fail = false;
+  StartupComplete = true;
 
   notify_observer_add(NeoMutt->notify, NT_CONFIG, log_observer, 0);
 

@@ -3,8 +3,10 @@
  * Dummy code for working around build problems
  *
  * @authors
- * Copyright (C) 2018 Naveen Nathan <naveen@lastninja.net>
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019 Naveen Nathan <naveen@lastninja.net>
+ * Copyright (C) 2019-2024 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2021 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 Rayford Shireman
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -21,25 +23,30 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define TEST_NO_MAIN
 #include "config.h"
+#include "acutest.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "mutt/lib.h"
-#include "email/lib.h"
 #include "core/lib.h"
-#include "history/lib.h"
 #include "key/lib.h"
 #include "menu/lib.h"
+#include "ncrypt/lib.h"
 #include "mview.h"
 
 struct Address;
 struct Body;
+struct Buffer;
+struct ConfigSubset;
 struct Email;
 struct Envelope;
-struct Keymap;
+struct Mapping;
+struct MuttWindow;
 struct Pager;
 struct Pattern;
+struct State;
+struct TagList;
 
 enum WindowType
 {
@@ -105,7 +112,7 @@ typedef uint16_t CompletionFlags;
 typedef uint16_t PagerFlags;
 typedef uint8_t SelectFileFlags;
 
-typedef const char *(format_t) (char *buf, size_t buflen, size_t col, int cols,
+typedef const char *(*format_t)(char *buf, size_t buflen, size_t col, int cols,
                                 char op, const char *src, const char *prec,
                                 const char *if_str, const char *else_str,
                                 intptr_t data, MuttFormatFlags flags);
@@ -323,4 +330,8 @@ struct MuttWindow *simple_dialog_new(enum MenuType mtype, enum WindowType wtype,
                                      const struct Mapping *help_data)
 {
   return NULL;
+}
+
+void alias_tags_to_buffer(struct TagList *tl, struct Buffer *buf)
+{
 }

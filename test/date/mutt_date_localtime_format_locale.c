@@ -23,18 +23,13 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
-#include <stdbool.h>
 #include <stdlib.h>
-#include <string.h>
-#include <time.h>
 #include "mutt/lib.h"
 #include "core/lib.h"
 
 void test_mutt_date_localtime_format_locale(void)
 {
   // size_t mutt_date_localtime_format_locale(char *buf, size_t buflen, const char *format, time_t t, locale_t loc);
-
-  putenv("TZ=UTC0");
 
   {
     char buf[64] = { 0 };

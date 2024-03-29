@@ -3,7 +3,7 @@
  * Mixmaster Remailer
  *
  * @authors
- * Copyright (C) 2022 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2022-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -36,7 +36,7 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "remailer.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 
 /**
  * remailer_free - Free a Remailer

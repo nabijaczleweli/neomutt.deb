@@ -3,7 +3,7 @@
  * Signal handling
  *
  * @authors
- * Copyright (C) 1996-2000,2012 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -36,7 +36,6 @@
 #include "core/lib.h"
 #include "gui/lib.h"
 #include "attach/lib.h"
-#include "globals.h"
 #include "protos.h"
 #if defined(USE_DEBUG_GRAPHVIZ) || defined(USE_DEBUG_BACKTRACE)
 #include "debug/lib.h"
@@ -67,7 +66,7 @@ static void curses_signal_handler(int sig)
         endwin();
       kill(0, SIGSTOP);
     }
-      /* fallthrough */
+      FALLTHROUGH;
 
     case SIGCONT:
       if (!IsEndwin)

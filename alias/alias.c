@@ -3,9 +3,11 @@
  * Representation of a single alias to an email address
  *
  * @authors
- * Copyright (C) 1996-2002 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2019 Federico Kircheis <federico.kircheis@gmail.com>
+ * Copyright (C) 2023 Anna Figueiredo Gomes <navi@vlhl.dev>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -52,7 +54,7 @@
 #include "question/lib.h"
 #include "send/lib.h"
 #include "alternates.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "maillist.h"
 #include "muttlib.h"
 #include "reverse.h"
@@ -297,9 +299,9 @@ struct AddressList *alias_lookup(const char *name)
  */
 void mutt_expand_aliases(struct AddressList *al)
 {
-  struct ListHead expn; /* previously expanded aliases to avoid loops */
+  // previously expanded aliases to avoid loops
+  struct ListHead expn = STAILQ_HEAD_INITIALIZER(expn);
 
-  STAILQ_INIT(&expn);
   expand_aliases_r(al, &expn);
   mutt_list_free(&expn);
   mutt_addrlist_dedupe(al);
@@ -464,7 +466,8 @@ retry_name:
     alias_free(&alias);
     goto done;
   }
-  buf_copy(TAILQ_FIRST(&alias->addr)->personal, buf);
+
+  TAILQ_FIRST(&alias->addr)->personal = buf_new(buf_string(buf));
 
   buf_reset(buf);
   if (mw_get_field(_("Comment: "), buf, MUTT_COMP_NO_FLAGS, HC_OTHER, NULL, NULL) == 0)
@@ -473,17 +476,37 @@ retry_name:
   }
 
   buf_reset(buf);
+  if (mw_get_field(_("Tags (comma-separated): "), buf, MUTT_COMP_NO_FLAGS,
+                   HC_OTHER, NULL, NULL) == 0)
+  {
+    parse_alias_tags(buf_string(buf), &alias->tags);
+  }
+
+  buf_reset(buf);
   mutt_addrlist_write(&alias->addr, buf, true);
   prompt = buf_pool_get();
+
+  buf_printf(prompt, "alias %s %s", alias->name, buf_string(buf));
+
+  bool has_tags = STAILQ_FIRST(&alias->tags);
+
+  if (alias->comment || has_tags)
+    buf_addstr(prompt, " #");
+
   if (alias->comment)
+    buf_add_printf(prompt, " %s", alias->comment);
+
+  if (has_tags)
   {
-    buf_printf(prompt, "[%s = %s # %s] %s", alias->name, buf_string(buf),
-               alias->comment, _("Accept?"));
+    if (STAILQ_FIRST(&alias->tags))
+    {
+      buf_addstr(prompt, " tags:");
+      alias_tags_to_buffer(&alias->tags, prompt);
+    }
   }
-  else
-  {
-    buf_printf(prompt, "[%s = %s] %s", alias->name, buf_string(buf), _("Accept?"));
-  }
+
+  buf_add_printf(prompt, "\n%s", _("Accept?"));
+
   if (query_yesorno(buf_string(prompt), MUTT_YES) != MUTT_YES)
   {
     alias_free(&alias);
@@ -503,7 +526,7 @@ retry_name:
     goto done;
   }
   mutt_expand_path(buf->data, buf->dsize);
-  fp_alias = fopen(buf_string(buf), "a+");
+  fp_alias = mutt_file_fopen(buf_string(buf), "a+");
   if (!fp_alias)
   {
     mutt_perror("%s", buf_string(buf));
@@ -548,6 +571,18 @@ retry_name:
   write_safe_address(fp_alias, buf_string(buf));
   if (alias->comment)
     fprintf(fp_alias, " # %s", alias->comment);
+  if (STAILQ_FIRST(&alias->tags))
+  {
+    fprintf(fp_alias, " tags:");
+
+    struct Tag *tag = NULL;
+    STAILQ_FOREACH(tag, &alias->tags, entries)
+    {
+      fprintf(fp_alias, "%s", tag->name);
+      if (STAILQ_NEXT(tag, entries))
+        fprintf(fp_alias, ",");
+    }
+  }
   fputc('\n', fp_alias);
   if (mutt_file_fsync_close(&fp_alias) != 0)
     mutt_perror(_("Trouble adding alias"));
@@ -631,6 +666,7 @@ struct Alias *alias_new(void)
 {
   struct Alias *a = mutt_mem_calloc(1, sizeof(struct Alias));
   TAILQ_INIT(&a->addr);
+  STAILQ_INIT(&a->tags);
   return a;
 }
 
@@ -651,15 +687,19 @@ void alias_free(struct Alias **ptr)
 
   FREE(&alias->name);
   FREE(&alias->comment);
+  driver_tags_free(&alias->tags);
   mutt_addrlist_clear(&(alias->addr));
+
   FREE(ptr);
 }
 
 /**
- * aliaslist_free - Free a List of Aliases
- * @param al AliasList to free
+ * aliaslist_clear - Empty a List of Aliases
+ * @param al AliasList to empty
+ *
+ * Each Alias will be freed and the AliasList will be left empty.
  */
-void aliaslist_free(struct AliasList *al)
+void aliaslist_clear(struct AliasList *al)
 {
   if (!al)
     return;
@@ -691,6 +731,6 @@ void alias_cleanup(void)
   {
     alias_reverse_delete(np);
   }
-  aliaslist_free(&Aliases);
+  aliaslist_clear(&Aliases);
   alias_reverse_shutdown();
 }

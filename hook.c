@@ -4,8 +4,13 @@
  *
  * @authors
  * Copyright (C) 1996-2002,2004,2007 Michael R. Elkins <me@mutt.org>, and others
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2016 Thomas Adam <thomas@xteddy.org>
+ * Copyright (C) 2016-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2021 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2019 Federico Kircheis <federico.kircheis@gmail.com>
+ * Copyright (C) 2019 Naveen Nathan <naveen@lastninja.net>
  * Copyright (C) 2022 Oliver Bandel <oliver@first.in-berlin.de>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -31,7 +36,6 @@
 #include "config.h"
 #include <limits.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include "mutt/lib.h"
@@ -42,19 +46,17 @@
 #include "alias/lib.h"
 #include "hook.h"
 #include "attach/lib.h"
+#include "compmbox/lib.h"
 #include "index/lib.h"
 #include "ncrypt/lib.h"
 #include "parse/lib.h"
 #include "pattern/lib.h"
 #include "commands.h"
 #include "format_flags.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "hdrline.h"
 #include "muttlib.h"
 #include "mx.h"
-#ifdef USE_COMP_MBOX
-#include "compmbox/lib.h"
-#endif
 
 /**
  * struct Hook - A list of user hooks
@@ -78,6 +80,38 @@ static struct HashTable *IdxFmtHooks = NULL;
 
 /// The type of the hook currently being executed, e.g. #MUTT_SAVE_HOOK
 static HookFlags CurrentHookType = MUTT_HOOK_NO_FLAGS;
+
+/**
+ * hook_free - Free a Hook
+ * @param ptr Hook to free
+ */
+static void hook_free(struct Hook **ptr)
+{
+  if (!ptr || !*ptr)
+    return;
+
+  struct Hook *h = *ptr;
+
+  FREE(&h->command);
+  FREE(&h->source_file);
+  FREE(&h->regex.pattern);
+  if (h->regex.regex)
+  {
+    regfree(h->regex.regex);
+    FREE(&h->regex.regex);
+  }
+  mutt_pattern_free(&h->pattern);
+  FREE(ptr);
+}
+
+/**
+ * hook_new - Create a Hook
+ * @retval ptr New Hook
+ */
+static struct Hook *hook_new(void)
+{
+  return mutt_mem_calloc(1, sizeof(struct Hook));
+}
 
 /**
  * mutt_parse_charset_iconv_hook - Parse 'charset-hook' and 'iconv-hook' commands - Implements Command::parse() - @ingroup command_parse
@@ -223,7 +257,6 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
     }
     buf_pool_release(&tmp);
   }
-#ifdef USE_COMP_MBOX
   else if (data & (MUTT_APPEND_HOOK | MUTT_OPEN_HOOK | MUTT_CLOSE_HOOK))
   {
     if (mutt_comp_valid_command(buf_string(cmd)) == 0)
@@ -232,7 +265,6 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
       goto cleanup;
     }
   }
-#endif
   else if (c_default_hook && (~data & MUTT_GLOBAL_HOOK) &&
            !(data & (MUTT_ACCOUNT_HOOK)) && (!WithCrypto || !(data & MUTT_CRYPT_HOOK)))
   {
@@ -322,7 +354,7 @@ enum CommandResult mutt_parse_hook(struct Buffer *buf, struct Buffer *s,
     }
   }
 
-  hook = mutt_mem_calloc(1, sizeof(struct Hook));
+  hook = hook_new();
   hook->type = data;
   hook->command = buf_strdup(cmd);
   hook->source_file = mutt_get_sourced_cwd();
@@ -337,24 +369,6 @@ cleanup:
   buf_pool_release(&cmd);
   buf_pool_release(&pattern);
   return rc;
-}
-
-/**
- * delete_hook - Delete a Hook
- * @param h Hook to delete
- */
-static void delete_hook(struct Hook *h)
-{
-  FREE(&h->command);
-  FREE(&h->source_file);
-  FREE(&h->regex.pattern);
-  if (h->regex.regex)
-  {
-    regfree(h->regex.regex);
-    FREE(&h->regex.regex);
-  }
-  mutt_pattern_free(&h->pattern);
-  FREE(&h);
 }
 
 /**
@@ -373,7 +387,7 @@ void mutt_delete_hooks(HookFlags type)
     if ((type == MUTT_HOOK_NO_FLAGS) || (type == h->type))
     {
       TAILQ_REMOVE(&Hooks, h, entries);
-      delete_hook(h);
+      hook_free(&h);
     }
   }
 }
@@ -390,7 +404,7 @@ static void idxfmt_hashelem_free(int type, void *obj, intptr_t data)
   TAILQ_FOREACH_SAFE(h, hl, entries, tmp)
   {
     TAILQ_REMOVE(hl, h, entries);
-    delete_hook(h);
+    hook_free(&h);
   }
 
   FREE(&hl);
@@ -484,7 +498,7 @@ static enum CommandResult mutt_parse_idxfmt_hook(struct Buffer *buf, struct Buff
   if (!pat)
     goto out;
 
-  hook = mutt_mem_calloc(1, sizeof(struct Hook));
+  hook = hook_new();
   hook->type = MUTT_IDXFMTHOOK;
   hook->command = buf_strdup(fmtstring);
   hook->source_file = mutt_get_sourced_cwd();
@@ -694,15 +708,13 @@ void mutt_message_hook(struct Mailbox *m, struct Email *e, HookFlags type)
 /**
  * addr_hook - Perform an address hook (get a path)
  * @param path    Buffer for path
- * @param pathlen Length of buffer
  * @param type    Hook type, see #HookFlags
  * @param m       Mailbox
  * @param e       Email
  * @retval  0 Success
  * @retval -1 Failure
  */
-static int addr_hook(char *path, size_t pathlen, HookFlags type,
-                     struct Mailbox *m, struct Email *e)
+static int addr_hook(struct Buffer *path, HookFlags type, struct Mailbox *m, struct Email *e)
 {
   struct Hook *hook = NULL;
   struct PatternCache cache = { 0 };
@@ -718,7 +730,8 @@ static int addr_hook(char *path, size_t pathlen, HookFlags type,
       if ((mutt_pattern_exec(SLIST_FIRST(hook->pattern), 0, m, e, &cache) > 0) ^
           hook->regex.pat_not)
       {
-        mutt_make_string(path, pathlen, 0, hook->command, m, -1, e, MUTT_FORMAT_PLAIN, NULL);
+        mutt_make_string(path, 0, hook->command, m, -1, e, MUTT_FORMAT_PLAIN, NULL);
+        buf_fix_dptr(path);
         return 0;
       }
     }
@@ -729,15 +742,13 @@ static int addr_hook(char *path, size_t pathlen, HookFlags type,
 
 /**
  * mutt_default_save - Find the default save path for an email
- * @param path    Buffer for the path
- * @param pathlen Length of buffer
- * @param e       Email
+ * @param path  Buffer for the path
+ * @param e     Email
  */
-void mutt_default_save(char *path, size_t pathlen, struct Email *e)
+void mutt_default_save(struct Buffer *path, struct Email *e)
 {
-  *path = '\0';
   struct Mailbox *m_cur = get_current_mailbox();
-  if (addr_hook(path, pathlen, MUTT_SAVE_HOOK, m_cur, e) == 0)
+  if (addr_hook(path, MUTT_SAVE_HOOK, m_cur, e) == 0)
     return;
 
   struct Envelope *env = e->env;
@@ -762,7 +773,7 @@ void mutt_default_save(char *path, size_t pathlen, struct Email *e)
   {
     struct Buffer *tmp = buf_pool_get();
     mutt_safe_path(tmp, addr);
-    snprintf(path, pathlen, "=%s", buf_string(tmp));
+    buf_add_printf(path, "=%s", buf_string(tmp));
     buf_pool_release(&tmp);
   }
 }
@@ -776,7 +787,7 @@ void mutt_select_fcc(struct Buffer *path, struct Email *e)
 {
   buf_alloc(path, PATH_MAX);
 
-  if (addr_hook(path->data, path->dsize, MUTT_FCC_HOOK, NULL, e) != 0)
+  if (addr_hook(path, MUTT_FCC_HOOK, NULL, e) != 0)
   {
     const struct Address *to = TAILQ_FIRST(&e->env->to);
     const struct Address *cc = TAILQ_FIRST(&e->env->cc);
@@ -891,27 +902,23 @@ done:
 void mutt_timeout_hook(void)
 {
   struct Hook *hook = NULL;
-  struct Buffer err;
-  char buf[256] = { 0 };
-
-  buf_init(&err);
-  err.data = buf;
-  err.dsize = sizeof(buf);
+  struct Buffer *err = buf_pool_get();
 
   TAILQ_FOREACH(hook, &Hooks, entries)
   {
     if (!(hook->command && (hook->type & MUTT_TIMEOUT_HOOK)))
       continue;
 
-    if (parse_rc_line_cwd(hook->command, hook->source_file, &err) == MUTT_CMD_ERROR)
+    if (parse_rc_line_cwd(hook->command, hook->source_file, err) == MUTT_CMD_ERROR)
     {
-      mutt_error("%s", err.data);
-      buf_reset(&err);
+      mutt_error("%s", buf_string(err));
+      buf_reset(err);
 
       /* The hooks should be independent of each other, so even though this on
        * failed, we'll carry on with the others. */
     }
   }
+  buf_pool_release(&err);
 
   /* Delete temporary attachment files */
   mutt_temp_attachments_cleanup();

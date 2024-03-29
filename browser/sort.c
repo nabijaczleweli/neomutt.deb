@@ -3,7 +3,8 @@
  * Browser sorting
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -187,12 +188,11 @@ void browser_sort(struct BrowserState *state)
   const enum SortType c_sort_browser = cs_subset_sort(NeoMutt->sub, "sort_browser");
   switch (c_sort_browser & SORT_MASK)
   {
-#ifdef USE_NNTP
     case SORT_SIZE:
     case SORT_DATE:
       if (OptNews)
         return;
-#endif
+      FALLTHROUGH;
     default:
       break;
   }

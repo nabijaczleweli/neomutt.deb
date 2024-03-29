@@ -3,8 +3,8 @@
  * Handling of email attachments
  *
  * @authors
- * Copyright (C) 1996-2000,2002,2013 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 1999-2004,2006 Thomas Roessler <roessler@does-not-exist.org>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2022 David Purton <dcpurton@marshwiggle.net>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -136,12 +136,12 @@ void mutt_actx_add_fp(struct AttachCtx *actx, FILE *fp_new)
 
 /**
  * mutt_actx_add_body - Add an email body to an Attachment Context
- * @param actx     Attachment context
- * @param new_body Email Body to add
+ * @param actx Attachment context
+ * @param b    Email Body to add
  */
-void mutt_actx_add_body(struct AttachCtx *actx, struct Body *new_body)
+void mutt_actx_add_body(struct AttachCtx *actx, struct Body *b)
 {
-  if (!actx || !new_body)
+  if (!actx || !b)
     return;
 
   if (actx->body_len == actx->body_max)
@@ -152,7 +152,7 @@ void mutt_actx_add_body(struct AttachCtx *actx, struct Body *new_body)
       actx->body_idx[i] = NULL;
   }
 
-  actx->body_idx[actx->body_len++] = new_body;
+  actx->body_idx[actx->body_len++] = b;
 }
 
 /**

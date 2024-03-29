@@ -1,9 +1,9 @@
 /**
  * @file
- * Test code for slist_add_list()
+ * Test code for slist_equal()
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -24,7 +24,7 @@
 #include "config.h"
 #include "acutest.h"
 
-void test_slist_add_list(void)
+void test_slist_equal(void)
 {
-  // struct Slist *slist_add_list(struct Slist *list, const struct Slist *add);
+  // bool slist_equal(const struct Slist *a, const struct Slist *b);
 }

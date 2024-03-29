@@ -3,7 +3,9 @@
  * Test code for the Number object
  *
  * @authors
- * Copyright (C) 2017-2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Jakub Jindra <jakub.jindra@socialbakers.com>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -39,10 +41,10 @@ static struct ConfigDef Vars[] = {
   { "Banana",     DT_NUMBER,                 99,  0, NULL,              },
   { "Cherry",     DT_NUMBER,                 33,  0, NULL,              },
   { "Damson",     DT_NUMBER,                 0,   0, NULL,              }, /* test_string_set */
-  { "Elderberry", DT_NUMBER|DT_NOT_NEGATIVE, 0,   0, NULL,              },
+  { "Elderberry", DT_NUMBER|D_INTEGER_NOT_NEGATIVE, 0, 0, NULL,         },
   { "Fig",        DT_NUMBER,                 0,   0, NULL,              }, /* test_string_get */
   { "Guava",      DT_NUMBER,                 0,   0, NULL,              }, /* test_native_set */
-  { "Hawthorn",   DT_NUMBER|DT_NOT_NEGATIVE, 0,   0, NULL,              },
+  { "Hawthorn",   DT_NUMBER|D_INTEGER_NOT_NEGATIVE, 0, 0, NULL,         },
   { "Ilama",      DT_NUMBER,                 0,   0, NULL,              }, /* test_native_get */
   { "Jackfruit",  DT_NUMBER,                 99,  0, NULL,              }, /* test_reset */
   { "Kumquat",    DT_NUMBER,                 33,  0, validator_fail,    },
@@ -50,6 +52,7 @@ static struct ConfigDef Vars[] = {
   { "Mango",      DT_NUMBER,                 0,   0, validator_warn,    },
   { "Nectarine",  DT_NUMBER,                 0,   0, validator_fail,    },
   { "Olive",      DT_NUMBER,                 0,   0, NULL,              }, /* test_inherit */
+  { "Papaya",     DT_NUMBER | D_ON_STARTUP,  1,   0, NULL,              }, /* startup */
   { NULL },
 };
 // clang-format on
@@ -220,6 +223,13 @@ static bool test_string_set(struct ConfigSubset *sub, struct Buffer *err)
     return false;
   }
 
+  name = "Papaya";
+  rc = cs_str_string_set(cs, name, "1", err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  rc = cs_str_string_set(cs, name, "0", err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   log_line(__func__);
   return true;
 }
@@ -331,6 +341,13 @@ static bool test_native_set(struct ConfigSubset *sub, struct Buffer *err)
     }
   }
 
+  name = "Papaya";
+  rc = cs_str_native_set(cs, name, 1, err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  rc = cs_str_native_set(cs, name, 0, err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   log_line(__func__);
   return true;
 }
@@ -432,6 +449,10 @@ static bool test_string_plus_equals(struct ConfigSubset *sub, struct Buffer *err
     return false;
   }
 
+  name = "Papaya";
+  rc = cs_str_string_plus_equals(cs, name, "1", err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   log_line(__func__);
   return true;
 }
@@ -513,6 +534,10 @@ static bool test_string_minus_equals(struct ConfigSubset *sub, struct Buffer *er
     return false;
   }
 
+  name = "Papaya";
+  rc = cs_str_string_minus_equals(cs, name, "1", err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
+
   log_line(__func__);
   return true;
 }
@@ -576,7 +601,19 @@ static bool test_reset(struct ConfigSubset *sub, struct Buffer *err)
     return false;
   }
 
-  TEST_MSG("Reset: %s = %d", name, VarKumquat);
+  TEST_MSG("Reset: %s = %ld", name, VarKumquat);
+
+  name = "Papaya";
+  rc = cs_str_reset(cs, name, err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+
+  StartupComplete = false;
+  rc = cs_str_native_set(cs, name, 0, err);
+  TEST_CHECK(CSR_RESULT(rc) == CSR_SUCCESS);
+  StartupComplete = true;
+
+  rc = cs_str_reset(cs, name, err);
+  TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS);
 
   log_line(__func__);
   return true;
@@ -916,10 +953,12 @@ void test_config_number(void)
   struct ConfigSubset *sub = NeoMutt->sub;
   struct ConfigSet *cs = sub->cs;
 
+  StartupComplete = false;
   dont_fail = true;
-  if (!TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS)))
+  if (!TEST_CHECK(cs_register_variables(cs, Vars)))
     return;
   dont_fail = false;
+  StartupComplete = true;
 
   notify_observer_add(NeoMutt->notify, NT_CONFIG, log_observer, 0);
 

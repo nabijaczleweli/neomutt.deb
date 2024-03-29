@@ -4,6 +4,8 @@
  *
  * @authors
  * Copyright (C) 1999-2001,2005 Brendan Cully <brendan@kublai.com>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2020 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -94,7 +96,8 @@ static void hmac_md5(const char *password, char *challenge, unsigned char *respo
  */
 enum ImapAuthRes imap_auth_cram_md5(struct ImapAccountData *adata, const char *method)
 {
-  char ibuf[2048], obuf[1024];
+  char ibuf[2048] = { 0 };
+  char obuf[1024] = { 0 };
   unsigned char hmac_response[MD5_DIGEST_LEN];
   int len;
   int rc;

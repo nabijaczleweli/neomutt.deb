@@ -3,8 +3,8 @@
  * String manipulation functions
  *
  * @authors
- * Copyright (C) 2017 Richard Russon <rich@flatcap.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019-2020 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -53,21 +53,16 @@
   terminate_string(str, strlen, sizeof(str) - 1)
 
 void        mutt_str_adjust(char **ptr);
-void        mutt_str_append_item(char **str, const char *item, char sep);
 int         mutt_str_asprintf(char **strp, const char *fmt, ...)
                               __attribute__((__format__(__printf__, 2, 3)));
 int         mutt_str_coll(const char *a, const char *b);
-void        mutt_str_dequote_comment(char *str);
 const char *mutt_str_find_word(const char *src);
 const char *mutt_str_getenv(const char *name);
 void        mutt_str_hyphenate(char *buf, size_t buflen, const char *str);
-bool        mutt_str_inline_replace(char *buf, size_t buflen, size_t xlen, const char *rstr);
 bool        mutt_str_is_ascii(const char *str, size_t len);
 size_t      mutt_str_len(const char *a);
 char *      mutt_str_lower(char *str);
 size_t      mutt_str_lws_len(const char *s, size_t n);
-size_t      mutt_str_lws_rlen(const char *s, size_t n);
-const char *mutt_str_next_word(const char *s);
 void        mutt_str_remove_trailing_ws(char *s);
 char *      mutt_str_replace(char **p, const char *s);
 char *      mutt_str_sep(char **stringp, const char *delim);
@@ -89,7 +84,6 @@ char *      mutt_strn_cat(char *dest, size_t l, const char *s, size_t sl);
 char *      mutt_strn_copy(char *dest, const char *src, size_t len, size_t dsize);
 char *      mutt_strn_dup(const char *begin, size_t l);
 bool        mutt_strn_equal(const char *a, const char *b, size_t num);
-const char *mutt_strn_rfind(const char *haystack, size_t haystack_length, const char *needle);
 
 /* case-insensitive flavours */
 int         mutt_istr_cmp(const char *a, const char *b);

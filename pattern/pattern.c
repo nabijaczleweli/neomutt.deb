@@ -3,9 +3,11 @@
  * Match patterns to emails
  *
  * @authors
- * Copyright (C) 1996-2000,2006-2007,2010 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
  * Copyright (C) 2020 R Primus <rprimus@gmail.com>
+ * Copyright (C) 2020 Romeu Vieira <romeu.bizz@gmail.com>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -43,9 +45,9 @@
 #include "lib.h"
 #include "editor/lib.h"
 #include "history/lib.h"
+#include "imap/lib.h"
 #include "menu/lib.h"
 #include "progress/lib.h"
-#include "globals.h" // IWYU pragma: keep
 #include "mutt_logging.h"
 #include "mview.h"
 #include "mx.h"
@@ -53,9 +55,6 @@
 #include "search_state.h"
 #ifndef USE_FMEMOPEN
 #include <sys/stat.h>
-#endif
-#ifdef USE_IMAP
-#include "imap/lib.h"
 #endif
 
 /**
@@ -232,8 +231,8 @@ int mutt_pattern_alias_func(char *prompt, struct AliasMenuData *mdata, struct Me
     match_all = true;
   }
 
-  progress = progress_new(_("Executing command on matching messages..."),
-                          MUTT_PROGRESS_READ, ARRAY_SIZE(&mdata->ava));
+  progress = progress_new(MUTT_PROGRESS_READ, ARRAY_SIZE(&mdata->ava));
+  progress_set_message(progress, _("Executing command on matching messages..."));
 
   int vcounter = 0;
   struct AliasView *avp = NULL;
@@ -299,7 +298,7 @@ int mutt_pattern_func(struct MailboxView *mv, int op, char *prompt)
   struct Progress *progress = NULL;
   struct Buffer *buf = buf_pool_get();
 
-  buf_strcpy(buf, NONULL(mv->pattern));
+  buf_strcpy(buf, mv->pattern);
   if (prompt || (op != MUTT_LIMIT))
   {
     if ((mw_get_field(prompt, buf, MUTT_COMP_CLEAR, HC_PATTERN, &CompletePatternOps, NULL) != 0) ||
@@ -328,13 +327,11 @@ int mutt_pattern_func(struct MailboxView *mv, int op, char *prompt)
     goto bail;
   }
 
-#ifdef USE_IMAP
   if ((m->type == MUTT_IMAP) && (!imap_search(m, pat)))
     goto bail;
-#endif
 
-  progress = progress_new(_("Executing command on matching messages..."), MUTT_PROGRESS_READ,
-                          (op == MUTT_LIMIT) ? m->msg_count : m->vcount);
+  progress = progress_new(MUTT_PROGRESS_READ, (op == MUTT_LIMIT) ? m->msg_count : m->vcount);
+  progress_set_message(progress, _("Executing command on matching messages..."));
 
   if (op == MUTT_LIMIT)
   {
@@ -383,7 +380,8 @@ int mutt_pattern_func(struct MailboxView *mv, int op, char *prompt)
         {
           case MUTT_UNDELETE:
             mutt_set_flag(m, e, MUTT_PURGE, false, true);
-          /* fallthrough */
+            FALLTHROUGH;
+
           case MUTT_DELETE:
             mutt_set_flag(m, e, MUTT_DELETE, (op == MUTT_DELETE), true);
             break;
@@ -496,17 +494,16 @@ int mutt_search_command(struct MailboxView *mv, struct Menu *menu, int cur,
   {
     for (int i = 0; i < m->msg_count; i++)
       m->emails[i]->searched = false;
-#ifdef USE_IMAP
     if ((m->type == MUTT_IMAP) && (!imap_search(m, state->pattern)))
       return -1;
-#endif
   }
 
   int incr = state->reverse ? -1 : 1;
   if (flags & SEARCH_OPPOSITE)
     incr = -incr;
 
-  progress = progress_new(_("Searching..."), MUTT_PROGRESS_READ, m->vcount);
+  progress = progress_new(MUTT_PROGRESS_READ, m->vcount);
+  progress_set_message(progress, _("Searching..."));
 
   const bool c_wrap_search = cs_subset_bool(NeoMutt->sub, "wrap_search");
   for (int i = cur + incr, j = 0; j != m->vcount; j++)
@@ -661,7 +658,8 @@ int mutt_search_alias_command(struct Menu *menu, int cur,
   if (flags & SEARCH_OPPOSITE)
     incr = -incr;
 
-  progress = progress_new(_("Searching..."), MUTT_PROGRESS_READ, ARRAY_SIZE(ava));
+  progress = progress_new(MUTT_PROGRESS_READ, ARRAY_SIZE(ava));
+  progress_set_message(progress, _("Searching..."));
 
   const bool c_wrap_search = cs_subset_bool(NeoMutt->sub, "wrap_search");
   for (int i = cur + incr, j = 0; j != ARRAY_SIZE(ava); j++)

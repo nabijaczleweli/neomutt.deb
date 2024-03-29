@@ -3,7 +3,8 @@
  * Test code for mutt_str_equal()
  *
  * @authors
- * Copyright (C) 2019 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -33,10 +34,10 @@ void test_mutt_str_equal(void)
 
   TEST_CHECK(!mutt_str_equal(NULL, "apple"));
   TEST_CHECK(!mutt_str_equal("apple", NULL));
-  TEST_CHECK_STR_EQ(NULL, NULL);
+  TEST_CHECK(mutt_str_equal(NULL, NULL));
 
-  TEST_CHECK_STR_EQ("", "");
-  TEST_CHECK_STR_EQ("apple", "apple");
+  TEST_CHECK(mutt_str_equal("", ""));
+  TEST_CHECK(mutt_str_equal("apple", "apple"));
   TEST_CHECK(!mutt_str_equal("apple", "APPLE"));
   TEST_CHECK(!mutt_str_equal("apple", "apple2"));
   TEST_CHECK(!mutt_str_equal("apple1", "apple"));

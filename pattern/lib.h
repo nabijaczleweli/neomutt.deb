@@ -3,8 +3,8 @@
  * Match patterns to emails
  *
  * @authors
- * Copyright (C) 2017 Richard Russon <rich@flatcap.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019-2021 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -50,7 +50,7 @@
 #include "mutt/lib.h"
 #include "mutt.h"
 #include "complete/lib.h"
-#include "search_state.h" // IWYU pragma: keep
+#include "search_state.h"
 
 struct AliasMenuData;
 struct AliasView;
@@ -176,9 +176,7 @@ enum PatternType
   MUTT_PAT_DRIVER_TAGS,       ///< Pattern matches message tags
   MUTT_PAT_MIMEATTACH,        ///< Pattern matches number of attachments
   MUTT_PAT_MIMETYPE,          ///< Pattern matches MIME type
-#ifdef USE_NNTP
   MUTT_PAT_NEWSGROUPS,        ///< Pattern matches newsgroup
-#endif
   MUTT_PAT_MAX,
 };
 

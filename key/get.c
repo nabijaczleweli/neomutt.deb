@@ -167,18 +167,6 @@ void mutt_flush_macro_to_endcond(void)
   array_to_endcond(&MacroEvents);
 }
 
-/**
- * mutt_flush_unget_to_endcond - Clear entries from UngetKeyEvents
- *
- * Normally, OP_END_COND should only be in the MacroEvent buffer.
- * km_error_key() (ab)uses OP_END_COND as a barrier in the unget buffer, and
- * calls this function to flush.
- */
-void mutt_flush_unget_to_endcond(void)
-{
-  array_to_endcond(&UngetKeyEvents);
-}
-
 #ifdef USE_INOTIFY
 /**
  * mutt_monitor_getch - Get a character and poll the filesystem monitor
@@ -438,7 +426,7 @@ struct KeyEvent km_dokey_event(enum MenuType mtype, GetChFlags flags)
        *
        * Originally this returned -1, however that results in an unbuffered
        * username or password prompt being aborted.  Returning OP_NULL allows
-       * mutt_enter_string_full() to display the keybinding pressed instead.
+       * mw_get_field() to display the keybinding pressed instead.
        *
        * It may be unexpected for a macro's keybinding to be returned,
        * but less so than aborting the prompt.  */
@@ -454,7 +442,7 @@ struct KeyEvent km_dokey_event(enum MenuType mtype, GetChFlags flags)
         return (struct KeyEvent){ '\0', OP_ABORT };
       }
 
-      generic_tokenize_push_string(map->macro, mutt_push_macro_event);
+      generic_tokenize_push_string(map->macro);
       map = STAILQ_FIRST(&Keymaps[mtype]);
       pos = 0;
     }

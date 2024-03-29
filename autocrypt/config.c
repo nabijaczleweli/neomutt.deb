@@ -3,7 +3,7 @@
  * Config used by libautocrypt
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -47,7 +47,7 @@ static struct ConfigDef AutocryptVars[] = {
   { "autocrypt_acct_format", DT_STRING, IP "%4n %-30a %20p %10s", 0, NULL,
     "Format of the autocrypt account menu"
   },
-  { "autocrypt_dir", DT_PATH|DT_PATH_DIR, IP "~/.mutt/autocrypt", 0, NULL,
+  { "autocrypt_dir", DT_PATH|D_PATH_DIR, IP "~/.mutt/autocrypt", 0, NULL,
     "Location of autocrypt files, including the GPG keyring and SQLite database"
   },
   { "autocrypt_reply", DT_BOOL, true, 0, NULL,
@@ -65,7 +65,7 @@ bool config_init_autocrypt(struct ConfigSet *cs)
   bool rc = false;
 
 #if defined(USE_AUTOCRYPT)
-  rc |= cs_register_variables(cs, AutocryptVars, DT_NO_FLAGS);
+  rc |= cs_register_variables(cs, AutocryptVars);
 #endif
 
   return rc;

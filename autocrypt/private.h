@@ -4,6 +4,7 @@
  *
  * @authors
  * Copyright (C) 2019 Kevin J. McCarthy <kevin@8t8.us>
+ * Copyright (C) 2019-2022 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -44,7 +45,7 @@ struct AccountEntry
 {
   int num;                          ///< Number in the index
   struct AutocryptAccount *account; ///< Account details
-  struct Address *addr; ///< Email address associated with the account
+  struct Address *addr;             ///< Email address associated with the account
 };
 
 int                            mutt_autocrypt_account_init(bool prompt);

@@ -3,7 +3,7 @@
  * Config used by libpattern
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2021 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -36,7 +36,7 @@
  */
 static struct ConfigDef PatternVars[] = {
   // clang-format off
-  { "external_search_command", DT_STRING|DT_COMMAND, 0, 0, NULL,
+  { "external_search_command", DT_STRING|D_STRING_COMMAND, 0, 0, NULL,
     "External search command"
   },
   { "pattern_format", DT_STRING, IP "%2n %-15e  %d", 0, NULL,
@@ -54,5 +54,5 @@ static struct ConfigDef PatternVars[] = {
  */
 bool config_init_pattern(struct ConfigSet *cs)
 {
-  return cs_register_variables(cs, PatternVars, DT_NO_FLAGS);
+  return cs_register_variables(cs, PatternVars);
 }

@@ -1,9 +1,9 @@
 /**
  * @file
- * Test code for slist_empty()
+ * Maildir Path handling
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2024 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -20,17 +20,16 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define TEST_NO_MAIN
-#include "config.h"
-#include "acutest.h"
-#include "mutt/lib.h"
+#ifndef MUTT_MAILDIR_PATH_H
+#define MUTT_MAILDIR_PATH_H
 
-void test_slist_empty(void)
-{
-  // struct Slist *slist_empty(struct Slist **list);
+#include "core/lib.h"
 
-  struct Slist *slist = NULL;
+struct Buffer;
+struct stat;
 
-  TEST_CHECK(slist_empty(NULL) == NULL);
-  TEST_CHECK(slist_empty(&slist) == NULL);
-}
+int              maildir_path_canon   (struct Buffer *path);
+int              maildir_path_is_empty(struct Buffer *path);
+enum MailboxType maildir_path_probe   (const char *path, const struct stat *st);
+
+#endif /* MUTT_MAILDIR_PATH_H */

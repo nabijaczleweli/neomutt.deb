@@ -3,7 +3,9 @@
  * Read/write command history from/to a file
  *
  * @authors
- * Copyright (C) 1996-2000 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019-2020 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -227,8 +229,9 @@ static void shrink_histfile(void)
     if ((sscanf(linebuf, "%d:%n", &hclass, &read) < 1) || (read == 0) ||
         (*(p = linebuf + strlen(linebuf) - 1) != '|') || (hclass < 0))
     {
-      mutt_error(_("Bad history file format (line %d)"), line);
-      goto cleanup;
+      mutt_error(_("%s:%d: Bad history file format"), c_history_file, line);
+      regen_file = true;
+      continue;
     }
     /* silently ignore too high class (probably newer neomutt) */
     if (hclass >= HC_MAX)
@@ -269,8 +272,7 @@ static void shrink_histfile(void)
       if ((sscanf(linebuf, "%d:%n", &hclass, &read) < 1) || (read == 0) ||
           (*(p = linebuf + strlen(linebuf) - 1) != '|') || (hclass < 0))
       {
-        mutt_error(_("Bad history file format (line %d)"), line);
-        goto cleanup;
+        continue;
       }
       if (hclass >= HC_MAX)
         continue;
@@ -290,11 +292,16 @@ cleanup:
   FREE(&linebuf);
   if (fp_tmp)
   {
-    if ((fflush(fp_tmp) == 0) && (fp = fopen(NONULL(c_history_file), "w")))
+    if (fflush(fp_tmp) == 0)
     {
-      rewind(fp_tmp);
-      mutt_file_copy_stream(fp_tmp, fp);
-      mutt_file_fclose(&fp);
+      truncate(c_history_file, 0);
+      fp = mutt_file_fopen(c_history_file, "w");
+      if (fp)
+      {
+        rewind(fp_tmp);
+        mutt_file_copy_stream(fp_tmp, fp);
+        mutt_file_fclose(&fp);
+      }
     }
     mutt_file_fclose(&fp_tmp);
   }
@@ -311,9 +318,8 @@ cleanup:
 static void save_history(enum HistoryClass hclass, const char *str)
 {
   static int n = 0;
-  char *tmp = NULL;
 
-  if (!str || (*str == '\0')) /* This shouldn't happen, but it's safer. */
+  if (!str || (*str == '\0')) // This shouldn't happen, but it's safer
     return;
 
   const char *const c_history_file = cs_subset_path(NeoMutt->sub, "history_file");
@@ -321,21 +327,17 @@ static void save_history(enum HistoryClass hclass, const char *str)
   if (!fp)
     return;
 
-  tmp = mutt_str_dup(str);
+  char *tmp = mutt_str_dup(str);
   mutt_ch_convert_string(&tmp, cc_charset(), "utf-8", MUTT_ICONV_NO_FLAGS);
+
+  // If tmp contains '\n' terminate it there.
+  char *nl = strchr(tmp, '\n');
+  if (nl)
+    *nl = '\0';
 
   /* Format of a history item (1 line): "<histclass>:<string>|".
    * We add a '|' in order to avoid lines ending with '\'. */
-  fprintf(fp, "%d:", (int) hclass);
-  for (char *p = tmp; *p; p++)
-  {
-    /* Don't copy \n as a history item must fit on one line. The string
-     * shouldn't contain such a character anyway, but as this can happen
-     * in practice, we must deal with that. */
-    if (*p != '\n')
-      putc((unsigned char) *p, fp);
-  }
-  fputs("|\n", fp);
+  fprintf(fp, "%d:%s|\n", (int) hclass, tmp);
 
   mutt_file_fclose(&fp);
   FREE(&tmp);
@@ -594,10 +596,6 @@ void mutt_hist_reset_state(enum HistoryClass hclass)
  */
 void mutt_hist_read_file(void)
 {
-  int line = 0, hclass, read;
-  char *linebuf = NULL, *p = NULL;
-  size_t buflen;
-
   const char *const c_history_file = cs_subset_path(NeoMutt->sub, "history_file");
   if (!c_history_file)
     return;
@@ -606,6 +604,10 @@ void mutt_hist_read_file(void)
   if (!fp)
     return;
 
+  int line = 0, hclass, read;
+  char *linebuf = NULL, *p = NULL;
+  size_t buflen;
+
   const char *const c_charset = cc_charset();
   while ((linebuf = mutt_file_read_line(linebuf, &buflen, fp, &line, MUTT_RL_NO_FLAGS)))
   {
@@ -613,8 +615,8 @@ void mutt_hist_read_file(void)
     if ((sscanf(linebuf, "%d:%n", &hclass, &read) < 1) || (read == 0) ||
         (*(p = linebuf + strlen(linebuf) - 1) != '|') || (hclass < 0))
     {
-      mutt_error(_("Bad history file format (line %d)"), line);
-      break;
+      mutt_error(_("%s:%d: Bad history file format"), c_history_file, line);
+      continue;
     }
     /* silently ignore too high class (probably newer neomutt) */
     if (hclass >= HC_MAX)

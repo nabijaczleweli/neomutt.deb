@@ -1,9 +1,9 @@
 /**
  * @file
- * Test code for slist_compare()
+ * Test code for buf_seek()
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2024 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -23,8 +23,33 @@
 #define TEST_NO_MAIN
 #include "config.h"
 #include "acutest.h"
+#include <stddef.h>
+#include "mutt/lib.h"
 
-void test_slist_compare(void)
+void test_buf_seek(void)
 {
-  // bool slist_compare(const struct Slist *a, const struct Slist *b);
+  // void buf_seek(struct Buffer *buf, size_t offset);
+
+  {
+    TEST_CASE("buf_seek(NULL, 0);");
+    buf_seek(NULL, 0);
+  }
+
+  {
+    struct Buffer *buf = buf_pool_get();
+    TEST_CASE("buf_seek(buf, 0);");
+    buf_seek(buf, 0);
+    buf_pool_release(&buf);
+  }
+
+  {
+    struct Buffer *buf = buf_pool_get();
+    const char *str = "apple";
+    buf_addstr(buf, str);
+    TEST_CASE("buf_seek(buf, 0);");
+    TEST_CHECK(buf->dptr != buf->data);
+    buf_seek(buf, 0);
+    TEST_CHECK(buf->dptr == buf->data);
+    buf_pool_release(&buf);
+  }
 }

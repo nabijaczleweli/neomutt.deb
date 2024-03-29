@@ -3,11 +3,11 @@
  * Sidebar Window
  *
  * @authors
- * Copyright (C) 2004 Justin Hibbits <jrh29@po.cwru.edu>
- * Copyright (C) 2004 Thomer M. Gil <mutt@thomer.com>
- * Copyright (C) 2015-2020 Richard Russon <rich@flatcap.org>
  * Copyright (C) 2016-2017 Kevin J. McCarthy <kevin@8t8.us>
  * Copyright (C) 2020 R Primus <rprimus@gmail.com>
+ * Copyright (C) 2020-2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2020-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021 Ashish Panigrahi <ashish.panigrahi@protonmail.com>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -82,9 +82,9 @@
 #include "muttlib.h"
 
 /**
- * struct SidebarFormatData - Data passed to sidebar_format_str()
+ * struct SidebarData - Data passed to sidebar_format_str()
  */
-struct SidebarFormatData
+struct SidebarData
 {
   struct SbEntry *entry;          ///< Info about a folder
   struct IndexSharedData *shared; ///< Shared Index Data
@@ -352,9 +352,9 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
                                       const char *if_str, const char *else_str,
                                       intptr_t data, MuttFormatFlags flags)
 {
-  struct SidebarFormatData *sfdata = (struct SidebarFormatData *) data;
-  struct SbEntry *sbe = sfdata->entry;
-  struct IndexSharedData *shared = sfdata->shared;
+  struct SidebarData *sdata = (struct SidebarData *) data;
+  struct SbEntry *sbe = sdata->entry;
+  struct IndexSharedData *shared = sdata->shared;
   char fmt[256] = { 0 };
 
   if (!sbe || !shared || !buf)
@@ -395,7 +395,7 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
       size_t off = add_indent(indented, ilen, sbe);
       snprintf(indented + off, ilen - off, "%s",
                ((op == 'D') && sbe->mailbox->name) ? sbe->mailbox->name : sbe->box);
-      mutt_format_s(buf, buflen, prec, indented);
+      mutt_format(buf, buflen, prec, indented, false);
       break;
     }
 
@@ -535,20 +535,20 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
     case '!':
       if (m->msg_flagged == 0)
       {
-        mutt_format_s(buf, buflen, prec, "");
+        mutt_format(buf, buflen, prec, "", false);
       }
       else if (m->msg_flagged == 1)
       {
-        mutt_format_s(buf, buflen, prec, "!");
+        mutt_format(buf, buflen, prec, "!", false);
       }
       else if (m->msg_flagged == 2)
       {
-        mutt_format_s(buf, buflen, prec, "!!");
+        mutt_format(buf, buflen, prec, "!!", false);
       }
       else
       {
         snprintf(fmt, sizeof(fmt), "%d!", m->msg_flagged);
-        mutt_format_s(buf, buflen, prec, fmt);
+        mutt_format(buf, buflen, prec, fmt, false);
       }
       break;
   }
@@ -582,11 +582,11 @@ static const char *sidebar_format_str(char *buf, size_t buflen, size_t col, int 
 static void make_sidebar_entry(char *buf, size_t buflen, int width,
                                struct SbEntry *sbe, struct IndexSharedData *shared)
 {
-  struct SidebarFormatData data = { sbe, shared };
+  struct SidebarData sdata = { sbe, shared };
 
   const char *const c_sidebar_format = cs_subset_string(NeoMutt->sub, "sidebar_format");
   mutt_expando_format(buf, buflen, 0, width, NONULL(c_sidebar_format),
-                      sidebar_format_str, (intptr_t) &data, MUTT_FORMAT_NO_FLAGS);
+                      sidebar_format_str, (intptr_t) &sdata, MUTT_FORMAT_NO_FLAGS);
 
   /* Force string to be exactly the right width */
   int w = mutt_strwidth(buf);

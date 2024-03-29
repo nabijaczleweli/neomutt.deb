@@ -3,7 +3,11 @@
  * Common code for file tests
  *
  * @authors
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020-2024 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Anna Figueiredo Gomes <navi@vlhl.dev>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
+ * Copyright (C) 2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 наб <nabijaczleweli@nabijaczleweli.xyz>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -26,7 +30,9 @@
 #include <limits.h>
 #include <locale.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include "mutt/lib.h"
@@ -36,14 +42,13 @@
 #include "copy.h"
 #include "mx.h"
 
+struct Email;
 struct MuttWindow;
 struct PagerView;
 
 bool StartupComplete = true;
 
 char *HomeDir = NULL;
-int SigInt = 0;
-int SigWinch = 0;
 char *ShortHostname = "example";
 bool MonitorContextChanged = false;
 
@@ -53,10 +58,10 @@ const struct CompleteOps CompleteMailboxOps = { 0 };
 
 static struct ConfigDef Vars[] = {
   // clang-format off
-  { "assumed_charset", DT_SLIST|SLIST_SEP_COLON|SLIST_ALLOW_EMPTY, 0, 0, NULL, },
-  { "charset", DT_STRING|DT_NOT_EMPTY|DT_CHARSET_SINGLE, IP "utf-8", 0, NULL, },
+  { "assumed_charset", DT_SLIST|D_SLIST_SEP_COLON|D_SLIST_ALLOW_EMPTY, 0, 0, NULL, },
+  { "charset", DT_STRING|D_NOT_EMPTY|D_CHARSET_SINGLE, IP "utf-8", 0, NULL, },
   { "maildir_field_delimiter", DT_STRING, IP ":", 0, NULL, },
-  { "tmp_dir", DT_PATH|DT_PATH_DIR|DT_NOT_EMPTY, IP TMPDIR, 0, NULL, },
+  { "tmp_dir", DT_PATH|D_PATH_DIR|D_NOT_EMPTY, IP TMPDIR, 0, NULL, },
   { NULL },
   // clang-format on
 };
@@ -105,7 +110,7 @@ bool test_neomutt_create(void)
   NeoMutt = neomutt_new(cs);
   TEST_CHECK(NeoMutt != NULL);
 
-  TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS));
+  TEST_CHECK(cs_register_variables(cs, Vars));
 
   init_tmp_dir(NeoMutt);
 
@@ -114,6 +119,9 @@ bool test_neomutt_create(void)
 
 void test_neomutt_destroy(void)
 {
+  if (!NeoMutt)
+    return;
+
   struct ConfigSet *cs = NeoMutt->sub->cs;
   neomutt_free(&NeoMutt);
   cs_free(&cs);
@@ -121,6 +129,8 @@ void test_neomutt_destroy(void)
 
 void test_init(void)
 {
+  setenv("TZ", "UTC", 1); // Default to UTC
+
   const char *path = get_test_dir();
   bool success = false;
 
@@ -163,7 +173,10 @@ void test_init(void)
   success = true;
 done:
   if (!success)
+  {
     TEST_MSG("See: https://github.com/neomutt/neomutt-test-files#test-files");
+    exit(1);
+  }
 }
 
 void test_fini(void)
@@ -262,6 +275,15 @@ struct Message *mx_msg_open_new(struct Mailbox *m, const struct Email *e, MsgOpe
 
 int mutt_copy_message(FILE *fp_out, struct Email *e, struct Message *msg,
                       CopyMessageFlags cmflags, CopyHeaderFlags chflags, int wraplen)
+{
+  return 0;
+}
+
+/**
+ * log_disp_null - Discard log lines - Implements ::log_dispatcher_t - @ingroup logging_api
+ */
+int log_disp_null(time_t stamp, const char *file, int line, const char *function,
+                  enum LogLevel level, const char *format, ...)
 {
   return 0;
 }

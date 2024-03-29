@@ -3,7 +3,7 @@
  * Imap-specific Mailbox data
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -93,10 +93,10 @@ struct ImapMboxData *imap_mdata_new(struct ImapAccountData *adata, const char *n
   imap_hcache_open(adata, mdata);
   if (mdata->hcache)
   {
-    if (hcache_fetch_obj(mdata->hcache, "/UIDVALIDITY", 12, &mdata->uidvalidity))
+    if (hcache_fetch_raw_obj(mdata->hcache, "UIDVALIDITY", 11, &mdata->uidvalidity))
     {
-      hcache_fetch_obj(mdata->hcache, "/UIDNEXT", 8, &mdata->uid_next);
-      hcache_fetch_obj(mdata->hcache, "/MODSEQ", 7, &mdata->modseq);
+      hcache_fetch_raw_obj(mdata->hcache, "UIDNEXT", 7, &mdata->uid_next);
+      hcache_fetch_raw_obj(mdata->hcache, "MODSEQ", 6, &mdata->modseq);
       mutt_debug(LL_DEBUG3, "hcache uidvalidity %u, uidnext %u, modseq %llu\n",
                  mdata->uidvalidity, mdata->uid_next, mdata->modseq);
     }

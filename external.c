@@ -3,9 +3,10 @@
  * Manage where the email is piped to external commands
  *
  * @authors
- * Copyright (C) 1996-2000 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2000-2004,2006 Thomas Roessler <roessler@does-not-exist.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2021 Eric Blake <eblake@redhat.com>
+ * Copyright (C) 2021 Ihor Antonov <ihor@antonovs.family>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -49,13 +50,14 @@
 #include "complete/lib.h"
 #include "editor/lib.h"
 #include "history/lib.h"
+#include "imap/lib.h"
 #include "ncrypt/lib.h"
 #include "parse/lib.h"
 #include "progress/lib.h"
 #include "question/lib.h"
 #include "send/lib.h"
 #include "copy.h"
-#include "globals.h" // IWYU pragma: keep
+#include "globals.h"
 #include "hook.h"
 #include "mutt_logging.h"
 #include "mutt_mailbox.h"
@@ -63,9 +65,6 @@
 #include "muttlib.h"
 #include "mx.h"
 #include "protos.h"
-#ifdef USE_IMAP
-#include "imap/lib.h"
-#endif
 #ifdef USE_NOTMUCH
 #include "notmuch/lib.h"
 #endif
@@ -419,7 +418,7 @@ void mutt_pipe_message(struct Mailbox *m, struct EmailArray *ea)
     goto cleanup;
   }
 
-  if (buf_len(buf) == 0)
+  if (buf_is_empty(buf))
     goto cleanup;
 
   buf_expand_path(buf);
@@ -841,8 +840,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailArray *ea,
   }
 
   mutt_message_hook(m, e_cur, MUTT_MESSAGE_HOOK);
-  mutt_default_save(buf->data, buf->dsize, e_cur);
-  buf_fix_dptr(buf);
+  mutt_default_save(buf, e_cur);
   buf_pretty_mailbox(buf);
 
   if (mw_enter_fname(prompt, buf, false, NULL, false, NULL, NULL, MUTT_SEL_NO_FLAGS) == -1)
@@ -860,7 +858,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailArray *ea,
 
   /* This is an undocumented feature of ELM pointed out to me by Felix von
    * Leitner <leitner@prz.fu-berlin.de> */
-  if (buf_len(&LastSaveFolder) == 0)
+  if (buf_is_empty(&LastSaveFolder))
     buf_alloc(&LastSaveFolder, PATH_MAX);
   if (mutt_str_equal(buf_string(buf), "."))
     buf_copy(buf, &LastSaveFolder);
@@ -882,7 +880,6 @@ int mutt_save_message(struct Mailbox *m, struct EmailArray *ea,
 
   mutt_message(_("Copying to %s..."), buf_string(buf));
 
-#ifdef USE_IMAP
   enum MailboxType mailbox_type = imap_path_probe(buf_string(buf), NULL);
   if ((m->type == MUTT_IMAP) && (transform_opt == TRANSFORM_NONE) && (mailbox_type == MUTT_IMAP))
   {
@@ -914,7 +911,6 @@ int mutt_save_message(struct Mailbox *m, struct EmailArray *ea,
         goto errcleanup;
     }
   }
-#endif
 
   mutt_file_resolve_symlink(buf);
   m_save = mx_path_resolve(buf_string(buf));
@@ -932,7 +928,6 @@ int mutt_save_message(struct Mailbox *m, struct EmailArray *ea,
   }
   m_save->append = true;
 
-#ifdef USE_COMP_MBOX
   /* If we're saving to a compressed mailbox, the stats won't be updated
    * until the next open.  Until then, improvise. */
   struct Mailbox *m_comp = NULL;
@@ -943,7 +938,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailArray *ea,
   /* We probably haven't been opened yet */
   if (m_comp && (m_comp->msg_count == 0))
     m_comp = NULL;
-#endif
+
   if (msg_count == 1)
   {
     rc = mutt_save_message_mbox(m, e_cur, save_opt, transform_opt, m_save);
@@ -953,7 +948,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailArray *ea,
       m_save->append = old_append;
       goto errcleanup;
     }
-#ifdef USE_COMP_MBOX
+
     if (m_comp)
     {
       m_comp->msg_count++;
@@ -966,7 +961,6 @@ int mutt_save_message(struct Mailbox *m, struct EmailArray *ea,
       if (e_cur->flagged)
         m_comp->msg_flagged++;
     }
-#endif
   }
   else
   {
@@ -976,7 +970,8 @@ int mutt_save_message(struct Mailbox *m, struct EmailArray *ea,
     if (m->type == MUTT_NOTMUCH)
       nm_db_longrun_init(m, true);
 #endif
-    struct Progress *progress = progress_new(progress_msg, MUTT_PROGRESS_WRITE, msg_count);
+    struct Progress *progress = progress_new(MUTT_PROGRESS_WRITE, msg_count);
+    progress_set_message(progress, "%s", progress_msg);
     struct Email **ep = NULL;
     ARRAY_FOREACH(ep, ea)
     {
@@ -986,7 +981,7 @@ int mutt_save_message(struct Mailbox *m, struct EmailArray *ea,
       rc = mutt_save_message_mbox(m, e, save_opt, transform_opt, m_save);
       if (rc != 0)
         break;
-#ifdef USE_COMP_MBOX
+
       if (m_comp)
       {
         struct Email *e2 = e;
@@ -1000,7 +995,6 @@ int mutt_save_message(struct Mailbox *m, struct EmailArray *ea,
         if (e2->flagged)
           m_comp->msg_flagged++;
       }
-#endif
     }
     progress_free(&progress);
 

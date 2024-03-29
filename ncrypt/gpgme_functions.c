@@ -3,7 +3,8 @@
  * Gpgme functions
  *
  * @authors
- * Copyright (C) 2022 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2022-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2024 Alejandro Colomar <alx@kernel.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -711,6 +712,22 @@ static bool crypt_key_is_valid(struct CryptKeyInfo *k)
   return true;
 }
 
+/**
+ * crypt_keys_are_valid - Are all these keys valid?
+ * @param keys Set of keys to test
+ * @retval true All keys are valid
+ */
+bool crypt_keys_are_valid(struct CryptKeyInfo *keys)
+{
+  for (struct CryptKeyInfo *k = keys; k != NULL; k = k->next)
+  {
+    if (!crypt_key_is_valid(k))
+      return false;
+  }
+
+  return true;
+}
+
 // -----------------------------------------------------------------------------
 
 /**
@@ -743,7 +760,7 @@ static int op_generic_select_entry(struct GpgmeData *gd, int op)
   if (OptPgpCheckTrust && (!crypt_id_is_valid(cur_key) || !crypt_id_is_strong(cur_key)))
   {
     const char *warn_s = NULL;
-    char buf2[1024];
+    char buf2[1024] = { 0 };
 
     if (cur_key->flags & KEYFLAG_CANTUSE)
     {

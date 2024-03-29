@@ -3,9 +3,11 @@
  * Address book
  *
  * @authors
- * Copyright (C) 1996-2000,2007 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
- * Copyright (C) 2020 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2020 Romeu Vieira <romeu.bizz@gmail.com>
+ * Copyright (C) 2020-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2023 Anna Figueiredo Gomes <navi@vlhl.dev>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -118,23 +120,24 @@ static const struct Mapping AliasHelp[] = {
  * | \%n     | Index number
  * | \%r     | Address which alias expands to
  * | \%t     | Character which indicates if the alias is tagged for inclusion
+ * | \%Y     | Comma-separated tags
  */
 static const char *alias_format_str(char *buf, size_t buflen, size_t col, int cols,
                                     char op, const char *src, const char *prec,
                                     const char *if_str, const char *else_str,
                                     intptr_t data, MuttFormatFlags flags)
 {
-  char tmp[1024];
+  char tmp[1024] = { 0 };
   struct AliasView *av = (struct AliasView *) data;
   struct Alias *alias = av->alias;
 
   switch (op)
   {
     case 'a':
-      mutt_format_s(buf, buflen, prec, alias->name);
+      mutt_format(buf, buflen, prec, alias->name, false);
       break;
     case 'c':
-      mutt_format_s(buf, buflen, prec, alias->comment);
+      mutt_format(buf, buflen, prec, alias->comment, false);
       break;
     case 'f':
       snprintf(tmp, sizeof(tmp), "%%%ss", prec);
@@ -150,13 +153,21 @@ static const char *alias_format_str(char *buf, size_t buflen, size_t col, int co
       mutt_addrlist_write(&alias->addr, tmpbuf, true);
       mutt_str_copy(tmp, buf_string(tmpbuf), sizeof(tmp));
       buf_pool_release(&tmpbuf);
-      mutt_format_s(buf, buflen, prec, tmp);
+      mutt_format(buf, buflen, prec, tmp, false);
       break;
     }
     case 't':
       buf[0] = av->is_tagged ? '*' : ' ';
       buf[1] = '\0';
       break;
+    case 'Y':
+    {
+      struct Buffer *tags = buf_pool_get();
+      alias_tags_to_buffer(&av->alias->tags, tags);
+      mutt_format(buf, buflen, prec, buf_string(tags), false);
+      buf_pool_release(&tags);
+      break;
+    }
   }
 
   return src;
@@ -167,7 +178,7 @@ static const char *alias_format_str(char *buf, size_t buflen, size_t col, int co
  *
  * @sa $alias_format, alias_format_str()
  */
-static void alias_make_entry(struct Menu *menu, char *buf, size_t buflen, int line)
+static void alias_make_entry(struct Menu *menu, int line, struct Buffer *buf)
 {
   const struct AliasMenuData *mdata = menu->mdata;
   const struct AliasViewArray *ava = &mdata->ava;
@@ -175,7 +186,7 @@ static void alias_make_entry(struct Menu *menu, char *buf, size_t buflen, int li
 
   const char *const c_alias_format = cs_subset_string(mdata->sub, "alias_format");
 
-  mutt_expando_format(buf, buflen, 0, menu->win->state.cols, NONULL(c_alias_format),
+  mutt_expando_format(buf->data, buf->dsize, 0, menu->win->state.cols, NONULL(c_alias_format),
                       alias_format_str, (intptr_t) av, MUTT_FORMAT_ARROWCURSOR);
 }
 
@@ -435,6 +446,7 @@ int alias_complete(struct Buffer *buf, struct ConfigSubset *sub)
         /* we are adding something to the completion */
         buf_strcpy_n(buf, bestname, mutt_str_len(bestname) + 1);
         FREE(&mdata.limit);
+        search_state_free(&mdata.search_state);
         return 1;
       }
 

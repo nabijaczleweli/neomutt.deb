@@ -3,9 +3,11 @@
  * Representation of an email address
  *
  * @authors
- * Copyright (C) 1996-2000,2011-2013 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 2017 Richard Russon <rich@flatcap.org>
- * Copyright (C) 2019 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2017-2023 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2018 Simon Symeonidis <lethaljellybean@gmail.com>
+ * Copyright (C) 2023 Anna Figueiredo Gomes <navi@vlhl.dev>
+ * Copyright (C) 2023 Steinar H Gunderson <steinar+neomutt@gunderson.no>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -481,7 +483,8 @@ int mutt_addrlist_parse(struct AddressList *al, const char *s)
     return 0;
 
   int parsed = 0;
-  char comment[1024], phrase[1024];
+  char comment[1024] = { 0 };
+  char phrase[1024] = { 0 };
   size_t phraselen = 0, commentlen = 0;
 
   bool ws_pending = mutt_str_is_email_wsp(*s);
@@ -1158,7 +1161,7 @@ static size_t addrlist_write(const struct AddressList *al, struct Buffer *buf,
       if (in_group && !a->mailbox && !a->personal)
       {
         buf_addch(buf, ';');
-        ++cur_col;
+        cur_col++;
         in_group = false;
       }
       if (next && (next->mailbox || next->personal))

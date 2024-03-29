@@ -3,7 +3,7 @@
  * Message Window
  *
  * @authors
- * Copyright (C) 2021 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -497,8 +497,11 @@ void msgwin_set_text(struct MuttWindow *win, const char *text, enum ColorId colo
   ARRAY_FREE(&wdata->chars);
   if (wdata->text)
   {
+    const struct AttrColor *ac_normal = simple_color_get(MT_COLOR_NORMAL);
     const struct AttrColor *ac_color = simple_color_get(color);
-    measure(&wdata->chars, buf_string(wdata->text), ac_color);
+    const struct AttrColor *ac_merge = merged_color_overlay(ac_normal, ac_color);
+
+    measure(&wdata->chars, buf_string(wdata->text), ac_merge);
   }
 
   mutt_debug(LL_DEBUG5, "MW SET: %zu, %s\n", buf_len(wdata->text),

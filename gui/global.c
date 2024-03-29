@@ -3,7 +3,9 @@
  * Global functions
  *
  * @authors
- * Copyright (C) 2022 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2022 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2022-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -41,7 +43,6 @@
 #include "mutt_mailbox.h"
 #include "mutt_window.h"
 #include "muttlib.h"
-#include "mx.h"
 #include "opcodes.h"
 
 /**
@@ -84,9 +85,8 @@ static int op_shell_escape(int op)
   if (mutt_shell_escape())
   {
     struct Mailbox *m_cur = get_current_mailbox();
+    m_cur->last_checked = 0; // force a check on the next mx_mbox_check() call
     mutt_mailbox_check(m_cur, MUTT_MAILBOX_CHECK_FORCE);
-    /* This forces a refresh on the next mx_mbox_check() call. */
-    mx_mbox_reset_check();
   }
   return FR_SUCCESS;
 }

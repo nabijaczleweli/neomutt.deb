@@ -3,7 +3,9 @@
  * Test code for the Address config object
  *
  * @authors
- * Copyright (C) 2017-2018 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2023 Anna Figueiredo Gomes <navi@vlhl.dev>
+ * Copyright (C) 2023 Dennis Schön <mail@dennis-schoen.de>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -24,10 +26,15 @@
 #include "config.h"
 #include "acutest.h"
 #include <stddef.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include "mutt/lib.h"
 #include "address/lib.h"
-#include "config/common.h"
+#include "config/common.h" // IWYU pragma: keep
 #include "config/lib.h"
 #include "core/lib.h"
+#include "limits.h"
 #include "test_common.h"
 
 // clang-format off
@@ -49,6 +56,7 @@ struct ConfigDef Vars[] = {
   { "Olive",      DT_ADDRESS, IP "olive@example.com",      0, validator_warn,    },
   { "Papaya",     DT_ADDRESS, IP "papaya@example.com",     0, validator_fail,    },
   { "Quince",     DT_ADDRESS, 0,                           0, NULL,              }, /* test_inherit */
+  { "Raspberry",  DT_ADDRESS|D_NOT_EMPTY, IP "raspberry",  0, NULL,              },
   { NULL },
 };
 // clang-format on
@@ -159,7 +167,7 @@ static bool test_string_set(struct ConfigSubset *sub, struct Buffer *err)
   log_line(__func__);
   struct ConfigSet *cs = sub->cs;
 
-  const char *valid[] = { "hello@example.com", "world@example.com", NULL };
+  const char *valid[] = { "hello@example.com", "world@example.com", "", NULL };
   const char *name = "Damson";
   struct Buffer *addr = NULL;
 
@@ -204,6 +212,13 @@ static bool test_string_set(struct ConfigSubset *sub, struct Buffer *err)
       return false;
     }
     TEST_MSG("%s = '%s', set by '%s'", name, buf_string(addr), NONULL(valid[i]));
+  }
+
+  name = "Raspberry";
+  rc = cs_str_string_set(cs, name, "", err);
+  if (TEST_CHECK(CSR_RESULT(rc) != CSR_SUCCESS))
+  {
+    TEST_MSG("Expected error: %s", buf_string(err));
   }
 
   log_line(__func__);
@@ -611,7 +626,7 @@ void test_address_config(void)
   struct ConfigSet *cs = sub->cs;
 
   dont_fail = true;
-  if (!TEST_CHECK(cs_register_variables(cs, Vars, DT_NO_FLAGS)))
+  if (!TEST_CHECK(cs_register_variables(cs, Vars)))
     return;
   dont_fail = false;
 

@@ -1,6 +1,6 @@
 /**
  * @file
- * Test code for editor_buffer_set()
+ * Mh Email helper
  *
  * @authors
  * Copyright (C) 2023 Richard Russon <rich@flatcap.org>
@@ -20,38 +20,57 @@
  * this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#define TEST_NO_MAIN
+/**
+ * @page mh_mdemail Mh Email helper
+ *
+ * Mh Email helper
+ */
+
 #include "config.h"
-#include "acutest.h"
 #include <stddef.h>
-#include <stdbool.h>
+#include "mutt/lib.h"
 #include "email/lib.h"
-#include "core/lib.h"
-#include "editor/lib.h"
+#include "mhemail.h"
 
-void test_editor_buffer_set(void)
+/**
+ * mh_entry_new - Create a new Mh entry
+ * @retval ptr New Mh entry
+ */
+struct MhEmail *mh_entry_new(void)
 {
-  // int editor_buffer_set(struct EnterState *es, const char *str);
+  return mutt_mem_calloc(1, sizeof(struct MhEmail));
+}
 
+/**
+ * mh_entry_free - Free a Mh object
+ * @param[out] ptr Mh to free
+ */
+void mh_entry_free(struct MhEmail **ptr)
+{
+  if (!ptr || !*ptr)
+    return;
+
+  struct MhEmail *md = *ptr;
+  FREE(&md->canon_fname);
+  email_free(&md->email);
+
+  FREE(ptr);
+}
+
+/**
+ * mharray_clear - Free a Mh array
+ * @param[out] mha Mh array to free
+ */
+void mharray_clear(struct MhEmailArray *mha)
+{
+  if (!mha)
+    return;
+
+  struct MhEmail **mdp = NULL;
+  ARRAY_FOREACH(mdp, mha)
   {
-    TEST_CHECK(editor_buffer_set(NULL, NULL) == 0);
+    mh_entry_free(mdp);
   }
 
-  {
-    struct EnterState *es = enter_state_new();
-    TEST_CHECK(editor_buffer_set(es, "hello world") == 11);
-    enter_state_free(&es);
-  }
-
-  {
-    struct EnterState *es = enter_state_new();
-    TEST_CHECK(editor_buffer_set(es, NULL) == 0);
-    enter_state_free(&es);
-  }
-
-  {
-    struct EnterState *es = enter_state_new();
-    TEST_CHECK(editor_buffer_set(es, "") == 0);
-    enter_state_free(&es);
-  }
+  ARRAY_FREE(mha);
 }

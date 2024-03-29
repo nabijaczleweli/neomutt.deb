@@ -3,10 +3,9 @@
  * Low-level socket handling
  *
  * @authors
- * Copyright (C) 1998,2000 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 1999-2006,2008 Brendan Cully <brendan@kublai.com>
- * Copyright (C) 1999-2000 Tommi Komulainen <Tommi.Komulainen@iki.fi>
  * Copyright (C) 2017 Damien Riegel <damien.riegel@gmail.com>
+ * Copyright (C) 2018-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2019-2023 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -138,13 +137,11 @@ int raw_socket_open(struct Connection *conn)
 
   /* "65536\0" */
   char port[6] = { 0 };
-  struct addrinfo hints;
+  struct addrinfo hints = { 0 };
   struct addrinfo *res = NULL;
   struct addrinfo *cur = NULL;
 
   /* we accept v4 or v6 STREAM sockets */
-  memset(&hints, 0, sizeof(hints));
-
   const bool c_use_ipv6 = cs_subset_bool(NeoMutt->sub, "use_ipv6");
   if (c_use_ipv6)
     hints.ai_family = AF_UNSPEC;
@@ -207,10 +204,8 @@ int raw_socket_open(struct Connection *conn)
 #else
   /* --- IPv4 only --- */
 
-  struct sockaddr_in sin;
   struct hostent *he = NULL;
-
-  memset(&sin, 0, sizeof(sin));
+  struct sockaddr_in sin = { 0 };
   sin.sin_port = htons(conn->account.port);
   sin.sin_family = AF_INET;
 
@@ -343,8 +338,8 @@ int raw_socket_poll(struct Connection *conn, time_t wait_secs)
   if (conn->fd < 0)
     return -1;
 
-  fd_set rfds;
-  struct timeval tv;
+  fd_set rfds = { 0 };
+  struct timeval tv = { 0 };
 
   uint64_t wait_millis = wait_secs * 1000UL;
 

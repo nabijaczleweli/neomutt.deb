@@ -3,7 +3,8 @@
  * Parse PGP data packets
  *
  * @authors
- * Copyright (C) 2001-2002,2007 Thomas Roessler <roessler@does-not-exist.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2021 Pietro Cerutti <gahr@gahr.ch>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -181,7 +182,7 @@ unsigned char *pgp_read_packet(FILE *fp, size_t *len)
 
       case 1:
         bytes = 2;
-        /* fallthrough */
+        FALLTHROUGH;
 
       case 2:
       {

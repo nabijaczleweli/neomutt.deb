@@ -3,7 +3,7 @@
  * Read/write command history from/to a file
  *
  * @authors
- * Copyright (C) 1996-2000 Michael R. Elkins <me@mutt.org>
+ * Copyright (C) 2017-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -39,6 +39,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+struct NotifyCallback;
+
 /**
  * enum HistoryClass - Type to differentiate different histories
  *
@@ -56,7 +58,14 @@ enum HistoryClass
   HC_MAX,
 };
 
-struct NotifyCallback;
+/**
+ * struct HistoryEntry - A line in the History menu
+ */
+struct HistoryEntry
+{
+  int num;             ///< Index number
+  const char *history; ///< Description of history
+};
 
 void  mutt_hist_add         (enum HistoryClass hclass, const char *str, bool save);
 bool  mutt_hist_at_scratch  (enum HistoryClass hclass);

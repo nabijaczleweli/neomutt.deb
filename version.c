@@ -3,9 +3,8 @@
  * Display version and copyright about NeoMutt
  *
  * @authors
- * Copyright (C) 1996-2007 Michael R. Elkins <me@mutt.org>
- * Copyright (C) 1999-2007 Thomas Roessler <roessler@does-not-exist.org>
- * Copyright (C) 2016-2017 Richard Russon <rich@flatcap.org>
+ * Copyright (C) 2016-2020 Pietro Cerutti <gahr@gahr.ch>
+ * Copyright (C) 2016-2023 Richard Russon <rich@flatcap.org>
  *
  * @copyright
  * This program is free software: you can redistribute it and/or modify it under
@@ -70,36 +69,36 @@ extern unsigned char configure_options[];
 
 /// CLI Version: Authors' copyrights
 static const char *Copyright =
-    "Copyright (C) 1996-2020 Michael R. Elkins <me@mutt.org>\n"
-    "Copyright (C) 1996-2002 Brandon Long <blong@fiction.net>\n"
-    "Copyright (C) 1997-2009 Thomas Roessler <roessler@does-not-exist.org>\n"
-    "Copyright (C) 1998-2005 Werner Koch <wk@isil.d.shuttle.de>\n"
-    "Copyright (C) 1999-2017 Brendan Cully <brendan@kublai.com>\n"
-    "Copyright (C) 1999-2002 Tommi Komulainen <Tommi.Komulainen@iki.fi>\n"
-    "Copyright (C) 2000-2004 Edmund Grimley Evans <edmundo@rano.org>\n"
-    "Copyright (C) 2006-2009 Rocco Rutte <pdmef@gmx.net>\n"
-    "Copyright (C) 2014-2020 Kevin J. McCarthy <kevin@8t8.us>\n"
-    "Copyright (C) 2015-2022 Richard Russon <rich@flatcap.org>\n";
+    "Copyright (C) 2015-2024 Richard Russon <rich@flatcap.org>\n"
+    "Copyright (C) 2016-2023 Pietro Cerutti <gahr@gahr.ch>\n"
+    "Copyright (C) 2017-2019 Mehdi Abaakouk <sileht@sileht.net>\n"
+    "Copyright (C) 2018-2020 Federico Kircheis <federico.kircheis@gmail.com>\n"
+    "Copyright (C) 2017-2022 Austin Ray <austin@austinray.io>\n"
+    "Copyright (C) 2023-2024 Dennis Schön <mail@dennis-schoen.de>\n"
+    "Copyright (C) 2016-2017 Damien Riegel <damien.riegel@gmail.com>\n"
+    "Copyright (C) 2023      Rayford Shireman\n"
+    "Copyright (C) 2021-2023 David Purton <dcpurton@marshwiggle.net>\n"
+    "Copyright (C) 2020-2023 наб <nabijaczleweli@nabijaczleweli.xyz>\n";
 
 /// CLI Version: Thanks
-static const char *Thanks = N_("Many others not mentioned here contributed code, fixes,\n"
-                               "and suggestions.\n");
+static const char *Thanks = N_(
+    "Many others not mentioned here contributed code, fixes and suggestions.\n");
 
 /// CLI Version: License
 static const char *License = N_(
-    "    This program is free software; you can redistribute it and/or modify\n"
-    "    it under the terms of the GNU General Public License as published by\n"
-    "    the Free Software Foundation; either version 2 of the License, or\n"
-    "    (at your option) any later version.\n"
+    "This program is free software; you can redistribute it and/or modify\n"
+    "it under the terms of the GNU General Public License as published by\n"
+    "the Free Software Foundation; either version 2 of the License, or\n"
+    "(at your option) any later version.\n"
     "\n"
-    "    This program is distributed in the hope that it will be useful,\n"
-    "    but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
-    "    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
-    "    GNU General Public License for more details.\n"
+    "This program is distributed in the hope that it will be useful,\n"
+    "but WITHOUT ANY WARRANTY; without even the implied warranty of\n"
+    "MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n"
+    "GNU General Public License for more details.\n"
     "\n"
-    "    You should have received a copy of the GNU General Public License\n"
-    "    along with this program; if not, write to the Free Software\n"
-    "    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.\n");
+    "You should have received a copy of the GNU General Public License\n"
+    "along with this program; if not, write to the Free Software\n"
+    "Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.\n");
 
 /// CLI Version: How to reach the NeoMutt Team
 static const char *ReachingUs = N_("To learn more about NeoMutt, visit: https://neomutt.org\n"
@@ -110,7 +109,7 @@ static const char *ReachingUs = N_("To learn more about NeoMutt, visit: https://
 // clang-format off
 /// CLI Version: Warranty notice
 static const char *Notice =
-    N_("Copyright (C) 1996-2022 Michael R. Elkins and others.\n"
+    N_("Copyright (C) 2015-2024 Richard Russon and friends\n"
        "NeoMutt comes with ABSOLUTELY NO WARRANTY; for details type 'neomutt -vv'.\n"
        "NeoMutt is free software, and you are welcome to redistribute it\n"
        "under certain conditions; type 'neomutt -vv' for details.\n");
@@ -126,41 +125,6 @@ struct CompileOptions
 };
 
 /* These are sorted by the display string */
-
-/// Default options strings for `neomutt -v` output
-static const struct CompileOptions CompOptsDefault[] = {
-  { "attach_headers_color", 1 },
-  { "compose_to_sender", 1 },
-  { "compress", 1 },
-  { "cond_date", 1 },
-  { "debug", 1 },
-  { "encrypt_to_self", 1 },
-  { "forgotten_attachments", 1 },
-  { "forwref", 1 },
-  { "ifdef", 1 },
-  { "imap", 1 },
-  { "index_color", 1 },
-  { "initials", 1 },
-  { "limit_current_thread", 1 },
-  { "multiple_fcc", 1 },
-  { "nested_if", 1 },
-  { "new_mail", 1 },
-  { "nntp", 1 },
-  { "pop", 1 },
-  { "progress", 1 },
-  { "quasi_delete", 1 },
-  { "regcomp", 1 },
-  { "reply_with_xorig", 1 },
-  { "sensible_browser", 1 },
-  { "sidebar", 1 },
-  { "skip_quoted", 1 },
-  { "smtp", 1 },
-  { "status_color", 1 },
-  { "timeout", 1 },
-  { "tls_sni", 1 },
-  { "trash", 1 },
-  { NULL, 0 },
-};
 
 /// Compile options strings for `neomutt -v` output
 static const struct CompileOptions CompOpts[] = {
@@ -289,11 +253,6 @@ static const struct CompileOptions CompOpts[] = {
   { "sqlite", 1 },
 #else
   { "sqlite", 0 },
-#endif
-#ifdef SUN_ATTACHMENT
-  { "sun_attachment", 1 },
-#else
-  { "sun_attachment", 0 },
 #endif
 #ifdef NEOMUTT_DIRECT_COLORS
   { "truecolor", 1 },
@@ -436,7 +395,7 @@ bool print_version(FILE *fp)
   if (!fp)
     return false;
 
-  struct utsname uts;
+  struct utsname uts = { 0 };
   bool tty = isatty(fileno(fp));
   const char *fmt = "%s\n";
 
@@ -518,9 +477,6 @@ bool print_version(FILE *fp)
   rstrip_in_place((char *) cc_cflags);
   fprintf(fp, "\nCompilation CFLAGS: %s\n", (char *) cc_cflags);
 
-  fprintf(fp, "\n%s\n", _("Default options:"));
-  print_compile_options(CompOptsDefault, fp);
-
   fprintf(fp, "\n%s\n", _("Compile options:"));
   print_compile_options(CompOpts, fp);
 
@@ -590,13 +546,6 @@ bool feature_enabled(const char *name)
 {
   if (!name)
     return false;
-  for (int i = 0; CompOptsDefault[i].name; i++)
-  {
-    if (mutt_str_equal(name, CompOptsDefault[i].name))
-    {
-      return true;
-    }
-  }
   for (int i = 0; CompOpts[i].name; i++)
   {
     if (mutt_str_equal(name, CompOpts[i].name))
