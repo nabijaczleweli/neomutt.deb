@@ -1,0 +1,44 @@
+From 2f25b6ef7674fd5bc448544419cec7a1cc98a330 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=D0=BD=D0=B0=D0=B1?= <nabijaczleweli@nabijaczleweli.xyz>
+Date: Fri, 29 Mar 2024 19:27:06 +0100
+Subject: [PATCH] Revert "progress: window resize"
+X-Mutt-PGP: OS
+
+https://mailman.neomutt.org/pipermail/neomutt-devel-neomutt.org/2024-March/000922.html
+
+This reverts commit f521c05c316da0eef1bffc2616ddd7e6a8749901.
+---
+ progress/progress.c | 15 ++-------------
+ 1 file changed, 2 insertions(+), 13 deletions(-)
+
+diff --git a/progress/progress.c b/progress/progress.c
+index e31f24412..4be0a6be5 100644
+--- a/progress/progress.c
++++ b/progress/progress.c
+@@ -85,21 +85,10 @@ bool progress_update(struct Progress *progress, size_t pos, int percent)
+   // Decloak an opaque pointer
+   struct MuttWindow *win = (struct MuttWindow *) progress;
+   const bool updated = progress_window_update(win, pos, percent);
+-
+-  if (SigWinch)
++  if (updated)
+   {
+-    SigWinch = false;
+-    notify_send(NeoMutt->notify_resize, NT_RESIZE, 0, NULL);
+-    window_redraw(NULL);
++    window_redraw(win);
+   }
+-  else
+-  {
+-    if (updated)
+-    {
+-      window_redraw(win);
+-    }
+-  }
+-
+   return updated;
+ }
+ 
+-- 
+2.43.0
+

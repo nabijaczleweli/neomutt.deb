@@ -4,3 +4,4 @@ debian-specific/document_debian_defaults.patch
 misc/fix_ALL_FILES.patch
 misc/0001-gen_msgid-snprintf-mutt_str_dup-mutt_str_asprintf.patch
 misc/0002-Add-message_id_format-hostname-random.patch
+0001-Revert-progress-window-resize.patch
